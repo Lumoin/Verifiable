@@ -11,9 +11,21 @@ namespace Verifiable.Cryptography;
 /// <para>
 /// Events are emitted by cryptographic operations (entropy generation, signing,
 /// verification, key material creation) and consumed by application-provided
-/// subscribers via <see cref="CryptoObservable.Events"/>. The library does not
+/// subscribers via <see cref="CryptographicKeyEvents.Events"/>. The library does not
 /// own the bus, transport, or sink — those are application concerns.
 /// </para>
+/// <para>
+/// Subscribers should filter by type rather than assume a fixed event mix, since the
+/// stream is process-wide and shared across every registered backend and operation kind:
+/// </para>
+/// <code>
+/// var observed = new List&lt;CryptoEvent&gt;();
+/// using IDisposable sub = CryptographicKeyEvents.Events.Subscribe(observed.Add);
+///
+/// //Exercise code under test...
+///
+/// Assert.IsTrue(observed.OfType&lt;SignatureProducedEvent&gt;().Any());
+/// </code>
 /// <para>
 /// <strong>Correlation via W3C TraceContext.</strong>
 /// </para>

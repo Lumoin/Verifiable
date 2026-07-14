@@ -2,6 +2,7 @@ using System.Formats.Asn1;
 using System.Numerics;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
+using Verifiable.Tests.TestDataProviders;
 
 namespace Verifiable.Tests.Cryptography
 {
@@ -106,16 +107,21 @@ namespace Verifiable.Tests.Cryptography
             const string CatastrophicExceptionMessage = "Catastrophic error while decoding RSA modulus bytes.";
             const int PaddingByteIndex = 8;
 
-            using(var rsaKey = RSA.Create(keySizeInBits))
+            var keyMaterial = CreateRsaKeyMaterial(keySizeInBits);
+            try
             {
-                var rsaParameters = rsaKey.ExportParameters(includePrivateParameters: false);
-                var rsaModulus = rsaParameters.Modulus!;
+                var rsaModulus = RsaUtilities.Decode(keyMaterial.PublicKey.AsReadOnlySpan());
 
                 var encodedModulus = RsaUtilities.Encode(rsaModulus);
                 encodedModulus[PaddingByteIndex] = 0x1;
 
                 var exception = Assert.ThrowsExactly<ArgumentException>(() => RsaUtilities.Decode(RsaUtilities.Decode(encodedModulus)));
                 Assert.AreEqual(CatastrophicExceptionMessage, exception.Message);
+            }
+            finally
+            {
+                keyMaterial.PublicKey.Dispose();
+                keyMaterial.PrivateKey.Dispose();
             }
         }
 
@@ -127,16 +133,21 @@ namespace Verifiable.Tests.Cryptography
             const string CatastrophicExceptionMessage = "Catastrophic error while decoding RSA modulus bytes.";
             const int MsbByteIndex = 9;
 
-            using(var rsaKey = RSA.Create(keySizeInBits))
+            var keyMaterial = CreateRsaKeyMaterial(keySizeInBits);
+            try
             {
-                var rsaParameters = rsaKey.ExportParameters(includePrivateParameters: false);
-                var rsaModulus = rsaParameters.Modulus!;
+                var rsaModulus = RsaUtilities.Decode(keyMaterial.PublicKey.AsReadOnlySpan());
 
                 var encodedModulus = RsaUtilities.Encode(rsaModulus);
                 encodedModulus[MsbByteIndex] = 0x1;
 
                 var exception = Assert.ThrowsExactly<ArgumentException>(() => RsaUtilities.Decode(RsaUtilities.Decode(encodedModulus)));
                 Assert.AreEqual(CatastrophicExceptionMessage, exception.Message);
+            }
+            finally
+            {
+                keyMaterial.PublicKey.Dispose();
+                keyMaterial.PrivateKey.Dispose();
             }
         }
 
@@ -145,6 +156,9 @@ namespace Verifiable.Tests.Cryptography
         [DynamicData(nameof(RsaKeySizesInBits))]
         public void RsaEncodingAndDecodingSucceeds(int keySizeInBits)
         {
+            //Independent oracle: a freshly minted platform RSA key is exported through the .NET-native
+            //ExportRSAPublicKey() DER path, independently of this library's RsaUtilities.Encode/Decode,
+            //so the two DER encodings can be compared byte-for-byte below.
             using(var rsaKey = RSA.Create(keySizeInBits))
             {
                 var rsaParameters = rsaKey.ExportParameters(includePrivateParameters: false);
@@ -167,36 +181,60 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void IsValidPublicKeyRejectsForgeryAndWeakKeys()
         {
-            using RSA rsa = RSA.Create(2048);
-            RSAParameters parameters = rsa.ExportParameters(includePrivateParameters: false);
-            byte[] modulus = parameters.Modulus!;
-            byte[] exponent = parameters.Exponent!;
+            var keyMaterial = TestKeyMaterialProvider.CreateRsa2048KeyMaterial();
+            try
+            {
+                byte[] modulus = RsaUtilities.Decode(keyMaterial.PublicKey.AsReadOnlySpan());
 
-            Assert.IsTrue(RsaUtilities.IsValidPublicKey(modulus, exponent), "A well-formed 2048-bit key with the standard public exponent is valid.");
+                //RSA key material minted by TestKeyMaterialProvider always carries the standard
+                //65537 public exponent (RsaUtilities.DefaultExponent, "AQAB").
+                byte[] exponent = [0x01, 0x00, 0x01];
 
-            //e = 1 is the identity map: an ISO/IEC 9796-2 recovered message equals the signature, so any value "verifies".
-            Assert.IsFalse(RsaUtilities.IsValidPublicKey(modulus, [0x01]), "A public exponent of 1 (the identity map) must be rejected.");
+                Assert.IsTrue(RsaUtilities.IsValidPublicKey(modulus, exponent), "A well-formed 2048-bit key with the standard public exponent is valid.");
 
-            //An even public exponent shares a factor with phi(n) and cannot be an RSA exponent.
-            Assert.IsFalse(RsaUtilities.IsValidPublicKey(modulus, [0x02]), "An even public exponent must be rejected.");
+                //e = 1 is the identity map: an ISO/IEC 9796-2 recovered message equals the signature, so any value "verifies".
+                Assert.IsFalse(RsaUtilities.IsValidPublicKey(modulus, [0x01]), "A public exponent of 1 (the identity map) must be rejected.");
 
-            //A public exponent at least as large as the modulus is outside the valid range.
-            Assert.IsFalse(RsaUtilities.IsValidPublicKey(modulus, modulus), "A public exponent not less than the modulus must be rejected.");
+                //An even public exponent shares a factor with phi(n) and cannot be an RSA exponent.
+                Assert.IsFalse(RsaUtilities.IsValidPublicKey(modulus, [0x02]), "An even public exponent must be rejected.");
 
-            //An even modulus is not a product of two odd primes.
-            byte[] evenModulus = (byte[])modulus.Clone();
-            evenModulus[^1] &= 0xFE;
-            Assert.IsFalse(RsaUtilities.IsValidPublicKey(evenModulus, exponent), "An even modulus must be rejected.");
+                //A public exponent at least as large as the modulus is outside the valid range.
+                Assert.IsFalse(RsaUtilities.IsValidPublicKey(modulus, modulus), "A public exponent not less than the modulus must be rejected.");
 
-            //A modulus below the minimum bit length is too weak to sign; a 512-bit odd modulus with a valid exponent still fails.
-            byte[] weakModulus = new byte[64];
-            weakModulus[0] = 0xFF;
-            weakModulus[^1] = 0x03;
-            Assert.IsFalse(RsaUtilities.IsValidPublicKey(weakModulus, exponent), "A modulus below the minimum bit length must be rejected.");
+                //An even modulus is not a product of two odd primes.
+                byte[] evenModulus = (byte[])modulus.Clone();
+                evenModulus[^1] &= 0xFE;
+                Assert.IsFalse(RsaUtilities.IsValidPublicKey(evenModulus, exponent), "An even modulus must be rejected.");
 
-            //An empty modulus or exponent is malformed.
-            Assert.IsFalse(RsaUtilities.IsValidPublicKey([], exponent), "An empty modulus must be rejected.");
-            Assert.IsFalse(RsaUtilities.IsValidPublicKey(modulus, []), "An empty exponent must be rejected.");
+                //A modulus below the minimum bit length is too weak to sign; a 512-bit odd modulus with a valid exponent still fails.
+                byte[] weakModulus = new byte[64];
+                weakModulus[0] = 0xFF;
+                weakModulus[^1] = 0x03;
+                Assert.IsFalse(RsaUtilities.IsValidPublicKey(weakModulus, exponent), "A modulus below the minimum bit length must be rejected.");
+
+                //An empty modulus or exponent is malformed.
+                Assert.IsFalse(RsaUtilities.IsValidPublicKey([], exponent), "An empty modulus must be rejected.");
+                Assert.IsFalse(RsaUtilities.IsValidPublicKey(modulus, []), "An empty exponent must be rejected.");
+            }
+            finally
+            {
+                keyMaterial.PublicKey.Dispose();
+                keyMaterial.PrivateKey.Dispose();
+            }
+        }
+
+
+        /// <summary>
+        /// Returns key material of the size <paramref name="keySizeInBits"/> selects, matching the
+        /// <see cref="RsaKeySizesInBits"/> shapes the DynamicData-driven tests exercise.
+        /// </summary>
+        /// <param name="keySizeInBits">The RSA modulus size in bits; 2048 or 4096.</param>
+        /// <returns>RSA key material of the requested size. The caller owns and must dispose it.</returns>
+        private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateRsaKeyMaterial(int keySizeInBits)
+        {
+            return keySizeInBits == RsaUtilities.Rsa4096ModulusLength * 8
+                ? TestKeyMaterialProvider.CreateRsa4096KeyMaterial()
+                : TestKeyMaterialProvider.CreateRsa2048KeyMaterial();
         }
 
 

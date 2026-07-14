@@ -69,8 +69,8 @@ public static class SelfIssuedIdTokenValidation
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
         MemoryPool<byte> memoryPool,
-        CancellationToken cancellationToken,
-        TimeSpan? expirationLeeway = null)
+        TimeSpan? expirationLeeway = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(idToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedAudience);

@@ -52,7 +52,7 @@ internal sealed class FederationHttpTransportTests
     [TestMethod]
     public async Task FetchParsesAStatementServedOverTheTransport()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject =
             FederationTestRing.CreateNode(new EntityIdentifier("https://leaf.example.com"));
 

@@ -1,4 +1,5 @@
 using Verifiable.Core.Model.Mdoc;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Mdoc;
 
@@ -16,12 +17,17 @@ namespace Verifiable.Tests.Mdoc;
 [TestClass]
 internal sealed class MdocMsoValidityValidatorTests
 {
+    //Family anchor: not a clean single-call TestClock.CanonicalEpoch offset
+    //(2026-06-01T12:00:00Z is 5 months 12 hours after this signed instant),
+    //so the one-year window anchors itself.
     private static readonly DateTimeOffset Signed = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
-    private static readonly DateTimeOffset ValidFrom = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
-    private static readonly DateTimeOffset ValidUntil = new(2027, 1, 1, 0, 0, 0, TimeSpan.Zero);
-    private static readonly DateTimeOffset MidWindow = new(2026, 6, 1, 12, 0, 0, TimeSpan.Zero);
-    private static readonly DateTimeOffset BeforeWindow = new(2025, 12, 31, 23, 59, 59, TimeSpan.Zero);
-    private static readonly DateTimeOffset AfterWindow = new(2027, 1, 1, 0, 0, 1, TimeSpan.Zero);
+    private static readonly DateTimeOffset ValidFrom = Signed;
+    private static readonly DateTimeOffset ValidUntil = Signed.AddYears(1);
+
+    //Bit-identical to TestClock.CanonicalEpoch (2026-06-01T12:00:00Z).
+    private static readonly DateTimeOffset MidWindow = TestClock.CanonicalEpoch;
+    private static readonly DateTimeOffset BeforeWindow = ValidFrom.AddSeconds(-1);
+    private static readonly DateTimeOffset AfterWindow = ValidUntil.AddSeconds(1);
 
 
     [TestMethod]

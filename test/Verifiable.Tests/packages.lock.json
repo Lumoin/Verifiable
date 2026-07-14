@@ -658,7 +658,10 @@
           "ModelContextProtocol": "[1.4.0, )",
           "SimpleBase": "[5.6.1, )",
           "System.CommandLine": "[2.0.9, )",
+          "Verifiable.Cbor": "[0.0.0, )",
           "Verifiable.Core": "[0.0.0, )",
+          "Verifiable.Fido2": "[0.0.0, )",
+          "Verifiable.Json": "[0.0.0, )",
           "Verifiable.Microsoft": "[0.0.0, )",
           "Verifiable.Tpm": "[0.0.0, )",
           "dotNetRdf": "[3.5.2, )"
@@ -675,7 +678,7 @@
       "verifiable.apdu": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.4, )",
+          "Lumoin.Base": "[0.0.6, )",
           "Verifiable.Cryptography": "[0.0.0, )",
           "Verifiable.Foundation": "[0.0.0, )"
         }
@@ -692,6 +695,7 @@
         "type": "Project",
         "dependencies": {
           "Verifiable.Core": "[0.0.0, )",
+          "Verifiable.Fido2": "[0.0.0, )",
           "Verifiable.Foundation": "[0.0.0, )",
           "Verifiable.JCose": "[0.0.0, )"
         }
@@ -716,14 +720,14 @@
       "verifiable.cryptography": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.4, )",
+          "Lumoin.Base": "[0.0.6, )",
           "Verifiable.Foundation": "[0.0.0, )"
         }
       },
       "verifiable.didcomm": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.4, )",
+          "Lumoin.Base": "[0.0.6, )",
           "Verifiable.Core": "[0.0.0, )",
           "Verifiable.Cryptography": "[0.0.0, )",
           "Verifiable.Foundation": "[0.0.0, )",
@@ -738,10 +742,20 @@
           "Verifiable.Keri": "[0.0.0, )"
         }
       },
+      "verifiable.fido2": {
+        "type": "Project",
+        "dependencies": {
+          "Verifiable.Core": "[0.0.0, )",
+          "Verifiable.Cryptography": "[0.0.0, )",
+          "Verifiable.Foundation": "[0.0.0, )",
+          "Verifiable.JCose": "[0.0.0, )",
+          "Verifiable.Tpm": "[0.0.0, )"
+        }
+      },
       "verifiable.foundation": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.4, )"
+          "Lumoin.Base": "[0.0.6, )"
         }
       },
       "verifiable.jcose": {
@@ -756,6 +770,7 @@
         "dependencies": {
           "Verifiable.Core": "[0.0.0, )",
           "Verifiable.DidComm": "[0.0.0, )",
+          "Verifiable.Fido2": "[0.0.0, )",
           "Verifiable.Foundation": "[0.0.0, )",
           "Verifiable.JCose": "[0.0.0, )",
           "Verifiable.JsonPointer": "[0.0.0, )",
@@ -844,9 +859,9 @@
       },
       "Lumoin.Base": {
         "type": "CentralTransitive",
-        "requested": "[0.0.4, )",
-        "resolved": "0.0.4",
-        "contentHash": "BcM4Dz91K0HAEb1NEJZNlLP/Go1FAvHV/+tjxpymYXuUVZ0/SdWuc3ukVH9qUv6rLahBsXbkfXpBwF18bm6/UA=="
+        "requested": "[0.0.6, )",
+        "resolved": "0.0.6",
+        "contentHash": "NRaNiGb9SPGuDo9+tRGxZ5UQPWWPFSVt5Il/UV3yFGY/EHIVAuGy5M+wFHmNcXzMWucHOj8vxt19qQ1ZjJoE1A=="
       },
       "Lumoin.Veridical.Backends.Managed": {
         "type": "CentralTransitive",

@@ -25,13 +25,13 @@ namespace Verifiable.OAuth.Pkce;
 public sealed class PkceChallenge: IDisposable, IEquatable<PkceChallenge>
 {
     private bool disposed;
-    private readonly IMemoryOwner<byte> owner;
+    private IMemoryOwner<byte> Owner { get; }
 
     /// <summary>
     /// The raw SHA-256 hash bytes of the encoded verifier. Valid only while this instance
     /// has not been disposed.
     /// </summary>
-    public ReadOnlyMemory<byte> Bytes => owner.Memory;
+    public ReadOnlyMemory<byte> Bytes => Owner.Memory;
 
     /// <summary>
     /// The length of the Base64url-encoded challenge without padding.
@@ -68,7 +68,7 @@ public sealed class PkceChallenge: IDisposable, IEquatable<PkceChallenge>
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentOutOfRangeException.ThrowIfNotEqual(encodedLength, 43);
 
-        this.owner = owner;
+        this.Owner = owner;
         EncodedLength = encodedLength;
     }
 
@@ -78,7 +78,7 @@ public sealed class PkceChallenge: IDisposable, IEquatable<PkceChallenge>
     {
         if(!disposed)
         {
-            owner.Dispose();
+            Owner.Dispose();
             disposed = true;
         }
     }

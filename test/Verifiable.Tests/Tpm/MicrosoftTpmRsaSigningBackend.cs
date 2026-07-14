@@ -44,6 +44,10 @@ internal static class MicrosoftTpmRsaSigningBackend
     {
         ArgumentNullException.ThrowIfNull(pool);
 
+        //Not test fixture material: this is the simulated TPM's own TPM2_CreatePrimary() key-generation step,
+        //invoked with whatever keyBits the exercised template requests, and its output is what SignDigestAsync
+        //below re-imports and signs with — a canned provider key would fix both the size and the identity of
+        //every simulated primary regardless of what a test's template asks for.
         using RSA rsa = RSA.Create(keyBits);
 
         //The retained private key is the PKCS#1 RSAPrivateKey DER the signer re-imports; the exported public
@@ -66,6 +70,8 @@ internal static class MicrosoftTpmRsaSigningBackend
     {
         ArgumentNullException.ThrowIfNull(pool);
 
+        //Not test fixture material: privateKey is whatever key GenerateKeyAsync retained for this specific
+        //simulated object, handed back by the simulator per TPM2_Sign() — there is no fixed key to substitute.
         using RSA rsa = RSA.Create();
         rsa.ImportRSAPrivateKey(privateKey.Span, out _);
 

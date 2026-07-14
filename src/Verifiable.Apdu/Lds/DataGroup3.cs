@@ -26,7 +26,7 @@ public sealed class DataGroup3: IDisposable
     private const int DataGroupTemplateTag = 0x63;
 
     //ISO/IEC 19794-4 finger image record format identifier: "FIR\0".
-    private static readonly byte[] FingerRecordFormatIdentifier = [0x46, 0x49, 0x52, 0x00];
+    private static byte[] FingerRecordFormatIdentifier { get; } = [0x46, 0x49, 0x52, 0x00];
 
     private bool disposed;
 

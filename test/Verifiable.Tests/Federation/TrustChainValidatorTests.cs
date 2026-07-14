@@ -1,5 +1,6 @@
 using Verifiable.Core.Assessment;
 using Verifiable.OAuth.Federation;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Federation;
 
@@ -16,7 +17,7 @@ internal sealed class TrustChainValidatorTests
     [TestMethod]
     public async Task HappyPathDirectChainEmitsAllSuccessClaims()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
@@ -59,7 +60,7 @@ internal sealed class TrustChainValidatorTests
     [TestMethod]
     public async Task WrongAnchorFailsChainTerminatesAtTrustAnchor()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
@@ -103,7 +104,7 @@ internal sealed class TrustChainValidatorTests
     [TestMethod]
     public async Task TamperedLinkFailsChainAllLinksVerified()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
@@ -139,7 +140,7 @@ internal sealed class TrustChainValidatorTests
     [TestMethod]
     public async Task ChainNotStartingWithSubjectEntityConfigurationFailsChainStartsAtSubject()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
@@ -182,7 +183,7 @@ internal sealed class TrustChainValidatorTests
     [TestMethod]
     public async Task ChainWithRepeatedSubordinateStatementFailsChainNoCycles()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
@@ -225,7 +226,7 @@ internal sealed class TrustChainValidatorTests
     [TestMethod]
     public async Task ChainExceedingMaxPathLengthFailsChainWithinMaxPathLength()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode intermediate = FederationTestRing.CreateNode(
@@ -270,7 +271,7 @@ internal sealed class TrustChainValidatorTests
     [TestMethod]
     public async Task ChainWithExpiredLinkFailsChainExpIsMinOfLinks()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
@@ -312,7 +313,7 @@ internal sealed class TrustChainValidatorTests
     [TestMethod]
     public async Task SubordinateHostWithinPermittedSubtreeSatisfiesNamingConstraints()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         //Subject host leaf.example.test is within the permitted ".example.test" subtree.
         Dictionary<string, object> permittedSubtree = new()
         {
@@ -331,7 +332,7 @@ internal sealed class TrustChainValidatorTests
     [TestMethod]
     public async Task ExcludedSubordinateHostFailsNamingConstraints()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         //Subject host leaf.example.test matches the excluded ".example.test" subtree —
         //invalid regardless of any permitted entry (§6.2.2).
         Dictionary<string, object> excludedSubtree = new()
@@ -351,7 +352,7 @@ internal sealed class TrustChainValidatorTests
     [TestMethod]
     public async Task SubordinateHostOutsidePermittedFailsNamingConstraints()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         //Subject host leaf.other.test is outside the only permitted subtree.
         Dictionary<string, object> permittedSubtree = new()
         {
@@ -428,7 +429,7 @@ internal sealed class TrustChainValidatorTests
     [TestMethod]
     public async Task ChainWithBrokenAdjacencyFailsChainProperlyLinked()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode other = FederationTestRing.CreateNode(

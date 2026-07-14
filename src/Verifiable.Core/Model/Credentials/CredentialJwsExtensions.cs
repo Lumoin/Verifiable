@@ -168,12 +168,14 @@ public static class CredentialJwsExtensions
 
         Debug.Assert(written == signingInputLength, "Signing input length must match the expected size.");
 
-        Signature signature = await signingDelegate(
+        (Signature signature, CryptoEvent? evt) = await signingDelegate(
             privateKey.AsReadOnlyMemory(),
             signingInputMemory,
             memoryPool,
             context: null,
             cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        CryptographicKeyEvents.Emit(evt);
 
         var signatureComponent = new JwsSignatureComponent(
             headerSegment,
@@ -290,12 +292,14 @@ public static class CredentialJwsExtensions
 
             Debug.Assert(written == verifyInputLength, "Verification input length must match the expected size.");
 
-            bool isValid = await verificationDelegate(
+            (bool isValid, CryptoEvent? evt) = await verificationDelegate(
                 verifyInputMemory,
                 signatureBytesOwner.Memory,
                 publicKey.AsReadOnlyMemory(),
                 context: null,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            CryptographicKeyEvents.Emit(evt);
 
             //Verify before interpreting the payload: a firewalled verifier must not transcode or
             //parse bytes whose authenticity has not been established. A tampered payload may not be
@@ -413,12 +417,14 @@ public static class CredentialJwsExtensions
 
         Debug.Assert(written == verifyInputLength, "Verification input length must match the expected size.");
 
-        bool isValid = await verificationDelegate(
+        (bool isValid, CryptoEvent? evt) = await verificationDelegate(
             verifyInputMemory,
             signature.Signature.AsReadOnlyMemory(),
             publicKey.AsReadOnlyMemory(),
             context: null,
             cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        CryptographicKeyEvents.Emit(evt);
 
         var header = new Dictionary<string, object>(signature.ProtectedHeader);
         if(!isValid)

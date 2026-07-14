@@ -50,8 +50,12 @@ namespace Verifiable.Core.Model.Did
                     rawKeyMaterial.Purpose);
 
                 //Call verification function directly with extracted key material.
-                return await verificationFunction(data, signature.AsReadOnlyMemory(), rawKeyMaterial.keyMaterial.Memory)
+                (bool isVerified, CryptoEvent? evt) = await verificationFunction(data, signature.AsReadOnlyMemory(), rawKeyMaterial.keyMaterial.Memory)
                     .ConfigureAwait(false);
+
+                CryptographicKeyEvents.Emit(evt);
+
+                return isVerified;
             }
         }
 

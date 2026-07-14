@@ -187,7 +187,7 @@ public static class CredentialCoseExtensions
             privateKey,
             signingDelegate,
             signaturePool,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -263,7 +263,7 @@ public static class CredentialCoseExtensions
             buildSigStructure,
             publicKey,
             verificationDelegate,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if(!isValid)
         {

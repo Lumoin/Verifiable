@@ -78,7 +78,7 @@ public readonly struct EntropySource: IEquatable<EntropySource>
     public static EntropySource Unknown { get; } = new(4);
 
 
-    private static readonly List<EntropySource> sources = [Csprng, Tpm, Hsm, Deterministic, Unknown];
+    private static List<EntropySource> sources { get; } = [Csprng, Tpm, Hsm, Deterministic, Unknown];
 
     /// <summary>Gets all registered entropy source values.</summary>
     public static IReadOnlyList<EntropySource> Sources => sources.AsReadOnly();

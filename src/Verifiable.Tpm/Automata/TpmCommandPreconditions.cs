@@ -36,7 +36,7 @@ namespace Verifiable.Tpm.Automata;
 /// </remarks>
 public static class TpmCommandPreconditions
 {
-    private static readonly FrozenDictionary<TpmCcConstants, FrozenSet<TpmLifecyclePhase>> CommandTable =
+    private static FrozenDictionary<TpmCcConstants, FrozenSet<TpmLifecyclePhase>> CommandTable { get; } =
         new Dictionary<TpmCcConstants, FrozenSet<TpmLifecyclePhase>>
         {
             [TpmCcConstants.TPM_CC_Startup] = new[] { TpmLifecyclePhase.Initializing }.ToFrozenSet(),

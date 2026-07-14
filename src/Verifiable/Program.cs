@@ -32,6 +32,11 @@ internal static class Program
 
     private static async Task<int> RunMcpServerAsync(string[] args)
     {
+        //Wire the cryptographic provider once for every provider-dependent MCP tool — mirrors
+        //RunCliAsync's own call below; previously missing here (a shipped gap the FIDO2 verbs need
+        //closed since VerifyFido2Registration/VerifyFido2Assertion need the registry populated).
+        CryptoProviderStartup.EnsureRegistered();
+
         var builder = Host.CreateApplicationBuilder(args);
 
         builder.Services.AddMcpServer()
@@ -264,11 +269,19 @@ internal static class Program
             Description = "Run a real crypto workload through the wired provider and emit the observed (runtime) CBOM."
         };
         Option<string?> cbomOutputOption = new("--output", "-o") { Description = "Write the CBOM JSON to a file." };
+        Option<bool> cbomEventsOption = new("--events")
+        {
+            Description = "With --observe, subscribe to the CryptoEvent stream for the workload's duration and " +
+                "append a compact provenance summary (counts by event type, algorithm, and backend) after the " +
+                "CBOM JSON. The CBOM JSON itself is unchanged. Has no effect with --declarative, which performs " +
+                "no cryptographic operation to observe."
+        };
 
         Command cbomCommand = new("cbom", "Emit a CycloneDX cryptographic bill of materials (CBOM).")
         {
             declarativeOption,
             observeOption,
+            cbomEventsOption,
             cbomOutputOption
         };
         rootCommand.Subcommands.Add(cbomCommand);
@@ -276,10 +289,11 @@ internal static class Program
         cbomCommand.SetAction(async parseResult =>
         {
             bool observe = parseResult.GetValue(observeOption);
+            bool includeEvents = parseResult.GetValue(cbomEventsOption);
             string? outputPath = parseResult.GetValue(cbomOutputOption);
 
             Result<string, string> result = observe
-                ? await VerifiableOperations.EmitObservedCbomAsync().ConfigureAwait(false)
+                ? await VerifiableOperations.EmitObservedCbomAsync(includeEventProvenance: includeEvents).ConfigureAwait(false)
                 : VerifiableOperations.EmitDeclarativeCbom();
 
             if(!result.IsSuccess)
@@ -292,6 +306,181 @@ internal static class Program
             {
                 await File.WriteAllTextAsync(outputPath, result.Value).ConfigureAwait(false);
                 Console.WriteLine($"CBOM written to: {Path.GetFullPath(outputPath)}");
+                return 0;
+            }
+
+            Console.WriteLine(result.Value);
+            return 0;
+        });
+
+        //FIDO2/WebAuthn commands: registration/assertion verification and challenge generation.
+        Command fido2Command = new("fido2", "Verify WebAuthn registration/assertion ceremonies and create challenges.");
+        rootCommand.Subcommands.Add(fido2Command);
+
+        Argument<string> attestationObjectArgument = new("attestation-object") { Description = "File path to the raw attestationObject CBOR bytes." };
+        Argument<string> registrationClientDataArgument = new("client-data") { Description = "File path to the raw clientDataJSON bytes." };
+        Option<string> registrationRpIdOption = new("--rp-id") { Description = "The relying party ID.", Required = true };
+        Option<string> registrationOriginOption = new("--origin") { Description = "The accepted origin.", Required = true };
+        Option<string> registrationChallengeOption = new("--challenge") { Description = "The base64url-encoded challenge exactly as issued to the client.", Required = true };
+        Option<string[]> trustAnchorOption = new("--trust-anchor")
+        {
+            Description = "Repeatable PEM/DER attestation root certificate file path. Mutually exclusive with --mds-blob/--mds-root."
+        };
+        Option<string?> mdsBlobOption = new("--mds-blob") { Description = "File path to a compact-JWS FIDO Metadata Service BLOB." };
+        Option<string?> mdsRootOption = new("--mds-root") { Description = "File path to the MDS root certificate --mds-blob chains to." };
+        Option<string?> registrationOutputOption = new("--output", "-o") { Description = "Write the credential record JSON to a file." };
+        Option<string?> registrationUserVerificationOption = new("--user-verification")
+        {
+            Description = "The relying party's user-verification policy: required, preferred, or discouraged. Defaults to preferred."
+        };
+        Option<string?> registrationAuthenticatorAttachmentOption = new("--authenticator-attachment")
+        {
+            Description = "The client-reported authenticatorAttachment value to store on the credential record: platform or cross-platform."
+        };
+        Option<bool> registrationRequireTeeEnforcedAuthorizationsOption = new("--require-tee-enforced-authorizations")
+        {
+            Description = "For an android-key attestation, require the origin/purpose authorizations to be satisfied by the teeEnforced list alone (rejects a software-only key). Defaults to false (union of teeEnforced and softwareEnforced)."
+        };
+
+        Command verifyRegistrationCommand = new("verify-registration", "Verify a WebAuthn registration ceremony's attestation object.")
+        {
+            attestationObjectArgument,
+            registrationClientDataArgument,
+            registrationRpIdOption,
+            registrationOriginOption,
+            registrationChallengeOption,
+            trustAnchorOption,
+            mdsBlobOption,
+            mdsRootOption,
+            registrationOutputOption,
+            registrationUserVerificationOption,
+            registrationAuthenticatorAttachmentOption,
+            registrationRequireTeeEnforcedAuthorizationsOption
+        };
+        fido2Command.Subcommands.Add(verifyRegistrationCommand);
+
+        verifyRegistrationCommand.SetAction(async parseResult =>
+        {
+            string attestationObjectPath = parseResult.GetValue(attestationObjectArgument)!;
+            string clientDataPath = parseResult.GetValue(registrationClientDataArgument)!;
+            string rpId = parseResult.GetValue(registrationRpIdOption)!;
+            string origin = parseResult.GetValue(registrationOriginOption)!;
+            string challenge = parseResult.GetValue(registrationChallengeOption)!;
+            string[]? trustAnchorPaths = parseResult.GetValue(trustAnchorOption);
+            string? mdsBlobPath = parseResult.GetValue(mdsBlobOption);
+            string? mdsRootPath = parseResult.GetValue(mdsRootOption);
+            string? outputPath = parseResult.GetValue(registrationOutputOption);
+            string? userVerification = parseResult.GetValue(registrationUserVerificationOption);
+            string? authenticatorAttachment = parseResult.GetValue(registrationAuthenticatorAttachmentOption);
+            bool requireTeeEnforcedAuthorizations = parseResult.GetValue(registrationRequireTeeEnforcedAuthorizationsOption);
+
+            var result = await VerifiableOperations.VerifyFido2RegistrationAsync(
+                attestationObjectPath, clientDataPath, rpId, origin, challenge, trustAnchorPaths, mdsBlobPath, mdsRootPath,
+                requireTeeEnforcedAuthorizations: requireTeeEnforcedAuthorizations,
+                userVerification: userVerification, authenticatorAttachment: authenticatorAttachment)
+                .ConfigureAwait(false);
+
+            if(!result.IsSuccess)
+            {
+                await Console.Error.WriteLineAsync(ConsoleFormatter.Error(result.Error!)).ConfigureAwait(false);
+                return 1;
+            }
+
+            if(outputPath is not null)
+            {
+                await File.WriteAllTextAsync(outputPath, result.Value).ConfigureAwait(false);
+                Console.WriteLine($"Credential record written to: {Path.GetFullPath(outputPath)}");
+                return 0;
+            }
+
+            Console.WriteLine(result.Value);
+            return 0;
+        });
+
+        Argument<string> credentialRecordArgument = new("credential-record") { Description = "File path to the credential record JSON document produced by 'verify-registration'." };
+        Argument<string> assertionAuthenticatorDataArgument = new("authenticator-data") { Description = "File path to the raw authData bytes (response.authenticatorData)." };
+        Argument<string> assertionSignatureArgument = new("signature") { Description = "File path to the raw assertion signature bytes (response.signature)." };
+        Argument<string> assertionClientDataArgument = new("client-data") { Description = "File path to the raw clientDataJSON bytes." };
+        Option<string> assertionRpIdOption = new("--rp-id") { Description = "The relying party ID.", Required = true };
+        Option<string> assertionOriginOption = new("--origin") { Description = "The accepted origin.", Required = true };
+        Option<string> assertionChallengeOption = new("--challenge") { Description = "The base64url-encoded challenge exactly as issued to the client.", Required = true };
+        Option<uint> storedSignCountOption = new("--stored-sign-count") { Description = "The signature counter value stored for this credential from the previous ceremony. Defaults to 0." };
+        Option<string?> assertionUserVerificationOption = new("--user-verification")
+        {
+            Description = "The relying party's user-verification policy: required, preferred, or discouraged. Defaults to preferred."
+        };
+        Option<string?> userHandleOption = new("--user-handle") { Description = "Optional file path to the raw response.userHandle bytes." };
+
+        Command verifyAssertionCommand = new("verify-assertion", "Verify a WebAuthn authentication ceremony's assertion.")
+        {
+            credentialRecordArgument,
+            assertionAuthenticatorDataArgument,
+            assertionSignatureArgument,
+            assertionClientDataArgument,
+            assertionRpIdOption,
+            assertionOriginOption,
+            assertionChallengeOption,
+            storedSignCountOption,
+            assertionUserVerificationOption,
+            userHandleOption
+        };
+        fido2Command.Subcommands.Add(verifyAssertionCommand);
+
+        verifyAssertionCommand.SetAction(async parseResult =>
+        {
+            string credentialRecordPath = parseResult.GetValue(credentialRecordArgument)!;
+            string authenticatorDataPath = parseResult.GetValue(assertionAuthenticatorDataArgument)!;
+            string signaturePath = parseResult.GetValue(assertionSignatureArgument)!;
+            string clientDataPath = parseResult.GetValue(assertionClientDataArgument)!;
+            string rpId = parseResult.GetValue(assertionRpIdOption)!;
+            string origin = parseResult.GetValue(assertionOriginOption)!;
+            string challenge = parseResult.GetValue(assertionChallengeOption)!;
+            uint storedSignCount = parseResult.GetValue(storedSignCountOption);
+            string? userVerification = parseResult.GetValue(assertionUserVerificationOption);
+            string? userHandlePath = parseResult.GetValue(userHandleOption);
+
+            var result = await VerifiableOperations.VerifyFido2AssertionAsync(
+                credentialRecordPath, authenticatorDataPath, signaturePath, clientDataPath, rpId, origin, challenge,
+                storedSignCount, userVerification, userHandlePath)
+                .ConfigureAwait(false);
+
+            if(!result.IsSuccess)
+            {
+                await Console.Error.WriteLineAsync(ConsoleFormatter.Error(result.Error!)).ConfigureAwait(false);
+                return 1;
+            }
+
+            Console.WriteLine(result.Value);
+            return 0;
+        });
+
+        Option<int?> challengeLengthOption = new("--length") { Description = "The challenge length in bytes. Defaults to 32; enforces a floor of 16." };
+        Option<string?> challengeOutputOption = new("--output", "-o") { Description = "Write the base64url challenge to a file." };
+
+        Command challengeCommand = new("challenge", "Create a WebAuthn cryptographic challenge.")
+        {
+            challengeLengthOption,
+            challengeOutputOption
+        };
+        fido2Command.Subcommands.Add(challengeCommand);
+
+        challengeCommand.SetAction(async parseResult =>
+        {
+            int? byteLength = parseResult.GetValue(challengeLengthOption);
+            string? outputPath = parseResult.GetValue(challengeOutputOption);
+
+            var result = VerifiableOperations.CreateFido2Challenge(byteLength);
+
+            if(!result.IsSuccess)
+            {
+                await Console.Error.WriteLineAsync(ConsoleFormatter.Error(result.Error!)).ConfigureAwait(false);
+                return 1;
+            }
+
+            if(outputPath is not null)
+            {
+                await File.WriteAllTextAsync(outputPath, result.Value).ConfigureAwait(false);
+                Console.WriteLine($"Challenge written to: {Path.GetFullPath(outputPath)}");
                 return 0;
             }
 

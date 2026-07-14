@@ -6,8 +6,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Verifiable.Cryptography.EventLogs;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.EventLogs;
 
@@ -346,7 +348,7 @@ internal sealed class LogReplayerTests
             ValidationContext = default,
             Apply = applyOverride ?? BuildBaseApply(),
             OnEntryProcessed = onEntryProcessed,
-            TimeProvider = System.TimeProvider.System
+            TimeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch)
         };
     }
 

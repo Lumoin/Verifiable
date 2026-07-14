@@ -86,7 +86,7 @@ public static partial class TcgEventLogReader
     /// from being used as a general-purpose file reader. Only known event log locations and
     /// the securityfs binary measurements path are permitted.
     /// </summary>
-    private static readonly string[] AllowedEventLogPaths =
+    private static string[] AllowedEventLogPaths { get; } =
     [
         LinuxEventLogPath,
         "/sys/kernel/security/tpm0/binary_bios_measurements",

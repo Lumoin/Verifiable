@@ -775,11 +775,11 @@ public static class MetadataEndpoints
 
 
     //Static well-known value sets emitted by the discovery endpoint.
-    private static readonly IReadOnlyList<string> SubjectTypePublic = ["public"];
-    private static readonly IReadOnlyList<string> ResponseTypeCode = ["code"];
-    private static readonly IReadOnlyList<string> CodeChallengeMethodS256 = ["S256"];
-    private static readonly IReadOnlyList<string> TokenEndpointAuthMethodNone = ["none"];
-    private static readonly IReadOnlyList<string> ClaimTypeNormal = ["normal"];
+    private static IReadOnlyList<string> SubjectTypePublic { get; } = ["public"];
+    private static IReadOnlyList<string> ResponseTypeCode { get; } = ["code"];
+    private static IReadOnlyList<string> CodeChallengeMethodS256 { get; } = ["S256"];
+    private static IReadOnlyList<string> TokenEndpointAuthMethodNone { get; } = ["none"];
+    private static IReadOnlyList<string> ClaimTypeNormal { get; } = ["normal"];
 
     /// <summary>
     /// JWT claim names the standard
@@ -790,7 +790,7 @@ public static class MetadataEndpoints
     /// list. The <see cref="ContributorChainRegressionTests"/> baseline pins
     /// the contributor output; this list pins the wire advertisement.
     /// </summary>
-    private static readonly IReadOnlyList<string> StandardClaimsSupported =
+    private static IReadOnlyList<string> StandardClaimsSupported { get; } =
     [
         //OIDC Core §2 spec-required.
         WellKnownJwtClaimNames.Sub,
@@ -910,30 +910,50 @@ public static class MetadataEndpoints
     private static void AppendContributedField(StringBuilder sb, DiscoveryField field)
     {
         bool first = false;
-        switch(field)
+        _ = field switch
         {
-            case DiscoveryStringField stringField:
-                JsonAppender.AppendStringField(sb, field.Name, stringField.Value, ref first);
-                return;
+            DiscoveryStringField stringField => AppendStringValue(stringField),
+            DiscoveryBooleanField booleanField => AppendBooleanValue(booleanField),
+            DiscoveryNumberField numberField => AppendNumberValue(numberField),
+            DiscoveryStringArrayField arrayField => AppendStringArrayValue(arrayField),
 
-            case DiscoveryBooleanField booleanField:
-                JsonAppender.AppendBoolField(sb, field.Name, booleanField.Value, ref first);
-                return;
+            //Library invariant: the DiscoveryField hierarchy is closed
+            //and exhaustively handled above. A new subtype added without
+            //updating this dispatch is a library bug.
+            _ => throw new InvalidOperationException(
+                $"Unhandled discovery field record subtype '{field.GetType().FullName}'.")
+        };
 
-            case DiscoveryNumberField numberField:
-                JsonAppender.AppendInt64Field(sb, field.Name, numberField.Value, ref first);
-                return;
 
-            case DiscoveryStringArrayField arrayField:
-                JsonAppender.AppendStringArrayField(sb, field.Name, arrayField.Values, ref first);
-                return;
+        bool AppendStringValue(DiscoveryStringField stringField)
+        {
+            JsonAppender.AppendStringField(sb, field.Name, stringField.Value, ref first);
 
-            default:
-                //Library invariant: the DiscoveryField hierarchy is closed
-                //and exhaustively handled above. A new subtype added without
-                //updating this dispatch is a library bug.
-                throw new InvalidOperationException(
-                    $"Unhandled discovery field record subtype '{field.GetType().FullName}'.");
+            return true;
+        }
+
+
+        bool AppendBooleanValue(DiscoveryBooleanField booleanField)
+        {
+            JsonAppender.AppendBoolField(sb, field.Name, booleanField.Value, ref first);
+
+            return true;
+        }
+
+
+        bool AppendNumberValue(DiscoveryNumberField numberField)
+        {
+            JsonAppender.AppendInt64Field(sb, field.Name, numberField.Value, ref first);
+
+            return true;
+        }
+
+
+        bool AppendStringArrayValue(DiscoveryStringArrayField arrayField)
+        {
+            JsonAppender.AppendStringArrayField(sb, field.Name, arrayField.Values, ref first);
+
+            return true;
         }
     }
 

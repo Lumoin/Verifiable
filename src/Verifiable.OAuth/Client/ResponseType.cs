@@ -111,7 +111,7 @@ public readonly struct ResponseType: IEquatable<ResponseType>
     public static ResponseType CodeVpToken { get; } = new(9);
 
 
-    private static readonly List<ResponseType> responseTypes =
+    private static List<ResponseType> responseTypes { get; } =
     [
         AuthorizationCode, Token, IdToken,
         CodeIdToken, CodeToken, IdTokenToken, CodeIdTokenToken,

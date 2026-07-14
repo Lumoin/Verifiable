@@ -39,7 +39,7 @@ internal sealed class CoseTests
             privateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(message);
         Assert.IsGreaterThan(0, message.Signature.Length);
@@ -50,7 +50,7 @@ internal sealed class CoseTests
             CoseSerialization.BuildSigStructure,
             publicKey,
             MicrosoftCryptographicFunctions.VerifyP256Async,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "COSE_Sign1 signature verification must succeed.");
     }
@@ -118,14 +118,14 @@ internal sealed class CoseTests
             privateKey,
             MicrosoftCryptographicFunctions.SignP384Async,
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         bool isValid = await Verifiable.JCose.Cose.VerifyAsync(
             message,
             CoseSerialization.BuildSigStructure,
             publicKey,
             MicrosoftCryptographicFunctions.VerifyP384Async,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "P-384 COSE_Sign1 signature verification must succeed.");
     }
@@ -150,14 +150,14 @@ internal sealed class CoseTests
             privateKey,
             MicrosoftCryptographicFunctions.SignP521Async,
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         bool isValid = await Verifiable.JCose.Cose.VerifyAsync(
             message,
             CoseSerialization.BuildSigStructure,
             publicKey,
             MicrosoftCryptographicFunctions.VerifyP521Async,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "P-521 COSE_Sign1 signature verification must succeed.");
     }
@@ -186,14 +186,14 @@ internal sealed class CoseTests
             signingPrivateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         bool isValid = await Verifiable.JCose.Cose.VerifyAsync(
             message,
             CoseSerialization.BuildSigStructure,
             wrongPublicKey,
             MicrosoftCryptographicFunctions.VerifyP256Async,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(isValid, "Verification with wrong key must fail.");
     }
@@ -218,7 +218,7 @@ internal sealed class CoseTests
             privateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, BaseMemoryPool.Shared);
         using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(coseBytes.AsReadOnlyMemory(), BaseMemoryPool.Shared);
@@ -232,7 +232,7 @@ internal sealed class CoseTests
             CoseSerialization.BuildSigStructure,
             publicKey,
             MicrosoftCryptographicFunctions.VerifyP256Async,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "Parsed COSE_Sign1 must verify successfully.");
     }
@@ -257,7 +257,7 @@ internal sealed class CoseTests
             privateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, BaseMemoryPool.Shared);
 
@@ -265,7 +265,7 @@ internal sealed class CoseTests
             coseBytes.AsReadOnlyMemory(),
             publicKey,
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsValid, "A genuine COSE_Sign1 signature must verify.");
         Assert.IsTrue(payload.AsSpan().SequenceEqual(result.Payload.Span), "The decoded payload must equal the signed payload.");
@@ -297,7 +297,7 @@ internal sealed class CoseTests
             signingPrivateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, BaseMemoryPool.Shared);
 
@@ -305,7 +305,7 @@ internal sealed class CoseTests
             coseBytes.AsReadOnlyMemory(),
             wrongPublicKey,
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid, "A COSE_Sign1 verified against the wrong key must not be valid.");
     }
@@ -324,7 +324,7 @@ internal sealed class CoseTests
             malformed,
             publicKey,
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid, "Malformed COSE bytes must fail closed to an invalid result, not throw.");
     }

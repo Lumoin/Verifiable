@@ -28,7 +28,6 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class PolicyOrInput: ITpmCommandInput
 {
-    private readonly IReadOnlyList<ReadOnlyMemory<byte>> branchDigests;
 
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_PolicyOR;
@@ -41,7 +40,7 @@ public sealed class PolicyOrInput: ITpmCommandInput
     /// <summary>
     /// Gets the allowed branch policy digests (the OR alternatives).
     /// </summary>
-    public IReadOnlyList<ReadOnlyMemory<byte>> BranchDigests => branchDigests;
+    public IReadOnlyList<ReadOnlyMemory<byte>> BranchDigests { get; }
 
     /// <summary>
     /// Creates a TPM2_PolicyOR input. The branch digests are public policy-digest values; the instance references
@@ -53,7 +52,7 @@ public sealed class PolicyOrInput: ITpmCommandInput
     {
         ArgumentNullException.ThrowIfNull(branchDigests);
         PolicySession = policySession;
-        this.branchDigests = branchDigests;
+        this.BranchDigests = branchDigests;
     }
 
     /// <inheritdoc/>
@@ -62,9 +61,9 @@ public sealed class PolicyOrInput: ITpmCommandInput
         int size = sizeof(uint) +   //policySession (handle area)
                    sizeof(uint);    //pHashList count (UINT32)
 
-        for(int i = 0; i < branchDigests.Count; i++)
+        for(int i = 0; i < BranchDigests.Count; i++)
         {
-            size += sizeof(ushort) + branchDigests[i].Length;   //each digest as TPM2B_DIGEST.
+            size += sizeof(ushort) + BranchDigests[i].Length;   //each digest as TPM2B_DIGEST.
         }
 
         return size;
@@ -79,12 +78,12 @@ public sealed class PolicyOrInput: ITpmCommandInput
     /// <inheritdoc/>
     public void WriteParameters(ref TpmWriter writer)
     {
-        writer.WriteUInt32((uint)branchDigests.Count);
-        for(int i = 0; i < branchDigests.Count; i++)
+        writer.WriteUInt32((uint)BranchDigests.Count);
+        for(int i = 0; i < BranchDigests.Count; i++)
         {
-            writer.WriteTpm2b(branchDigests[i].Span);
+            writer.WriteTpm2b(BranchDigests[i].Span);
         }
     }
 
-    private string DebuggerDisplay => $"PolicyOrInput(Session=0x{PolicySession:X8}, {branchDigests.Count} branch(es))";
+    private string DebuggerDisplay => $"PolicyOrInput(Session=0x{PolicySession:X8}, {BranchDigests.Count} branch(es))";
 }

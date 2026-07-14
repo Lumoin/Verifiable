@@ -27,7 +27,7 @@ internal sealed class BitstringStatusListCredentialJwsTests
 {
     private const int Example4Index = 94567;
     private const int UnsetIndex = 5;
-    private static readonly DateTimeOffset Now = new(2024, 4, 6, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset Now = StatusListTestConstants.BitstringValidationReferenceTime;
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
@@ -62,7 +62,7 @@ internal sealed class BitstringStatusListCredentialJwsTests
         statusList[Example4Index] = 1;
         string encodedList = BitstringStatusListCodec.EncodeList(statusList);
 
-        VerifiableCredential statusListCredential = BuildStatusListCredential(encodedList);
+        VerifiableCredential statusListCredential = StatusListTokenJwtFixtures.BuildStatusListCredential(StatusListCredentialTemplate, encodedList);
 
         using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         using var publicKey = CredentialSecuringMaterial.DecodeEd25519PublicKey();
@@ -110,7 +110,7 @@ internal sealed class BitstringStatusListCredentialJwsTests
     {
         using var statusList = StatusListType.Create(BitstringStatusListCodec.MinimumEntries, StatusListBitSize.OneBit, Pool, BitOrder.MostSignificantFirst);
         statusList[Example4Index] = 1;
-        VerifiableCredential statusListCredential = BuildStatusListCredential(BitstringStatusListCodec.EncodeList(statusList));
+        VerifiableCredential statusListCredential = StatusListTokenJwtFixtures.BuildStatusListCredential(StatusListCredentialTemplate, BitstringStatusListCodec.EncodeList(statusList));
 
         using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         using var publicKey = CredentialSecuringMaterial.DecodeEd25519PublicKey();
@@ -145,15 +145,6 @@ internal sealed class BitstringStatusListCredentialJwsTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid, "A tampered status list credential must not verify.");
-    }
-
-
-    private static VerifiableCredential BuildStatusListCredential(string encodedList)
-    {
-        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(StatusListCredentialTemplate, CredentialSecuringMaterial.JsonOptions)!;
-        credential.CredentialSubject![0].AdditionalData![BitstringStatusListConstants.EncodedListProperty] = encodedList;
-
-        return credential;
     }
 
 

@@ -22,15 +22,15 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 public sealed class PolicySecretResponse: IDisposable, ITpmWireType
 {
     private bool disposed;
-    private readonly IMemoryOwner<byte> timeoutOwner;
-    private readonly int timeoutLength;
-    private readonly IMemoryOwner<byte> ticketDigestOwner;
-    private readonly int ticketDigestLength;
+    private IMemoryOwner<byte> TimeoutOwner { get; }
+    private int TimeoutLength { get; }
+    private IMemoryOwner<byte> TicketDigestOwner { get; }
+    private int TicketDigestLength { get; }
 
     /// <summary>
     /// Gets the timeout value (empty in the immediate form).
     /// </summary>
-    public ReadOnlySpan<byte> Timeout => timeoutOwner.Memory.Span[..timeoutLength];
+    public ReadOnlySpan<byte> Timeout => TimeoutOwner.Memory.Span[..TimeoutLength];
 
     /// <summary>
     /// Gets the authorization ticket (a NULL ticket in the immediate form).
@@ -40,10 +40,10 @@ public sealed class PolicySecretResponse: IDisposable, ITpmWireType
     private PolicySecretResponse(
         IMemoryOwner<byte> timeoutOwner, int timeoutLength, IMemoryOwner<byte> ticketDigestOwner, int ticketDigestLength, TpmtTkAuth policyTicket)
     {
-        this.timeoutOwner = timeoutOwner;
-        this.timeoutLength = timeoutLength;
-        this.ticketDigestOwner = ticketDigestOwner;
-        this.ticketDigestLength = ticketDigestLength;
+        this.TimeoutOwner = timeoutOwner;
+        this.TimeoutLength = timeoutLength;
+        this.TicketDigestOwner = ticketDigestOwner;
+        this.TicketDigestLength = ticketDigestLength;
         PolicyTicket = policyTicket;
     }
 
@@ -87,11 +87,11 @@ public sealed class PolicySecretResponse: IDisposable, ITpmWireType
     {
         if(!disposed)
         {
-            timeoutOwner.Dispose();
-            ticketDigestOwner.Dispose();
+            TimeoutOwner.Dispose();
+            TicketDigestOwner.Dispose();
             disposed = true;
         }
     }
 
-    private string DebuggerDisplay => $"PolicySecretResponse(timeout={timeoutLength} bytes, ticket={PolicyTicket})";
+    private string DebuggerDisplay => $"PolicySecretResponse(timeout={TimeoutLength} bytes, ticket={PolicyTicket})";
 }

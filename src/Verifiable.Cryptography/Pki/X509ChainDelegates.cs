@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Linq;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -35,19 +36,26 @@ public delegate IReadOnlyList<PkiCertificateMemory> ParseX5cDelegate(
 /// </param>
 /// <param name="validationTime">The UTC time at which to evaluate certificate validity.</param>
 /// <param name="pool">Memory pool for key material allocation.</param>
-/// <param name="cancellationToken">Cancellation token.</param>
 /// <param name="checkRevocation">
 /// An optional revocation-status seam. When it is <see langword="null"/> (the default) no revocation source is
 /// configured and only chain building is performed. When it is supplied, an implementation of this delegate MUST
-/// consult it for the chain leaf and fail closed — a <see cref="CertificateRevocationStatus.Revoked"/> or
-/// <see cref="CertificateRevocationStatus.Unknown"/> result MUST throw
-/// <see cref="System.Security.SecurityException"/> — so a caller relying on revocation gets it from any conforming
-/// implementation. The two library backends (<c>MicrosoftX509Functions.ValidateChainAsync</c> and
-/// <c>BouncyCastleX509Functions.ValidateChainAsync</c>) honour this contract; a custom implementation that accepts
-/// the parameter but ignores it silently forgoes revocation, exactly as a custom implementation that skipped chain
-/// building would forgo trust. Supplying the checker is how a caller configures a revocation source; the library
-/// ships the seam and the fail-closed policy, not an OCSP/CRL client.
+/// consult it for every certificate in <paramref name="chain"/> that is not byte-equal to a supplied trust
+/// anchor — the leaf AND every intermediate CA certificate the chain carries, per
+/// <see href="https://www.w3.org/TR/webauthn-3/#sctn-registering-a-new-credential">W3C Web Authentication Level 3,
+/// section 7.1: Registering a New Credential</see>'s "the Relying Party MUST have access to certificate status
+/// information for the intermediate CA certificates" — and fail closed: a
+/// <see cref="CertificateRevocationStatus.Revoked"/> or <see cref="CertificateRevocationStatus.Unknown"/> result
+/// for any checked certificate MUST throw <see cref="System.Security.SecurityException"/>. For each certificate
+/// checked, the issuer candidates passed to <paramref name="checkRevocation"/> are the OTHER certificates in
+/// <paramref name="chain"/> plus <paramref name="trustAnchors"/>, so a checker can locate the leaf's intermediate
+/// issuer as well as an intermediate's own (root) issuer. The two library backends
+/// (<c>MicrosoftX509Functions.ValidateChainAsync</c> and <c>BouncyCastleX509Functions.ValidateChainAsync</c>)
+/// honour this contract; a custom implementation that accepts the parameter but ignores it silently forgoes
+/// revocation, exactly as a custom implementation that skipped chain building would forgo trust. Supplying the
+/// checker is how a caller configures a revocation source; the library ships the seam and the fail-closed policy,
+/// not an OCSP/CRL client.
 /// </param>
+/// <param name="cancellationToken">Cancellation token.</param>
 /// <returns>
 /// The leaf certificate's public key. The caller owns the returned
 /// <see cref="PublicKeyMemory"/> and must dispose it.
@@ -69,8 +77,48 @@ public delegate ValueTask<PublicKeyMemory> ValidateCertificateChainAsyncDelegate
     IReadOnlyList<PkiCertificateMemory> trustAnchors,
     DateTimeOffset validationTime,
     MemoryPool<byte> pool,
-    CancellationToken cancellationToken,
-    CheckCertificateRevocationStatusAsyncDelegate? checkRevocation = null);
+    CheckCertificateRevocationStatusAsyncDelegate? checkRevocation = null,
+    CancellationToken cancellationToken = default);
+
+
+/// <summary>
+/// Completes a partial X.509 certificate chain by acquiring any missing intermediate certificates, so that a
+/// certificate path whose carrier omitted intermediates (the client did not provide them) can still be validated.
+/// </summary>
+/// <param name="partialChain">
+/// The certificate chain as supplied on the wire: leaf first, zero or more intermediates following, possibly
+/// already reaching a trust anchor.
+/// </param>
+/// <param name="trustAnchors">The trust anchor certificates the completed chain must reach.</param>
+/// <param name="pool">Memory pool for any acquired certificate's byte allocation.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+/// <returns>
+/// <paramref name="partialChain"/> unchanged when it already reaches a trust anchor; otherwise
+/// <paramref name="partialChain"/> with the acquired intermediate certificates appended, in issuance order (the
+/// certificate whose issuer is <paramref name="partialChain"/>'s last entry comes first). Every certificate beyond
+/// <paramref name="partialChain"/>'s own entries was newly acquired by this call and is owned by the CALLER of
+/// this delegate, which must dispose it once validation is complete; <paramref name="partialChain"/>'s own
+/// entries remain owned exactly as before the call.
+/// </returns>
+/// <remarks>
+/// <see href="https://www.w3.org/TR/webauthn-3/#sctn-registering-a-new-credential">W3C Web Authentication Level 3,
+/// section 7.1: Registering a New Credential</see>: "The Relying Party MUST also be able to build the attestation
+/// certificate chain if the client did not provide this chain in the attestation information." A typical
+/// acquisition source is the certificate's Authority Information Access extension's <c>id-ad-caIssuers</c> access
+/// method (<see href="https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.2.1">RFC 5280 section
+/// 4.2.2.1</see>); an offline deployment may instead hold a store of known intermediates, as
+/// <c>CertificateChainCompleter</c> (Verifiable.BouncyCastle) does. The seam is asynchronous because production
+/// chain completion typically requires I/O (an AIA fetch); an offline, in-memory implementation completes
+/// synchronously via a completed <see cref="ValueTask{TResult}"/>.
+/// </remarks>
+/// <exception cref="System.Security.SecurityException">
+/// Thrown when the chain cannot be completed to any of the supplied trust anchors.
+/// </exception>
+public delegate ValueTask<IReadOnlyList<PkiCertificateMemory>> CompleteCertificateChainAsyncDelegate(
+    IReadOnlyList<PkiCertificateMemory> partialChain,
+    IReadOnlyList<PkiCertificateMemory> trustAnchors,
+    MemoryPool<byte> pool,
+    CancellationToken cancellationToken);
 
 
 /// <summary>
@@ -170,8 +218,13 @@ public delegate X509CertificateProfile ReadCertificateProfileDelegate(
 /// <summary>
 /// The profile-relevant constraints of an X.509 certificate, extracted as backend-neutral booleans:
 /// the two Key Usage bits (RFC 5280 §4.2.1.3) and the Basic Constraints CA flag (RFC 5280 §4.2.1.9)
-/// a certificate-profile policy checks. A certificate whose relevant extension is absent reads every
-/// affected constraint as <see langword="false"/>.
+/// a certificate-profile policy checks, together with the certificate's version (RFC 5280 §4.1.2.1)
+/// and its Subject Organizational Unit (OID 2.5.4.11), Country (OID 2.5.4.6), Organization
+/// (OID 2.5.4.10), and Common Name (OID 2.5.4.3) values (RFC 5280 §4.1.2.4) — the additional
+/// fields <see href="https://www.w3.org/TR/webauthn-3/#sctn-packed-attestation-cert-requirements">
+/// WebAuthn Level 3 §8.2.1 "Certificate Requirements for Packed Attestation Statements"</see> checks.
+/// A certificate whose relevant extension is absent reads every affected constraint as
+/// <see langword="false"/>.
 /// </summary>
 public sealed record X509CertificateProfile
 {
@@ -193,7 +246,152 @@ public sealed record X509CertificateProfile
     /// sets <c>cA=FALSE</c>.
     /// </summary>
     public required bool IsCertificateAuthority { get; init; }
+
+    /// <summary>
+    /// Gets the certificate's version (RFC 5280 §4.1.2.1) — <c>3</c> for a version-3 certificate,
+    /// the version a certificate profile that relies on version-3-only extensions requires.
+    /// </summary>
+    public required int Version { get; init; }
+
+    /// <summary>
+    /// Gets the certificate Subject's Organizational Unit (<c>OU</c>, OID 2.5.4.11) attribute values
+    /// (RFC 5280 §4.1.2.4), in the order they appear in the Subject field. Empty when the Subject
+    /// carries no Organizational Unit attribute.
+    /// </summary>
+    public required IReadOnlyList<string> SubjectOrganizationalUnits { get; init; }
+
+    /// <summary>
+    /// Gets the certificate Subject's Country (<c>C</c>, OID 2.5.4.6) attribute values
+    /// (RFC 5280 §4.1.2.4), in the order they appear in the Subject field. Empty when the Subject
+    /// carries no Country attribute.
+    /// </summary>
+    public required IReadOnlyList<string> SubjectCountries { get; init; }
+
+    /// <summary>
+    /// Gets the certificate Subject's Organization (<c>O</c>, OID 2.5.4.10) attribute values
+    /// (RFC 5280 §4.1.2.4), in the order they appear in the Subject field. Empty when the Subject
+    /// carries no Organization attribute.
+    /// </summary>
+    public required IReadOnlyList<string> SubjectOrganizations { get; init; }
+
+    /// <summary>
+    /// Gets the certificate Subject's Common Name (<c>CN</c>, OID 2.5.4.3) attribute values
+    /// (RFC 5280 §4.1.2.4), in the order they appear in the Subject field. Empty when the Subject
+    /// carries no Common Name attribute.
+    /// </summary>
+    public required IReadOnlyList<string> SubjectCommonNames { get; init; }
+
+    /// <summary>
+    /// Gets whether the certificate's Subject field (RFC 5280 §4.1.2.4, an RDNSequence) carries no
+    /// relative distinguished names at all — the "Subject field MUST be set to empty" constraint
+    /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-tpm-cert-requirements">WebAuthn Level 3
+    /// §8.3.1</see> imposes on a TPM attestation key certificate, whose identity is carried entirely
+    /// in its Subject Alternative Name instead. Distinct from <see cref="SubjectOrganizationalUnits"/>
+    /// and its siblings being empty: those report only four specific attribute types, while this
+    /// reports whether the Subject carries ANY relative distinguished name of any type.
+    /// </summary>
+    public required bool HasEmptySubject { get; init; }
+
+    /// <summary>
+    /// Determines whether this profile and <paramref name="other"/> report the same constraints. The
+    /// compiler-synthesized record equality compares the Subject attribute lists by reference, which
+    /// would report two independently-read profiles with identical Subject attribute sequences as
+    /// unequal; this override compares each sequence by value instead.
+    /// </summary>
+    /// <param name="other">The other profile to compare against.</param>
+    /// <returns>
+    /// <see langword="true"/> when every constraint matches, including a value-wise (not reference-wise)
+    /// comparison of <see cref="SubjectOrganizationalUnits"/>, <see cref="SubjectCountries"/>,
+    /// <see cref="SubjectOrganizations"/>, and <see cref="SubjectCommonNames"/>.
+    /// </returns>
+    public bool Equals(X509CertificateProfile? other) =>
+        other is not null
+        && AssertsDigitalSignature == other.AssertsDigitalSignature
+        && AssertsKeyCertSign == other.AssertsKeyCertSign
+        && IsCertificateAuthority == other.IsCertificateAuthority
+        && Version == other.Version
+        && HasEmptySubject == other.HasEmptySubject
+        && SubjectOrganizationalUnits.SequenceEqual(other.SubjectOrganizationalUnits)
+        && SubjectCountries.SequenceEqual(other.SubjectCountries)
+        && SubjectOrganizations.SequenceEqual(other.SubjectOrganizations)
+        && SubjectCommonNames.SequenceEqual(other.SubjectCommonNames);
+
+    /// <summary>
+    /// Computes a hash code consistent with <see cref="Equals(X509CertificateProfile?)"/> — combining the
+    /// boolean constraints, the version, and each Subject attribute list's values in order — so two
+    /// value-equal profiles never disagree in a hash-based collection.
+    /// </summary>
+    /// <returns>The hash code.</returns>
+    public override int GetHashCode()
+    {
+        HashCode hash = new();
+        hash.Add(AssertsDigitalSignature);
+        hash.Add(AssertsKeyCertSign);
+        hash.Add(IsCertificateAuthority);
+        hash.Add(Version);
+        hash.Add(HasEmptySubject);
+        foreach(string organizationalUnit in SubjectOrganizationalUnits)
+        {
+            hash.Add(organizationalUnit, StringComparer.Ordinal);
+        }
+
+        foreach(string country in SubjectCountries)
+        {
+            hash.Add(country, StringComparer.Ordinal);
+        }
+
+        foreach(string organization in SubjectOrganizations)
+        {
+            hash.Add(organization, StringComparer.Ordinal);
+        }
+
+        foreach(string commonName in SubjectCommonNames)
+        {
+            hash.Add(commonName, StringComparer.Ordinal);
+        }
+
+        return hash.ToHashCode();
+    }
 }
+
+
+/// <summary>
+/// The value of a single X.509 certificate extension, read as backend-neutral bytes.
+/// </summary>
+/// <param name="Value">
+/// The DER contents of the extension's <c>extnValue</c> (RFC 5280 §4.2), exactly as the underlying
+/// platform exposes the extension's raw data — for example the DER OCTET STRING payload of a private
+/// extension, still requiring its own ASN.1 decoding by the caller.
+/// </param>
+/// <param name="IsCritical">The extension's <c>critical</c> flag (RFC 5280 §4.2).</param>
+public sealed record X509ExtensionValue(ReadOnlyMemory<byte> Value, bool IsCritical);
+
+
+/// <summary>
+/// Reads a single named extension of an X.509 certificate as backend-neutral bytes, so a caller can
+/// decode a private extension (for example the WebAuthn Level 3 §8.2.1 attestation certificate AAGUID
+/// extension, OID <c>1.3.6.1.4.1.45724.1.1.4</c>) without depending on any provider's certificate type.
+/// </summary>
+/// <param name="certificate">The certificate to inspect.</param>
+/// <param name="oid">The dotted-decimal object identifier of the extension to read.</param>
+/// <returns>
+/// The <see cref="X509ExtensionValue"/> for <paramref name="oid"/>, or <see langword="null"/> when the
+/// certificate carries no extension with that identifier.
+/// </returns>
+/// <remarks>
+/// Mirrors <see cref="ReadCertificateProfileDelegate"/>'s fail-closed duplicate-extension rule: RFC 5280
+/// §4.2 forbids a certificate from including more than one instance of any single extension, and a
+/// malformed certificate that does so is rejected outright — before <paramref name="oid"/> is even looked
+/// up — rather than resolving <paramref name="oid"/> from an arbitrarily chosen instance among the
+/// duplicates.
+/// </remarks>
+/// <exception cref="System.Security.Cryptography.CryptographicException">
+/// Thrown when the certificate is malformed — for example it includes more than one instance of a single
+/// extension (of any OID, not only <paramref name="oid"/>), which RFC 5280 §4.2 forbids.
+/// </exception>
+public delegate X509ExtensionValue? ReadCertificateExtensionValueDelegate(
+    PkiCertificateMemory certificate,
+    string oid);
 
 
 /// <summary>

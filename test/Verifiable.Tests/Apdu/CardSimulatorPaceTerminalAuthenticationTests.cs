@@ -94,6 +94,7 @@ internal sealed class CardSimulatorPaceTerminalAuthenticationTests
         ReadOnlyMemory<byte> chipStaticPrivateKey = Convert.FromHexString(ChipStaticPrivateKey);
         ReadOnlyMemory<byte> terminalChipAuthenticationPrivateKey = Convert.FromHexString(TerminalChipAuthenticationPrivateKey);
 
+        //CVCA, Document Verifier, and Terminal keys mint the CA/attestation chain (cert-factory carve-out); CardVerifiableCertificateMinter.Mint signs and embeds ECDsa instances directly.
         using ECDsa cvcaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa documentVerifierKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa terminalKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);

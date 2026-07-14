@@ -18,7 +18,7 @@ namespace Verifiable.Tests.OAuth;
 [TestClass]
 internal sealed class AuthorizationRequestStateParameterPolicyTests
 {
-    private static readonly DateTimeOffset Now = new(2026, 6, 1, 12, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset Now = TestClock.CanonicalEpoch;
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(5);
 
     private static readonly JarClaimDeserializer<DcqlQuery> DcqlDeserializer =

@@ -14,7 +14,7 @@ internal sealed class DpopProofValidatorTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly DateTimeOffset NowInstant = new(2026, 5, 13, 12, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset NowInstant = TestClock.CanonicalEpoch.AddDays(-19);
     private static readonly TimeSpan IatSkew = TimeSpan.FromSeconds(30);
     private const string DefaultMethod = "POST";
     private const string DefaultUrl = "https://as.example.com/token";

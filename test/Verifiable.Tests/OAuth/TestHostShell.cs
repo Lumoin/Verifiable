@@ -56,7 +56,7 @@ namespace Verifiable.Tests.OAuth;
 /// <remarks>
 /// <para>
 /// This is the test equivalent of <c>Program.cs</c>. In production the host is
-/// ASP.NET with Kestrel, Dapper, PostgreSQL, and whatever other infrastructure
+/// ASP.NET with Kestrel, a database, and whatever other infrastructure
 /// the deployment requires. Here the host is a plain class with
 /// <see cref="ConcurrentDictionary{TKey,TValue}"/> stores. The
 /// <see cref="AuthorizationServer"/> underneath is identical in both cases.
@@ -84,40 +84,71 @@ namespace Verifiable.Tests.OAuth;
 [DebuggerDisplay("TestHostShell Clients={Default.Registrations.Count} Flows={Default.FlowStates.Count}")]
 internal sealed class TestHostShell: IAsyncDisposable
 {
-    //All per-host state lives on the Default HostedAuthorizationServer.
-    //Property accessors below mirror the historical field names so methods
-    //on TestHostShell continue to compile unchanged. Multi-host tests get
-    //additional hosts via Hosts (TODO follow-up).
+    /// <summary>
+    /// All per-host state lives on this instance. The property aliases below mirror the historical
+    /// field names so methods on <see cref="TestHostShell"/> continue to compile unchanged after that
+    /// state moved onto <see cref="HostedAuthorizationServer"/>. Multi-host tests reach additional
+    /// hosts through <see cref="Hosts"/>.
+    /// </summary>
     private HostedAuthorizationServer Default { get; }
 
-    //Property aliases — same names the integration-delegate lambdas in the
-    //constructor close over. Each access goes to the Default host's state.
+    /// <summary>The <see cref="Default"/> host's client registrations, keyed by both tenant segment and client id.</summary>
     private ConcurrentDictionary<string, ClientRecord> Registrations => Default.Registrations;
+
+    /// <summary>The <see cref="Default"/> host's flow-state store, keyed by flow id.</summary>
     private ConcurrentDictionary<string, (FlowState State, int StepCount)> FlowStates => Default.FlowStates;
+
+    /// <summary>The <see cref="Default"/> host's request_uri / per-flow handle secondary index.</summary>
     private ConcurrentDictionary<string, string> RequestUriTokenIndex => Default.RequestUriTokenIndex;
+
+    /// <summary>The <see cref="Default"/> host's authorization-code secondary index.</summary>
     private ConcurrentDictionary<string, string> CodeIndex => Default.CodeIndex;
+
+    /// <summary>The <see cref="Default"/> host's DPoP <c>jti</c> replay index.</summary>
     private ConcurrentDictionary<string, string> JtiIndex => Default.JtiIndex;
+
+    /// <summary>The <see cref="Default"/> host's access-token secondary index.</summary>
     private ConcurrentDictionary<string, string> AccessTokenIndex => Default.AccessTokenIndex;
+
+    /// <summary>The <see cref="Default"/> host's refresh-token secondary index.</summary>
     private ConcurrentDictionary<string, string> RefreshTokenIndex => Default.RefreshTokenIndex;
+
+    /// <summary>The <see cref="Default"/> host's token/JAR signing key store.</summary>
     private ConcurrentDictionary<KeyId, PrivateKeyMemory> SigningKeys => Default.SigningKeys;
+
+    /// <summary>The <see cref="Default"/> host's signature verification key store.</summary>
     private ConcurrentDictionary<KeyId, PublicKeyMemory> VerificationKeys => Default.VerificationKeys;
+
+    /// <summary>The <see cref="Default"/> host's response-encryption decryption key store.</summary>
     private ConcurrentDictionary<KeyId, PrivateKeyMemory> DecryptionKeys => Default.DecryptionKeys;
+
+    /// <summary>The <see cref="Default"/> host's RFC 7592 registration access token store.</summary>
     private ConcurrentDictionary<string, string> RegistrationAccessTokens => Default.RegistrationAccessTokens;
 
+    /// <summary>Disposable DPoP-related resources owned by this shell, released on <see cref="DisposeAsync"/>.</summary>
     private List<IDisposable> DpopOwnedDisposables { get; } = [];
+
+    /// <summary>The DPoP HMAC confirmation key set shared by tests that need symmetric DPoP proofs.</summary>
     private InProcessKeySet? DpopHmacKeySet { get; set; }
+
+    /// <summary>Guards <see cref="DisposeAsync"/> against running its teardown more than once.</summary>
     private bool Disposed { get; set; }
 
+    /// <summary>The <see cref="Default"/> host's Kestrel server instance, set once <see cref="StartHttpHostAsync"/> runs.</summary>
     private global::Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServer? KestrelServer
     {
         get => Default.KestrelServer;
         set => Default.KestrelServer = value;
     }
+
+    /// <summary>The <see cref="Default"/> host's loopback base address once it is serving HTTP.</summary>
     private Uri? HttpBaseAddress
     {
         get => Default.HttpBaseAddress;
         set => Default.HttpBaseAddress = value;
     }
+
+    /// <summary>The <see cref="Default"/> host's shared <see cref="System.Net.Http.HttpClient"/> for real-wire tests.</summary>
     private System.Net.Http.HttpClient? SharedHttpClient
     {
         get => Default.SharedHttpClient;
@@ -377,18 +408,32 @@ internal sealed class TestHostShell: IAsyncDisposable
     }
 
 
-    //Shell-level dependencies kept for AddHost so secondary hosts wire the
-    //same trust anchor and VP validator the Default host received.
+    /// <summary>
+    /// Shell-level trust-anchor lookup, kept for <see cref="AddHost"/> so secondary hosts wire the
+    /// same trust anchor the <see cref="Default"/> host received.
+    /// </summary>
     private ResolveIssuerKeyDelegate ResolveIssuerKeyShared { get; }
+
+    /// <summary>Shell-level VP-token validator, kept for <see cref="AddHost"/> alongside <see cref="ResolveIssuerKeyShared"/>.</summary>
     private ClaimIssuer<ValidationContext> VpValidatorShared { get; }
+
+    /// <summary>Shell-level mdoc VP verification seams, or <see langword="null"/> when the shell was not built with mdoc support.</summary>
     private MdocVpVerificationSeams? MdocSeamsShared { get; }
+
+    /// <summary>Shell-level SD-CWT VP verification seams, or <see langword="null"/> when the shell was not built with SD-CWT support.</summary>
     private SdCwtVpVerificationSeams? SdCwtSeamsShared { get; }
+
+    /// <summary>Shell-level commitment-reuse detection seam, or <see langword="null"/> when the shell was not built with one.</summary>
     private CommitmentReuseDetectionSeam? SaltReuseSeamShared { get; }
+
+    /// <summary>Shell-level status-list token resolver, or <see langword="null"/> when status-list resolution is not wired.</summary>
     private Verifiable.Core.StatusList.ResolveVerifiedStatusListTokenDelegate? StatusListResolverShared { get; }
 
-    //Multi-host orchestration. The Default entry is added in the constructor;
-    //AddHost creates further independent hosts (different roles in a multi-
-    //party flow — Verifier + Federation Anchor, etc.).
+    /// <summary>
+    /// Multi-host orchestration store, keyed by role name. The <c>"default"</c> entry is added by the
+    /// constructor; <see cref="AddHost"/> creates further independent hosts (different roles in a
+    /// multi-party flow — Verifier + Federation Anchor, etc.).
+    /// </summary>
     private Dictionary<string, HostedAuthorizationServer> HostsByName { get; } =
         new(StringComparer.Ordinal);
 
@@ -557,20 +602,6 @@ internal sealed class TestHostShell: IAsyncDisposable
 
 
     /// <summary>
-    /// Registers a client with externally provided signing key material.
-    /// Use this overload to test JWKS output for any algorithm — P-256, P-384,
-    /// P-521, Ed25519, secp256k1, RSA-2048, ML-DSA-44, ML-DSA-65, ML-DSA-87.
-    /// </summary>
-    /// <param name="clientId">The client identifier.</param>
-    /// <param name="signingKeyPair">
-    /// The signing key pair. Ownership transfers to the host — both keys are
-    /// stored in the key stores and disposed when the host is disposed.
-    /// </param>
-    /// <param name="capabilities">
-    /// The capabilities this client is allowed to use.
-    /// </param>
-    /// <returns>The registered <see cref="ClientRecord"/>.</returns>
-    /// <summary>
     /// Registers a client with the supplied signing key in the
     /// <see cref="KeyUsageContext.JarSigning"/> slot, so JAR-bearing AuthCode
     /// or OID4VP flows can be parameterised across signature algorithms.
@@ -646,6 +677,20 @@ internal sealed class TestHostShell: IAsyncDisposable
     }
 
 
+    /// <summary>
+    /// Registers a client with externally provided signing key material.
+    /// Use this overload to test JWKS output for any algorithm — P-256, P-384,
+    /// P-521, Ed25519, secp256k1, RSA-2048, ML-DSA-44, ML-DSA-65, ML-DSA-87.
+    /// </summary>
+    /// <param name="clientId">The client identifier.</param>
+    /// <param name="signingKeyPair">
+    /// The signing key pair. Ownership transfers to the host — both keys are
+    /// stored in the key stores and disposed when the host is disposed.
+    /// </param>
+    /// <param name="capabilities">
+    /// The capabilities this client is allowed to use.
+    /// </param>
+    /// <returns>The registered <see cref="ClientRecord"/>.</returns>
     public ClientRecord RegisterSigningClient(
         string clientId,
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> signingKeyPair,
@@ -899,7 +944,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         ArgumentNullException.ThrowIfNull(record);
         ArgumentException.ThrowIfNullOrWhiteSpace(redirectUri);
 
-        await StartHttpHostAsync(cancellationToken).ConfigureAwait(false);
+        await StartHttpHostAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
 
         ClientRecord alignedRecord = AlignRegistrationIssuerToHttpBase(record);
 
@@ -910,6 +955,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         Uri parEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodePar, segment));
         Uri authEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment));
         Uri tokenEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeToken, segment));
+        Uri revocationEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeRevoke, segment));
         Uri issuerUriValue = alignedRecord.IssuerUri!;
 
         AuthorizationServerMetadata metadata = new()
@@ -917,7 +963,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             Issuer = issuerUriValue,
             PushedAuthorizationRequestEndpoint = parEndpoint,
             AuthorizationEndpoint = authEndpoint,
-            TokenEndpoint = tokenEndpoint
+            TokenEndpoint = tokenEndpoint,
+            RevocationEndpoint = revocationEndpoint
         };
 
         System.Net.Http.HttpClient httpClient = SharedHttpClient!;
@@ -997,7 +1044,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         ArgumentNullException.ThrowIfNull(holderKey);
 
         OAuthClientInfrastructure infrastructure = await BuildHttpBackedOAuthClientInfrastructureAsync(
-            verifierKeys, cancellationToken).ConfigureAwait(false);
+            verifierKeys, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         HttpClient walletHttpClient = Host("default").SharedHttpClient!;
         Oid4VpWalletConfiguration config =
@@ -1032,7 +1079,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         ArgumentNullException.ThrowIfNull(holderKey);
 
         OAuthClientInfrastructure infrastructure = await BuildHttpBackedOAuthClientInfrastructureAsync(
-            verifierKeys, cancellationToken).ConfigureAwait(false);
+            verifierKeys, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         HttpClient walletHttpClient = Host("default").SharedHttpClient!;
         Oid4VpWalletConfiguration config =
@@ -1068,7 +1115,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         ArgumentNullException.ThrowIfNull(verifierSigningKeyResolver);
 
         OAuthClientInfrastructure infrastructure = await BuildHttpBackedOAuthClientInfrastructureAsync(
-            verifierKeys, cancellationToken).ConfigureAwait(false);
+            verifierKeys, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         HttpClient walletHttpClient = Host("default").SharedHttpClient!;
         Oid4VpWalletConfiguration config =
@@ -1081,6 +1128,11 @@ internal sealed class TestHostShell: IAsyncDisposable
     }
 
 
+    /// <summary>
+    /// Registers <paramref name="verifierKeys"/>' client via the OAuth-client factory and returns the
+    /// resulting HTTP-backed <see cref="OAuthClientInfrastructure"/> so wallet clients can send through
+    /// its <c>SendFormPostAsync</c> transport.
+    /// </summary>
     private async ValueTask<OAuthClientInfrastructure> BuildHttpBackedOAuthClientInfrastructureAsync(
         VerifierKeyMaterial verifierKeys,
         CancellationToken cancellationToken)
@@ -1185,9 +1237,17 @@ internal sealed class TestHostShell: IAsyncDisposable
     }
 
 
-    //SD-JWT VC mandatory claims — always disclosed, the lattice bottom.
-    private static readonly CredentialPath SdJwtIssPath = CredentialPath.FromJsonPointer("/iss");
-    private static readonly CredentialPath SdJwtVctPath = CredentialPath.FromJsonPointer("/vct");
+    /// <summary>
+    /// The SD-JWT VC mandatory <c>iss</c> claim path — always disclosed, the lattice bottom every
+    /// disclosure computation in this file treats as non-selectable.
+    /// </summary>
+    private static CredentialPath SdJwtIssPath { get; } = CredentialPath.FromJsonPointer("/iss");
+
+    /// <summary>
+    /// The SD-JWT VC mandatory <c>vct</c> claim path — always disclosed, the lattice bottom every
+    /// disclosure computation in this file treats as non-selectable.
+    /// </summary>
+    private static CredentialPath SdJwtVctPath { get; } = CredentialPath.FromJsonPointer("/vct");
 
 
     /// <summary>
@@ -1242,6 +1302,12 @@ internal sealed class TestHostShell: IAsyncDisposable
     }
 
 
+    /// <summary>
+    /// Shared implementation behind the <c>BuildSdJwtProduceDelegate*</c> overloads: parses the stored
+    /// SD-JWT resolved by <paramref name="resolveStoredSdJwt"/>, computes the disclosure set (minimal
+    /// unless <paramref name="minimalDisclosure"/> is <see langword="false"/>), and builds the bound
+    /// KB-JWT presentation.
+    /// </summary>
     private static ProduceVpTokenPresentationsDelegate BuildSdJwtProduceDelegateCore(
         Func<string, string> resolveStoredSdJwt, PrivateKeyMemory holderKey, bool minimalDisclosure = true)
     {
@@ -1265,11 +1331,11 @@ internal sealed class TestHostShell: IAsyncDisposable
                 HashSet<string> selectedClaimNames;
                 if(minimalDisclosure)
                 {
-                    //--- The one engine path every flow runs: DcqlDisclosure drives
+                    //The one engine path every flow runs: DcqlDisclosure drives
                     //DcqlEvaluator.Evaluate -> ToDisclosureMatch -> ComputeAsync over the
                     //parsed token via SdTokenDcqlAdapter. iss/vct are the always-visible
                     //mandatory paths (lattice bottom); the engine's SelectedPaths is the
-                    //minimal disclosure set. ---
+                    //minimal disclosure set.
                     DisclosureStrategyGraph<SdToken<string>> graph = (await DcqlDisclosure.ComputeStrategyAsync(
                         query,
                         token,
@@ -1297,9 +1363,11 @@ internal sealed class TestHostShell: IAsyncDisposable
                         && selectedClaimNames.Contains(disclosure.ClaimName),
                     MemoryPool);
 
-                //--- Format build: KB-JWT bound to client_id / nonce / transaction_data. ---
-                byte[] hashInputBytes = Encoding.UTF8.GetBytes(
-                    SdJwtSerializer.GetSdJwtForHashing(selected, TestSetup.Base64UrlEncoder));
+                //Format build: KB-JWT bound to client_id / nonce / transaction_data.
+                string sdJwtForHashing = SdJwtSerializer.GetSdJwtForHashing(selected, TestSetup.Base64UrlEncoder);
+                using IMemoryOwner<byte> hashInputOwner = MemoryPool.Rent(Encoding.UTF8.GetByteCount(sdJwtForHashing));
+                int hashInputLength = Encoding.UTF8.GetBytes(sdJwtForHashing, hashInputOwner.Memory.Span);
+                ReadOnlyMemory<byte> hashInputBytes = hashInputOwner.Memory[..hashInputLength];
 
                 IReadOnlyList<string>? transactionDataHashes = null;
                 if(context.Request.TransactionData is { Count: > 0 } transactionData)
@@ -1312,7 +1380,7 @@ internal sealed class TestHostShell: IAsyncDisposable
                 string compactKbJwt = await KbJwtIssuance.IssueAsync(
                     hashInputBytes, holderKey, context.Request.Nonce, context.Request.ClientId, context.Now,
                     context.Base64UrlEncoder, headerSerializer, payloadSerializer, context.MemoryPool,
-                    cancellationToken, transactionDataHashes).ConfigureAwait(false);
+                    transactionDataHashes, cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 using SdToken<string> tokenWithKb = selected.WithKeyBinding(compactKbJwt, MemoryPool);
                 presentations[queryId] = SdJwtSerializer.SerializeToken(tokenWithKb, TestSetup.Base64UrlEncoder);
@@ -1482,7 +1550,7 @@ internal sealed class TestHostShell: IAsyncDisposable
                     capabilities,
                     new ExchangeContext(),
                     Server,
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 return new HttpResponseData
                 {
@@ -1559,7 +1627,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         context.SetRegistration(registration);
 
         ServerHttpResponse response = await Server.DispatchAsync(
-            request, context, cancellationToken).ConfigureAwait(false);
+            request, context, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return new HttpResponseData
         {
@@ -1607,6 +1675,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     }
 
 
+    /// <summary>Parses an RFC 7591 §3.2.1 dynamic-registration JSON response body into a <see cref="RegistrationResponse"/>.</summary>
     private static ValueTask<RegistrationResponse> ParseRegistrationResponseJson(string body)
     {
         using JsonDocument doc = JsonDocument.Parse(body);
@@ -1830,7 +1899,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             RouteValues: RouteValues.Empty);
 
         ServerHttpResponse response = await Server.DispatchAsync(
-            request, context, cancellationToken).ConfigureAwait(false);
+            request, context, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         //RFC 9126 §2.2: a successful PAR response is HTTP 201 Created (accept any 2xx).
         if(!response.IsSuccessStatusCode)
@@ -1866,7 +1935,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     {
         (string requestHandle, _) = await HandleSiopRequestPreparationAsync(
             keyMaterial, nonce, clientId, allowedAlgorithms,
-            useStaticDiscoveryAudience: false, cancellationToken).ConfigureAwait(false);
+            useStaticDiscoveryAudience: false, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return requestHandle;
     }
@@ -1971,7 +2040,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             RouteValues: RouteValues.Empty);
 
         ServerHttpResponse response = await Server.DispatchAsync(
-            request, context, cancellationToken).ConfigureAwait(false);
+            request, context, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if(!response.IsSuccessStatusCode)
         {
@@ -2024,7 +2093,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             RouteValues: RouteValues.Empty);
 
         ServerHttpResponse response = await Server.DispatchAsync(
-            request, context, cancellationToken).ConfigureAwait(false);
+            request, context, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if(response.StatusCode != 200)
         {
@@ -2069,7 +2138,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             RouteValues: RouteValues.Empty);
 
         ServerHttpResponse response = await Server.DispatchAsync(
-            request, context, cancellationToken).ConfigureAwait(false);
+            request, context, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if(response.StatusCode != 200)
         {
@@ -2123,7 +2192,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             RouteValues: RouteValues.Empty);
 
         ServerHttpResponse response = await Server.DispatchAsync(
-            request, context, cancellationToken).ConfigureAwait(false);
+            request, context, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if(response.StatusCode != 200)
         {
@@ -2173,7 +2242,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             RouteValues: RouteValues.Empty);
 
         ServerHttpResponse response = await Server.DispatchAsync(
-            request, context, cancellationToken).ConfigureAwait(false);
+            request, context, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if(response.StatusCode != 200)
         {
@@ -3453,7 +3522,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         ArgumentNullException.ThrowIfNull(record);
         ArgumentException.ThrowIfNullOrWhiteSpace(redirectUri);
 
-        await StartHttpHostAsync(cancellationToken).ConfigureAwait(false);
+        await StartHttpHostAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
 
         ClientRecord alignedRecord = AlignRegistrationIssuerToHttpBase(record);
 
@@ -3623,7 +3692,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             global::Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
 
         AuthorizationServerHttpApplication app = new(host.Server);
-        await kestrel.StartAsync(app, cancellationToken).ConfigureAwait(false);
+        await kestrel.StartAsync(app, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         global::Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature? addresses =
             kestrel.Features.Get<global::Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>();
@@ -3677,7 +3746,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             global::Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
 
         Verifiable.Tests.Vcalm.VcalmConformanceHttpApplication app = new(host.Server, registration);
-        await kestrel.StartAsync(app, cancellationToken).ConfigureAwait(false);
+        await kestrel.StartAsync(app, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         global::Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature? addresses =
             kestrel.Features.Get<global::Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>();
@@ -3714,7 +3783,7 @@ internal sealed class TestHostShell: IAsyncDisposable
 
             if(host.KestrelServer is not null)
             {
-                await host.KestrelServer.StopAsync(CancellationToken.None).ConfigureAwait(false);
+                await host.KestrelServer.StopAsync(cancellationToken: CancellationToken.None).ConfigureAwait(false);
                 host.KestrelServer.Dispose();
                 host.KestrelServer = null;
             }
@@ -3815,11 +3884,12 @@ internal sealed class TestHostShell: IAsyncDisposable
     }
 
 
-    //Shared suffix dispatch — read by ResolveEndpointUriAsync and by the
-    //synchronous Compose* helpers. The fixture's URL-shape contract lives
-    //here in one place. New endpoint roles get added to both
-    //WellKnownEndpointNames (in the library) and to this switch (in this
-    //fixture).
+    /// <summary>
+    /// Shared suffix dispatch — read by <c>ResolveEndpointUriAsync</c> and by the synchronous
+    /// <c>Compose*</c> helpers. The fixture's URL-shape contract lives here in one place. New endpoint
+    /// roles get added to both <see cref="WellKnownEndpointNames"/> (in the library) and to this switch
+    /// (in this fixture). Returns <see langword="null"/> for an endpoint name this fixture does not serve.
+    /// </summary>
     internal static string? EndpointPathSuffix(string endpointName)
     {
         if(endpointName == WellKnownEndpointNames.AuthCodePar) { return "par"; }
@@ -3928,6 +3998,11 @@ internal sealed class TestHostShell: IAsyncDisposable
     }
 
 
+    /// <summary>
+    /// Builds an OID4VP verifier's <c>client_metadata</c> claim by publishing
+    /// <paramref name="exchangePublicKey"/> as a JWK under <paramref name="encryptionKeyId"/>, so the
+    /// wallet can encrypt its <c>direct_post.jwt</c> response to it.
+    /// </summary>
     private static VerifierClientMetadata BuildClientMetadata(
         string clientId,
         PublicKeyMemory exchangePublicKey,
@@ -3986,6 +4061,12 @@ internal sealed class TestHostShell: IAsyncDisposable
         string segment,
         string issuerUri)
     {
+        /// <summary>
+        /// Routes <paramref name="endpoint"/>/<paramref name="fields"/>/<paramref name="headers"/> to
+        /// the constructor-bound <see cref="EndpointServer.DispatchAsync"/> for the constructor-bound
+        /// tenant and registration, mapping the resulting <see cref="ServerHttpResponse"/> onto
+        /// <see cref="HttpResponseData"/>.
+        /// </summary>
         public async ValueTask<HttpResponseData> SendAsync(
             Uri endpoint,
             IReadOnlyDictionary<string, string> fields,
@@ -4011,7 +4092,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             context.SetRegistration(registration);
 
             ServerHttpResponse response = await server.DispatchAsync(
-                request, context, cancellationToken).ConfigureAwait(false);
+                request, context, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             return new HttpResponseData
             {
@@ -4084,6 +4165,11 @@ internal sealed class TestHostShell: IAsyncDisposable
         ConcurrentDictionary<string, ClientRecord> registrations,
         string issuerUri)
     {
+        /// <summary>
+        /// Resolves the <see cref="ClientRecord"/> for <paramref name="endpoint"/>'s tenant segment at
+        /// dispatch time and routes to the constructor-bound <see cref="EndpointServer.DispatchAsync"/>,
+        /// returning a 404 <see cref="HttpResponseData"/> when no registration is found for the segment.
+        /// </summary>
         public async ValueTask<HttpResponseData> SendAsync(
             Uri endpoint,
             IReadOnlyDictionary<string, string> fields,
@@ -4115,7 +4201,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             context.SetRegistration(registration);
 
             ServerHttpResponse response = await server.DispatchAsync(
-                request, context, cancellationToken).ConfigureAwait(false);
+                request, context, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             return new HttpResponseData
             {
@@ -4126,15 +4212,17 @@ internal sealed class TestHostShell: IAsyncDisposable
         }
 
 
+        /// <summary>Extracts the tenant segment from <paramref name="path"/>. Delegates to <see cref="ExtractTenantSegmentForTests"/>.</summary>
         private static string ExtractTenantSegment(string path) =>
             ExtractTenantSegmentForTests(path);
 
 
+        /// <summary>
+        /// Extracts the tenant segment from a test path shaped <c>/connect/{segment}/&lt;endpoint&gt;</c>.
+        /// Any other shape returns an empty segment, which fails the registration lookup and surfaces a 404.
+        /// </summary>
         internal static string ExtractTenantSegmentForTests(string path)
         {
-            //Test paths follow /connect/{segment}/<endpoint>. Anything else
-            //returns an empty segment which will fail the registration
-            //lookup and surface a 404.
             const string prefix = "/connect/";
             if(!path.StartsWith(prefix, StringComparison.Ordinal))
             {

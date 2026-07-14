@@ -40,7 +40,7 @@ internal sealed class Oid4VpX509RequestUriPostFlowTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private static readonly Uri VerifierBaseUri = new("https://verifier.example.com");
 

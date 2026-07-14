@@ -81,9 +81,9 @@ public static class KbJwtIssuance
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
         MemoryPool<byte> memoryPool,
-        CancellationToken cancellationToken,
         IReadOnlyList<string>? transactionDataHashes = null,
-        string? transactionDataHashesAlg = null)
+        string? transactionDataHashesAlg = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(holderKey);
         ArgumentException.ThrowIfNullOrWhiteSpace(verifierNonce);

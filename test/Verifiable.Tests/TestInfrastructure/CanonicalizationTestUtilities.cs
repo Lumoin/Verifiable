@@ -7,7 +7,9 @@ using VDS.RDF.JsonLd;
 using VDS.RDF.JsonLd.Syntax;
 using VDS.RDF.Parsing;
 using Verifiable.Core;
+using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
+using Verifiable.Json;
 
 namespace Verifiable.Tests.TestInfrastructure;
 
@@ -573,4 +575,25 @@ internal static class CanonicalizationTestUtilities
         identifier.StartsWith("_:", StringComparison.Ordinal)
             ? identifier[2..]
             : identifier;
+
+
+    /// <summary>Serializes <paramref name="credential"/> with <see cref="TestSetup.DefaultSerializationOptions"/>, for the BBS/ecdsa-sd spec-vector round trip.</summary>
+    /// <param name="credential">The credential to serialize.</param>
+    /// <returns>The serialized JSON text.</returns>
+    public static string SerializeCredential(VerifiableCredential credential) =>
+        JsonSerializerExtensions.Serialize(credential, TestSetup.DefaultSerializationOptions);
+
+
+    /// <summary>Deserializes <paramref name="json"/> as a <see cref="VerifiableCredential"/> with <see cref="TestSetup.DefaultSerializationOptions"/>.</summary>
+    /// <param name="json">The credential JSON text.</param>
+    /// <returns>The deserialized credential.</returns>
+    public static VerifiableCredential DeserializeCredential(string json) =>
+        JsonSerializerExtensions.Deserialize<VerifiableCredential>(json, TestSetup.DefaultSerializationOptions)!;
+
+
+    /// <summary>Serializes <paramref name="proofOptions"/> with <see cref="TestSetup.DefaultSerializationOptions"/> via <see cref="ProofOptionsSerializer.Serialize"/>.</summary>
+    /// <param name="proofOptions">The proof options document to serialize.</param>
+    /// <returns>The serialized JSON text.</returns>
+    public static string SerializeProofOptions(ProofOptionsDocument proofOptions) =>
+        ProofOptionsSerializer.Serialize(proofOptions, TestSetup.DefaultSerializationOptions);
 }

@@ -39,7 +39,7 @@ public sealed class MdocIssuerSigningConfig
     /// key's matching private half to sign <c>DeviceAuth</c> at presentation
     /// time (M.3b).
     /// </summary>
-    public required MdocCoseKey DeviceKey { get; init; }
+    public required CoseKey DeviceKey { get; init; }
 
     /// <summary>
     /// Optional <c>kid</c> for the COSE_Sign1 protected header. Verifiers

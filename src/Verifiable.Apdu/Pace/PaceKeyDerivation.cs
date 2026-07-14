@@ -52,7 +52,7 @@ public static class PaceKeyDerivation
 
     //eMRTD PACE (AES-128 / 3DES profile) derives keys with SHA-1; the convenience digest tags omit
     //SHA-1 by design, so it is composed inline here.
-    private static readonly Tag Sha1DigestTag = Tag.Create(HashAlgorithmName.SHA1).With(Purpose.Digest).With(EncodingScheme.Raw);
+    private static Tag Sha1DigestTag { get; } = Tag.Create(HashAlgorithmName.SHA1).With(Purpose.Digest).With(EncodingScheme.Raw);
 
 
     /// <summary>

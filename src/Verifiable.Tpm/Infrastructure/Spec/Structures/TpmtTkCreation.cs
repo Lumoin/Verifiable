@@ -50,14 +50,14 @@ namespace Verifiable.Tpm.Infrastructure.Spec.Structures;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class TpmtTkCreation: IDisposable, ITpmWireType
 {
-    private static readonly TpmtTkCreation NullInstance = new(
+    private static TpmtTkCreation NullInstance { get; } = new(
         TpmStConstants.TPM_ST_CREATION,
         TpmRh.TPM_RH_NULL,
         null,
         0);
 
-    private readonly IMemoryOwner<byte>? storage;
-    private readonly int digestLength;
+    private IMemoryOwner<byte>? Storage { get; }
+    private int DigestLength { get; }
     private bool disposed;
 
     /// <summary>
@@ -80,8 +80,8 @@ public sealed class TpmtTkCreation: IDisposable, ITpmWireType
     {
         Tag = tag;
         Hierarchy = hierarchy;
-        this.storage = storage;
-        this.digestLength = digestLength;
+        this.Storage = storage;
+        this.DigestLength = digestLength;
     }
 
     /// <summary>
@@ -92,7 +92,7 @@ public sealed class TpmtTkCreation: IDisposable, ITpmWireType
     /// <summary>
     /// Gets whether this is a NULL ticket.
     /// </summary>
-    public bool IsNull => Hierarchy == TpmRh.TPM_RH_NULL && digestLength == 0;
+    public bool IsNull => Hierarchy == TpmRh.TPM_RH_NULL && DigestLength == 0;
 
     /// <summary>
     /// Gets the digest as a read-only span.
@@ -103,19 +103,19 @@ public sealed class TpmtTkCreation: IDisposable, ITpmWireType
         {
             ObjectDisposedException.ThrowIf(disposed, this);
 
-            if(storage is null)
+            if(Storage is null)
             {
                 return ReadOnlySpan<byte>.Empty;
             }
 
-            return storage.Memory.Span.Slice(0, digestLength);
+            return Storage.Memory.Span.Slice(0, DigestLength);
         }
     }
 
     /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
-    public int SerializedSize => sizeof(ushort) + sizeof(uint) + sizeof(ushort) + digestLength;
+    public int SerializedSize => sizeof(ushort) + sizeof(uint) + sizeof(ushort) + DigestLength;
 
     /// <summary>
     /// Writes this structure to a TPM writer.
@@ -127,9 +127,9 @@ public sealed class TpmtTkCreation: IDisposable, ITpmWireType
 
         writer.WriteUInt16((ushort)Tag);
         writer.WriteUInt32((uint)Hierarchy);
-        writer.WriteUInt16((ushort)digestLength);
+        writer.WriteUInt16((ushort)DigestLength);
 
-        if(digestLength > 0)
+        if(DigestLength > 0)
         {
             writer.WriteBytes(Digest);
         }
@@ -178,7 +178,7 @@ public sealed class TpmtTkCreation: IDisposable, ITpmWireType
     {
         if(!disposed)
         {
-            storage?.Dispose();
+            Storage?.Dispose();
             disposed = true;
         }
     }
@@ -201,7 +201,7 @@ public sealed class TpmtTkCreation: IDisposable, ITpmWireType
                 _ => $"0x{(uint)Hierarchy:X8}"
             };
 
-            return $"TPMT_TK_CREATION({hierarchyName}, {digestLength} bytes)";
+            return $"TPMT_TK_CREATION({hierarchyName}, {DigestLength} bytes)";
         }
     }
 }

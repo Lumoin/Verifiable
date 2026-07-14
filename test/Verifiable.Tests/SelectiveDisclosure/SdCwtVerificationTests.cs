@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Formats.Cbor;
 using System.Globalization;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Sd;
@@ -281,18 +280,9 @@ internal sealed class SdCwtVerificationTests
         };
 
         return await claims.IssueSdCwtTokenAsync(
-            SerializeCwtClaimMap, SdCwtIssuance.IssueVerboseAsync, disclosablePaths, TestSalts.DefaultGenerator(),
+            SdCwtWireFixtures.SerializeCwtClaimMap, SdCwtIssuance.IssueVerboseAsync, disclosablePaths, TestSalts.DefaultGenerator(),
             privateKey, IssuerKeyId, Pool,
             decoyOptions: decoyOptions,
             cancellationToken: cancellationToken).ConfigureAwait(false);
-    }
-
-
-    private static ReadOnlySpan<byte> SerializeCwtClaimMap(Dictionary<int, object> claims)
-    {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        CborValueConverter.WriteValue(writer, claims);
-
-        return writer.Encode();
     }
 }

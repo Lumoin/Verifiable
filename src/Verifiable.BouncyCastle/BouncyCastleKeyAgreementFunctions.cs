@@ -68,17 +68,17 @@ public static class BouncyCastleKeyAgreementFunctions
     private const int AesGcmTagLength = 16;
     private const int AesGcmIvLength = 12;
 
-    private static readonly ProviderLibrary ProviderLib = new(
+    private static ProviderLibrary ProviderLib { get; } = new(
         typeof(BouncyCastleKeyAgreementFunctions).Assembly.GetName().Name ?? "Verifiable.BouncyCastle",
         typeof(BouncyCastleKeyAgreementFunctions).Assembly.GetName().Version?.ToString() ?? "Unknown");
 
     //BouncyCastle is an independently versioned NuGet package — its assembly
     //version is the most meaningful CBOM identifier.
-    private static readonly CryptoLibraryInfo CryptoLib = new(
+    private static CryptoLibraryInfo CryptoLib { get; } = new(
         "Org.BouncyCastle.Cryptography",
         typeof(Org.BouncyCastle.Security.SecureRandom).Assembly.GetName().Version?.ToString() ?? "Unknown");
 
-    private static readonly ProviderClass ProviderCls = new(nameof(BouncyCastleKeyAgreementFunctions));
+    private static ProviderClass ProviderCls { get; } = new(nameof(BouncyCastleKeyAgreementFunctions));
 
     //XChaCha20-Poly1305 (the JOSE "XC20P" content encryption algorithm) geometry per
     //draft-irtf-cfrg-xchacha-03 §2.3: a 256-bit key, a 192-bit extended nonce, and a 128-bit
@@ -1558,12 +1558,15 @@ public static class BouncyCastleKeyAgreementFunctions
                 $"Received {contentEncryptionKey.AsReadOnlySpan().Length} bytes.", nameof(contentEncryptionKey));
         }
 
-        byte[] kekArray = keyEncryptionKey.AsReadOnlySpan().ToArray();
         byte[] keyArray = contentEncryptionKey.AsReadOnlySpan().ToArray();
         try
         {
             var engine = new Org.BouncyCastle.Crypto.Engines.AesWrapEngine();
-            engine.Init(forWrapping: true, new KeyParameter(kekArray));
+
+            //The KeyParameter span ctor copies the KEK into BouncyCastle's own buffer — no naked
+            //byte[] of key-encryption-key material for us to track and zero. AesWrapEngine.Wrap is
+            //byte[]-only, so the content-encryption key being wrapped is still copied and zeroed.
+            engine.Init(forWrapping: true, new KeyParameter(keyEncryptionKey.AsReadOnlySpan()));
             byte[] wrapped = engine.Wrap(keyArray, 0, keyArray.Length);
 
             IMemoryOwner<byte> wrappedOwner = pool.Rent(wrapped.Length);
@@ -1573,7 +1576,6 @@ public static class BouncyCastleKeyAgreementFunctions
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(kekArray);
             CryptographicOperations.ZeroMemory(keyArray);
         }
     }
@@ -1606,13 +1608,15 @@ public static class BouncyCastleKeyAgreementFunctions
         await Task.CompletedTask.ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
 
-        byte[] kekArray = keyEncryptionKey.AsReadOnlySpan().ToArray();
+        //The wrapped-key ciphertext is public by design (a JOSE encrypted_key transits untrusted
+        //channels), so it is not zeroed. The KeyParameter span ctor copies the KEK into BouncyCastle's
+        //own buffer — no naked byte[] of key-encryption-key material for us to track and zero.
         byte[] wrappedArray = wrappedKey.ToArray();
         byte[]? unwrapped = null;
         try
         {
             var engine = new Org.BouncyCastle.Crypto.Engines.AesWrapEngine();
-            engine.Init(forWrapping: false, new KeyParameter(kekArray));
+            engine.Init(forWrapping: false, new KeyParameter(keyEncryptionKey.AsReadOnlySpan()));
 
             try
             {
@@ -1630,7 +1634,6 @@ public static class BouncyCastleKeyAgreementFunctions
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(kekArray);
             if(unwrapped is not null)
             {
                 CryptographicOperations.ZeroMemory(unwrapped);
@@ -1640,7 +1643,7 @@ public static class BouncyCastleKeyAgreementFunctions
 
 
     //The Ed25519 / Curve25519 field prime p = 2^255 - 19 (RFC 7748 §4.1).
-    private static readonly BigInteger Curve25519FieldPrime =
+    private static BigInteger Curve25519FieldPrime { get; } =
         BigInteger.Two.Pow(255).Subtract(BigInteger.ValueOf(19));
 
 

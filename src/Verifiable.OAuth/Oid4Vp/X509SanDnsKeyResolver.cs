@@ -98,7 +98,7 @@ public static class X509SanDnsKeyResolver
         try
         {
             PublicKeyMemory leafKey = await validateChain(
-                chain, trustAnchors, validationTime, pool, cancellationToken).ConfigureAwait(false);
+                chain, trustAnchors, validationTime, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             try
             {

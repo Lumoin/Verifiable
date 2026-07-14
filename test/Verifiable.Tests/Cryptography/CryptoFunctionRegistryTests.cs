@@ -19,9 +19,9 @@ internal class CryptoFunctionRegistryTests
             var privateKey = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
             var publicKey = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(CryptoAlgorithm.P256, Purpose.Verification);
 
-            var signature = await privateKey(compressedKeys.PrivateKey.AsReadOnlyMemory(), TestData, BaseMemoryPool.Shared, context: null, cancellationToken: default)
+            (Signature signature, CryptoEvent? _) = await privateKey(compressedKeys.PrivateKey.AsReadOnlyMemory(), TestData, BaseMemoryPool.Shared, context: null, cancellationToken: default)
                 .ConfigureAwait(false);
-            bool isVerified = await publicKey(TestData, signature.AsReadOnlyMemory(), compressedKeys.PublicKey.AsReadOnlyMemory(), context: null, cancellationToken: default)
+            (bool isVerified, CryptoEvent? _) = await publicKey(TestData, signature.AsReadOnlyMemory(), compressedKeys.PublicKey.AsReadOnlyMemory(), context: null, cancellationToken: default)
                 .ConfigureAwait(false);
             Assert.IsTrue(isVerified);
         }
@@ -51,8 +51,8 @@ internal class CryptoFunctionRegistryTests
             var privateKey = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.Rsa2048, Purpose.Signing);
             var publicKey = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(CryptoAlgorithm.Rsa2048, Purpose.Verification);
 
-            var signature = await privateKey(keys.PrivateKey.AsReadOnlyMemory(), TestData, BaseMemoryPool.Shared, context: null, cancellationToken: default).ConfigureAwait(false);
-            bool isVerified = await publicKey(TestData, signature.AsReadOnlyMemory(), keys.PublicKey.AsReadOnlyMemory(), context: null, cancellationToken: default).ConfigureAwait(false);
+            (Signature signature, CryptoEvent? _) = await privateKey(keys.PrivateKey.AsReadOnlyMemory(), TestData, BaseMemoryPool.Shared, context: null, cancellationToken: default).ConfigureAwait(false);
+            (bool isVerified, CryptoEvent? _) = await publicKey(TestData, signature.AsReadOnlyMemory(), keys.PublicKey.AsReadOnlyMemory(), context: null, cancellationToken: default).ConfigureAwait(false);
             Assert.IsTrue(isVerified);
         }
     }

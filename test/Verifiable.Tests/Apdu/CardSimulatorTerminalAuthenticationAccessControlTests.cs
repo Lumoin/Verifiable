@@ -93,6 +93,9 @@ internal sealed class CardSimulatorTerminalAuthenticationAccessControlTests
         EcMultiplyGeneratorDelegate multiplyGenerator = Resolve<EcMultiplyGeneratorDelegate>();
         ReadOnlyMemory<byte> terminalEphemeralPrivateKey = Convert.FromHexString(TerminalEphemeralPrivateKey);
 
+        //The CVCA and Document Verifier keys are minted with the framework's own ECDSA — the independent signer
+        //CardVerifiableCertificateMinter uses to build the CA/attestation chain (BSI TR-03110-3 §C.1) that the
+        //library's Terminal Authentication chain verification then checks.
         using ECDsa cvcaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa documentVerifierKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
@@ -238,6 +241,9 @@ internal sealed class CardSimulatorTerminalAuthenticationAccessControlTests
         ReadOnlyMemory<byte> chipStaticPrivateKey = Convert.FromHexString(ChipStaticPrivateKey);
         ReadOnlyMemory<byte> terminalEphemeralPrivateKey = Convert.FromHexString(TerminalEphemeralPrivateKey);
 
+        //The CVCA, Document Verifier, and terminal keys are minted with the framework's own ECDSA — the
+        //independent signer CardVerifiableCertificateMinter uses to build the CA/attestation chain
+        //(BSI TR-03110-3 §C.1) that the library's Terminal Authentication chain verification then checks.
         using ECDsa cvcaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa documentVerifierKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa terminalKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);

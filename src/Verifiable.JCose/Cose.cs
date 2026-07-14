@@ -75,7 +75,7 @@ public static class Cose
             privateKey,
             signingDelegate,
             signaturePool,
-            cancellationToken);
+            cancellationToken: cancellationToken);
     }
 
 
@@ -92,6 +92,15 @@ public static class Cose
     /// <param name="privateKey">The private key for signing.</param>
     /// <param name="signingDelegate">The signing delegate to use.</param>
     /// <param name="signaturePool">Memory pool for signature allocation.</param>
+    /// <param name="eventSink">
+    /// Receives the <see cref="SignatureProducedEvent"/> the resolved <paramref name="signingDelegate"/>
+    /// constructs, or <see langword="null"/> to route it to <see cref="CryptographicKeyEvents.DefaultSink"/>
+    /// (the process-wide <see cref="CryptographicKeyEvents.Events"/> stream). This overload resolves and
+    /// invokes <paramref name="signingDelegate"/> directly rather than through a bound
+    /// <see cref="PrivateKey"/>, so a <see cref="CryptoEventSink"/> is this call site's route — see
+    /// <see cref="CryptoEventSink"/> for the two-route rationale.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The COSE_Sign1 message containing the signature.</returns>
     public static async ValueTask<CoseSign1Message> SignAsync(
         EncodedCoseProtectedHeader protectedHeader,
@@ -101,7 +110,8 @@ public static class Cose
         PrivateKeyMemory privateKey,
         SigningDelegate signingDelegate,
         MemoryPool<byte> signaturePool,
-        CancellationToken cancellationToken)
+        CryptoEventSink? eventSink = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(protectedHeader);
         ArgumentNullException.ThrowIfNull(buildSigStructure);
@@ -116,11 +126,16 @@ public static class Cose
             payload.Span,
             []);
 
-        Signature signature = await signingDelegate(
+        (Signature signature, CryptoEvent? evt) = await signingDelegate(
             privateKey.AsReadOnlyMemory(),
             toBeSigned,
             signaturePool,
             cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        if(evt is not null)
+        {
+            (eventSink ?? CryptographicKeyEvents.DefaultSink)(evt);
+        }
 
         return new CoseSign1Message(
             protectedHeader,
@@ -202,7 +217,7 @@ public static class Cose
             buildSigStructure,
             publicKey,
             verificationDelegate,
-            cancellationToken);
+            cancellationToken: cancellationToken);
     }
 
 
@@ -213,13 +228,22 @@ public static class Cose
     /// <param name="buildSigStructure">Delegate to build the Sig_structure for verification.</param>
     /// <param name="publicKey">The public key for verification.</param>
     /// <param name="verificationDelegate">The verification delegate to use.</param>
+    /// <param name="eventSink">
+    /// Receives the <see cref="VerificationCompletedEvent"/> the resolved <paramref name="verificationDelegate"/>
+    /// constructs, or <see langword="null"/> to route it to <see cref="CryptographicKeyEvents.DefaultSink"/>.
+    /// This overload resolves and invokes <paramref name="verificationDelegate"/> directly rather than
+    /// through a bound <see cref="PublicKey"/>, so a <see cref="CryptoEventSink"/> is this call site's
+    /// route — see <see cref="CryptoEventSink"/>.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
     public static async ValueTask<bool> VerifyAsync(
         CoseSign1Message message,
         BuildSigStructureDelegate buildSigStructure,
         PublicKeyMemory publicKey,
         VerificationDelegate verificationDelegate,
-        CancellationToken cancellationToken)
+        CryptoEventSink? eventSink = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(message);
         ArgumentNullException.ThrowIfNull(buildSigStructure);
@@ -233,11 +257,18 @@ public static class Cose
             message.Payload.Span,
             ReadOnlySpan<byte>.Empty);
 
-        return await verificationDelegate(
+        (bool isVerified, CryptoEvent? evt) = await verificationDelegate(
             toBeSigned,
             message.Signature.AsReadOnlyMemory(),
             publicKey.AsReadOnlyMemory(),
             cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        if(evt is not null)
+        {
+            (eventSink ?? CryptographicKeyEvents.DefaultSink)(evt);
+        }
+
+        return isVerified;
     }
 
 
@@ -278,6 +309,16 @@ public static class Cose
     /// <summary>
     /// Creates a COSE_Sign1 message using resolver/binder pattern for key resolution.
     /// </summary>
+    /// <remarks>
+    /// This is the second sanctioned route <see cref="CryptoEventSink"/> describes: <paramref name="binder"/>
+    /// constructs a <see cref="PrivateKey"/> around the resolved material, so signing goes through
+    /// <see cref="PrivateKey.SignAsync"/> — the choke point that always emits to
+    /// <see cref="CryptographicKeyEvents.Events"/> — with no <see cref="CryptoEventSink"/> parameter needed
+    /// here at all. A caller already holding (or able to cheaply construct) key material uses this route; a
+    /// caller that only holds raw, disassembled key material uses the sink-threaded
+    /// <see cref="SignAsync(EncodedCoseProtectedHeader, IReadOnlyDictionary{int, object}?, ReadOnlyMemory{byte}, BuildSigStructureDelegate, PrivateKeyMemory, SigningDelegate, MemoryPool{byte}, CryptoEventSink?, CancellationToken)"/>
+    /// overload instead. Both routes emit; neither discards.
+    /// </remarks>
     /// <typeparam name="TResolverState">The state type for key material resolution.</typeparam>
     /// <typeparam name="TBinderState">The state type for key material binding.</typeparam>
     /// <param name="protectedHeader">
@@ -341,6 +382,11 @@ public static class Cose
     /// <summary>
     /// Verifies a COSE_Sign1 message using resolver/binder pattern for key resolution.
     /// </summary>
+    /// <remarks>
+    /// The verify-side counterpart of the resolver/binder <c>SignAsync</c> overload's remarks: <paramref name="binder"/>
+    /// constructs a <see cref="PublicKey"/>, so verification goes through <see cref="PublicKey.VerifyAsync"/>
+    /// and emits with no <see cref="CryptoEventSink"/> parameter needed.
+    /// </remarks>
     /// <typeparam name="TResolverState">The state type for key material resolution.</typeparam>
     /// <typeparam name="TBinderState">The state type for key material binding.</typeparam>
     /// <param name="message">The COSE_Sign1 message to verify.</param>

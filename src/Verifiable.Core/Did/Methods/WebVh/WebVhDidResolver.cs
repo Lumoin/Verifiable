@@ -1137,19 +1137,19 @@ public static class WebVhDidResolver
     private sealed class FrozenTimeProvider: TimeProvider
     {
         /// <summary>The committed resolution instant returned for every <see cref="GetUtcNow"/> call.</summary>
-        private readonly DateTimeOffset instant;
+        private DateTimeOffset Instant { get; }
 
         /// <summary>Creates a provider frozen at the given instant.</summary>
         /// <param name="instant">The instant to freeze at.</param>
         public FrozenTimeProvider(DateTimeOffset instant)
         {
-            this.instant = instant;
+            this.Instant = instant;
         }
 
         /// <inheritdoc />
         public override DateTimeOffset GetUtcNow()
         {
-            return instant;
+            return Instant;
         }
     }
 }

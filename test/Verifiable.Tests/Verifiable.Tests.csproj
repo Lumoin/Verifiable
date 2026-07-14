@@ -76,6 +76,7 @@
     <ProjectReference Include="..\..\src\Verifiable.Cryptography\Verifiable.Cryptography.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.DidComm\Verifiable.DidComm.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.DidWebs\Verifiable.DidWebs.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable.Fido2\Verifiable.Fido2.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Foundation\Verifiable.Foundation.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.JCose\Verifiable.JCose.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Json\Verifiable.Json.csproj" />

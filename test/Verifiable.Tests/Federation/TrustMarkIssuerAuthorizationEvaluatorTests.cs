@@ -1,5 +1,6 @@
 using Verifiable.Core.Assessment;
 using Verifiable.OAuth.Federation;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Federation;
 
@@ -17,7 +18,7 @@ internal sealed class TrustMarkIssuerAuthorizationEvaluatorTests
     [TestMethod]
     public async Task AuthorizedIssuerEmitsSuccess()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
@@ -63,7 +64,7 @@ internal sealed class TrustMarkIssuerAuthorizationEvaluatorTests
     [TestMethod]
     public async Task UnauthorizedIssuerEmitsFailureWithIssuerNotInList()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
@@ -114,7 +115,7 @@ internal sealed class TrustMarkIssuerAuthorizationEvaluatorTests
     [TestMethod]
     public async Task NoTrustMarkIssuersClaimOnAnchorEmitsFailure()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(

@@ -34,17 +34,17 @@ namespace Verifiable.Core.Model.Dcql;
 [DebuggerDisplay("{ToString()}")]
 public sealed class DcqlClaimPattern: IEquatable<DcqlClaimPattern>
 {
-    private readonly PatternSegment[] segments;
+    private PatternSegment[] Segments { get; }
 
     /// <summary>
     /// The number of segments in this pattern.
     /// </summary>
-    public int Count => segments.Length;
+    public int Count => Segments.Length;
 
     /// <summary>
     /// Gets the segment at the specified index.
     /// </summary>
-    public PatternSegment this[int index] => segments[index];
+    public PatternSegment this[int index] => Segments[index];
 
     /// <summary>
     /// Whether this pattern contains any wildcard segments.
@@ -53,7 +53,7 @@ public sealed class DcqlClaimPattern: IEquatable<DcqlClaimPattern>
     {
         get
         {
-            foreach(var segment in segments)
+            foreach(var segment in Segments)
             {
                 if(segment.IsWildcard)
                 {
@@ -81,7 +81,7 @@ public sealed class DcqlClaimPattern: IEquatable<DcqlClaimPattern>
             throw new ArgumentException("A claim pattern must have at least one segment.", nameof(segments));
         }
 
-        this.segments = (PatternSegment[])segments.Clone();
+        this.Segments = (PatternSegment[])segments.Clone();
     }
 
 
@@ -144,7 +144,7 @@ public sealed class DcqlClaimPattern: IEquatable<DcqlClaimPattern>
         }
 
         var pointer = JsonPointerType.Root;
-        foreach(var segment in segments)
+        foreach(var segment in Segments)
         {
             if(segment.IsKey)
             {
@@ -174,15 +174,15 @@ public sealed class DcqlClaimPattern: IEquatable<DcqlClaimPattern>
         }
 
         var jsonPointer = path.JsonPointer;
-        if(jsonPointer.Depth != segments.Length)
+        if(jsonPointer.Depth != Segments.Length)
         {
             return false;
         }
 
         var pointerSegments = jsonPointer.Segments;
-        for(int i = 0; i < segments.Length; i++)
+        for(int i = 0; i < Segments.Length; i++)
         {
-            var pattern = segments[i];
+            var pattern = Segments[i];
             var actual = pointerSegments[i];
 
             if(pattern.IsWildcard)
@@ -213,10 +213,10 @@ public sealed class DcqlClaimPattern: IEquatable<DcqlClaimPattern>
     /// <inheritdoc/>
     public override string ToString()
     {
-        var parts = new string[segments.Length];
-        for(int i = 0; i < segments.Length; i++)
+        var parts = new string[Segments.Length];
+        for(int i = 0; i < Segments.Length; i++)
         {
-            parts[i] = segments[i].ToString();
+            parts[i] = Segments[i].ToString();
         }
 
         return $"[{string.Join(", ", parts)}]";
@@ -226,14 +226,14 @@ public sealed class DcqlClaimPattern: IEquatable<DcqlClaimPattern>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool Equals(DcqlClaimPattern? other)
     {
-        if(other is null || segments.Length != other.segments.Length)
+        if(other is null || Segments.Length != other.Segments.Length)
         {
             return false;
         }
 
-        for(int i = 0; i < segments.Length; i++)
+        for(int i = 0; i < Segments.Length; i++)
         {
-            if(!segments[i].Equals(other.segments[i]))
+            if(!Segments[i].Equals(other.Segments[i]))
             {
                 return false;
             }
@@ -251,8 +251,8 @@ public sealed class DcqlClaimPattern: IEquatable<DcqlClaimPattern>
     public override int GetHashCode()
     {
         var hash = new HashCode();
-        hash.Add(segments.Length);
-        foreach(var segment in segments)
+        hash.Add(Segments.Length);
+        foreach(var segment in Segments)
         {
             hash.Add(segment);
         }

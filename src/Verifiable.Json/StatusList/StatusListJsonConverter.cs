@@ -25,7 +25,7 @@ namespace Verifiable.Json.StatusList;
 /// </remarks>
 public sealed class StatusListJsonConverter: JsonConverter<Core.StatusList.StatusList>
 {
-    private readonly MemoryPool<byte> pool;
+    private MemoryPool<byte> Pool { get; }
 
     /// <summary>
     /// Creates a new converter using the specified memory pool.
@@ -34,7 +34,7 @@ public sealed class StatusListJsonConverter: JsonConverter<Core.StatusList.Statu
     public StatusListJsonConverter(MemoryPool<byte> pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
-        this.pool = pool;
+        this.Pool = pool;
     }
 
     /// <inheritdoc/>
@@ -95,7 +95,7 @@ public sealed class StatusListJsonConverter: JsonConverter<Core.StatusList.Statu
         byte[] compressedData = Base64UrlDecode(lst);
 
         var statusList = Core.StatusList.StatusList.FromCompressed(
-            compressedData, bitSize, pool, Core.StatusList.BitOrder.LeastSignificantFirst);
+            compressedData, bitSize, Pool, Core.StatusList.BitOrder.LeastSignificantFirst);
 
         if(aggregationUri is not null)
         {
@@ -225,7 +225,7 @@ public sealed class StatusListReferenceJsonConverter: JsonConverter<StatusListRe
 /// </summary>
 public sealed class StatusClaimJsonConverter: JsonConverter<StatusClaim>
 {
-    private readonly StatusListReferenceJsonConverter referenceConverter = new();
+    private StatusListReferenceJsonConverter ReferenceConverter { get; } = new();
 
     /// <inheritdoc/>
     public override StatusClaim Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
@@ -254,7 +254,7 @@ public sealed class StatusClaimJsonConverter: JsonConverter<StatusClaim>
 
             if(propertyName == StatusListJsonConstants.StatusList)
             {
-                statusList = referenceConverter.Read(ref reader, typeof(StatusListReference), options);
+                statusList = ReferenceConverter.Read(ref reader, typeof(StatusListReference), options);
             }
             else
             {
@@ -281,7 +281,7 @@ public sealed class StatusClaimJsonConverter: JsonConverter<StatusClaim>
         if(value.HasStatusList)
         {
             writer.WritePropertyName(StatusListJsonConstants.StatusList);
-            referenceConverter.Write(writer, value.StatusList!.Value, options);
+            ReferenceConverter.Write(writer, value.StatusList!.Value, options);
         }
 
         writer.WriteEndObject();

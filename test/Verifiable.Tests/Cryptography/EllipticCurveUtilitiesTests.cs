@@ -27,60 +27,76 @@ namespace Verifiable.Tests.Cryptography
         [SkipOnMacOSTestMethod(Reason = "Elliptic curve compression is not supported on macOS.")]
         public void PrimeCurveCompressThrowsWithCorrectMessageIfEitherOrBothParametersNull()
         {
-            using(var key = ECDsa.Create())
-            {
-                var keyParams = key.ExportParameters(includePrivateParameters: false);
+            //The coordinate content is irrelevant to a null-argument check; any valid P-256
+            //point supplies fixture-shaped X and Y byte arrays.
+            PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial = TestKeyMaterialProvider.CreateP256KeyMaterial();
+            using PublicKeyMemory publicKey = keyMaterial.PublicKey;
+            using PrivateKeyMemory privateKey = keyMaterial.PrivateKey;
 
-                var exception1 = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(null, keyParams.Q.Y));
-                Assert.AreEqual(XParameterNameInExceptionMessage, exception1.ParamName);
+            byte[] uncompressedPoint = EllipticCurveUtilities.NormalizeToUncompressed(publicKey.AsReadOnlySpan(), EllipticCurveTypes.NistCurves);
+            byte[] x = EllipticCurveUtilities.SliceXCoordinate(uncompressedPoint).ToArray();
+            byte[] y = EllipticCurveUtilities.SliceYCoordinate(uncompressedPoint).ToArray();
 
-                var exception2 = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(keyParams.Q.X, null));
-                Assert.AreEqual(YParameterNameInExceptionMessage, exception2.ParamName);
+            var exception1 = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(null, y));
+            Assert.AreEqual(XParameterNameInExceptionMessage, exception1.ParamName);
 
-                var exception3 = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(null, null));
-                Assert.AreEqual(XParameterNameInExceptionMessage, exception3.ParamName);
-            }
+            var exception2 = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(x, null));
+            Assert.AreEqual(YParameterNameInExceptionMessage, exception2.ParamName);
+
+            var exception3 = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(null, null));
+            Assert.AreEqual(XParameterNameInExceptionMessage, exception3.ParamName);
         }
 
 
         [SkipOnMacOSTestMethod(Reason = "Elliptic curve compression is not supported on macOS.")]
         public void CompressThrowsWithCorrectMessageIfPointsDifferentLength()
         {
-            using(var key1 = ECDsa.Create(ECCurve.NamedCurves.nistP256))
-            {
-                using(var key2 = ECDsa.Create(ECCurve.NamedCurves.nistP384))
-                {
-                    var keyParams1 = key1.ExportParameters(includePrivateParameters: false);
-                    var keyParams2 = key2.ExportParameters(includePrivateParameters: false);
+            //The coordinate content is irrelevant to a length-mismatch check; the P-256 and
+            //P-384 fixture keys merely supply X and Y byte arrays of two different lengths.
+            PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial1 = TestKeyMaterialProvider.CreateP256KeyMaterial();
+            using PublicKeyMemory publicKey1 = keyMaterial1.PublicKey;
+            using PrivateKeyMemory privateKey1 = keyMaterial1.PrivateKey;
 
-                    const string ExceptionMessage = $"Parameters '{XParameterNameInExceptionMessage}' and '{YParameterNameInExceptionMessage}' need to be of the same length.";
-                    var exception = Assert.ThrowsExactly<ArgumentException>(() => EllipticCurveUtilities.Compress(keyParams1.Q.X!, keyParams2.Q.Y));
-                    Assert.AreEqual(ExceptionMessage, exception.Message);
-                }
-            }
+            PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial2 = TestKeyMaterialProvider.CreateP384KeyMaterial();
+            using PublicKeyMemory publicKey2 = keyMaterial2.PublicKey;
+            using PrivateKeyMemory privateKey2 = keyMaterial2.PrivateKey;
+
+            byte[] uncompressedPoint1 = EllipticCurveUtilities.NormalizeToUncompressed(publicKey1.AsReadOnlySpan(), EllipticCurveTypes.NistCurves);
+            byte[] uncompressedPoint2 = EllipticCurveUtilities.NormalizeToUncompressed(publicKey2.AsReadOnlySpan(), EllipticCurveTypes.NistCurves);
+            byte[] x1 = EllipticCurveUtilities.SliceXCoordinate(uncompressedPoint1).ToArray();
+            byte[] y2 = EllipticCurveUtilities.SliceYCoordinate(uncompressedPoint2).ToArray();
+
+            const string ExceptionMessage = $"Parameters '{XParameterNameInExceptionMessage}' and '{YParameterNameInExceptionMessage}' need to be of the same length.";
+            var exception = Assert.ThrowsExactly<ArgumentException>(() => EllipticCurveUtilities.Compress(x1, y2));
+            Assert.AreEqual(ExceptionMessage, exception.Message);
         }
 
 
         [SkipOnMacOSTestMethod(Reason = "Elliptic curve compression is not supported on macOS.")]
         public void CompressThrowsWithCorrectMessageIfPointsWrongLength()
         {
-            using(var key1 = ECDsa.Create(ECCurve.NamedCurves.nistP256))
-            {
-                var keyParams1 = key1.ExportParameters(includePrivateParameters: false);
+            //The coordinate content is irrelevant to a wrong-length check; the P-256 fixture
+            //key supplies an X and Y byte array that is then lengthened by one byte.
+            PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial1 = TestKeyMaterialProvider.CreateP256KeyMaterial();
+            using PublicKeyMemory publicKey1 = keyMaterial1.PublicKey;
+            using PrivateKeyMemory privateKey1 = keyMaterial1.PrivateKey;
 
-                //Brainpool support widened the accepted coordinate-length set to
-                //{28 (BP-224), 32 (P-256 / secp256k1 / BP-256), 40 (BP-320), 48 (P-384 / BP-384),
-                //64 (BP-512), 66 (P-521)}; the error message lists them in that order.
-                string xPointExceptionMessage = $"Length must be one of {EllipticCurveConstants.BrainpoolP224r1.PointArrayLength}, {EllipticCurveConstants.P256.PointArrayLength}, {EllipticCurveConstants.BrainpoolP320r1.PointArrayLength}, {EllipticCurveConstants.P384.PointArrayLength}, {EllipticCurveConstants.BrainpoolP512r1.PointArrayLength}, {EllipticCurveConstants.P521.PointArrayLength}. (Parameter 'xPoint')";
-                var xException = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(keyParams1.Q.X!.Concat(new byte[] { 0x00 }).ToArray(), keyParams1.Q.Y));
-                Assert.AreEqual(XParameterNameInExceptionMessage, xException.ParamName);
-                Assert.AreEqual(xPointExceptionMessage, xException.Message);
+            byte[] uncompressedPoint1 = EllipticCurveUtilities.NormalizeToUncompressed(publicKey1.AsReadOnlySpan(), EllipticCurveTypes.NistCurves);
+            byte[] x1 = EllipticCurveUtilities.SliceXCoordinate(uncompressedPoint1).ToArray();
+            byte[] y1 = EllipticCurveUtilities.SliceYCoordinate(uncompressedPoint1).ToArray();
 
-                string yPointExceptionMessage = $"Length must be one of {EllipticCurveConstants.BrainpoolP224r1.PointArrayLength}, {EllipticCurveConstants.P256.PointArrayLength}, {EllipticCurveConstants.BrainpoolP320r1.PointArrayLength}, {EllipticCurveConstants.P384.PointArrayLength}, {EllipticCurveConstants.BrainpoolP512r1.PointArrayLength}, {EllipticCurveConstants.P521.PointArrayLength}. (Parameter 'yPoint')";
-                var yException = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(keyParams1.Q.X!, keyParams1.Q.Y!.Concat(new byte[] { 0x00 }).ToArray()));
-                Assert.AreEqual(YParameterNameInExceptionMessage, yException.ParamName);
-                Assert.AreEqual(yPointExceptionMessage, yException.Message);
-            }
+            //Brainpool support widened the accepted coordinate-length set to
+            //{28 (BP-224), 32 (P-256 / secp256k1 / BP-256), 40 (BP-320), 48 (P-384 / BP-384),
+            //64 (BP-512), 66 (P-521)}; the error message lists them in that order.
+            string xPointExceptionMessage = $"Length must be one of {EllipticCurveConstants.BrainpoolP224r1.PointArrayLength}, {EllipticCurveConstants.P256.PointArrayLength}, {EllipticCurveConstants.BrainpoolP320r1.PointArrayLength}, {EllipticCurveConstants.P384.PointArrayLength}, {EllipticCurveConstants.BrainpoolP512r1.PointArrayLength}, {EllipticCurveConstants.P521.PointArrayLength}. (Parameter 'xPoint')";
+            var xException = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(x1.Concat(new byte[] { 0x00 }).ToArray(), y1));
+            Assert.AreEqual(XParameterNameInExceptionMessage, xException.ParamName);
+            Assert.AreEqual(xPointExceptionMessage, xException.Message);
+
+            string yPointExceptionMessage = $"Length must be one of {EllipticCurveConstants.BrainpoolP224r1.PointArrayLength}, {EllipticCurveConstants.P256.PointArrayLength}, {EllipticCurveConstants.BrainpoolP320r1.PointArrayLength}, {EllipticCurveConstants.P384.PointArrayLength}, {EllipticCurveConstants.BrainpoolP512r1.PointArrayLength}, {EllipticCurveConstants.P521.PointArrayLength}. (Parameter 'yPoint')";
+            var yException = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.Compress(x1, y1.Concat(new byte[] { 0x00 }).ToArray()));
+            Assert.AreEqual(YParameterNameInExceptionMessage, yException.ParamName);
+            Assert.AreEqual(yPointExceptionMessage, yException.Message);
         }
 
 
@@ -262,6 +278,8 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void CombineToUncompressedPointIsInverseOfSliceCoordinates()
         {
+            //Noise payload: CombineToUncompressedPoint concatenates bytes without inspecting
+            //curve validity, so any random fill exercises the structural roundtrip.
             byte[] x = new byte[EllipticCurveConstants.P256.PointArrayLength];
             byte[] y = new byte[EllipticCurveConstants.P256.PointArrayLength];
             RandomNumberGenerator.Fill(x);

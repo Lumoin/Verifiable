@@ -30,7 +30,7 @@ namespace Verifiable.OAuth.Federation;
 [DebuggerDisplay("TrustChainValidator")]
 public sealed class TrustChainValidator
 {
-    private readonly ClaimIssuer<TrustChainValidationContext> issuer;
+    private ClaimIssuer<TrustChainValidationContext> Issuer { get; }
 
 
     /// <summary>
@@ -60,7 +60,7 @@ public sealed class TrustChainValidator
         ArgumentException.ThrowIfNullOrEmpty(issuerId);
         ArgumentNullException.ThrowIfNull(validationRules);
 
-        issuer = new ClaimIssuer<TrustChainValidationContext>(
+        Issuer = new ClaimIssuer<TrustChainValidationContext>(
             issuerId, validationRules, timeProvider);
     }
 
@@ -88,6 +88,6 @@ public sealed class TrustChainValidator
         ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrEmpty(correlationId);
 
-        return issuer.GenerateClaimsAsync(context, correlationId, cancellationToken);
+        return Issuer.GenerateClaimsAsync(context, correlationId, cancellationToken);
     }
 }

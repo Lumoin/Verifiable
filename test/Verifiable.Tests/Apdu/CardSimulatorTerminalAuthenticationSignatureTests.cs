@@ -10,6 +10,7 @@ using Verifiable.Apdu.Eac;
 using Verifiable.Apdu.Lds;
 using Verifiable.Apdu.SecureMessaging;
 using Verifiable.Cryptography;
+using Verifiable.Tests.TestDataProviders;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -53,6 +54,8 @@ internal sealed class CardSimulatorTerminalAuthenticationSignatureTests
     [TestMethod]
     public async Task AuthenticatesAfterBasicAccessControlAndChipAuthentication()
     {
+        //CardVerifiableCertificateMinter is a test-side CVC certificate factory that requires a framework
+        //ECDsa key; this key mints the terminal certificate and its exported scalar signs EXTERNAL AUTHENTICATE.
         using ECDsa terminalKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         byte[] terminalPrivateKey = terminalKey.ExportParameters(includePrivateParameters: true).D!;
 
@@ -65,12 +68,18 @@ internal sealed class CardSimulatorTerminalAuthenticationSignatureTests
     [TestMethod]
     public async Task RejectsTerminalAuthenticationSignedWithTheWrongKey()
     {
+        //CardVerifiableCertificateMinter is a test-side CVC certificate factory that requires a framework
+        //ECDsa key; this key mints the terminal certificate.
         using ECDsa terminalKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        using ECDsa impostorKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        //The chain carries the real terminal key, but the terminal signs with a key it does not hold.
-        byte[] impostorPrivateKey = impostorKey.ExportParameters(includePrivateParameters: true).D!;
 
-        bool accepted = await RunTerminalAuthenticationAsync(terminalKey, impostorPrivateKey, useRetainedEphemeralKey: true);
+        //The chain carries the real terminal key, but the terminal signs with a key it does not hold; any
+        //P-256 key distinct from the certificate's suffices, so the impostor key is ready-made test material
+        //rather than a freshly minted framework key.
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> impostorKeyMaterial = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory impostorPublicKey = impostorKeyMaterial.PublicKey;
+        using PrivateKeyMemory impostorPrivateKey = impostorKeyMaterial.PrivateKey;
+
+        bool accepted = await RunTerminalAuthenticationAsync(terminalKey, impostorPrivateKey.AsReadOnlyMemory(), useRetainedEphemeralKey: true);
 
         Assert.IsFalse(accepted, "The chip must reject an EXTERNAL AUTHENTICATE signed with a key other than the terminal certificate's.");
     }
@@ -79,6 +88,8 @@ internal sealed class CardSimulatorTerminalAuthenticationSignatureTests
     [TestMethod]
     public async Task RejectsTerminalAuthenticationBoundToADifferentEphemeralKey()
     {
+        //CardVerifiableCertificateMinter is a test-side CVC certificate factory that requires a framework
+        //ECDsa key; this key mints the terminal certificate and its exported scalar signs EXTERNAL AUTHENTICATE.
         using ECDsa terminalKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         byte[] terminalPrivateKey = terminalKey.ExportParameters(includePrivateParameters: true).D!;
 
@@ -97,13 +108,15 @@ internal sealed class CardSimulatorTerminalAuthenticationSignatureTests
     /// Authentication ephemeral key or a different one. Returns whether the chip accepted it.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The re-keyed session takes ownership of the Chip Authentication keys and is disposed via using; the Basic Access Control session and access keys are disposed in the using blocks.")]
-    private async Task<bool> RunTerminalAuthenticationAsync(ECDsa terminalKey, byte[] signingPrivateKey, bool useRetainedEphemeralKey)
+    private async Task<bool> RunTerminalAuthenticationAsync(ECDsa terminalKey, ReadOnlyMemory<byte> signingPrivateKey, bool useRetainedEphemeralKey)
     {
         Tag chipCurve = CryptoTags.BrainpoolP256r1ExchangePublicKey;
         EcMultiplyGeneratorDelegate multiplyGenerator = Resolve<EcMultiplyGeneratorDelegate>();
         ReadOnlyMemory<byte> chipStaticPrivateKey = Convert.FromHexString(ChipStaticPrivateKey);
         ReadOnlyMemory<byte> terminalEphemeralPrivateKey = Convert.FromHexString(TerminalEphemeralPrivateKey);
 
+        //CardVerifiableCertificateMinter is a test-side CVC certificate factory that requires framework ECDsa
+        //keys; cvcaKey self-signs the trust anchor and documentVerifierKey issues the terminal certificate.
         using ECDsa cvcaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa documentVerifierKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 

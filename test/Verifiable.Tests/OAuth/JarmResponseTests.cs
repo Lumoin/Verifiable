@@ -23,7 +23,7 @@ internal sealed class JarmResponseTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
@@ -153,7 +153,7 @@ internal sealed class JarmResponseTests
         JarmResponseValidationResult result = await JarmResponseValidation.ValidateAsync(
             responseJwt, Issuer, ClientId, AllowedAlgorithms, TimeProvider.GetUtcNow(),
             resolver, PayloadDeserializer, TestSetup.Base64UrlDecoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsIssuerValid);
         Assert.IsFalse(result.IsValid);
@@ -272,7 +272,7 @@ internal sealed class JarmResponseTests
         JarmResponseValidationResult result = await JarmResponseValidation.ValidateAsync(
             unsignedJwt, Issuer, ClientId, misconfiguredAllowList, TimeProvider.GetUtcNow(),
             resolver, PayloadDeserializer, TestSetup.Base64UrlDecoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsAlgorithmAllowed);
         Assert.IsFalse(result.IsSignatureValid);
@@ -350,7 +350,7 @@ internal sealed class JarmResponseTests
             expiresAt ?? TimeProvider.GetUtcNow().AddMinutes(5),
             responseParameters,
             TestSetup.Base64UrlEncoder, HeaderSerializer, PayloadSerializer, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
 
     private async ValueTask<JarmResponseValidationResult> ValidateAsync(
@@ -366,6 +366,6 @@ internal sealed class JarmResponseTests
             responseJwt, expectedIssuer, expectedClientId, AllowedAlgorithms,
             TimeProvider.GetUtcNow(), resolver, PayloadDeserializer,
             TestSetup.Base64UrlDecoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 }

@@ -17,7 +17,7 @@ namespace Verifiable.Tpm.Extensions.Pcr;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class PcrBank
 {
-    private readonly Dictionary<int, byte[]> values;
+    private Dictionary<int, byte[]> Values { get; }
 
     /// <summary>
     /// Gets the algorithm name (e.g., "SHA256", "SHA384").
@@ -37,7 +37,7 @@ public sealed class PcrBank
     /// <summary>
     /// Gets the number of allocated PCRs.
     /// </summary>
-    public int Count => values.Count;
+    public int Count => Values.Count;
 
     /// <summary>
     /// Gets the digest for the specified PCR index.
@@ -45,13 +45,13 @@ public sealed class PcrBank
     /// <param name="index">The PCR index.</param>
     /// <returns>The digest value as a byte array.</returns>
     /// <exception cref="KeyNotFoundException">The PCR index is not allocated in this bank.</exception>
-    public byte[] this[int index] => values[index];
+    public byte[] this[int index] => Values[index];
 
     internal PcrBank(string algorithm, int digestSize, Dictionary<int, byte[]> values)
     {
         Algorithm = algorithm;
         DigestSize = digestSize;
-        this.values = values;
+        this.Values = values;
 
         //Build sorted list of allocated PCR indices.
         var indices = new List<int>(values.Keys);
@@ -64,7 +64,7 @@ public sealed class PcrBank
     /// </summary>
     /// <param name="index">The PCR index.</param>
     /// <returns><c>true</c> if the PCR is allocated; otherwise, <c>false</c>.</returns>
-    public bool HasPcr(int index) => values.ContainsKey(index);
+    public bool HasPcr(int index) => Values.ContainsKey(index);
 
     /// <summary>
     /// Attempts to get the digest for the specified PCR index.
@@ -74,7 +74,7 @@ public sealed class PcrBank
     /// <returns><c>true</c> if the PCR is allocated; otherwise, <c>false</c>.</returns>
     public bool TryGetPcr(int index, [NotNullWhen(true)] out byte[]? value)
     {
-        return values.TryGetValue(index, out value);
+        return Values.TryGetValue(index, out value);
     }
 
     /// <summary>
@@ -84,7 +84,7 @@ public sealed class PcrBank
     /// <returns><c>true</c> if the PCR has been extended; <c>false</c> if zero or not allocated.</returns>
     public bool IsExtended(int index)
     {
-        if(!values.TryGetValue(index, out byte[]? bytes))
+        if(!Values.TryGetValue(index, out byte[]? bytes))
         {
             return false;
         }
@@ -107,7 +107,7 @@ public sealed class PcrBank
     /// <returns><c>true</c> if the PCR is in error state; <c>false</c> otherwise or if not allocated.</returns>
     public bool IsErrorState(int index)
     {
-        if(!values.TryGetValue(index, out byte[]? bytes))
+        if(!Values.TryGetValue(index, out byte[]? bytes))
         {
             return false;
         }

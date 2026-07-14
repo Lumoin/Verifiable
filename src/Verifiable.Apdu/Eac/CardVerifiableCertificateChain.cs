@@ -127,7 +127,7 @@ public static class CardVerifiableCertificateChain
 
         if(issuer.PublicKey.IsEllipticCurve)
         {
-            return await VerifyEllipticCurveSignatureAsync(certificate, issuer.PublicKey, cancellationToken).ConfigureAwait(false)
+            return await VerifyEllipticCurveSignatureAsync(certificate, issuer.PublicKey, cancellationToken: cancellationToken).ConfigureAwait(false)
                 ? CvcChainVerificationResult.Valid
                 : CvcChainVerificationResult.InvalidSignature;
         }
@@ -138,7 +138,7 @@ public static class CardVerifiableCertificateChain
             return CvcChainVerificationResult.UnsupportedIssuerKey;
         }
 
-        return await VerifyRsaSignatureAsync(certificate, issuer.PublicKey, cancellationToken).ConfigureAwait(false)
+        return await VerifyRsaSignatureAsync(certificate, issuer.PublicKey, cancellationToken: cancellationToken).ConfigureAwait(false)
             ? CvcChainVerificationResult.Valid
             : CvcChainVerificationResult.InvalidSignature;
     }
@@ -149,7 +149,11 @@ public static class CardVerifiableCertificateChain
     /// the registered verification function for the issuer's curve (which fixes the hash and accepts the
     /// plain <c>r || s</c> signature).
     /// </summary>
-    private static async ValueTask<bool> VerifyEllipticCurveSignatureAsync(CardVerifiableCertificate certificate, CardVerifiableCertificatePublicKey issuerKey, CancellationToken cancellationToken)
+    private static async ValueTask<bool> VerifyEllipticCurveSignatureAsync(
+        CardVerifiableCertificate certificate,
+        CardVerifiableCertificatePublicKey issuerKey,
+        CryptoEventSink? eventSink = null,
+        CancellationToken cancellationToken = default)
     {
         if(!issuerKey.EllipticCurvePoint!.Tag.TryGet(out CryptoAlgorithm algorithm))
         {
@@ -160,19 +164,30 @@ public static class CardVerifiableCertificateChain
 
         try
         {
-            return await verify(
+            //Resolves and invokes the registry delegate directly rather than through PublicKey.VerifyAsync (there
+            //is no bound PublicKey here, only the certificate's raw elliptic-curve point), so the
+            //VerificationCompletedEvent forwards through the explicit sink seam instead.
+            (bool isVerified, CryptoEvent? evt) = await verify(
                 certificate.ToBeSigned,
                 certificate.Signature.AsReadOnlyMemory(),
                 issuerKey.EllipticCurvePoint!.AsReadOnlyMemory(),
                 null,
                 cancellationToken).ConfigureAwait(false);
+
+            if(evt is not null)
+            {
+                (eventSink ?? CryptographicKeyEvents.DefaultSink)(evt);
+            }
+
+            return isVerified;
         }
         catch(Exception exception) when(exception is ArgumentException or FormatException or InvalidOperationException or System.Security.Cryptography.CryptographicException)
         {
             //A malformed issuer public key — a point off the curve or one sized for a different curve than its tag
             //names — makes the registered verification function throw rather than report a failed signature. Chain
             //verification is fail-closed: an issuer key that cannot verify a signature stops the walk as if the
-            //signature were invalid, never as an uncaught exception out of the chain walk.
+            //signature were invalid, never as an uncaught exception out of the chain walk. No event is emitted:
+            //verification never actually ran against a key.
             return false;
         }
     }
@@ -184,7 +199,11 @@ public static class CardVerifiableCertificateChain
     /// signature algorithm of a certificate is the one the issuer's public-key object identifier names
     /// (TR-03110-3 §C.1.8), so the scheme is taken from the issuer key, not the certificate's own.
     /// </summary>
-    private static async ValueTask<bool> VerifyRsaSignatureAsync(CardVerifiableCertificate certificate, CardVerifiableCertificatePublicKey issuerKey, CancellationToken cancellationToken)
+    private static async ValueTask<bool> VerifyRsaSignatureAsync(
+        CardVerifiableCertificate certificate,
+        CardVerifiableCertificatePublicKey issuerKey,
+        CryptoEventSink? eventSink = null,
+        CancellationToken cancellationToken = default)
     {
         if(CardVerifiableCertificatePublicKey.ResolveRsaAlgorithm(issuerKey.SignatureScheme) is not CryptoAlgorithm algorithm)
         {
@@ -195,18 +214,28 @@ public static class CardVerifiableCertificateChain
 
         try
         {
-            return await verify(
+            //Forwards the VerificationCompletedEvent through the explicit sink seam for the same reason as the
+            //elliptic-curve overload above.
+            (bool isVerified, CryptoEvent? evt) = await verify(
                 certificate.ToBeSigned,
                 certificate.Signature.AsReadOnlyMemory(),
                 issuerKey.RsaKey!.AsReadOnlyMemory(),
                 null,
                 cancellationToken).ConfigureAwait(false);
+
+            if(evt is not null)
+            {
+                (eventSink ?? CryptographicKeyEvents.DefaultSink)(evt);
+            }
+
+            return isVerified;
         }
         catch(Exception exception) when(exception is ArgumentException or FormatException or InvalidOperationException or System.Security.Cryptography.CryptographicException)
         {
             //A malformed issuer public key makes the registered verification function throw rather than report a
             //failed signature. Chain verification is fail-closed: an unusable issuer key stops the walk as if the
-            //signature were invalid, never as an uncaught exception out of the chain walk.
+            //signature were invalid, never as an uncaught exception out of the chain walk. No event is emitted:
+            //verification never actually ran against a key.
             return false;
         }
     }

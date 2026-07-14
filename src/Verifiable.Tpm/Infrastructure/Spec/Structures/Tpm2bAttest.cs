@@ -30,8 +30,8 @@ namespace Verifiable.Tpm.Infrastructure.Spec.Structures;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class Tpm2bAttest: ITpmWireType, IDisposable
 {
-    private readonly IMemoryOwner<byte>? rawStorage;
-    private readonly int rawLength;
+    private IMemoryOwner<byte>? RawStorage { get; }
+    private int RawLength { get; }
     private bool disposed;
 
     /// <summary>
@@ -45,8 +45,8 @@ public sealed class Tpm2bAttest: ITpmWireType, IDisposable
     private Tpm2bAttest(TpmsAttest attestationData, IMemoryOwner<byte>? rawStorage, int rawLength)
     {
         AttestationData = attestationData;
-        this.rawStorage = rawStorage;
-        this.rawLength = rawLength;
+        this.RawStorage = rawStorage;
+        this.RawLength = rawLength;
     }
 
     /// <summary>
@@ -61,12 +61,12 @@ public sealed class Tpm2bAttest: ITpmWireType, IDisposable
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        if(rawStorage is null)
+        if(RawStorage is null)
         {
             return ReadOnlySpan<byte>.Empty;
         }
 
-        return rawStorage.Memory.Span.Slice(0, rawLength);
+        return RawStorage.Memory.Span.Slice(0, RawLength);
     }
 
     /// <summary>
@@ -76,7 +76,7 @@ public sealed class Tpm2bAttest: ITpmWireType, IDisposable
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        return sizeof(ushort) + rawLength;
+        return sizeof(ushort) + RawLength;
     }
 
     /// <summary>
@@ -87,7 +87,7 @@ public sealed class Tpm2bAttest: ITpmWireType, IDisposable
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        writer.WriteUInt16((ushort)rawLength);
+        writer.WriteUInt16((ushort)RawLength);
         writer.WriteBytes(GetRawBytes());
     }
 
@@ -127,10 +127,10 @@ public sealed class Tpm2bAttest: ITpmWireType, IDisposable
         if(!disposed)
         {
             AttestationData.Dispose();
-            rawStorage?.Dispose();
+            RawStorage?.Dispose();
             disposed = true;
         }
     }
 
-    private string DebuggerDisplay => $"TPM2B_ATTEST({rawLength} bytes, {AttestationData.Type})";
+    private string DebuggerDisplay => $"TPM2B_ATTEST({RawLength} bytes, {AttestationData.Type})";
 }

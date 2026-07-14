@@ -353,7 +353,7 @@ internal sealed class KbCwtIssuanceTests
         };
 
         return await claims.IssueSdCwtTokenAsync(
-            SerializeCwtClaimMap, SdCwtIssuance.IssueVerboseAsync, disclosablePaths,
+            SdCwtWireFixtures.SerializeCwtClaimMap, SdCwtIssuance.IssueVerboseAsync, disclosablePaths,
             TestSalts.DefaultGenerator(),
             privateKey, IssuerKeyId, Pool,
             cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -373,14 +373,6 @@ internal sealed class KbCwtIssuanceTests
 
         return issuedToken.SelectDisclosures(
             d => d.ClaimName is not null && selected.Contains(d.ClaimName), Pool);
-    }
-
-
-    private static ReadOnlySpan<byte> SerializeCwtClaimMap(Dictionary<int, object> claims)
-    {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        CborValueConverter.WriteValue(writer, claims);
-        return writer.Encode();
     }
 
 

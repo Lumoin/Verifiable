@@ -45,7 +45,7 @@ namespace Verifiable.Tpm;
 /// <seealso cref="TpmRecorder"/>
 public sealed class TpmVirtualDevice
 {
-    private readonly Dictionary<int, byte[]> responses = [];
+    private Dictionary<int, byte[]> Responses { get; } = [];
     private readonly Lock gate = new();
 
     /// <summary>
@@ -57,7 +57,7 @@ public sealed class TpmVirtualDevice
         {
             lock(gate)
             {
-                return responses.Count;
+                return Responses.Count;
             }
         }
     }
@@ -85,7 +85,7 @@ public sealed class TpmVirtualDevice
         {
             foreach(TpmExchange exchange in exchanges)
             {
-                responses[ComputeReplayKey(exchange.Command.Span)] = exchange.Response.ToArray();
+                Responses[ComputeReplayKey(exchange.Command.Span)] = exchange.Response.ToArray();
             }
         }
     }
@@ -101,7 +101,7 @@ public sealed class TpmVirtualDevice
 
         lock(gate)
         {
-            responses[key] = response.ToArray();
+            Responses[key] = response.ToArray();
         }
     }
 
@@ -116,7 +116,7 @@ public sealed class TpmVirtualDevice
 
         lock(gate)
         {
-            return responses.ContainsKey(key);
+            return Responses.ContainsKey(key);
         }
     }
 
@@ -127,7 +127,7 @@ public sealed class TpmVirtualDevice
     {
         lock(gate)
         {
-            responses.Clear();
+            Responses.Clear();
         }
     }
 
@@ -155,7 +155,7 @@ public sealed class TpmVirtualDevice
         byte[]? canned;
         lock(gate)
         {
-            _ = responses.TryGetValue(ComputeReplayKey(command.Span), out canned);
+            _ = Responses.TryGetValue(ComputeReplayKey(command.Span), out canned);
         }
 
         if(canned is null)

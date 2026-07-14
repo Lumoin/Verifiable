@@ -31,7 +31,7 @@ namespace Verifiable.OAuth;
 public sealed class EphemeralEncryptionKeyPair: IDisposable, IEquatable<EphemeralEncryptionKeyPair>
 {
     private bool disposed;
-    private readonly IMemoryOwner<byte> privateKeyOwner;
+    private IMemoryOwner<byte> PrivateKeyOwner { get; }
 
     /// <summary>
     /// The P-256 public key serialized as a JWKS JSON string carrying a single JWK with
@@ -44,7 +44,7 @@ public sealed class EphemeralEncryptionKeyPair: IDisposable, IEquatable<Ephemera
     /// The raw private scalar bytes. Valid only while this instance has not been disposed.
     /// Never transmitted.
     /// </summary>
-    public ReadOnlyMemory<byte> PrivateKeyBytes => privateKeyOwner.Memory;
+    public ReadOnlyMemory<byte> PrivateKeyBytes => PrivateKeyOwner.Memory;
 
 
     /// <summary>
@@ -63,7 +63,7 @@ public sealed class EphemeralEncryptionKeyPair: IDisposable, IEquatable<Ephemera
         ArgumentNullException.ThrowIfNull(privateKeyOwner);
 
         PublicKeyJwk = publicKeyJwk;
-        this.privateKeyOwner = privateKeyOwner;
+        this.PrivateKeyOwner = privateKeyOwner;
     }
 
 
@@ -185,7 +185,7 @@ public sealed class EphemeralEncryptionKeyPair: IDisposable, IEquatable<Ephemera
     {
         if(!disposed)
         {
-            privateKeyOwner.Dispose();
+            PrivateKeyOwner.Dispose();
             disposed = true;
         }
     }

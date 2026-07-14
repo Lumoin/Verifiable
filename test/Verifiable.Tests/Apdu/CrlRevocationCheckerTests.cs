@@ -1,11 +1,14 @@
 using System;
 using System.Security;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
+using Verifiable.Tests.X509;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -208,7 +211,7 @@ internal sealed class CrlRevocationCheckerTests
         try
         {
             using PublicKeyMemory leafKey = await MicrosoftX509Functions.ValidateChainAsync(
-                chain, anchors, ValidationTime, BaseMemoryPool.Shared, TestContext.CancellationToken, checker.CheckAsync).ConfigureAwait(false);
+                chain, anchors, ValidationTime, BaseMemoryPool.Shared, checker.CheckAsync, TestContext.CancellationToken).ConfigureAwait(false);
         }
         catch(SecurityException)
         {
@@ -228,8 +231,193 @@ internal sealed class CrlRevocationCheckerTests
         PkiCertificateMemory[] anchors = [scenario.CscaAnchor];
 
         using PublicKeyMemory leafKey = await MicrosoftX509Functions.ValidateChainAsync(
-            chain, anchors, ValidationTime, BaseMemoryPool.Shared, TestContext.CancellationToken, checker.CheckAsync).ConfigureAwait(false);
+            chain, anchors, ValidationTime, BaseMemoryPool.Shared, checker.CheckAsync, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(leafKey, "A clean CRL lets chain validation complete and return the leaf key.");
+    }
+
+
+    /// <summary>
+    /// The Microsoft backend rejects a three-certificate chain (leaf + intermediate) whose INTERMEDIATE CA
+    /// certificate is revoked by a CRL issued by the root, even though the leaf's own CRL is clean — the
+    /// chain-validation seam must consult revocation for every non-anchor certificate, not the leaf alone.
+    /// </summary>
+    [TestMethod]
+    public async Task MicrosoftBackendRejectsAThreeCertificateChainWithARevokedIntermediate()
+    {
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
+        using X509ChainTestRingChain ring = X509ChainTestRing.BuildThreeLevelChain("intermediate-revocation.example.test", timeProvider);
+        DateTimeOffset validationTime = timeProvider.GetUtcNow();
+
+        (IReadOnlyList<PkiCertificateMemory> chain, IReadOnlyList<PkiCertificateMemory> anchors) = ParseThreeLevelChain(ring);
+        try
+        {
+            using PkiCertificateMemory cleanLeafCrl = MintCrlFromRingNode(ring.Intermediate, revokedCertificate: null, validationTime, crlNumber: 1);
+            using PkiCertificateMemory revokingIntermediateCrl = MintCrlFromRingNode(ring.Root, ring.Intermediate.Certificate, validationTime, crlNumber: 2);
+            var checker = new CrlRevocationChecker([cleanLeafCrl, revokingIntermediateCrl]);
+
+            bool threw = false;
+            try
+            {
+                using PublicKeyMemory _ = await MicrosoftX509Functions.ValidateChainAsync(
+                    chain, anchors, validationTime, BaseMemoryPool.Shared, checker.CheckAsync, TestContext.CancellationToken).ConfigureAwait(false);
+            }
+            catch(SecurityException)
+            {
+                threw = true;
+            }
+
+            Assert.IsTrue(threw, "A revoked intermediate CA certificate in a three-certificate chain must be rejected by the Microsoft backend.");
+        }
+        finally
+        {
+            DisposeAll(chain);
+            DisposeAll(anchors);
+        }
+    }
+
+
+    /// <summary>
+    /// The Microsoft backend accepts a three-certificate chain when both the leaf's and the intermediate's CRLs
+    /// report a clean status, returning the leaf key.
+    /// </summary>
+    [TestMethod]
+    public async Task MicrosoftBackendAcceptsAThreeCertificateChainWhenTheIntermediateIsClean()
+    {
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
+        using X509ChainTestRingChain ring = X509ChainTestRing.BuildThreeLevelChain("intermediate-clean.example.test", timeProvider);
+        DateTimeOffset validationTime = timeProvider.GetUtcNow();
+
+        (IReadOnlyList<PkiCertificateMemory> chain, IReadOnlyList<PkiCertificateMemory> anchors) = ParseThreeLevelChain(ring);
+        try
+        {
+            using PkiCertificateMemory cleanLeafCrl = MintCrlFromRingNode(ring.Intermediate, revokedCertificate: null, validationTime, crlNumber: 1);
+            using PkiCertificateMemory cleanIntermediateCrl = MintCrlFromRingNode(ring.Root, revokedCertificate: null, validationTime, crlNumber: 2);
+            var checker = new CrlRevocationChecker([cleanLeafCrl, cleanIntermediateCrl]);
+
+            using PublicKeyMemory leafKey = await MicrosoftX509Functions.ValidateChainAsync(
+                chain, anchors, validationTime, BaseMemoryPool.Shared, checker.CheckAsync, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsNotNull(leafKey, "Clean CRLs for both the leaf and the intermediate let chain validation complete and return the leaf key.");
+        }
+        finally
+        {
+            DisposeAll(chain);
+            DisposeAll(anchors);
+        }
+    }
+
+
+    /// <summary>Mirrors <see cref="MicrosoftBackendRejectsAThreeCertificateChainWithARevokedIntermediate"/> against the BouncyCastle backend.</summary>
+    [TestMethod]
+    public async Task BouncyCastleBackendRejectsAThreeCertificateChainWithARevokedIntermediate()
+    {
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
+        using X509ChainTestRingChain ring = X509ChainTestRing.BuildThreeLevelChain("intermediate-revocation-bc.example.test", timeProvider);
+        DateTimeOffset validationTime = timeProvider.GetUtcNow();
+
+        (IReadOnlyList<PkiCertificateMemory> chain, IReadOnlyList<PkiCertificateMemory> anchors) = ParseThreeLevelChain(ring);
+        try
+        {
+            using PkiCertificateMemory cleanLeafCrl = MintCrlFromRingNode(ring.Intermediate, revokedCertificate: null, validationTime, crlNumber: 1);
+            using PkiCertificateMemory revokingIntermediateCrl = MintCrlFromRingNode(ring.Root, ring.Intermediate.Certificate, validationTime, crlNumber: 2);
+            var checker = new CrlRevocationChecker([cleanLeafCrl, revokingIntermediateCrl]);
+
+            bool threw = false;
+            try
+            {
+                using PublicKeyMemory _ = await BouncyCastleX509Functions.ValidateChainAsync(
+                    chain, anchors, validationTime, BaseMemoryPool.Shared, checker.CheckAsync, TestContext.CancellationToken).ConfigureAwait(false);
+            }
+            catch(SecurityException)
+            {
+                threw = true;
+            }
+
+            Assert.IsTrue(threw, "A revoked intermediate CA certificate in a three-certificate chain must be rejected by the BouncyCastle backend.");
+        }
+        finally
+        {
+            DisposeAll(chain);
+            DisposeAll(anchors);
+        }
+    }
+
+
+    /// <summary>Mirrors <see cref="MicrosoftBackendAcceptsAThreeCertificateChainWhenTheIntermediateIsClean"/> against the BouncyCastle backend.</summary>
+    [TestMethod]
+    public async Task BouncyCastleBackendAcceptsAThreeCertificateChainWhenTheIntermediateIsClean()
+    {
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
+        using X509ChainTestRingChain ring = X509ChainTestRing.BuildThreeLevelChain("intermediate-clean-bc.example.test", timeProvider);
+        DateTimeOffset validationTime = timeProvider.GetUtcNow();
+
+        (IReadOnlyList<PkiCertificateMemory> chain, IReadOnlyList<PkiCertificateMemory> anchors) = ParseThreeLevelChain(ring);
+        try
+        {
+            using PkiCertificateMemory cleanLeafCrl = MintCrlFromRingNode(ring.Intermediate, revokedCertificate: null, validationTime, crlNumber: 1);
+            using PkiCertificateMemory cleanIntermediateCrl = MintCrlFromRingNode(ring.Root, revokedCertificate: null, validationTime, crlNumber: 2);
+            var checker = new CrlRevocationChecker([cleanLeafCrl, cleanIntermediateCrl]);
+
+            using PublicKeyMemory leafKey = await BouncyCastleX509Functions.ValidateChainAsync(
+                chain, anchors, validationTime, BaseMemoryPool.Shared, checker.CheckAsync, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsNotNull(leafKey, "Clean CRLs for both the leaf and the intermediate let chain validation complete and return the leaf key.");
+        }
+        finally
+        {
+            DisposeAll(chain);
+            DisposeAll(anchors);
+        }
+    }
+
+
+    /// <summary>
+    /// Parses an <see cref="X509ChainTestRing"/> three-level chain into the leaf-plus-intermediate <c>chain</c> and
+    /// single-root <c>anchors</c> lists <see cref="MicrosoftX509Functions.ValidateChainAsync"/> and
+    /// <see cref="BouncyCastleX509Functions.ValidateChainAsync"/> take, via the production <c>ParseX5c</c> seam.
+    /// </summary>
+    /// <param name="ring">The three-level chain to parse.</param>
+    /// <returns>The parsed chain (leaf, intermediate) and anchors (root) lists; the caller disposes both.</returns>
+    private static (IReadOnlyList<PkiCertificateMemory> Chain, IReadOnlyList<PkiCertificateMemory> Anchors) ParseThreeLevelChain(X509ChainTestRingChain ring)
+    {
+        IReadOnlyList<PkiCertificateMemory> chain = MicrosoftX509Functions.ParseX5c(
+            [Convert.ToBase64String(ring.Leaf.Certificate.RawData), Convert.ToBase64String(ring.Intermediate.Certificate.RawData)],
+            BaseMemoryPool.Shared);
+        IReadOnlyList<PkiCertificateMemory> anchors = MicrosoftX509Functions.ParseX5c(
+            [Convert.ToBase64String(ring.Root.Certificate.RawData)],
+            BaseMemoryPool.Shared);
+
+        return (chain, anchors);
+    }
+
+
+    /// <summary>
+    /// Mints a CRL signed by <paramref name="issuerNode"/>'s certificate and private key, via
+    /// <see cref="SyntheticPassportFactory.MintCrl"/> — the shared CRL-minting helper this file's own scenario
+    /// tests already use, reused here for the <see cref="X509ChainTestRing"/>-built three-level chain rather than
+    /// duplicating the minting logic.
+    /// </summary>
+    /// <param name="issuerNode">The ring node whose certificate and private key sign the CRL.</param>
+    /// <param name="revokedCertificate">The certificate to list as revoked, or <see langword="null"/> for a clean CRL.</param>
+    /// <param name="validationTime">The instant the CRL's validity window is centred on.</param>
+    /// <param name="crlNumber">The CRL's sequence number.</param>
+    /// <returns>The pooled CRL carrier; the caller disposes it.</returns>
+    private static PkiCertificateMemory MintCrlFromRingNode(X509ChainTestRingNode issuerNode, X509Certificate2? revokedCertificate, DateTimeOffset validationTime, long crlNumber)
+    {
+        using X509Certificate2 issuerWithKey = issuerNode.Certificate.CopyWithPrivateKey(issuerNode.SigningKey);
+
+        return SyntheticPassportFactory.MintCrl(issuerWithKey, revokedCertificate, validationTime.AddDays(-1), validationTime.AddDays(30), crlNumber);
+    }
+
+
+    /// <summary>Disposes every certificate carrier in <paramref name="certificates"/>.</summary>
+    /// <param name="certificates">The certificates to dispose.</param>
+    private static void DisposeAll(IReadOnlyList<PkiCertificateMemory> certificates)
+    {
+        foreach(PkiCertificateMemory certificate in certificates)
+        {
+            certificate.Dispose();
+        }
     }
 }

@@ -3,12 +3,14 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Did.Methods.WebVh;
 using Verifiable.Cryptography.EventLogs;
 using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.Microsoft;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Resolver;
 
@@ -32,7 +34,7 @@ internal sealed class WebVhProofVerificationTests
         Base58Encoder = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase)),
         Base58Decoder = DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase)),
         MemoryPool = BaseMemoryPool.Shared,
-        TimeProvider = TimeProvider.System
+        TimeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch)
     };
 
 

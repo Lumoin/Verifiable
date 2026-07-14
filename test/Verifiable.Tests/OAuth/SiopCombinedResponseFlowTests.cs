@@ -44,8 +44,7 @@ internal sealed class SiopCombinedResponseFlowTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new(
-        new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
+    private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
@@ -95,7 +94,7 @@ internal sealed class SiopCombinedResponseFlowTests
             //=== Step 1: the RP prepares the transaction and learns the handle to echo as state. ===
             string requestHandle = await host.HandleSiopRequestPreparationAsync(
                 rpKeys, SiopNonce, RelyingPartyClientId, AllowedSiopAlgorithms,
-                TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsInstanceOfType<SiopRequestPreparedState>(host.GetFlowState(requestHandle).State);
 
@@ -108,7 +107,7 @@ internal sealed class SiopCombinedResponseFlowTests
                 siopPrivate, siopPublic, RelyingPartyClientId, SiopNonce,
                 issuedAt: TimeProvider.GetUtcNow(), lifetime: TimeSpan.FromMinutes(5),
                 TestSetup.Base64UrlEncoder, HeaderSerializer, PayloadSerializer, Pool,
-                TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             string vpToken = await PresentWithKeyBindingAsync(
                 serializedSdJwt, holderPrivateKey, SiopNonce, RelyingPartyClientId)
@@ -128,7 +127,7 @@ internal sealed class SiopCombinedResponseFlowTests
                     [OAuthRequestParameterNames.State] = requestHandle
                 },
                 new ExchangeContext(),
-                TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             //=== Step 4: 200 and the terminal verified state with the expected subject + nonce. ===
             Assert.AreEqual((int)HttpStatusCode.OK, response.StatusCode, response.Body);
@@ -167,7 +166,7 @@ internal sealed class SiopCombinedResponseFlowTests
 
             string requestHandle = await host.HandleSiopRequestPreparationAsync(
                 rpKeys, SiopNonce, RelyingPartyClientId, AllowedSiopAlgorithms,
-                TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             var siopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
             using PublicKeyMemory siopPublic = siopKeys.PublicKey;
@@ -178,7 +177,7 @@ internal sealed class SiopCombinedResponseFlowTests
                 siopPrivate, siopPublic, RelyingPartyClientId, StaleNonce,
                 issuedAt: TimeProvider.GetUtcNow(), lifetime: TimeSpan.FromMinutes(5),
                 TestSetup.Base64UrlEncoder, HeaderSerializer, PayloadSerializer, Pool,
-                TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             string staleVpToken = await PresentWithKeyBindingAsync(
                 serializedSdJwt, holderPrivateKey, StaleNonce, RelyingPartyClientId)
@@ -195,7 +194,7 @@ internal sealed class SiopCombinedResponseFlowTests
                     [OAuthRequestParameterNames.State] = requestHandle
                 },
                 new ExchangeContext(),
-                TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             //The flow must not succeed; it reaches terminal failure naming the nonce miss. The
             //id_token §11.1 nonce check fails first (it runs before the vp_token), so the failure
@@ -223,7 +222,7 @@ internal sealed class SiopCombinedResponseFlowTests
 
         string requestHandle = await host.HandleSiopRequestPreparationAsync(
             rpKeys, SiopNonce, RelyingPartyClientId, AllowedSiopAlgorithms,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var siopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         using PublicKeyMemory siopPublic = siopKeys.PublicKey;
@@ -233,7 +232,7 @@ internal sealed class SiopCombinedResponseFlowTests
             siopPrivate, siopPublic, RelyingPartyClientId, SiopNonce,
             issuedAt: TimeProvider.GetUtcNow(), lifetime: TimeSpan.FromMinutes(5),
             TestSetup.Base64UrlEncoder, HeaderSerializer, PayloadSerializer, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string expectedSubject = SelfIssuedSubjectThumbprint(siopPublic);
 
@@ -247,7 +246,7 @@ internal sealed class SiopCombinedResponseFlowTests
                 [OAuthRequestParameterNames.State] = requestHandle
             },
             new ExchangeContext(),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual((int)HttpStatusCode.OK, response.StatusCode, response.Body);
 
@@ -350,7 +349,7 @@ internal sealed class SiopCombinedResponseFlowTests
             HeaderSerializer,
             PayloadSerializer,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         using SdToken<string> tokenWithKb = token.WithKeyBinding(compactKbJwt, Pool);
 

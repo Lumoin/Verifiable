@@ -32,7 +32,7 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 ///   <item><description>Base64url-decode the vp_token value, then parse the DeviceResponse via <see cref="ParseMdocDeviceResponseDelegate"/>.</description></item>
 ///   <item><description>Verify the issuer-auth COSE_Sign1 against the key the trust framework resolves from the IssuerAuth (<see cref="ResolveMdocIssuerKeyDelegate"/>).</description></item>
 ///   <item><description>Validate the MSO digest binding over every presented item (<see cref="MdocMsoDigestBindingValidator"/>).</description></item>
-///   <item><description>Derive the device key from the issuer-committed MSO (<see cref="MdocCoseKeyExtensions.ToPublicKeyMemory"/>).</description></item>
+///   <item><description>Derive the device key from the issuer-committed MSO (<see cref="CoseKeyExtensions.ToPublicKeyMemory"/>).</description></item>
 ///   <item><description>Reconstruct the SessionTranscript and verify the device COSE_Sign1 over it.</description></item>
 ///   <item><description>Surface the disclosed claims keyed by element identifier.</description></item>
 /// </list>

@@ -25,7 +25,7 @@ namespace Verifiable.DidComm.ProblemReports;
 public static class DidCommProblemReportExtensions
 {
     //The problem-report Message Type URI, parsed once for semver-compatible handler dispatch.
-    private static readonly MessageTypeUri ProblemReportMessageType = MessageTypeUri.Parse(WellKnownProblemReportNames.ProblemReportType);
+    private static MessageTypeUri ProblemReportMessageType { get; } = MessageTypeUri.Parse(WellKnownProblemReportNames.ProblemReportType);
 
 
     /// <summary>
@@ -239,29 +239,37 @@ public static class DidCommProblemReportExtensions
         var collected = new List<string?>();
         foreach(object? element in elements)
         {
-            switch(element)
+            bool isCollected = element switch
             {
-                case null:
-                {
-                    collected.Add(null);
+                null => CollectNull(collected),
+                string text => CollectText(collected, text),
+                _ => false
+            };
 
-                    break;
-                }
-                case string text:
-                {
-                    collected.Add(text);
-
-                    break;
-                }
-                default:
-                {
-                    return false;
-                }
+            if(!isCollected)
+            {
+                return false;
             }
         }
 
         args = collected;
 
         return true;
+
+        //Appends a JSON-null element and reports success; null is a recognized, valid element type.
+        static bool CollectNull(List<string?> target)
+        {
+            target.Add(null);
+
+            return true;
+        }
+
+        //Appends a string element and reports success, mirroring CollectNull for the string arm.
+        static bool CollectText(List<string?> target, string text)
+        {
+            target.Add(text);
+
+            return true;
+        }
     }
 }

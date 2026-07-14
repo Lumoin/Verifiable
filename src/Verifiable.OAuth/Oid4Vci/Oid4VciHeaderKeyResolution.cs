@@ -228,7 +228,7 @@ internal static class Oid4VciHeaderKeyResolution
         try
         {
             return await x509Verification.ValidateChain(
-                chain, trustAnchors, validationTime.Value, x509Verification.MemoryPool, cancellationToken)
+                chain, trustAnchors, validationTime.Value, x509Verification.MemoryPool, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
         }
         catch

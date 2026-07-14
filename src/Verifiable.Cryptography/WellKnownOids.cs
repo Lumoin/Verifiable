@@ -72,6 +72,30 @@ namespace Verifiable.Cryptography
         /// </summary>
         public const string KeyUsageExtension = "2.5.29.15";
 
+        /// <summary>
+        /// OID for the X.520 Organizational Unit Name attribute type (organizationalUnitName) per
+        /// RFC 5280 §4.1.2.4, used in a certificate's Subject or Issuer distinguished name.
+        /// </summary>
+        public const string OrganizationalUnitName = "2.5.4.11";
+
+        /// <summary>
+        /// OID for the X.520 Country Name attribute type (countryName) per RFC 5280 §4.1.2.4,
+        /// used in a certificate's Subject or Issuer distinguished name.
+        /// </summary>
+        public const string CountryName = "2.5.4.6";
+
+        /// <summary>
+        /// OID for the X.520 Organization Name attribute type (organizationName) per
+        /// RFC 5280 §4.1.2.4, used in a certificate's Subject or Issuer distinguished name.
+        /// </summary>
+        public const string OrganizationName = "2.5.4.10";
+
+        /// <summary>
+        /// OID for the X.520 Common Name attribute type (commonName) per RFC 5280 §4.1.2.4,
+        /// used in a certificate's Subject or Issuer distinguished name.
+        /// </summary>
+        public const string CommonName = "2.5.4.3";
+
 
         //The DER value bytes (the content after the 0x06 OBJECT IDENTIFIER tag and length) of the OIDs
         //above, for callers that compare against an OID parsed from a DER structure (e.g. a

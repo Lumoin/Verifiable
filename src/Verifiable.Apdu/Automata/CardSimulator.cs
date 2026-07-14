@@ -548,30 +548,35 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// </summary>
     private static (IMemoryOwner<byte>? OwnedData, ReadOnlyMemory<byte> Data, StatusWord StatusWord) ExtractResponse(CardResponseIntent intent)
     {
-        switch(intent)
+        return intent switch
         {
-            case BinaryReadResponse read:
-                return (null, read.Data, read.StatusWord);
-            case ActiveAuthenticationResponse activeAuthentication:
-                //INTERNAL AUTHENTICATE runs over Secure Messaging too; the signature is the protected response
-                //data, so its buffer is handed back to be disposed after protection rather than released here.
-                return (activeAuthentication.Signature, activeAuthentication.Signature.Memory[..activeAuthentication.Length], activeAuthentication.StatusWord);
-            case ChallengeResponse challenge:
-                //GET CHALLENGE runs over Secure Messaging during Terminal Authentication; the issued challenge
-                //r_IC is the protected response data, so its buffer is handed back to be disposed after protection.
-                return (challenge.Challenge, challenge.Challenge.Memory[..challenge.Length], challenge.StatusWord);
-            case BacAuthenticateResponse authenticate:
-                authenticate.Token.Dispose();
+            BinaryReadResponse read => (null, read.Data, read.StatusWord),
+            //INTERNAL AUTHENTICATE runs over Secure Messaging too; the signature is the protected response
+            //data, so its buffer is handed back to be disposed after protection rather than released here.
+            ActiveAuthenticationResponse activeAuthentication =>
+                (activeAuthentication.Signature, activeAuthentication.Signature.Memory[..activeAuthentication.Length], activeAuthentication.StatusWord),
+            //GET CHALLENGE runs over Secure Messaging during Terminal Authentication; the issued challenge
+            //r_IC is the protected response data, so its buffer is handed back to be disposed after protection.
+            ChallengeResponse challenge => (challenge.Challenge, challenge.Challenge.Memory[..challenge.Length], challenge.StatusWord),
+            BacAuthenticateResponse authenticate => ReleaseTokenAndReturnEmpty(authenticate),
+            DynamicAuthenticationDataResponse dynamicAuthentication => ReleaseDataAndReturnEmpty(dynamicAuthentication),
+            _ => (null, ReadOnlyMemory<byte>.Empty, intent.StatusWord)
+        };
 
-                return (null, ReadOnlyMemory<byte>.Empty, authenticate.StatusWord);
-            case DynamicAuthenticationDataResponse dynamicAuthentication:
-                //PACE rounds run in the clear, so this is a defensive release of an owned buffer that should
-                //never reach the Secure-Messaging-wrapped dispatch path.
-                dynamicAuthentication.Data.Dispose();
+        static (IMemoryOwner<byte>? OwnedData, ReadOnlyMemory<byte> Data, StatusWord StatusWord) ReleaseTokenAndReturnEmpty(BacAuthenticateResponse authenticate)
+        {
+            authenticate.Token.Dispose();
 
-                return (null, ReadOnlyMemory<byte>.Empty, dynamicAuthentication.StatusWord);
-            default:
-                return (null, ReadOnlyMemory<byte>.Empty, intent.StatusWord);
+            return (null, ReadOnlyMemory<byte>.Empty, authenticate.StatusWord);
+        }
+
+        static (IMemoryOwner<byte>? OwnedData, ReadOnlyMemory<byte> Data, StatusWord StatusWord) ReleaseDataAndReturnEmpty(DynamicAuthenticationDataResponse dynamicAuthentication)
+        {
+            //PACE rounds run in the clear, so this is a defensive release of an owned buffer that should
+            //never reach the Secure-Messaging-wrapped dispatch path.
+            dynamicAuthentication.Data.Dispose();
+
+            return (null, ReadOnlyMemory<byte>.Empty, dynamicAuthentication.StatusWord);
         }
     }
 
@@ -1180,9 +1185,9 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
             //recovery; an elliptic-curve key signs ECDSA over the curve the chip's own EF.DG15 announces.
             using Signature signature = dataGroup15.KeyType == ActiveAuthenticationKeyType.Rsa
                 ? await RsaActiveAuthenticationCardResponder.SignChallengeAsync(
-                    ActiveAuthenticationKey.AsReadOnlyMemory(), action.Challenge, basePool, cancellationToken).ConfigureAwait(false)
+                    ActiveAuthenticationKey.AsReadOnlyMemory(), action.Challenge, basePool, cancellationToken: cancellationToken).ConfigureAwait(false)
                 : await ActiveAuthenticationCardResponder.SignChallengeAsync(
-                    ActiveAuthenticationKey.AsReadOnlyMemory(), dataGroup15.EllipticCurvePublicKey.Tag, action.Challenge, basePool, cancellationToken).ConfigureAwait(false);
+                    ActiveAuthenticationKey.AsReadOnlyMemory(), dataGroup15.EllipticCurvePublicKey.Tag, action.Challenge, basePool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             //The signature is public; copy it out of the responder's buffer so the (disposed-here) Signature
             //carrier does not outlive framing, mirroring the GET CHALLENGE data-response path.
@@ -1465,11 +1470,11 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
                     ? await TerminalAuthenticationSignature.VerifyAsync(
                         terminalPublicKey.EllipticCurvePoint!, action.Signature, chipIdentifier,
                         IssuedChallenge.Memory[..IssuedChallengeLength], TerminalChipAuthenticationEphemeralKey.AsReadOnlyMemory(),
-                        basePool, cancellationToken).ConfigureAwait(false)
+                        basePool, cancellationToken: cancellationToken).ConfigureAwait(false)
                     : await TerminalAuthenticationSignature.VerifyWithRsaAsync(
                         terminalPublicKey.RsaKey!, terminalPublicKey.SignatureScheme, action.Signature, chipIdentifier,
                         IssuedChallenge.Memory[..IssuedChallengeLength], TerminalChipAuthenticationEphemeralKey.AsReadOnlyMemory(),
-                        basePool, cancellationToken).ConfigureAwait(false);
+                        basePool, cancellationToken: cancellationToken).ConfigureAwait(false);
             }
         }
         catch(Exception exception) when(exception is InvalidOperationException or ArgumentException)
@@ -1706,14 +1711,21 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// </summary>
     private static int WriteBerLength(int length, Span<byte> destination)
     {
-        if(length <= 0x7F)
+        return length switch
+        {
+            <= 0x7F => WriteShortForm(length, destination),
+            <= 0xFF => WriteOneByteLongForm(length, destination),
+            _ => WriteTwoByteLongForm(length, destination)
+        };
+
+        static int WriteShortForm(int length, Span<byte> destination)
         {
             destination[0] = (byte)length;
 
             return 1;
         }
 
-        if(length <= 0xFF)
+        static int WriteOneByteLongForm(int length, Span<byte> destination)
         {
             destination[0] = 0x81;
             destination[1] = (byte)length;
@@ -1721,11 +1733,14 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
             return 2;
         }
 
-        destination[0] = 0x82;
-        destination[1] = (byte)(length >> 8);
-        destination[2] = (byte)length;
+        static int WriteTwoByteLongForm(int length, Span<byte> destination)
+        {
+            destination[0] = 0x82;
+            destination[1] = (byte)(length >> 8);
+            destination[2] = (byte)length;
 
-        return 3;
+            return 3;
+        }
     }
 
 
@@ -1806,49 +1821,25 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
         byte p1 = command[2];
         byte p2 = command[3];
 
-        if(instruction == InstructionCode.Select.Code)
+        return instruction switch
         {
-            return TryParseSelect(command, p1, p2, out input, out malformedStatus);
-        }
+            var code when code == InstructionCode.Select.Code => TryParseSelect(command, p1, p2, out input, out malformedStatus),
+            var code when code == InstructionCode.ReadBinary.Code => TryParseReadBinary(command, p1, p2, out input),
+            var code when code == InstructionCode.GetChallenge.Code => TryParseGetChallenge(command, out input),
+            var code when code == InstructionCode.ExternalAuthenticate.Code => TryParseExternalAuthenticate(commandApdu, out input, out malformedStatus),
+            var code when code == InstructionCode.ManageSecurityEnvironment.Code => TryParseManageSecurityEnvironment(commandApdu, p1, p2, out input, out malformedStatus),
+            var code when code == InstructionCode.PerformSecurityOperation.Code => TryParsePerformSecurityOperation(commandApdu, p1, p2, out input, out malformedStatus),
+            var code when code == GeneralAuthenticateInstruction => TryParseGeneralAuthenticate(commandApdu, out input, out malformedStatus),
+            var code when code == InstructionCode.InternalAuthenticate.Code => TryParseInternalAuthenticate(commandApdu, out input, out malformedStatus),
+            _ => ReceiveUnsupported(instruction, out input)
+        };
 
-        if(instruction == InstructionCode.ReadBinary.Code)
+        static bool ReceiveUnsupported(byte instruction, out CardSimulatorInput? input)
         {
-            return TryParseReadBinary(command, p1, p2, out input);
+            input = new UnsupportedCommandReceived(instruction);
+
+            return true;
         }
-
-        if(instruction == InstructionCode.GetChallenge.Code)
-        {
-            return TryParseGetChallenge(command, out input);
-        }
-
-        if(instruction == InstructionCode.ExternalAuthenticate.Code)
-        {
-            return TryParseExternalAuthenticate(commandApdu, out input, out malformedStatus);
-        }
-
-        if(instruction == InstructionCode.ManageSecurityEnvironment.Code)
-        {
-            return TryParseManageSecurityEnvironment(commandApdu, p1, p2, out input, out malformedStatus);
-        }
-
-        if(instruction == InstructionCode.PerformSecurityOperation.Code)
-        {
-            return TryParsePerformSecurityOperation(commandApdu, p1, p2, out input, out malformedStatus);
-        }
-
-        if(instruction == GeneralAuthenticateInstruction)
-        {
-            return TryParseGeneralAuthenticate(commandApdu, out input, out malformedStatus);
-        }
-
-        if(instruction == InstructionCode.InternalAuthenticate.Code)
-        {
-            return TryParseInternalAuthenticate(commandApdu, out input, out malformedStatus);
-        }
-
-        input = new UnsupportedCommandReceived(instruction);
-
-        return true;
     }
 
 
@@ -1890,30 +1881,22 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// </summary>
     private static bool TryParseManageSecurityEnvironment(ReadOnlyMemory<byte> commandApdu, byte p1, byte p2, [NotNullWhen(true)] out CardSimulatorInput? input, out StatusWord malformedStatus)
     {
-        if(p1 == SetAuthenticationTemplateP1 && p2 == SetAuthenticationTemplateP2)
+        return (p1, p2) switch
         {
-            return TryParseSetAuthenticationTemplate(commandApdu, out input, out malformedStatus);
-        }
+            (SetAuthenticationTemplateP1, SetAuthenticationTemplateP2) => TryParseSetAuthenticationTemplate(commandApdu, out input, out malformedStatus),
+            (SetKeyAgreementTemplateP1, SetKeyAgreementTemplateP2) => TryParseSetKeyAgreementTemplate(commandApdu, out input, out malformedStatus),
+            (SetDigitalSignatureTemplateP1, SetDigitalSignatureTemplateP2) => TryParseSetDigitalSignatureTemplate(commandApdu, out input, out malformedStatus),
+            (SetDigitalSignatureTemplateP1, SetAuthenticationTemplateP2) => TryParseSetTerminalAuthenticationTemplate(commandApdu, out input, out malformedStatus),
+            _ => RejectIncorrectP1P2(out input, out malformedStatus)
+        };
 
-        if(p1 == SetKeyAgreementTemplateP1 && p2 == SetKeyAgreementTemplateP2)
+        static bool RejectIncorrectP1P2(out CardSimulatorInput? input, out StatusWord malformedStatus)
         {
-            return TryParseSetKeyAgreementTemplate(commandApdu, out input, out malformedStatus);
+            input = null;
+            malformedStatus = StatusWord.IncorrectP1P2;
+
+            return false;
         }
-
-        if(p1 == SetDigitalSignatureTemplateP1 && p2 == SetDigitalSignatureTemplateP2)
-        {
-            return TryParseSetDigitalSignatureTemplate(commandApdu, out input, out malformedStatus);
-        }
-
-        if(p1 == SetDigitalSignatureTemplateP1 && p2 == SetAuthenticationTemplateP2)
-        {
-            return TryParseSetTerminalAuthenticationTemplate(commandApdu, out input, out malformedStatus);
-        }
-
-        input = null;
-        malformedStatus = StatusWord.IncorrectP1P2;
-
-        return false;
     }
 
 
@@ -2270,15 +2253,25 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
         }
 
         byte first = data[offset++];
-        if(first <= 0x7F)
+
+        return first switch
+        {
+            <= 0x7F => ReadShortForm(first, out length),
+            0x81 => ReadOneByteLongForm(data, ref offset, out length),
+            0x82 => ReadTwoByteLongForm(data, ref offset, out length),
+            _ => false
+        };
+
+        static bool ReadShortForm(byte first, out int length)
         {
             length = first;
 
             return true;
         }
 
-        if(first == 0x81)
+        static bool ReadOneByteLongForm(ReadOnlySpan<byte> data, ref int offset, out int length)
         {
+            length = 0;
             if(offset >= data.Length)
             {
                 return false;
@@ -2289,8 +2282,9 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
             return true;
         }
 
-        if(first == 0x82)
+        static bool ReadTwoByteLongForm(ReadOnlySpan<byte> data, ref int offset, out int length)
         {
+            length = 0;
             if(offset + 1 >= data.Length)
             {
                 return false;
@@ -2301,8 +2295,6 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
 
             return true;
         }
-
-        return false;
     }
 
 

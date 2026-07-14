@@ -6,9 +6,11 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography.EventLogs;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
@@ -374,7 +376,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
                     return ValueTask.FromResult((new ActiveLogState<TpmAttestationState>(next), (string?)null));
                 },
                 deactivate: static (active, _, _) => ValueTask.FromResult((new DeactivatedLogState<TpmAttestationState>(active.Value), (string?)null))),
-            TimeProvider = TimeProvider.System
+            TimeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch)
         };
 
         var replayer = new LogReplayer<TpmAttestationState, TpmQuoteOperation, CryptoProof, TpmAttestationTrustContext>();

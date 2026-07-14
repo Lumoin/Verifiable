@@ -26,8 +26,7 @@ internal sealed class Oid4VciCredentialOfferEndpointTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>A fixed clock so dispatch behaviour is reproducible.</summary>
-    private FakeTimeProvider TimeProvider { get; } = new(
-        new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
+    private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     /// <summary>The Credential Issuer client identifier registered for the offer tests.</summary>
     private const string ClientId = "https://issuer.client.test";

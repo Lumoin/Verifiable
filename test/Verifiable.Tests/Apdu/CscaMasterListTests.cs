@@ -22,8 +22,8 @@ namespace Verifiable.Tests.Apdu;
 [TestClass]
 internal sealed class CscaMasterListTests
 {
-    private static readonly DateTimeOffset NotBefore = new(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
-    private static readonly DateTimeOffset NotAfter = new(2034, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset NotBefore = SyntheticPassportFactory.NotBefore;
+    private static readonly DateTimeOffset NotAfter = SyntheticPassportFactory.NotAfter;
     private static readonly DateTimeOffset ValidationTime = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>The id-icao-mrtd-security-ldsSecurityObject content type, a valid CMS content type that is not a master list.</summary>
@@ -36,6 +36,7 @@ internal sealed class CscaMasterListTests
     [TestMethod]
     public async Task ParsesAMintedMasterListAndExtractsItsCertificates()
     {
+        //The certificate factory (CertificateRequest and friends) requires framework ECDsa instances to mint the signer and CSCA certificates.
         using ECDsa signerKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa firstKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa secondKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -67,6 +68,7 @@ internal sealed class CscaMasterListTests
     [TestMethod]
     public async Task RejectsCmsWithTheWrongContentType()
     {
+        //The certificate factory (CertificateRequest and friends) requires framework ECDsa instances to mint the signer and CSCA certificates.
         using ECDsa signerKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa cscaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
@@ -86,6 +88,7 @@ internal sealed class CscaMasterListTests
     [TestMethod]
     public async Task RejectsATamperedMasterList()
     {
+        //The certificate factory (CertificateRequest and friends) requires framework ECDsa instances to mint the signer and CSCA certificates.
         using ECDsa signerKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa cscaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
@@ -109,6 +112,7 @@ internal sealed class CscaMasterListTests
     {
         using SyntheticPassport passport = SyntheticPassportFactory.Mint();
 
+        //The certificate factory (CertificateRequest and friends) requires framework ECDsa instances to mint the signer and CSCA certificates.
         using ECDsa signerKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa otherKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using X509Certificate2 signer = CmsSignedDataTestFactory.MintSelfSignedCertificate(signerKey, NotBefore, NotAfter);

@@ -2,6 +2,7 @@ using Verifiable.Core.Assessment;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Federation;
 
@@ -18,7 +19,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task HappyPathEntityConfigurationEmitsAllSuccessOrNotApplicable()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/leaf"));
 
@@ -60,7 +61,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task ExpiredEntityConfigurationFailsExpInFuture()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/expired"));
 
@@ -98,7 +99,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task EntityConfigurationWithExpiryAtOrBeforeIssuanceFailsExpAfterIat()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/inverted-window"));
 
@@ -138,7 +139,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task UnverifiedSignatureFailsOnlySignatureVerifiesClaim()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/sigfail"));
 
@@ -177,7 +178,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task EntityConfigurationWithPrivateKeyInJwksFailsPublicOnlyCheck()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/leaked-private-key"));
 
@@ -234,7 +235,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task EntityConfigurationWithDuplicateKidInJwksFailsDistinctKidCheck()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/duplicate-kid"));
 
@@ -298,7 +299,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task EntityConfigurationWithKidlessJwksKeyFailsDistinctKidCheck()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/kidless-key"));
 
@@ -353,7 +354,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task EntityConfigurationWithUndersizedRsaKeyFailsMinimumKeyLength()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/weak-rsa"));
 
@@ -384,7 +385,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task EntityConfigurationWithAdequateRsaKeyPassesMinimumKeyLength()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/strong-rsa"));
 
@@ -451,7 +452,7 @@ internal sealed class EntityStatementValidatorTests
     {
         int signedDelta = inPast ? -absSeconds : absSeconds;
 
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier($"https://example.test/iat-{absSeconds}-{(inPast ? "past" : "future")}"));
 
@@ -487,7 +488,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task AlgNoneFailsAlgPresent()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/alg-none"));
 
@@ -525,7 +526,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task AlgAbsentFailsAlgPresent()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/alg-absent"));
 
@@ -560,7 +561,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task TrustMarkTypFailsTypMatchEntityStatement()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/typ-confusion"));
 
@@ -601,7 +602,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task EmptyJwksFailsJwksPresentWhenSelfSigned()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/empty-jwks"));
 
@@ -642,7 +643,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task RelativeAuthorityHintFailsAuthorityHintsWellFormed()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/bad-authority-hint"));
 
@@ -678,7 +679,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task NonObjectMetadataFailsMetadataWellFormed()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/bad-metadata"));
 
@@ -714,7 +715,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task NullMetadataValueFailsMetadataWellFormed()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/null-metadata-value"));
 
@@ -758,7 +759,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task NonHttpsFederationEndpointFailsEndpointsWellFormed()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/http-fetch-endpoint"));
 
@@ -802,7 +803,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task FragmentInFederationEndpointFailsEndpointsWellFormed()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/fragment-endpoint"));
 
@@ -845,7 +846,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task NoneInEndpointAuthSigningAlgsFailsEndpointAuthAlgsNotNone()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/alg-none-endpoint-auth"));
 
@@ -890,7 +891,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task Rs256OnlyEndpointAuthSigningAlgsPassesEndpointAuthAlgsNotNone()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/alg-rs256-endpoint-auth"));
 
@@ -934,7 +935,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task JwkSetParamUnderFederationEntityFailsHasNoJwkSetParams()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/jwks-under-federation-entity"));
 
@@ -978,7 +979,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task EntityConfigurationWithSubordinateOnlyClaimFailsPlacement()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/ec-with-policy"));
 
@@ -1018,7 +1019,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task SubordinateStatementWithConfigurationOnlyClaimFailsPlacement()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode issuer = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/superior"));
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
@@ -1056,7 +1057,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task CritNamingUnunderstoodExtensionClaimFailsCritUnderstood()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/crit-unknown"));
 
@@ -1093,7 +1094,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task EmptyCritArrayFailsCritUnderstood()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/crit-empty"));
 
@@ -1128,7 +1129,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task CritNamingUnderstoodExtensionClaimPassesCritUnderstood()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/crit-understood"));
 
@@ -1166,7 +1167,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task CritNamingSpecifiedClaimFailsCritUnderstood()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/crit-specified-claim"));
 
@@ -1211,7 +1212,7 @@ internal sealed class EntityStatementValidatorTests
     [TestMethod]
     public async Task EntityConfigurationCarryingTrustChainHeaderFailsNoChainHeader()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/embedded-chain-header"));
 

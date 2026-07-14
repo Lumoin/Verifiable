@@ -37,7 +37,7 @@ internal static class WebPlusProofs
     /// The <c>crit</c> extensions a did:webplus proof verifier understands: only <c>b64</c> (RFC 7797), which a
     /// proof header MUST mark critical (<c>"crit":["b64"]</c>).
     /// </summary>
-    private static readonly IReadOnlySet<string> UnderstoodCriticalExtensions =
+    private static IReadOnlySet<string> UnderstoodCriticalExtensions { get; } =
         new HashSet<string>(StringComparer.Ordinal) { WellKnownJoseHeaderNames.B64 }.ToFrozenSet(StringComparer.Ordinal);
 
 
@@ -263,7 +263,7 @@ internal static class WebPlusProofs
                 verify,
                 decoded.keyMaterial.Memory,
                 pool,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             return valid ? (null, kid) : ("A did:webplus proof signature is invalid.", null);
         }

@@ -11,7 +11,7 @@ namespace Verifiable.OAuth.IdJag;
 /// <summary>
 /// Per-call inputs for <see cref="IdJagClient.MintAsync(ClientRegistration, IdJagMintOptions, CancellationToken)"/>
 /// — the client side of the ID-JAG mint (a Token Exchange requesting <c>requested_token_type</c> id-jag,
-/// draft-ietf-oauth-identity-assertion-authz-grant §4.3). The client authenticates as a confidential
+/// draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §4.3). The client authenticates as a confidential
 /// client (§9.1) with a <c>private_key_jwt</c> assertion signed from <see cref="SigningKey"/>.
 /// </summary>
 [DebuggerDisplay("IdJagMintOptions Audience={Audience}, SubjectTokenType={SubjectTokenType}")]
@@ -55,7 +55,7 @@ public sealed record IdJagMintOptions
 /// <summary>
 /// Per-call inputs for <see cref="IdJagClient.RedeemAsync(ClientRegistration, IdJagRedeemOptions, CancellationToken)"/>
 /// — the client side of the ID-JAG redeem (a JWT Bearer grant presenting the ID-JAG as the assertion,
-/// draft-ietf-oauth-identity-assertion-authz-grant §4.4). The client authenticates as a confidential
+/// draft-ietf-oauth-identity-assertion-authz-grant-04 §4.4). The client authenticates as a confidential
 /// client (§9.1) with a <c>private_key_jwt</c> assertion signed from <see cref="SigningKey"/>.
 /// </summary>
 [DebuggerDisplay("IdJagRedeemOptions")]
@@ -83,7 +83,7 @@ public sealed record IdJagRedeemOptions
 
 /// <summary>
 /// The ID-JAG sub-client of <see cref="OAuthClient"/> — the client side of the Cross-App Access two-leg
-/// profile (draft-ietf-oauth-identity-assertion-authz-grant): <see cref="MintAsync(ClientRegistration, IdJagMintOptions, CancellationToken)"/>
+/// profile (draft-ietf-oauth-identity-assertion-authz-grant-04): <see cref="MintAsync(ClientRegistration, IdJagMintOptions, CancellationToken)"/>
 /// obtains an ID-JAG from the IdP via Token Exchange (§4.3); <see cref="RedeemAsync(ClientRegistration, IdJagRedeemOptions, CancellationToken)"/>
 /// redeems it at the Resource Authorization Server via the JWT Bearer grant (§4.4). Both authenticate the
 /// confidential client (§9.1) with a <c>private_key_jwt</c> assertion.

@@ -47,7 +47,7 @@ namespace Verifiable.BouncyCastle;
 /// </remarks>
 public static class BouncyCastleSymmetricFunctions
 {
-    private static readonly ProviderLibrary ProviderLib = new(
+    private static ProviderLibrary ProviderLib { get; } = new(
         typeof(BouncyCastleSymmetricFunctions).Assembly.GetName().Name
             ?? "Verifiable.BouncyCastle",
         typeof(BouncyCastleSymmetricFunctions).Assembly.GetName().Version?.ToString()
@@ -55,11 +55,11 @@ public static class BouncyCastleSymmetricFunctions
 
     //BouncyCastle is an independently versioned NuGet package — its assembly version is the
     //most meaningful CBOM identifier.
-    private static readonly CryptoLibraryInfo CryptoLib = new(
+    private static CryptoLibraryInfo CryptoLib { get; } = new(
         "Org.BouncyCastle.Cryptography",
         typeof(DesEdeEngine).Assembly.GetName().Version?.ToString() ?? "Unknown");
 
-    private static readonly ProviderClass ProviderCls =
+    private static ProviderClass ProviderCls { get; } =
         new(nameof(BouncyCastleSymmetricFunctions));
 
     /// <summary>The DES/Triple-DES cipher block size in octets, shared by the CBC cipher and the Retail MAC.</summary>
@@ -293,36 +293,28 @@ public static class BouncyCastleSymmetricFunctions
                 $"The input must be a non-empty whole number of {blockSize}-byte blocks but was {input.Length} bytes.", nameof(input));
         }
 
-        //BouncyCastle's BufferedBlockCipher operates on byte[] (no span API), so the key and the
-        //data are copied into transient arrays that are zeroed in the finally blocks. The rented
-        //output buffer is owned by the returned carrier (a Ciphertext or DecryptedContent), which
-        //clears it on disposal.
-        byte[] keyArray = key.ToArray();
+        //The KeyParameter and ParametersWithIV span ctors copy the key and IV into BouncyCastle's own
+        //buffers — no naked byte[] of key material for us to track and zero. BufferedBlockCipher's
+        //ProcessBytes/DoFinal remain byte[]-only, so the plaintext/ciphertext data is still copied into
+        //transient arrays that are zeroed in the finally block.
+        BufferedBlockCipher cipher = new(new CbcBlockCipher(engine));
+        cipher.Init(forEncryption, new ParametersWithIV(new KeyParameter(key), iv));
+
+        byte[] inputArray = input.ToArray();
+        byte[] outputArray = new byte[cipher.GetOutputSize(inputArray.Length)];
         try
         {
-            BufferedBlockCipher cipher = new(new CbcBlockCipher(engine));
-            cipher.Init(forEncryption, new ParametersWithIV(new KeyParameter(keyArray), iv.ToArray()));
+            int written = cipher.ProcessBytes(inputArray, 0, inputArray.Length, outputArray, 0);
+            written += cipher.DoFinal(outputArray, written);
 
-            byte[] inputArray = input.ToArray();
-            byte[] outputArray = new byte[cipher.GetOutputSize(inputArray.Length)];
-            try
-            {
-                int written = cipher.ProcessBytes(inputArray, 0, inputArray.Length, outputArray, 0);
-                written += cipher.DoFinal(outputArray, written);
-
-                IMemoryOwner<byte> owner = pool.Rent(written);
-                outputArray.AsSpan(0, written).CopyTo(owner.Memory.Span);
-                return owner;
-            }
-            finally
-            {
-                CryptographicOperations.ZeroMemory(inputArray);
-                CryptographicOperations.ZeroMemory(outputArray);
-            }
+            IMemoryOwner<byte> owner = pool.Rent(written);
+            outputArray.AsSpan(0, written).CopyTo(owner.Memory.Span);
+            return owner;
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(keyArray);
+            CryptographicOperations.ZeroMemory(inputArray);
+            CryptographicOperations.ZeroMemory(outputArray);
         }
     }
 
@@ -340,48 +332,42 @@ public static class BouncyCastleSymmetricFunctions
         IMac mac = ResolveMac(algorithm, outputByteLength);
         ValidateKeyLength(algorithm, key.Length);
 
-        byte[] keyArray = key.ToArray();
+        //The KeyParameter span ctor copies the key into BouncyCastle's own buffer — no naked byte[]
+        //of key material for us to track and zero.
+        mac.Init(new KeyParameter(key));
+
+        if(RequiresBlockAlignedMacInput(algorithm))
+        {
+            int blockSize = MacBlockSize(algorithm);
+            if(message.Length == 0 || message.Length % blockSize != 0)
+            {
+                throw new ArgumentException(
+                    $"The MAC message must be a non-empty whole number of {blockSize}-byte blocks but was {message.Length} bytes.", nameof(message));
+            }
+        }
+
+        byte[] messageArray = message.ToArray();
         try
         {
-            mac.Init(new KeyParameter(keyArray));
+            mac.BlockUpdate(messageArray, 0, messageArray.Length);
 
-            if(RequiresBlockAlignedMacInput(algorithm))
-            {
-                int blockSize = MacBlockSize(algorithm);
-                if(message.Length == 0 || message.Length % blockSize != 0)
-                {
-                    throw new ArgumentException(
-                        $"The MAC message must be a non-empty whole number of {blockSize}-byte blocks but was {message.Length} bytes.", nameof(message));
-                }
-            }
-
-            byte[] messageArray = message.ToArray();
+            byte[] macArray = new byte[mac.GetMacSize()];
             try
             {
-                mac.BlockUpdate(messageArray, 0, messageArray.Length);
+                mac.DoFinal(macArray, 0);
 
-                byte[] macArray = new byte[mac.GetMacSize()];
-                try
-                {
-                    mac.DoFinal(macArray, 0);
-
-                    IMemoryOwner<byte> owner = pool.Rent(outputByteLength);
-                    macArray.AsSpan(0, outputByteLength).CopyTo(owner.Memory.Span);
-                    return owner;
-                }
-                finally
-                {
-                    CryptographicOperations.ZeroMemory(macArray);
-                }
+                IMemoryOwner<byte> owner = pool.Rent(outputByteLength);
+                macArray.AsSpan(0, outputByteLength).CopyTo(owner.Memory.Span);
+                return owner;
             }
             finally
             {
-                CryptographicOperations.ZeroMemory(messageArray);
+                CryptographicOperations.ZeroMemory(macArray);
             }
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(keyArray);
+            CryptographicOperations.ZeroMemory(messageArray);
         }
     }
 

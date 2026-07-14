@@ -52,8 +52,10 @@ public static class CryptoProofValidation
                 VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(
                     proof.Algorithm, Purpose.Verification);
 
-                bool verified = await verify(
+                (bool verified, CryptoEvent? evt) = await verify(
                     entry.CanonicalBytes, proof.Signature.AsReadOnlyMemory(), proof.SignerKey.AsReadOnlyMemory(), null, cancellationToken).ConfigureAwait(false);
+
+                CryptographicKeyEvents.Emit(evt);
 
                 if(!verified)
                 {

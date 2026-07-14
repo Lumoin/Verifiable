@@ -113,7 +113,7 @@ internal sealed class SecurityEventTokenReceptionTests
             expectedAudience: Audience,
             SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
             TestSetup.Base64UrlDecoder, NeverSeen, new ExchangeContext(), Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(SsfDeliveryOutcome.Rejected, decision.Outcome);
         Assert.IsTrue(SsfDeliveryErrorCodes.IsInvalidIssuer(decision.Error!.Err));
@@ -136,7 +136,7 @@ internal sealed class SecurityEventTokenReceptionTests
             expectedAudience: "https://other.example/",
             SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
             TestSetup.Base64UrlDecoder, NeverSeen, new ExchangeContext(), Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(SsfDeliveryOutcome.Rejected, decision.Outcome);
         Assert.IsTrue(SsfDeliveryErrorCodes.IsInvalidAudience(decision.Error!.Err));
@@ -206,9 +206,9 @@ internal sealed class SecurityEventTokenReceptionTests
             SecurityEventTestJson.HeaderSerializer,
             SecurityEventTestJson.PayloadSerializer,
             Pool,
-            TestContext.CancellationToken,
             signingKeyId: "key-1",
-            subjectId: SubjectIdentifier.Opaque(StreamId)).ConfigureAwait(false);
+            subjectId: SubjectIdentifier.Opaque(StreamId),
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
 
     private async Task<SsfDeliveryDecision> ReceiveAsync(
@@ -220,5 +220,5 @@ internal sealed class SecurityEventTokenReceptionTests
             compact, publicKey, Issuer, Audience,
             SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
             TestSetup.Base64UrlDecoder, isJtiSeen ?? NeverSeen, new ExchangeContext(), Pool,
-            TestContext.CancellationToken, expectedVerificationState).ConfigureAwait(false);
+            expectedVerificationState, TestContext.CancellationToken).ConfigureAwait(false);
 }

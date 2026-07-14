@@ -80,7 +80,7 @@ internal sealed class Rfc7797JwsTests
             MicrosoftCryptographicFunctions.SignP256Async,
             BaseMemoryPool.Shared,
             unprotectedHeader: null,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         JwsSignatureComponent signature = message.Signatures[0];
 
@@ -93,7 +93,7 @@ internal sealed class Rfc7797JwsTests
             MicrosoftCryptographicFunctions.VerifyP256Async,
             publicKey.AsReadOnlyMemory(),
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(valid, "The unencoded-payload signature must verify over the raw payload.");
 
         bool wrongInterpretation = await Jws.VerifySignatureAsync(
@@ -105,7 +105,7 @@ internal sealed class Rfc7797JwsTests
             MicrosoftCryptographicFunctions.VerifyP256Async,
             publicKey.AsReadOnlyMemory(),
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(wrongInterpretation, "Treating the payload as base64url-encoded is the wrong b64 interpretation and must fail.");
 
         byte[] tampered = (byte[])payload.Clone();
@@ -119,7 +119,7 @@ internal sealed class Rfc7797JwsTests
             MicrosoftCryptographicFunctions.VerifyP256Async,
             publicKey.AsReadOnlyMemory(),
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(tamperedResult, "A tampered payload must not verify.");
     }
 }

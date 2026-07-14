@@ -103,8 +103,12 @@ public static class TpmCryptographicFunctions
     /// <param name="context">Per-call state — see the context-key constants; must not be <see langword="null"/>.</param>
     /// <param name="cancellationToken">A token observed across the signing exchange.</param>
     /// <returns>The signature: ECDSA as IEEE P1363 (r || s), RSA as the raw signature octets.</returns>
+    /// <summary>The backend name stamped on the <see cref="SignatureProducedEvent"/> this function emits.</summary>
+    private const string BackendName = "Tpm";
+
+
     [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned Signature transfers to the caller.")]
-    public static async ValueTask<Signature> SignAsync(
+    public static async ValueTask<(Signature Signature, CryptoEvent? Event)> SignAsync(
         ReadOnlyMemory<byte> handleBytes,
         ReadOnlyMemory<byte> dataToSign,
         MemoryPool<byte> signaturePool,
@@ -142,7 +146,11 @@ public static class TpmCryptographicFunctions
         //into the neutral Signature carrier is shared with TPM attestation (see TpmCryptographicProjections).
         int ecdsaComponentSize = scheme == TpmAlgIdConstants.TPM_ALG_ECDSA ? (int)context[EcdsaComponentSizeContextKey] : 0;
 
-        return response.Signature.ToSignature(ecdsaComponentSize, signatureTag, signaturePool);
+        Signature signatureResult = response.Signature.ToSignature(ecdsaComponentSize, signatureTag, signaturePool);
+        CryptoEvent evt = SignatureProducedEvent.Create(
+            signatureTag.Get<Verifiable.Cryptography.Context.CryptoAlgorithm>(), dataToSign.Length, signatureResult.AsReadOnlyMemory().Length, BackendName);
+
+        return (signatureResult, evt);
     }
 
     /// <summary>

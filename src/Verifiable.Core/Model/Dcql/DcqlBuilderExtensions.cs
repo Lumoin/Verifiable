@@ -15,7 +15,7 @@ namespace Verifiable.Core.Model.Dcql;
 /// This class follows the same pattern as <c>DidBuilderExtensions</c>: the builder
 /// remains focused on the fold/aggregate mechanics while these extensions provide
 /// domain-specific, composable construction methods. Each method adds a transformation
-/// via <see cref="Verifiable.Core.Model.Common.Builder{TResult, TState, TBuilder}.With"/>
+/// via <see cref="Verifiable.Foundation.Builder{TResult, TState, TBuilder}.With"/>
 /// that modifies the <see cref="DcqlQueryBuildState"/> during the fold.
 /// </para>
 /// <para>

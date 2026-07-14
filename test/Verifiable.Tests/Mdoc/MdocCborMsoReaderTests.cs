@@ -1,6 +1,9 @@
 using System.Formats.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Core.Model.Mdoc;
+using Verifiable.JCose;
+using Verifiable.Tests.TestInfrastructure;
+using static Verifiable.Tests.TestInfrastructure.MdocTestFixtures;
 
 namespace Verifiable.Tests.Mdoc;
 
@@ -24,6 +27,12 @@ internal sealed class MdocCborMsoReaderTests
 {
     private const string MdlNamespace = "org.iso.18013.5.1";
     private const string MdlDocType = "org.iso.18013.5.1.mDL";
+
+    //Mirrors the instants MdocTestFixtures.WriteValidityInfo bakes into
+    //BuildSampleMso's validityInfo tdate fields. Bit-identical to
+    //TestClock.CanonicalEpoch.AddDays(-8) (2026-05-24T12:00:00Z).
+    private static readonly DateTimeOffset ExpectedValiditySigned = TestClock.CanonicalEpoch.AddDays(-8);
+    private static readonly DateTimeOffset ExpectedValidityValidUntil = ExpectedValiditySigned.AddYears(1);
 
 
     [TestMethod]
@@ -66,9 +75,9 @@ internal sealed class MdocCborMsoReaderTests
 
         MdocMobileSecurityObject mso = MdocCborMsoReader.Read(msoBytes);
 
-        Assert.AreEqual(new DateTimeOffset(2026, 5, 24, 12, 0, 0, TimeSpan.Zero), mso.ValidityInfo.Signed);
-        Assert.AreEqual(new DateTimeOffset(2026, 5, 24, 12, 0, 0, TimeSpan.Zero), mso.ValidityInfo.ValidFrom);
-        Assert.AreEqual(new DateTimeOffset(2027, 5, 24, 12, 0, 0, TimeSpan.Zero), mso.ValidityInfo.ValidUntil);
+        Assert.AreEqual(ExpectedValiditySigned, mso.ValidityInfo.Signed);
+        Assert.AreEqual(ExpectedValiditySigned, mso.ValidityInfo.ValidFrom);
+        Assert.AreEqual(ExpectedValidityValidUntil, mso.ValidityInfo.ValidUntil);
         Assert.IsNull(mso.ValidityInfo.ExpectedUpdate, "Sample MSO omits expectedUpdate; null is the parsed-absence sentinel.");
     }
 
@@ -80,9 +89,9 @@ internal sealed class MdocCborMsoReaderTests
 
         MdocMobileSecurityObject mso = MdocCborMsoReader.Read(msoBytes);
 
-        MdocCoseKey deviceKey = mso.DeviceKeyInfo.DeviceKey;
-        Assert.AreEqual(MdocCoseKeyTypes.Ec2, deviceKey.Kty);
-        Assert.AreEqual(MdocCoseKeyCurves.P256, deviceKey.Curve);
+        CoseKey deviceKey = mso.DeviceKeyInfo.DeviceKey;
+        Assert.AreEqual(CoseKeyTypes.Ec2, deviceKey.Kty);
+        Assert.AreEqual(CoseKeyCurves.P256, deviceKey.Curve);
         Assert.IsNotNull(deviceKey.X);
         Assert.IsNotNull(deviceKey.Y);
         Assert.AreEqual(32, deviceKey.X!.Value.Length);
@@ -136,7 +145,7 @@ internal sealed class MdocCborMsoReaderTests
         writer.WriteTextString(MdocMsoWellKnownKeys.DigestAlgorithmSha256);
 
         writer.WriteTextString(MdocMsoWellKnownKeys.ValueDigests);
-        WriteValueDigests(writer);
+        WriteValueDigests(writer, MdlNamespace);
 
         writer.WriteTextString(MdocMsoWellKnownKeys.DeviceKeyInfo);
         WriteDeviceKeyInfo(writer);
@@ -172,7 +181,7 @@ internal sealed class MdocCborMsoReaderTests
         writer.WriteTextString(MdocMsoWellKnownKeys.DigestAlgorithmSha256);
 
         writer.WriteTextString(MdocMsoWellKnownKeys.ValueDigests);
-        WriteValueDigests(writer);
+        WriteValueDigests(writer, MdlNamespace);
 
         writer.WriteTextString(MdocMsoWellKnownKeys.DeviceKeyInfo);
         WriteDeviceKeyInfo(writer);
@@ -183,74 +192,5 @@ internal sealed class MdocCborMsoReaderTests
         writer.WriteEndMap();
 
         return writer.Encode();
-    }
-
-
-    private static void WriteValueDigests(CborWriter writer)
-    {
-        writer.WriteStartMap(1);
-        writer.WriteTextString(MdlNamespace);
-
-        writer.WriteStartMap(2);
-        writer.WriteUInt32(0);
-        writer.WriteByteString(new byte[32]);
-        writer.WriteUInt32(1);
-        writer.WriteByteString(new byte[32]);
-        writer.WriteEndMap();
-
-        writer.WriteEndMap();
-    }
-
-
-    private static void WriteDeviceKeyInfo(CborWriter writer)
-    {
-        //Just a deviceKey field — KeyAuthorizations / KeyInfo are optional
-        //and parsing them as opaque encoded bytes is exercised in a separate test.
-        writer.WriteStartMap(1);
-        writer.WriteTextString(MdocMsoWellKnownKeys.DeviceKey);
-
-        //COSE_Key for a P-256 public key: {1: 2 (EC2), -1: 1 (P-256), -2: X, -3: Y}.
-        //Canonical key order: positive ints first ascending, then negative ints ascending
-        //(which is -1 before -2 before -3 by absolute value descending — actually CBOR
-        //canonical sorts numerically: 1 < -1 < -2 < -3 because positive < negative in
-        //CBOR canonical sorting per RFC 8949 §4.2.1). The MSO carries COSE keys in
-        //the order the issuer emits; readers are not ordering-sensitive on the COSE
-        //label namespace.
-        writer.WriteStartMap(4);
-        writer.WriteInt32(MdocCoseKeyParameters.Kty);
-        writer.WriteInt32(MdocCoseKeyTypes.Ec2);
-        writer.WriteInt32(MdocCoseKeyParameters.Crv);
-        writer.WriteInt32(MdocCoseKeyCurves.P256);
-        writer.WriteInt32(MdocCoseKeyParameters.X);
-        writer.WriteByteString(new byte[32]);
-        writer.WriteInt32(MdocCoseKeyParameters.Y);
-        writer.WriteByteString(new byte[32]);
-        writer.WriteEndMap();
-
-        writer.WriteEndMap();
-    }
-
-
-    private static void WriteValidityInfo(CborWriter writer)
-    {
-        writer.WriteStartMap(3);
-
-        writer.WriteTextString(MdocMsoWellKnownKeys.Signed);
-        WriteTdate(writer, "2026-05-24T12:00:00Z");
-
-        writer.WriteTextString(MdocMsoWellKnownKeys.ValidFrom);
-        WriteTdate(writer, "2026-05-24T12:00:00Z");
-
-        writer.WriteTextString(MdocMsoWellKnownKeys.ValidUntil);
-        WriteTdate(writer, "2027-05-24T12:00:00Z");
-
-        writer.WriteEndMap();
-    }
-
-
-    private static void WriteTdate(CborWriter writer, string rfc3339)
-    {
-        writer.WriteTag(CborTag.DateTimeString);
-        writer.WriteTextString(rfc3339);
     }
 }

@@ -42,7 +42,7 @@ namespace Verifiable.Apdu;
 /// </remarks>
 public sealed class ApduRecorder : IObserver<ApduExchange>, IDisposable
 {
-    private readonly List<ApduExchange> exchanges = [];
+    private List<ApduExchange> Exchanges { get; } = [];
     private readonly Lock gate = new();
     private bool completed;
 
@@ -55,7 +55,7 @@ public sealed class ApduRecorder : IObserver<ApduExchange>, IDisposable
         {
             lock(gate)
             {
-                return exchanges.Count;
+                return Exchanges.Count;
             }
         }
     }
@@ -68,7 +68,7 @@ public sealed class ApduRecorder : IObserver<ApduExchange>, IDisposable
     {
         lock(gate)
         {
-            return [.. exchanges];
+            return [.. Exchanges];
         }
     }
 
@@ -83,7 +83,7 @@ public sealed class ApduRecorder : IObserver<ApduExchange>, IDisposable
 
         lock(gate)
         {
-            return new ApduRecording(info, [.. exchanges]);
+            return new ApduRecording(info, [.. Exchanges]);
         }
     }
 
@@ -97,7 +97,7 @@ public sealed class ApduRecorder : IObserver<ApduExchange>, IDisposable
         {
             if(!completed)
             {
-                exchanges.Add(value);
+                Exchanges.Add(value);
             }
         }
     }
@@ -132,7 +132,7 @@ public sealed class ApduRecorder : IObserver<ApduExchange>, IDisposable
     {
         lock(gate)
         {
-            exchanges.Clear();
+            Exchanges.Clear();
             completed = false;
         }
     }
@@ -145,7 +145,7 @@ public sealed class ApduRecorder : IObserver<ApduExchange>, IDisposable
         lock(gate)
         {
             completed = true;
-            exchanges.Clear();
+            Exchanges.Clear();
         }
     }
 }

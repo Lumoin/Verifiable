@@ -50,7 +50,7 @@ public sealed class VcalmTemplateEvaluatorRegistry
     public const string LiteralTemplateType = "literal";
 
 
-    private readonly Dictionary<string, VcalmTemplateEvaluator> _evaluators;
+    private Dictionary<string, VcalmTemplateEvaluator> Evaluators { get; }
 
 
     /// <summary>
@@ -59,7 +59,7 @@ public sealed class VcalmTemplateEvaluatorRegistry
     /// </summary>
     public VcalmTemplateEvaluatorRegistry()
     {
-        _evaluators = new Dictionary<string, VcalmTemplateEvaluator>(StringComparer.Ordinal)
+        Evaluators = new Dictionary<string, VcalmTemplateEvaluator>(StringComparer.Ordinal)
         {
             [JsonataTemplateType] = EvaluateJsonata,
             [LiteralTemplateType] = EvaluateLiteral
@@ -79,7 +79,7 @@ public sealed class VcalmTemplateEvaluatorRegistry
         ArgumentException.ThrowIfNullOrEmpty(templateType);
         ArgumentNullException.ThrowIfNull(evaluator);
 
-        _evaluators[templateType] = evaluator;
+        Evaluators[templateType] = evaluator;
     }
 
 
@@ -92,7 +92,7 @@ public sealed class VcalmTemplateEvaluatorRegistry
     {
         ArgumentNullException.ThrowIfNull(templateType);
 
-        return _evaluators.ContainsKey(templateType);
+        return Evaluators.ContainsKey(templateType);
     }
 
 
@@ -109,7 +109,7 @@ public sealed class VcalmTemplateEvaluatorRegistry
     {
         ArgumentNullException.ThrowIfNull(template);
 
-        if(!_evaluators.TryGetValue(template.TemplateType, out VcalmTemplateEvaluator? evaluator))
+        if(!Evaluators.TryGetValue(template.TemplateType, out VcalmTemplateEvaluator? evaluator))
         {
             throw new KeyNotFoundException(
                 $"No VCALM credential-template evaluator is registered for the template type '{template.TemplateType}'.");

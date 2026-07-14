@@ -27,12 +27,12 @@ namespace Verifiable.OAuth.Pkce;
 public sealed class PkceVerifier: IDisposable, IEquatable<PkceVerifier>
 {
     private bool disposed;
-    private readonly IMemoryOwner<byte> owner;
+    private IMemoryOwner<byte> Owner { get; }
 
     /// <summary>
     /// The raw verifier bytes. Valid only while this instance has not been disposed.
     /// </summary>
-    public ReadOnlyMemory<byte> Bytes => owner.Memory;
+    public ReadOnlyMemory<byte> Bytes => Owner.Memory;
 
     /// <summary>
     /// The length of the Base64url-encoded verifier without padding.
@@ -71,7 +71,7 @@ public sealed class PkceVerifier: IDisposable, IEquatable<PkceVerifier>
         ArgumentOutOfRangeException.ThrowIfLessThan(encodedLength, 43);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(encodedLength, 128);
 
-        this.owner = owner;
+        this.Owner = owner;
         EncodedLength = encodedLength;
     }
 
@@ -81,7 +81,7 @@ public sealed class PkceVerifier: IDisposable, IEquatable<PkceVerifier>
     {
         if(!disposed)
         {
-            owner.Dispose();
+            Owner.Dispose();
             disposed = true;
         }
     }

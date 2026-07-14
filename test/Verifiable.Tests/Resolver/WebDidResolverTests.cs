@@ -1,11 +1,13 @@
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Cryptography.EventLogs;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Resolvers;
 using Verifiable.Core.Did.Methods.Web;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Resolver;
 
@@ -402,7 +404,7 @@ internal sealed class WebDidResolverTests
                 log.Add(result);
                 return ValueTask.CompletedTask;
             },
-            TimeProvider = TimeProvider.System
+            TimeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch)
         };
     }
 

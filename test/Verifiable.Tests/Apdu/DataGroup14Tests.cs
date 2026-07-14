@@ -2,6 +2,7 @@ using System;
 using Verifiable.Apdu.Lds;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using static Verifiable.Tests.TestInfrastructure.ApduWireFixtures;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -87,17 +88,6 @@ internal sealed class DataGroup14Tests
     }
 
 
-    /// <summary>Builds a 65-byte SEC1 uncompressed P-256/brainpoolP256r1 point: <c>0x04</c> then 64 filler bytes.</summary>
-    private static byte[] BuildUncompressedPoint(byte fill)
-    {
-        byte[] point = new byte[65];
-        point[0] = 0x04;
-        point.AsSpan(1).Fill(fill);
-
-        return point;
-    }
-
-
     /// <summary>Builds a ChipAuthenticationInfo SecurityInfo: <c>SEQUENCE { OID, version }</c>.</summary>
     private static byte[] ChipAuthenticationInfoSecurityInfo(string oidHex, int version)
     {
@@ -152,16 +142,6 @@ internal sealed class DataGroup14Tests
         byte[] length = EncodeLength(body.Length);
 
         return Concat(tagBytes, length, body);
-    }
-
-
-    /// <summary>Encodes a BER-TLV definite length (short form, or long form with 0x81 / 0x82).</summary>
-    private static byte[] EncodeLength(int length)
-    {
-        if(length <= 0x7F) { return [(byte)length]; }
-        if(length <= 0xFF) { return [0x81, (byte)length]; }
-
-        return [0x82, (byte)(length >> 8), (byte)length];
     }
 
 

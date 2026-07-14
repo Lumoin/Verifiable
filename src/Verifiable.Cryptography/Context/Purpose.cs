@@ -149,7 +149,7 @@ public readonly struct Purpose: IEquatable<Purpose>
     public static Purpose Salt { get; } = new Purpose(14);
 
 
-    private static readonly List<Purpose> purposes = new([
+    private static List<Purpose> purposes { get; } = new([
         None, Verification, Signing, Exchange, Wrapped, Signature,
         Encryption, Nonce, Hmac, Digest, Transport, Data, Mac, Decrypted, Salt
     ]);

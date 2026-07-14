@@ -30,8 +30,8 @@ namespace Verifiable.DidComm.TrustPing;
 public static class TrustPingExtensions
 {
     //The ping / ping-response Message Type URIs, parsed once for semver-compatible handler dispatch.
-    private static readonly MessageTypeUri PingMessageType = MessageTypeUri.Parse(WellKnownTrustPingNames.PingType);
-    private static readonly MessageTypeUri PingResponseMessageType = MessageTypeUri.Parse(WellKnownTrustPingNames.PingResponseType);
+    private static MessageTypeUri PingMessageType { get; } = MessageTypeUri.Parse(WellKnownTrustPingNames.PingType);
+    private static MessageTypeUri PingResponseMessageType { get; } = MessageTypeUri.Parse(WellKnownTrustPingNames.PingResponseType);
 
 
     /// <summary>

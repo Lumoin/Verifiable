@@ -44,8 +44,7 @@ internal sealed class FullLifecycleTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new(
-        new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
+    private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
@@ -158,7 +157,7 @@ internal sealed class FullLifecycleTests
                 [OAuthRequestParameterNames.PreAuthorizedCode] = scannedCode
             },
             new ExchangeContext(),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
 
         using JsonDocument tokenDoc = JsonDocument.Parse(tokenResponse.Body);
@@ -168,7 +167,7 @@ internal sealed class FullLifecycleTests
         ServerHttpResponse nonceResponse = await host.DispatchAtEndpointAsync(
             tenant, WellKnownEndpointNames.Oid4VciNonce, "POST",
             new RequestFields(), new ExchangeContext(),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, nonceResponse.StatusCode, nonceResponse.Body);
 
         using JsonDocument nonceDoc = JsonDocument.Parse(nonceResponse.Body);
@@ -245,7 +244,7 @@ internal sealed class FullLifecycleTests
             siopPrivate, siopPublic, VerifierClientId, VerifierNonce,
             issuedAt: TimeProvider.GetUtcNow(), lifetime: TimeSpan.FromMinutes(5),
             TestSetup.Base64UrlEncoder, HeaderSerializer, PayloadSerializer, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         PublicKeyMemory? IssuerLookup(string iss) =>
             string.Equals(iss, SdJwtIssuerId, StringComparison.Ordinal) ? sdJwtIssuerPublic : null;
@@ -259,7 +258,7 @@ internal sealed class FullLifecycleTests
             MicrosoftEntropyFunctions.ComputeDigestAsync,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
             saltReuseSeam: null,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(parsed.CredentialSignatureValid, "The issued credential must verify at the verifier.");
         Assert.IsTrue(parsed.KbJwtSignatureValid, "The KB-JWT must verify against the cnf key the ISSUER bound.");
@@ -272,7 +271,7 @@ internal sealed class FullLifecycleTests
             idToken, VerifierClientId, VerifierNonce, allowedSiopAlgorithms, TimeProvider.GetUtcNow(),
             resolveDidVerificationKey: null,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(siopResult.IsValid, "The Self-Issued ID Token must validate per SIOPv2 §11.1.");
 
         //=== Act 3: a resource server introspects the issuance access token — signed per
@@ -295,7 +294,7 @@ internal sealed class FullLifecycleTests
                 [WellKnownHttpHeaderNames.Accept] = [WellKnownMediaTypes.Application.TokenIntrospectionJwt]
             }),
             new ExchangeContext(),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, introspection.StatusCode, introspection.Body);
         Assert.AreEqual(WellKnownMediaTypes.Application.TokenIntrospectionJwt, introspection.ContentType);
@@ -304,7 +303,7 @@ internal sealed class FullLifecycleTests
             introspection.Body, TestSetup.Base64UrlDecoder,
             Pool,
             material.SigningPublicKey,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(isIntrospectionSignatureValid);
 
         string introspectionPayload = DecodeSegment(introspection.Body, segmentIndex: 1);
@@ -363,7 +362,7 @@ internal sealed class FullLifecycleTests
                 bool isProofSignatureValid = await Jws.VerifyAsync(
                     proof, TestSetup.Base64UrlDecoder,
                     Pool,
-                    proofKey, ct).ConfigureAwait(false);
+                    proofKey, cancellationToken: ct).ConfigureAwait(false);
 
                 if(!isProofSignatureValid
                     || mintedNonce is null
@@ -377,7 +376,7 @@ internal sealed class FullLifecycleTests
                 //Mint the real SD-JWT VC bound to the proven holder key NOW; deliver it
                 //later through the deferred transaction (manual-review simulation).
                 issuerState.PendingCredential = await IssueSdJwtVcAsync(
-                    sdJwtIssuerPrivate, proof, ct).ConfigureAwait(false);
+                    sdJwtIssuerPrivate, proof, cancellationToken: ct).ConfigureAwait(false);
             }
 
             return CredentialIssuanceDecision.Defer(TransactionId, 60);
@@ -511,7 +510,7 @@ internal sealed class FullLifecycleTests
         using JwsMessage jws = await unsigned.SignAsync(
             holderPrivate, HeaderSerializer, PayloadSerializer,
             TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         return JwsSerialization.SerializeCompact(jws, TestSetup.Base64UrlEncoder);
     }
@@ -553,7 +552,7 @@ internal sealed class FullLifecycleTests
             holderPrivate, nonce, audience,
             TimeProvider.GetUtcNow(),
             TestSetup.Base64UrlEncoder, HeaderSerializer, PayloadSerializer, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         using SdToken<string> tokenWithKb = token.WithKeyBinding(compactKbJwt, Pool);
 
@@ -591,7 +590,7 @@ internal sealed class FullLifecycleTests
             BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementDecryptP256Async,
             ConcatKdf.DefaultKeyDerivationDelegate,
             BouncyCastleKeyAgreementFunctions.AesGcmDecryptAsync,
-            Pool, TestContext.CancellationToken).ConfigureAwait(false);
+            Pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         return Encoding.UTF8.GetString(decrypted.AsReadOnlySpan());
     }
@@ -631,6 +630,6 @@ internal sealed class FullLifecycleTests
             }),
             jsonBody,
             new ExchangeContext(),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 }

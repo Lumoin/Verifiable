@@ -644,7 +644,7 @@ public static class GeneralJweParsing
         }
 
         IMemoryOwner<byte> pointOwner = pool.Rent(1 + xSpan.Length + ySpan.Length);
-        pointOwner.Memory.Span[0] = 0x04;
+        pointOwner.Memory.Span[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
         xSpan.CopyTo(pointOwner.Memory.Span[1..]);
         ySpan.CopyTo(pointOwner.Memory.Span[(1 + xSpan.Length)..]);
 
@@ -803,7 +803,7 @@ public static class GeneralJweParsing
     //rather than processed against the protected values while silently ignoring the unprotected
     //ones. Benign, non-cryptographic members (e.g. the 'jku' key hint) are not listed and are
     //permitted, matching the ECDH-1PU Appendix B vector.
-    private static readonly (byte[] Utf8, string Name)[] CryptographicHeaderParameters =
+    private static (byte[] Utf8, string Name)[] CryptographicHeaderParameters { get; } =
     [
         ("alg"u8.ToArray(), WellKnownJwkMemberNames.Alg),
         ("enc"u8.ToArray(), WellKnownJoseHeaderNames.Enc),

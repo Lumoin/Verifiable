@@ -30,8 +30,7 @@ internal sealed class JarRarAndJarmTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new(
-        new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
+    private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
@@ -170,7 +169,7 @@ internal sealed class JarRarAndJarmTests
                 [OAuthRequestParameterNames.ClientId] = ClientId
             },
             new ExchangeContext(),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
 
         string marker = "\"request_uri\":\"";
@@ -188,7 +187,7 @@ internal sealed class JarRarAndJarmTests
                 [OAuthRequestParameterNames.RequestUri] = requestUri
             },
             authorizeContext,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //The JARM mode signed into the pushed request governs the response shape.
         Assert.AreEqual(302, authorizeResponse.StatusCode, authorizeResponse.Body);
@@ -204,7 +203,7 @@ internal sealed class JarRarAndJarmTests
             responseJwt, material.Registration.IssuerUri!.OriginalString, ClientId,
             AllowedAlgorithms, TimeProvider.GetUtcNow(), resolver, PayloadDeserializer,
             TestSetup.Base64UrlDecoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(jarmResult.IsValid);
         Assert.AreEqual(RequestState, jarmResult.State);
@@ -398,7 +397,7 @@ internal sealed class JarRarAndJarmTests
             PayloadSerializer,
             TestSetup.Base64UrlEncoder,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         return JwsSerialization.SerializeCompact(signed, TestSetup.Base64UrlEncoder);
     }
@@ -420,7 +419,7 @@ internal sealed class JarRarAndJarmTests
                 [OAuthRequestParameterNames.ClientId] = ClientId
             },
             context,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 
@@ -438,7 +437,7 @@ internal sealed class JarRarAndJarmTests
                 [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
             },
             new ExchangeContext(),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 

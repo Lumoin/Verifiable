@@ -66,17 +66,17 @@ public sealed class CardVerifiableCertificate: SensitiveMemory
 
     //BSI TR-03110-3 Terminal Authentication public-key OID value bytes (after the 0x06 tag and length),
     //less the final hash/scheme arc. id-TA-ECDSA = 0.4.0.127.0.7.2.2.2.2, id-TA-RSA = 0.4.0.127.0.7.2.2.2.1.
-    private static readonly byte[] IdTaEcdsaPrefix = [0x04, 0x00, 0x7F, 0x00, 0x07, 0x02, 0x02, 0x02, 0x02];
-    private static readonly byte[] IdTaRsaPrefix = [0x04, 0x00, 0x7F, 0x00, 0x07, 0x02, 0x02, 0x02, 0x01];
+    private static byte[] IdTaEcdsaPrefix { get; } = [0x04, 0x00, 0x7F, 0x00, 0x07, 0x02, 0x02, 0x02, 0x02];
+    private static byte[] IdTaRsaPrefix { get; } = [0x04, 0x00, 0x7F, 0x00, 0x07, 0x02, 0x02, 0x02, 0x01];
 
     //Certificate Holder Authorization terminal-type OID value bytes (TR-03110 Part 4, base 0.4.0.127.0.7.3.1.2).
-    private static readonly byte[] IdInspectionSystem = [0x04, 0x00, 0x7F, 0x00, 0x07, 0x03, 0x01, 0x02, 0x01];
-    private static readonly byte[] IdAuthenticationTerminal = [0x04, 0x00, 0x7F, 0x00, 0x07, 0x03, 0x01, 0x02, 0x02];
-    private static readonly byte[] IdSignatureTerminal = [0x04, 0x00, 0x7F, 0x00, 0x07, 0x03, 0x01, 0x02, 0x03];
+    private static byte[] IdInspectionSystem { get; } = [0x04, 0x00, 0x7F, 0x00, 0x07, 0x03, 0x01, 0x02, 0x01];
+    private static byte[] IdAuthenticationTerminal { get; } = [0x04, 0x00, 0x7F, 0x00, 0x07, 0x03, 0x01, 0x02, 0x02];
+    private static byte[] IdSignatureTerminal { get; } = [0x04, 0x00, 0x7F, 0x00, 0x07, 0x03, 0x01, 0x02, 0x03];
 
-    private readonly int bodyOffset;
-    private readonly int bodyLength;
-    private readonly int contentLength;
+    private int BodyOffset { get; }
+    private int BodyLength { get; }
+    private int ContentLength { get; }
 
 
     private CardVerifiableCertificate(
@@ -102,9 +102,9 @@ public sealed class CardVerifiableCertificate: SensitiveMemory
         EffectiveDate = effectiveDate;
         ExpirationDate = expirationDate;
         Signature = signature;
-        this.bodyOffset = bodyOffset;
-        this.bodyLength = bodyLength;
-        this.contentLength = contentLength;
+        this.BodyOffset = bodyOffset;
+        this.BodyLength = bodyLength;
+        this.ContentLength = contentLength;
     }
 
 
@@ -137,7 +137,7 @@ public sealed class CardVerifiableCertificate: SensitiveMemory
     /// signature is computed — the message a verifier checks against the issuer's public key
     /// (TR-03110-3 §C.1.8). A view into the owned encoded certificate.
     /// </summary>
-    public ReadOnlyMemory<byte> ToBeSigned => AsReadOnlyMemory().Slice(bodyOffset, bodyLength);
+    public ReadOnlyMemory<byte> ToBeSigned => AsReadOnlyMemory().Slice(BodyOffset, BodyLength);
 
     /// <summary>
     /// Gets the certificate content (the body <c>7F4E</c> TLV followed by the signature <c>5F37</c> TLV,
@@ -145,7 +145,7 @@ public sealed class CardVerifiableCertificate: SensitiveMemory
     /// Certificate command during Terminal Authentication (ICAO Doc 9303 Part 11 §7.1.5). A view into the
     /// owned encoded certificate.
     /// </summary>
-    public ReadOnlyMemory<byte> Content => AsReadOnlyMemory().Slice(bodyOffset, contentLength);
+    public ReadOnlyMemory<byte> Content => AsReadOnlyMemory().Slice(BodyOffset, ContentLength);
 
 
     /// <summary>

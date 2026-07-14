@@ -186,7 +186,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
                 CryptoFormatConversions.DefaultTagToEpkCrvConverter,
                 MicrosoftEntropyFunctions.GenerateNonce,
                 Pool,
-                TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
 
@@ -233,7 +233,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
                 MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
                 BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
                 Pool,
-                TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             for(int i = 0; i < recipientCount; ++i)
             {
@@ -252,7 +252,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
                     MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
                     BouncyCastleKeyAgreementFunctions.AesGcmDecryptAsync,
                     Pool,
-                    TestContext.CancellationToken).ConfigureAwait(false);
+                    cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
                 Assert.IsTrue(result.IsUnpacked, $"Recipient {i} MUST unpack. Error: {result.Error}.");
                 Assert.AreEqual(DidCommDecryptionError.None, result.Error);
@@ -278,7 +278,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
                 MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
                 BouncyCastleKeyAgreementFunctions.AesGcmDecryptAsync,
                 Pool,
-                TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(outsiderResult.IsUnpacked, "An outsider key MUST NOT unpack the message.");
             Assert.AreEqual(DidCommDecryptionError.DecryptionFailed, outsiderResult.Error);
@@ -329,7 +329,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
             BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string protectedHeaderJson = DecodeProtectedHeader(encrypted);
 
@@ -427,7 +427,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
             BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         return await encrypted.UnpackAnoncryptAsync(
             BobKid,
@@ -443,7 +443,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             BouncyCastleKeyAgreementFunctions.AesGcmDecryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 
@@ -485,7 +485,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
             aeadEncrypt,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         DidCommEncryptedUnpackResult result = await encrypted.UnpackAnoncryptAsync(
             BobKid,
@@ -501,7 +501,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             aeadDecrypt,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertAnoncryptSuccess(result, [BobDid]);
     }
@@ -537,7 +537,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
             MicrosoftEntropyFunctions.GenerateNonce,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         DidCommEncryptedUnpackResult result = await encrypted.UnpackAnoncryptAsync(
             BobKid,
@@ -549,7 +549,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertAnoncryptSuccess(result, [BobDid]);
     }

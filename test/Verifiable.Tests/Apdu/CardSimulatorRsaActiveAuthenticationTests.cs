@@ -2,6 +2,7 @@ using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
+using System.Linq;
 using System.Numerics;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
@@ -12,6 +13,8 @@ using Verifiable.Apdu.Lds;
 using Verifiable.Apdu.SecureMessaging;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Tests.TestDataProviders;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -63,6 +66,53 @@ internal sealed class CardSimulatorRsaActiveAuthenticationTests
     }
 
 
+    /// <summary>
+    /// The wave-7 recoverable-family (ISO/IEC 9796-2) CryptoEvent emission test over the real eMRTD Active
+    /// Authentication path: <see cref="RsaActiveAuthenticationCardResponder.SignChallengeAsync"/> (the chip
+    /// side, inside <see cref="CardSimulator"/>) and <see cref="ActiveAuthentication.AuthenticateAsync(ApduDevice, RsaPublicKey, ReadOnlyMemory{byte}, BaseMemoryPool, System.Threading.CancellationToken)"/>'s
+    /// private RSA verify helper (the terminal side) both resolve and invoke the
+    /// <see cref="RecoverableSigningDelegate"/>/<see cref="RecoverableVerificationDelegate"/> directly — the
+    /// tuple-route completion design item 4 gave the message-recovery family — and neither exposes a
+    /// <see cref="CryptoEventSink"/> at this public entry point, so both events reach
+    /// <see cref="CryptographicKeyEvents.DefaultSink"/> (the global stream) by default.
+    /// </summary>
+    [TestMethod]
+    public async Task AuthenticatesRsaActiveAuthenticationInPlaintextEmitsSignatureAndVerificationEventsToGlobalStream()
+    {
+        (RsaPublicKey publicKey, ActiveAuthenticationKey privateKey) = MintRsaActiveAuthenticationKeyPair();
+        using(publicKey)
+        using(privateKey)
+        {
+            using ElementaryFile dataGroup15File = DataGroup15.Write(publicKey, BaseMemoryPool.Shared);
+            using ElementaryFile dataGroup1 = DataGroup1.Write(Td2MachineReadableZone, BaseMemoryPool.Shared);
+
+            using var card = new CardSimulator(
+                "passport-rsa-active-auth-event-emission", [dataGroup1, dataGroup15File], activeAuthenticationKey: privateKey);
+            using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
+
+            using DataGroup15 parsedDataGroup15 = DataGroup15.Parse(dataGroup15File.AsReadOnlySpan(), BaseMemoryPool.Shared);
+
+            var observer = new TestObserver<CryptoEvent>();
+            bool authenticated;
+            using(CryptographicKeyEvents.Events.Subscribe(observer))
+            {
+                authenticated = await ActiveAuthentication.AuthenticateAsync(
+                    device, parsedDataGroup15.RsaPublicKey, Convert.FromHexString(Challenge), BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+            }
+
+            Assert.IsTrue(authenticated, "The chip's ISO-9796-2 signature over the challenge must recover and verify against its genuine DG15 public key.");
+            Assert.Contains(
+                (SignatureProducedEvent e) => e.Algorithm == CryptoAlgorithm.RsaIso9796d2,
+                observer.Received.OfType<SignatureProducedEvent>(),
+                "The chip's RsaActiveAuthenticationCardResponder.SignChallengeAsync must publish a SignatureProducedEvent to the global stream.");
+            Assert.Contains(
+                (VerificationCompletedEvent e) => e.Algorithm == CryptoAlgorithm.RsaIso9796d2 && e.Outcome == VerificationOutcome.Valid,
+                observer.Received.OfType<VerificationCompletedEvent>(),
+                "The terminal's RSA Active Authentication verify must publish a VerificationCompletedEvent to the global stream.");
+        }
+    }
+
+
     [TestMethod]
     public async Task RejectsRsaActiveAuthenticationFromAClonedKey()
     {
@@ -88,17 +138,27 @@ internal sealed class CardSimulatorRsaActiveAuthenticationTests
         //into the identity map: the recovered message equals the signature, so any hash is forged. The terminal
         //must reject the degenerate key and fail closed, whatever signature accompanies it (the key is rejected
         //before the signature is ever processed).
-        using RSA rsa = RSA.Create(1024);
-        byte[] modulus = rsa.ExportParameters(includePrivateParameters: false).Modulus!;
+        //
+        //The modulus itself is mere fixture material: RsaUtilities.IsValidPublicKey short-circuits on e < 3
+        //before the modulus is ever inspected, so any RSA public key's modulus serves. The provider's ready-made
+        //RSA-2048 key is parsed to lift just the modulus.
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> rsaKeyMaterial = TestKeyMaterialProvider.CreateRsa2048KeyMaterial();
+        using PublicKeyMemory rsaPublicKeyMemory = rsaKeyMaterial.PublicKey;
+        using PrivateKeyMemory rsaPrivateKeyMemory = rsaKeyMaterial.PrivateKey;
+
+        var derReader = new AsnReader(rsaPublicKeyMemory.AsReadOnlyMemory(), AsnEncodingRules.DER);
+        AsnReader rsaPublicKeySequence = derReader.ReadSequence();
+        byte[] modulus = rsaPublicKeySequence.ReadInteger().ToByteArray(isUnsigned: true, isBigEndian: true);
         using RsaPublicKey exponentOneKey = BuildRsaPublicKey(modulus, [0x01]);
 
         RecoverableVerificationDelegate verify = RecoverableSignatureFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(
             CryptoAlgorithm.RsaIso9796d2, Purpose.Verification);
 
-        bool verified = await verify(
+        (bool verified, CryptoEvent? evt) = await verify(
             Convert.FromHexString(Challenge), new byte[128], exponentOneKey.AsReadOnlyMemory(), null, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(verified, "An RSA Active Authentication key with a public exponent of 1 is an identity-map forgery vector and must be rejected.");
+        Assert.IsNull(evt, "A degenerate key is rejected before verification is attempted, so no VerificationCompletedEvent is produced.");
     }
 
 

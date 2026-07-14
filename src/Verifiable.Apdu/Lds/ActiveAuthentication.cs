@@ -85,7 +85,7 @@ public static class ActiveAuthentication
         }
 
         return await VerifyEllipticCurveAsync(
-            activeAuthenticationPublicKey, challenge, response.AsReadOnlyMemory()[..response.DataLength], cancellationToken).ConfigureAwait(false);
+            activeAuthenticationPublicKey, challenge, response.AsReadOnlyMemory()[..response.DataLength], cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -124,7 +124,7 @@ public static class ActiveAuthentication
         unprotected.Data.CopyTo(signature.Memory.Span);
 
         return await VerifyEllipticCurveAsync(
-            activeAuthenticationPublicKey, challenge, signature.Memory[..unprotected.Length], cancellationToken).ConfigureAwait(false);
+            activeAuthenticationPublicKey, challenge, signature.Memory[..unprotected.Length], cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -164,7 +164,7 @@ public static class ActiveAuthentication
         }
 
         return await VerifyRsaAsync(
-            activeAuthenticationPublicKey, challenge, response.AsReadOnlyMemory()[..response.DataLength], cancellationToken).ConfigureAwait(false);
+            activeAuthenticationPublicKey, challenge, response.AsReadOnlyMemory()[..response.DataLength], cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -203,7 +203,7 @@ public static class ActiveAuthentication
         unprotected.Data.CopyTo(signature.Memory.Span);
 
         return await VerifyRsaAsync(
-            activeAuthenticationPublicKey, challenge, signature.Memory[..unprotected.Length], cancellationToken).ConfigureAwait(false);
+            activeAuthenticationPublicKey, challenge, signature.Memory[..unprotected.Length], cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -256,7 +256,8 @@ public static class ActiveAuthentication
         EncodedEcPoint activeAuthenticationPublicKey,
         ReadOnlyMemory<byte> challenge,
         ReadOnlyMemory<byte> signature,
-        CancellationToken cancellationToken)
+        CryptoEventSink? eventSink = null,
+        CancellationToken cancellationToken = default)
     {
         if(!activeAuthenticationPublicKey.Tag.TryGet(out CryptoAlgorithm algorithm))
         {
@@ -268,7 +269,17 @@ public static class ActiveAuthentication
         //the uncompressed point as-is, so the key passes straight through.
         VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, Purpose.Verification);
 
-        return await verify(challenge, signature, activeAuthenticationPublicKey.AsReadOnlyMemory(), null, cancellationToken).ConfigureAwait(false);
+        //Resolves and invokes the registry delegate directly rather than through PublicKey.VerifyAsync (there is
+        //no bound PublicKey here, only a raw EncodedEcPoint), so the VerificationCompletedEvent forwards through
+        //the explicit sink seam instead — see CryptoEventSink.
+        (bool isVerified, CryptoEvent? evt) = await verify(challenge, signature, activeAuthenticationPublicKey.AsReadOnlyMemory(), null, cancellationToken).ConfigureAwait(false);
+
+        if(evt is not null)
+        {
+            (eventSink ?? CryptographicKeyEvents.DefaultSink)(evt);
+        }
+
+        return isVerified;
     }
 
 
@@ -281,11 +292,19 @@ public static class ActiveAuthentication
         RsaPublicKey activeAuthenticationPublicKey,
         ReadOnlyMemory<byte> challenge,
         ReadOnlyMemory<byte> signature,
-        CancellationToken cancellationToken)
+        CryptoEventSink? eventSink = null,
+        CancellationToken cancellationToken = default)
     {
         RecoverableVerificationDelegate verify = RecoverableSignatureFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(
             CryptoAlgorithm.RsaIso9796d2, Purpose.Verification);
 
-        return await verify(challenge, signature, activeAuthenticationPublicKey.AsReadOnlyMemory(), null, cancellationToken).ConfigureAwait(false);
+        (bool isVerified, CryptoEvent? evt) = await verify(challenge, signature, activeAuthenticationPublicKey.AsReadOnlyMemory(), null, cancellationToken).ConfigureAwait(false);
+
+        if(evt is not null)
+        {
+            (eventSink ?? CryptographicKeyEvents.DefaultSink)(evt);
+        }
+
+        return isVerified;
     }
 }

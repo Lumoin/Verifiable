@@ -359,7 +359,7 @@ internal sealed class Ecdh1PuTests
         using IMemoryOwner<byte> y = TestSetup.Base64UrlDecoder(yBase64Url, Pool);
 
         IMemoryOwner<byte> pointOwner = Pool.Rent(1 + x.Memory.Length + y.Memory.Length);
-        pointOwner.Memory.Span[0] = 0x04;
+        pointOwner.Memory.Span[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
         x.Memory.Span.CopyTo(pointOwner.Memory.Span[1..]);
         y.Memory.Span.CopyTo(pointOwner.Memory.Span[(1 + x.Memory.Length)..]);
 

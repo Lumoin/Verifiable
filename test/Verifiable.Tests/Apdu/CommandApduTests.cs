@@ -149,4 +149,42 @@ internal sealed class CommandApduTests
         Assert.IsTrue(bytes.SequenceEqual(expected),
             "Built command should match the wire format from the YubiKey PIV trace.");
     }
+
+    [TestMethod]
+    public void Case4UseExtendedOverloadForcesExtendedRegardlessOfSizeHeuristic()
+    {
+        //A small payload with Le=0 ("give me everything") trips neither of the automatic-selection
+        //overload's heuristics (data.Length > 255 or le > 256), so it would silently encode short-form.
+        //The explicit useExtended overload must force extended encoding anyway, mirroring BuildCase2's
+        //own explicit parameter.
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        byte[] data = [0x04];
+
+        using CommandApdu automatic = CommandApdu.BuildCase4(0x80, 0x10, 0x80, 0x00, data, 0, pool);
+        using CommandApdu forcedExtended = CommandApdu.BuildCase4(0x80, 0x10, 0x80, 0x00, data, 0, useExtended: true, pool);
+
+        //Automatic selection: header(4) + Lc(1) + data(1) + Le(1) = 7 bytes, short-form.
+        Assert.AreEqual(7, automatic.Length);
+
+        //Forced extended: header(4) + 0x00(1) + Lc(2) + data(1) + Le(2) = 10 bytes.
+        Assert.AreEqual(10, forcedExtended.Length);
+        ReadOnlySpan<byte> extendedBytes = forcedExtended.AsReadOnlySpan();
+        byte[] expected = [0x80, 0x10, 0x80, 0x00, 0x00, 0x00, 0x01, 0x04, 0x00, 0x00];
+        Assert.IsTrue(extendedBytes.SequenceEqual(expected),
+            "The forced-extended overload should match the explicit extended Case 4 layout.");
+    }
+
+    [TestMethod]
+    public void Case4UseExtendedFalseMatchesAutomaticShortSelection()
+    {
+        //The explicit overload with useExtended:false for a payload that would also automatically
+        //select short-form must produce byte-identical output to the automatic-selection overload.
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        byte[] data = [0x5C, 0x03, 0x5F, 0xC1, 0x02];
+
+        using CommandApdu automatic = CommandApdu.BuildCase4(0x00, 0xCB, 0x3F, 0xFF, data, 0, pool);
+        using CommandApdu explicitShort = CommandApdu.BuildCase4(0x00, 0xCB, 0x3F, 0xFF, data, 0, useExtended: false, pool);
+
+        Assert.IsTrue(automatic.AsReadOnlySpan().SequenceEqual(explicitShort.AsReadOnlySpan()));
+    }
 }

@@ -89,7 +89,7 @@ public readonly struct InstructionCode : IEquatable<InstructionCode>
     public static InstructionCode GenerateAsymmetricKeyPair { get; } = new(0x47);
 
 
-    private static readonly List<InstructionCode> codes =
+    private static List<InstructionCode> codes { get; } =
     [
         Select, GetResponse, GetDataSimple, GetDataBerTlv, PutData,
         Verify, ChangeReferenceData, ResetRetryCounter,
@@ -164,7 +164,7 @@ public readonly struct InstructionCode : IEquatable<InstructionCode>
 /// <summary>Provides human-readable names for <see cref="InstructionCode"/> values.</summary>
 public static class InstructionCodeNames
 {
-    private static readonly Dictionary<byte, string> customNames = [];
+    private static Dictionary<byte, string> customNames { get; } = [];
 
     /// <summary>Gets the name for the specified instruction code.</summary>
     public static string GetName(InstructionCode instruction) => GetName(instruction.Code);

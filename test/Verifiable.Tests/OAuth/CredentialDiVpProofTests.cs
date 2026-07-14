@@ -47,8 +47,7 @@ internal sealed class CredentialDiVpProofTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new(
-        new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
+    private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
@@ -379,7 +378,7 @@ internal sealed class CredentialDiVpProofTests
             holderDidDocument, holderPrivate, CredentialNonce, issuerIdentifier).ConfigureAwait(false);
 
         //The did:web document the canned transport serves at https://holder.web.test/.well-known/did.json.
-        string didJson = SerializeDidDocument(holderDidDocument);
+        string didJson = DidDocumentWireFixtures.SerializeDidDocument(holderDidDocument, JsonOptions);
         using CannedDidJsonHandler handler = new(DidWebHolderDocumentUrl, didJson);
         using HttpClient httpClient = new(handler, disposeHandler: false);
         DidResolver webResolver = BuildFetchingWebDidResolver(httpClient);
@@ -477,7 +476,7 @@ internal sealed class CredentialDiVpProofTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //The handler closes over this captured string; fill it now that the document exists.
-        didJsonHolder = SerializeDidDocument(holderDidDocument);
+        didJsonHolder = DidDocumentWireFixtures.SerializeDidDocument(holderDidDocument, JsonOptions);
 
         //The handler serves the did.json at the path WebDidResolver computes (a did:web with no path
         //component resolves to /.well-known/did.json). Compute it to assert the route lines up.
@@ -632,11 +631,6 @@ internal sealed class CredentialDiVpProofTests
             MultikeyVerificationMethodTypeInfo.Instance,
             includeDefaultContext: false,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-
-
-    //Serializes a DID document to the did.json bytes a did:web endpoint serves.
-    private static string SerializeDidDocument(DidDocument document) =>
-        JsonSerializerExtensions.Serialize(document, JsonOptions);
 
 
     //Builds a DidResolver whose did:web handler fetches the holder's did.json through the guarded

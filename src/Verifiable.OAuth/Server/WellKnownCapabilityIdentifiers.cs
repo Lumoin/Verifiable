@@ -66,7 +66,7 @@ public static class WellKnownCapabilityIdentifiers
 
     /// <summary>
     /// Identity Assertion JWT Authorization Grant (ID-JAG) per
-    /// draft-ietf-oauth-identity-assertion-authz-grant. Gates the IdP-side mint
+    /// draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026). Gates the IdP-side mint
     /// (a Token Exchange whose <c>requested_token_type</c> is
     /// <c>urn:ietf:params:oauth:token-type:id-jag</c>) and the discovery
     /// advertisement of the profile. The redeem leg rides the existing

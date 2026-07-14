@@ -62,6 +62,9 @@ internal sealed class CardSimulatorRsaTerminalAuthenticationTests
     [TestMethod]
     public async Task AuthenticatesWithAnRsaTerminalKeyAfterBasicAccessControlAndChipAuthentication()
     {
+        //Minted with the framework RSA implementation: CardVerifiableCertificateMinter (an independent CVC
+        //certificate factory) requires a framework RSA object for the subject key it embeds, and this same key
+        //is exported below as the EXTERNAL AUTHENTICATE signer the chip verifies.
         using RSA terminalKey = RSA.Create(2048);
 
         bool accepted = await RunRsaTerminalAuthenticationAsync(certificateKey: terminalKey, signingKey: terminalKey);
@@ -73,7 +76,11 @@ internal sealed class CardSimulatorRsaTerminalAuthenticationTests
     [TestMethod]
     public async Task RejectsAnRsaTerminalAuthenticationSignedWithTheWrongKey()
     {
+        //Minted with the framework RSA implementation: CardVerifiableCertificateMinter (an independent CVC
+        //certificate factory) requires a framework RSA object for the subject key it embeds.
         using RSA terminalKey = RSA.Create(2048);
+
+        //A fresh, deliberately mismatched key minted on the spot for the negative case below.
         using RSA impostorKey = RSA.Create(2048);
 
         //The certificate carries the real RSA terminal key, but the terminal signs with a key it does not hold.
@@ -86,6 +93,9 @@ internal sealed class CardSimulatorRsaTerminalAuthenticationTests
     [TestMethod]
     public async Task AuthenticatesAFullRsaCertificateChain()
     {
+        //All three keys are minted with the framework RSA implementation: CardVerifiableCertificateMinter (an
+        //independent CVC certificate factory) requires framework RSA objects for both the issuer signing key
+        //and the embedded subject key at every link of the chain.
         using RSA cvcaKey = RSA.Create(2048);
         using RSA documentVerifierKey = RSA.Create(2048);
         using RSA terminalKey = RSA.Create(2048);
@@ -114,6 +124,8 @@ internal sealed class CardSimulatorRsaTerminalAuthenticationTests
     /// </summary>
     private async Task<bool> RunRsaTerminalAuthenticationAsync(RSA certificateKey, RSA signingKey)
     {
+        //Minted with the framework ECDSA implementation: CardVerifiableCertificateMinter (an independent CVC
+        //certificate factory) requires framework ECDsa objects for the issuer signing key at each link.
         using ECDsa cvcaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa documentVerifierKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 

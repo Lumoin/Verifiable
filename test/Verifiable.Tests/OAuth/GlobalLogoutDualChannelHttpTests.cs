@@ -49,8 +49,7 @@ internal sealed class GlobalLogoutDualChannelHttpTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>A fixed clock so issued artefacts are reproducible.</summary>
-    private FakeTimeProvider TimeProvider { get; } = new(
-        new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
+    private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     /// <summary>The memory pool used for all transient signing/verification buffers.</summary>
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
@@ -115,7 +114,7 @@ internal sealed class GlobalLogoutDualChannelHttpTests
             SsfDeliveryDecision decision = await SecurityEventTokenReception.ReceiveAsync(
                 request.Body, opPublic, OpIssuer, ReceiverAudience,
                 SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
-                TestSetup.Base64UrlDecoder, isSeen, new ExchangeContext(), Pool, ct).ConfigureAwait(false);
+                TestSetup.Base64UrlDecoder, isSeen, new ExchangeContext(), Pool, cancellationToken: ct).ConfigureAwait(false);
 
             if(decision.Outcome is SsfDeliveryOutcome.Accepted or SsfDeliveryOutcome.AcceptedDuplicate)
             {
@@ -127,14 +126,14 @@ internal sealed class GlobalLogoutDualChannelHttpTests
         }
 
         await using MinimalHttpHost ssfReceiver = await MinimalHttpHost.StartAsync(
-            ReceiverPushHandler, TestContext.CancellationToken).ConfigureAwait(false);
+            ReceiverPushHandler, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Channel 1 — two OIDC relying parties, each a real receiver over loopback Kestrel. Each
         //holds a live session keyed by the shared OP sid and drops it on a valid §2.6 Logout Token.
         await using RelyingPartyReceiver rp1 = await RelyingPartyReceiver.StartAsync(
-            "https://rp1.example.com", opPublic, OpIssuer, TestContext.CancellationToken).ConfigureAwait(false);
+            "https://rp1.example.com", opPublic, OpIssuer, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         await using RelyingPartyReceiver rp2 = await RelyingPartyReceiver.StartAsync(
-            "https://rp2.example.com", opPublic, OpIssuer, TestContext.CancellationToken).ConfigureAwait(false);
+            "https://rp2.example.com", opPublic, OpIssuer, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         rp1.SeedSession(SsoSessionId);
         rp2.SeedSession(SsoSessionId);
 
@@ -172,13 +171,13 @@ internal sealed class GlobalLogoutDualChannelHttpTests
                     SecurityEventTestJson.HeaderSerializer,
                     SecurityEventTestJson.PayloadSerializer,
                     Pool,
-                    ct,
+                    cancellationToken: ct,
                     signingKeyId: "op-key-1").ConfigureAwait(false);
 
                 using FormUrlEncodedContent content = new(
                     [new KeyValuePair<string, string>(WellKnownTokenTypes.LogoutToken, logoutToken)]);
                 using HttpResponseMessage delivery = await deliveryClient.PostAsync(
-                    relyingParty.BackChannelLogoutUri, content, ct).ConfigureAwait(false);
+                    relyingParty.BackChannelLogoutUri, content, cancellationToken: ct).ConfigureAwait(false);
                 Assert.AreEqual(200, (int)delivery.StatusCode,
                     $"RP '{relyingParty.ClientId}' must acknowledge the Logout Token with 200.");
             }
@@ -208,13 +207,13 @@ internal sealed class GlobalLogoutDualChannelHttpTests
                 SecurityEventTestJson.HeaderSerializer,
                 SecurityEventTestJson.PayloadSerializer,
                 Pool,
-                ct,
                 signingKeyId: "op-key-1",
-                subjectId: subId).ConfigureAwait(false);
+                subjectId: subId,
+                cancellationToken: ct).ConfigureAwait(false);
 
             using StringContent setContent = new(set, Encoding.UTF8, WellKnownMediaTypes.Application.SecEventJwt);
             using HttpResponseMessage push = await transmitterClient.PostAsync(
-                new Uri(ssfReceiver.BaseAddress, "/ssf/push"), setContent, ct).ConfigureAwait(false);
+                new Uri(ssfReceiver.BaseAddress, "/ssf/push"), setContent, cancellationToken: ct).ConfigureAwait(false);
             Assert.AreEqual(202, (int)push.StatusCode, "The SSF Receiver must accept the session-revoked SET.");
 
             return GlobalTokenRevocationOutcome.Initiated;
@@ -228,7 +227,7 @@ internal sealed class GlobalLogoutDualChannelHttpTests
             new RequestFields(),
             SubIdJson,
             new ExchangeContext(),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //§3: revocation initiated → 204; both fan-outs reached and verified at their receivers.
         Assert.AreEqual(204, response.StatusCode, response.Body);

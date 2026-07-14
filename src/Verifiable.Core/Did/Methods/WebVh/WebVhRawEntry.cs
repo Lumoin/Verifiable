@@ -106,8 +106,8 @@ public sealed record WebVhWitnessProofEntry
 /// </remarks>
 public sealed class WebVhWitnessFile: IDisposable
 {
-    private readonly IMemoryOwner<byte> contentOwner;
-    private readonly int contentLength;
+    private IMemoryOwner<byte> ContentOwner { get; }
+    private int ContentLength { get; }
 
     /// <summary>Creates a witness file, taking ownership of <paramref name="contentOwner"/>.</summary>
     /// <param name="entries">The parsed witness proof records, in file order.</param>
@@ -118,20 +118,20 @@ public sealed class WebVhWitnessFile: IDisposable
         ArgumentNullException.ThrowIfNull(contentOwner);
 
         Entries = entries;
-        this.contentOwner = contentOwner;
-        this.contentLength = contentLength;
+        this.ContentOwner = contentOwner;
+        this.ContentLength = contentLength;
     }
 
     /// <summary>The parsed witness proof records, in file order.</summary>
     public ImmutableArray<WebVhWitnessProofEntry> Entries { get; }
 
     /// <summary>The fetched <c>did-witness.json</c> bytes the proof options are re-derived from.</summary>
-    public ReadOnlyMemory<byte> Content => contentOwner.Memory[..contentLength];
+    public ReadOnlyMemory<byte> Content => ContentOwner.Memory[..ContentLength];
 
     /// <summary>Returns the pooled content buffer to the pool.</summary>
     public void Dispose()
     {
-        contentOwner.Dispose();
+        ContentOwner.Dispose();
     }
 }
 

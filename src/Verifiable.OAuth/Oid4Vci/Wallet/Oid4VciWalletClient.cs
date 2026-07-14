@@ -36,11 +36,10 @@ namespace Verifiable.OAuth.Oid4Vci.Wallet;
 [DebuggerDisplay("Oid4VciWalletClient")]
 public sealed class Oid4VciWalletClient
 {
-    private readonly Oid4VciWalletConfiguration configuration;
 
 
     /// <summary>The wallet configuration carrying the transport, signer, and optional DPoP/decrypt delegates.</summary>
-    public Oid4VciWalletConfiguration Configuration => configuration;
+    public Oid4VciWalletConfiguration Configuration { get; }
 
 
     /// <summary>
@@ -52,7 +51,7 @@ public sealed class Oid4VciWalletClient
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
-        this.configuration = configuration;
+        this.Configuration = configuration;
     }
 
 
@@ -116,7 +115,7 @@ public sealed class Oid4VciWalletClient
     {
         ArgumentNullException.ThrowIfNull(credentialOfferUri);
 
-        if(configuration.FetchCredentialOffer is null)
+        if(Configuration.FetchCredentialOffer is null)
         {
             throw new InvalidOperationException(
                 "§4.1.3 the Wallet MUST send an HTTP GET to the credential_offer_uri to retrieve the "
@@ -124,7 +123,7 @@ public sealed class Oid4VciWalletClient
                 + "Oid4VciWalletConfiguration.FetchCredentialOffer to fetch a by-reference offer.");
         }
 
-        (int statusCode, string body) = await configuration.FetchCredentialOffer(
+        (int statusCode, string body) = await Configuration.FetchCredentialOffer(
             credentialOfferUri, cancellationToken).ConfigureAwait(false);
 
         if(statusCode is < 200 or >= 300)
@@ -339,11 +338,11 @@ public sealed class Oid4VciWalletClient
             holderPublic,
             credentialIssuer.OriginalString,
             credentialNonce,
-            configuration.TimeProvider.GetUtcNow(),
-            configuration.JwtHeaderSerializer,
-            configuration.JwtPayloadSerializer,
-            configuration.Base64UrlEncoder,
-            configuration.MemoryPool,
+            Configuration.TimeProvider.GetUtcNow(),
+            Configuration.JwtHeaderSerializer,
+            Configuration.JwtPayloadSerializer,
+            Configuration.Base64UrlEncoder,
+            Configuration.MemoryPool,
             cancellationToken).ConfigureAwait(false);
 
         //§8: the Credential Request — JSON body with the proof, optional §10
@@ -382,7 +381,7 @@ public sealed class Oid4VciWalletClient
             formFields[OAuthRequestParameterNames.TxCode] = transactionCode;
         }
 
-        (int statusCode, string body) = await configuration.SendFormPost(
+        (int statusCode, string body) = await Configuration.SendFormPost(
             tokenEndpoint, formFields, cancellationToken).ConfigureAwait(false);
 
         if(statusCode is < 200 or >= 300)
@@ -418,7 +417,7 @@ public sealed class Oid4VciWalletClient
         IReadOnlyDictionary<string, string> headers = await ComposeAuthorizationHeadersAsync(
             accessToken, tokenType, nonceEndpoint, cancellationToken).ConfigureAwait(false);
 
-        (int statusCode, string body, _) = await configuration.SendJsonPost(
+        (int statusCode, string body, _) = await Configuration.SendJsonPost(
             nonceEndpoint, string.Empty, headers, cancellationToken).ConfigureAwait(false);
 
         if(statusCode is < 200 or >= 300)
@@ -459,7 +458,7 @@ public sealed class Oid4VciWalletClient
         IReadOnlyDictionary<string, string> headers = await ComposeAuthorizationHeadersAsync(
             accessToken, tokenType, credentialEndpoint, cancellationToken).ConfigureAwait(false);
 
-        (int statusCode, string body, string? contentType) = await configuration.SendJsonPost(
+        (int statusCode, string body, string? contentType) = await Configuration.SendJsonPost(
             credentialEndpoint, requestBody, headers, cancellationToken).ConfigureAwait(false);
 
         //§8.3: a deferral answers HTTP 202 with transaction_id + interval (plaintext metadata, not the
@@ -514,7 +513,7 @@ public sealed class Oid4VciWalletClient
         IReadOnlyDictionary<string, string> headers = await ComposeAuthorizationHeadersAsync(
             accessToken, tokenType, deferredCredentialEndpoint, cancellationToken).ConfigureAwait(false);
 
-        (int statusCode, string body, string? contentType) = await configuration.SendJsonPost(
+        (int statusCode, string body, string? contentType) = await Configuration.SendJsonPost(
             deferredCredentialEndpoint, requestBody, headers, cancellationToken).ConfigureAwait(false);
 
         //§9.2: still pending answers HTTP 202 echoing the transaction_id with a fresh interval.
@@ -568,7 +567,7 @@ public sealed class Oid4VciWalletClient
         IReadOnlyDictionary<string, string> headers = await ComposeAuthorizationHeadersAsync(
             accessToken, tokenType, notificationEndpoint, cancellationToken).ConfigureAwait(false);
 
-        (int statusCode, string body, _) = await configuration.SendJsonPost(
+        (int statusCode, string body, _) = await Configuration.SendJsonPost(
             notificationEndpoint, requestBody, headers, cancellationToken).ConfigureAwait(false);
 
         //§11.2: success is HTTP 204 No Content; §11.3 maps failures to error bodies.
@@ -597,7 +596,7 @@ public sealed class Oid4VciWalletClient
             return requestBody;
         }
 
-        if(configuration.EncryptRequest is null)
+        if(Configuration.EncryptRequest is null)
         {
             throw new InvalidOperationException(
                 "The request asks for §10 response encryption, so §8.2 requires the request itself to "
@@ -606,7 +605,7 @@ public sealed class Oid4VciWalletClient
                 + "credential_request_encryption key.");
         }
 
-        return await configuration.EncryptRequest(requestBody, cancellationToken).ConfigureAwait(false);
+        return await Configuration.EncryptRequest(requestBody, cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -627,7 +626,7 @@ public sealed class Oid4VciWalletClient
             return body;
         }
 
-        if(configuration.DecryptResponse is null)
+        if(Configuration.DecryptResponse is null)
         {
             throw new InvalidOperationException(
                 "The request asked for §10 response encryption but the wallet configuration has no "
@@ -645,7 +644,7 @@ public sealed class Oid4VciWalletClient
                 + $"not '{WellKnownMediaTypes.Application.Jwt}'. The Issuer did not encrypt the response.");
         }
 
-        return await configuration.DecryptResponse(body, cancellationToken).ConfigureAwait(false);
+        return await Configuration.DecryptResponse(body, cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -786,9 +785,9 @@ public sealed class Oid4VciWalletClient
     {
         Dictionary<string, string> headers = new(StringComparer.OrdinalIgnoreCase);
 
-        if(WellKnownAuthenticationSchemes.IsDPoP(tokenType) && configuration.ProduceDpopProof is not null)
+        if(WellKnownAuthenticationSchemes.IsDPoP(tokenType) && Configuration.ProduceDpopProof is not null)
         {
-            string dpopProof = await configuration.ProduceDpopProof(
+            string dpopProof = await Configuration.ProduceDpopProof(
                 HttpPostMethod, endpoint, accessToken, cancellationToken).ConfigureAwait(false);
 
             headers[WellKnownHttpHeaderNames.Authorization] =

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 using Verifiable.OAuth.Siop;
 using Verifiable.OAuth.Siop.Server;
 using Verifiable.OAuth.Siop.Server.States;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -15,8 +16,7 @@ internal sealed class SiopVerifierFlowAutomatonTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new(
-        new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
+    private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
 
     [TestMethod]

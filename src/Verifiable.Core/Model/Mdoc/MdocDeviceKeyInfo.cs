@@ -1,3 +1,5 @@
+using Verifiable.JCose;
+
 namespace Verifiable.Core.Model.Mdoc;
 
 /// <summary>
@@ -37,7 +39,7 @@ public sealed class MdocDeviceKeyInfo
     /// issuer-specific device-attestation parameters).
     /// </param>
     public MdocDeviceKeyInfo(
-        MdocCoseKey deviceKey,
+        CoseKey deviceKey,
         ReadOnlyMemory<byte>? encodedKeyAuthorizations = null,
         ReadOnlyMemory<byte>? encodedKeyInfo = null)
     {
@@ -50,7 +52,7 @@ public sealed class MdocDeviceKeyInfo
 
 
     /// <summary>The COSE_Key the wallet holds privately and uses to sign <c>DeviceAuth</c>.</summary>
-    public MdocCoseKey DeviceKey { get; }
+    public CoseKey DeviceKey { get; }
 
     /// <summary>
     /// Opaque encoding of the <c>keyAuthorizations</c> map. The structured

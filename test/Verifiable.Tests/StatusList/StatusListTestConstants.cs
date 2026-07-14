@@ -85,4 +85,16 @@ internal static class StatusListTestConstants
     /// Fixed timestamp for deterministic tests. Corresponds to 2023-11-14T22:13:20Z.
     /// </summary>
     internal static readonly DateTimeOffset BaseTime = new(2024, 1, 15, 12, 0, 0, TimeSpan.Zero);
+
+    /// <summary>
+    /// Reference "now" for the JWS-enveloped and bare Validate Algorithm (§3.2) Bitstring Status
+    /// List tests, 81 days and 12 hours after <see cref="BaseTime"/> (2024-04-06T00:00:00Z).
+    /// </summary>
+    internal static readonly DateTimeOffset BitstringValidationReferenceTime = BaseTime + new TimeSpan(81, 12, 0, 0);
+
+    /// <summary>
+    /// Reference "now" for the Data Integrity-secured Bitstring Status List tests, 152 days after
+    /// <see cref="BaseTime"/> (2024-06-15T12:00:00Z).
+    /// </summary>
+    internal static readonly DateTimeOffset BitstringDataIntegrityReferenceTime = BaseTime + new TimeSpan(152, 0, 0, 0);
 }

@@ -47,6 +47,21 @@ internal static class McpToolNames
     public const string EmitCbom = "EmitCbom";
 
     /// <summary>
+    /// Verifies a WebAuthn registration ceremony's attestation object.
+    /// </summary>
+    public const string VerifyFido2Registration = "VerifyFido2Registration";
+
+    /// <summary>
+    /// Verifies a WebAuthn authentication ceremony's assertion.
+    /// </summary>
+    public const string VerifyFido2Assertion = "VerifyFido2Assertion";
+
+    /// <summary>
+    /// Creates a WebAuthn cryptographic challenge.
+    /// </summary>
+    public const string CreateFido2Challenge = "CreateFido2Challenge";
+
+    /// <summary>
     /// All available tool names.
     /// </summary>
     public static readonly string[] All =
@@ -58,6 +73,9 @@ internal static class McpToolNames
         RevokeDid,
         ListDids,
         ViewDid,
-        EmitCbom
+        EmitCbom,
+        VerifyFido2Registration,
+        VerifyFido2Assertion,
+        CreateFido2Challenge
     ];
 }

@@ -52,11 +52,11 @@ public static class SecurityEventTokenReception
     /// <param name="isJtiSeen">The replay tracker consulted during verification.</param>
     /// <param name="context">Per-call exchange context, threaded to the replay check.</param>
     /// <param name="memoryPool">Memory pool for transient verification buffers.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <param name="expectedVerificationState">
     /// The <c>state</c> from the Receiver's outstanding verification request, if any. When set
     /// and the SET carries an SSF verification event, the event's <c>state</c> MUST match.
     /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public static async ValueTask<SsfDeliveryDecision> ReceiveAsync(
         string compactSet,
         PublicKeyMemory signingPublicKey,
@@ -68,8 +68,8 @@ public static class SecurityEventTokenReception
         IsSecurityEventTokenJtiSeenDelegate isJtiSeen,
         ExchangeContext context,
         MemoryPool<byte> memoryPool,
-        CancellationToken cancellationToken,
-        string? expectedVerificationState = null)
+        string? expectedVerificationState = null,
+        CancellationToken cancellationToken = default)
     {
         SecurityEventTokenVerificationResult result = await SecurityEventTokenVerification.VerifyAsync(
             compactSet,

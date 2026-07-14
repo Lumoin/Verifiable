@@ -46,11 +46,11 @@ public static class SecurityEventTokenIssuance
     /// <param name="headerSerializer">Serializes the protected header to UTF-8 JSON bytes.</param>
     /// <param name="payloadSerializer">Serializes the payload claims to UTF-8 JSON bytes.</param>
     /// <param name="memoryPool">Memory pool for transient signing buffers.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <param name="signingKeyId">Optional <c>kid</c> header naming the signing key in the Transmitter's JWK set.</param>
     /// <param name="subjectId">Optional <c>sub_id</c> subject identifier for the principal the SET is about.</param>
     /// <param name="timeOfEvent">Optional <c>toe</c> claim — when the event occurred, encoded as Unix seconds.</param>
     /// <param name="transaction">Optional <c>txn</c> claim correlating the SET with a transaction.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The compact-serialized SET (<c>header.payload.signature</c>).</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "JwsMessage is disposed via the using statement before the method returns; the returned string is independent of the message.")]
     public static async ValueTask<string> IssueAsync(
@@ -64,11 +64,11 @@ public static class SecurityEventTokenIssuance
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
         MemoryPool<byte> memoryPool,
-        CancellationToken cancellationToken,
         string? signingKeyId = null,
         SubjectIdentifier? subjectId = null,
         DateTimeOffset? timeOfEvent = null,
-        string? transaction = null)
+        string? transaction = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(issuer);
         ArgumentNullException.ThrowIfNull(audiences);

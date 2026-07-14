@@ -22,9 +22,9 @@ namespace Verifiable.Cryptography;
 [DebuggerDisplay("SymmetricKey Id={Id,nq}")]
 public sealed class SymmetricKey: SensitiveMemoryKey
 {
-    private readonly ComputeHmacDelegate computeHmac;
-    private readonly VerifyHmacDelegate verifyHmac;
-    private readonly FrozenDictionary<string, object>? defaultContext;
+    private ComputeHmacDelegate ComputeHmac { get; }
+    private VerifyHmacDelegate VerifyHmac { get; }
+    private FrozenDictionary<string, object>? DefaultContext { get; }
 
 
     /// <summary>
@@ -53,9 +53,9 @@ public sealed class SymmetricKey: SensitiveMemoryKey
         ArgumentNullException.ThrowIfNull(computeHmac);
         ArgumentNullException.ThrowIfNull(verifyHmac);
 
-        this.computeHmac = computeHmac;
-        this.verifyHmac = verifyHmac;
-        this.defaultContext = defaultContext;
+        this.ComputeHmac = computeHmac;
+        this.VerifyHmac = verifyHmac;
+        this.DefaultContext = defaultContext;
     }
 
 
@@ -71,7 +71,7 @@ public sealed class SymmetricKey: SensitiveMemoryKey
     {
         ArgumentNullException.ThrowIfNull(pool);
         return KeyMaterial.ComputeHmacAsync(
-            message, outputByteLength, computeHmac, pool, context ?? defaultContext, cancellationToken);
+            message, outputByteLength, ComputeHmac, pool, context ?? DefaultContext, cancellationToken);
     }
 
 
@@ -89,7 +89,7 @@ public sealed class SymmetricKey: SensitiveMemoryKey
         ArgumentNullException.ThrowIfNull(expectedMac);
         ArgumentNullException.ThrowIfNull(pool);
         return KeyMaterial.VerifyHmacAsync(
-            message, expectedMac, verifyHmac, pool, context ?? defaultContext, cancellationToken);
+            message, expectedMac, VerifyHmac, pool, context ?? DefaultContext, cancellationToken);
     }
 
 
@@ -106,6 +106,6 @@ public sealed class SymmetricKey: SensitiveMemoryKey
     {
         ArgumentNullException.ThrowIfNull(pool);
         return KeyMaterial.VerifyHmacAsync(
-            message, expectedMacBytes, verifyHmac, pool, context ?? defaultContext, cancellationToken);
+            message, expectedMacBytes, VerifyHmac, pool, context ?? DefaultContext, cancellationToken);
     }
 }

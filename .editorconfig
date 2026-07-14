@@ -129,6 +129,15 @@ csharp_style_prefer_not_pattern = true
 csharp_style_prefer_pattern_matching = true
 csharp_style_prefer_switch_expression = true
 
+# CancellationToken is the last parameter of every method and delegate signature; applies to
+# every accessibility, not only the public surface (the analyzer's default api_surface).
+dotnet_diagnostic.CA1068.severity = error
+dotnet_code_quality.CA1068.api_surface = all
+
+# Switch expressions are preferred over switch statements (IDE0066); enforced in build via
+# EnforceCodeStyleInBuild together with csharp_prefer_braces below.
+dotnet_diagnostic.IDE0066.severity = warning
+
 # Null-checking preferences
 csharp_style_conditional_delegate_call = true
 
@@ -137,7 +146,7 @@ csharp_prefer_static_local_function = true
 csharp_preferred_modifier_order = public,private,protected,internal,file,static,extern,new,virtual,abstract,sealed,override,readonly,unsafe,required,volatile,async:suggestion
 
 # Code-block preferences
-csharp_prefer_braces = true:silent
+csharp_prefer_braces = true:error
 csharp_prefer_simple_using_statement = false:suggestion
 csharp_style_namespace_declarations = block_scoped:silent
 csharp_style_prefer_method_group_conversion = true:silent

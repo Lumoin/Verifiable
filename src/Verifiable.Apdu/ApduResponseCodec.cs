@@ -44,7 +44,7 @@ internal delegate IApduWireType ApduResponseParserInternal(
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class ApduResponseCodec
 {
-    private readonly ApduResponseParserInternal? parser;
+    private ApduResponseParserInternal? Parser { get; }
 
     /// <summary>
     /// Gets whether this codec has response data to parse.
@@ -53,11 +53,11 @@ public sealed class ApduResponseCodec
     /// Some commands (e.g., VERIFY with correct PIN) return only a status word
     /// with no data. Their codec has no parser.
     /// </remarks>
-    public bool HasResponseData => parser is not null;
+    public bool HasResponseData => Parser is not null;
 
     private ApduResponseCodec(ApduResponseParserInternal? parser)
     {
-        this.parser = parser;
+        this.Parser = parser;
     }
 
     /// <summary>
@@ -92,12 +92,12 @@ public sealed class ApduResponseCodec
     /// <exception cref="InvalidOperationException">Thrown if this codec has no parser.</exception>
     internal IApduWireType ParseResponse(ref ApduReader reader, MemoryPool<byte> pool)
     {
-        if(parser is null)
+        if(Parser is null)
         {
             throw new InvalidOperationException("This codec has no response data parser.");
         }
 
-        return parser(ref reader, pool);
+        return Parser(ref reader, pool);
     }
 
     private string DebuggerDisplay => $"ApduResponseCodec(HasData={HasResponseData})";

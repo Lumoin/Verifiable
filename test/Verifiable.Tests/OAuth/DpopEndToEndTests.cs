@@ -30,7 +30,7 @@ internal sealed class DpopEndToEndTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly DateTimeOffset NowInstant = new(2026, 5, 14, 12, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset NowInstant = TestClock.CanonicalEpoch.AddDays(-18);
     private const string ClientId = "https://client.example.com";
     private const string TestSubject = "subject-1";
     private static readonly Uri ClientBaseUri = new("https://client.example.com");

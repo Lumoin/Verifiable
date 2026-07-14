@@ -18,7 +18,7 @@ internal sealed class AuthCodeFlowTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private static readonly Uri DefaultRedirectUri = new("https://client.example.com/callback");
 
@@ -27,7 +27,7 @@ internal sealed class AuthCodeFlowTests
     public async Task HandleParAsyncReturnsRedirectOnSuccess()
     {
         var store = new Dictionary<string, FlowState>();
-        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:abc", 60));
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:abc", 60));
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleParAsync(
             new Dictionary<string, string> { [OAuthRequestParameterNames.Scope] = "openid" },
@@ -144,7 +144,7 @@ internal sealed class AuthCodeFlowTests
     public async Task HandleCallbackAsyncReturnsBadRequestOnIssuerMismatch()
     {
         var store = new Dictionary<string, FlowState>();
-        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:x", 60));
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:x", 60));
         await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken).ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
@@ -169,7 +169,7 @@ internal sealed class AuthCodeFlowTests
     public async Task HandleCallbackAsyncPersistsCodeStateOnSuccess()
     {
         var store = new Dictionary<string, FlowState>();
-        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:y", 60));
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:y", 60));
         await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken).ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
@@ -211,7 +211,7 @@ internal sealed class AuthCodeFlowTests
     public async Task HandleTokenAsyncReturnsBadRequestWhenNoCodePending()
     {
         var store = new Dictionary<string, FlowState>();
-        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:z", 60));
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:z", 60));
         await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken).ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
@@ -233,8 +233,8 @@ internal sealed class AuthCodeFlowTests
         var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
             store,
-            parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:happy", 60),
-            tokenResponse: BuildTokenJson("at.abc", "Bearer", 3600, "rt.xyz"));
+            parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:happy", 60),
+            tokenResponse: OAuthJsonResponseFixtures.BuildTokenJson("at.abc", "Bearer", 3600, "rt.xyz"));
 
         await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken).ConfigureAwait(false);
         string flowId = GetSingleFlowId(store);
@@ -304,7 +304,7 @@ internal sealed class AuthCodeFlowTests
     {
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
             new Dictionary<string, FlowState>(),
-            tokenResponse: BuildTokenJson("at.new", "Bearer", 3600, "rt.new"));
+            tokenResponse: OAuthJsonResponseFixtures.BuildTokenJson("at.new", "Bearer", 3600, "rt.new"));
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.RefreshAsync(
             new RefreshTokenRequest
@@ -328,7 +328,7 @@ internal sealed class AuthCodeFlowTests
     {
         var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store,
-            parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:pkce1", 60));
+            parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:pkce1", 60));
 
         await AuthCodeFlowHandlers.HandleParAsync(
             new Dictionary<string, string>(),
@@ -363,9 +363,9 @@ internal sealed class AuthCodeFlowTests
         var store2 = new Dictionary<string, FlowState>();
 
         (OAuthClientInfrastructure infrastructure1, ClientRegistration registration1) = CreateInfrastructureAndRegistration(store1,
-            parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:u1", 60));
+            parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:u1", 60));
         (OAuthClientInfrastructure infrastructure2, ClientRegistration registration2) = CreateInfrastructureAndRegistration(store2,
-            parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:u2", 60));
+            parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:u2", 60));
 
         await AuthCodeFlowHandlers.HandleParAsync(
             new Dictionary<string, string>(), DefaultRedirectUri, infrastructure1, registration1,
@@ -392,7 +392,7 @@ internal sealed class AuthCodeFlowTests
         const int expiresIn = 90;
         var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store,
-            parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:exp", expiresIn));
+            parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:exp", expiresIn));
 
         DateTimeOffset before = TimeProvider.GetUtcNow();
 
@@ -423,7 +423,7 @@ internal sealed class AuthCodeFlowTests
 
         var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store,
-            parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:obs", 60));
+            parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:obs", 60));
 
         await AuthCodeFlowHandlers.HandleParAsync(
             new Dictionary<string, string>(),
@@ -526,14 +526,6 @@ internal sealed class AuthCodeFlowTests
 
         return (infrastructure, registration);
     }
-
-    private static string BuildParJson(string requestUri, int expiresIn) =>
-        /*lang=json,strict*/ $"{{\"request_uri\":\"{requestUri}\",\"expires_in\":{expiresIn}}}";
-
-    private static string BuildTokenJson(string accessToken, string tokenType, int expiresIn, string? refreshToken) =>
-        refreshToken is null
-            ? /*lang=json,strict*/ $"{{\"access_token\":\"{accessToken}\",\"token_type\":\"{tokenType}\",\"expires_in\":{expiresIn}}}"
-            : /*lang=json,strict*/ $"{{\"access_token\":\"{accessToken}\",\"token_type\":\"{tokenType}\",\"expires_in\":{expiresIn},\"refresh_token\":\"{refreshToken}\"}}";
 
     private static string GetSingleFlowId(Dictionary<string, FlowState> store)
     {

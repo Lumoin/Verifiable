@@ -29,7 +29,7 @@ namespace Verifiable.Server;
 [DebuggerDisplay("RouteValues({Count} values)")]
 public sealed class RouteValues
 {
-    private readonly Dictionary<string, string> values;
+    private Dictionary<string, string> Values { get; }
 
 
     /// <summary>
@@ -42,10 +42,10 @@ public sealed class RouteValues
     {
         ArgumentNullException.ThrowIfNull(source);
 
-        values = new Dictionary<string, string>(source.Count, StringComparer.Ordinal);
+        Values = new Dictionary<string, string>(source.Count, StringComparer.Ordinal);
         foreach(KeyValuePair<string, string> entry in source)
         {
-            values[entry.Key] = entry.Value;
+            Values[entry.Key] = entry.Value;
         }
     }
 
@@ -61,7 +61,7 @@ public sealed class RouteValues
     /// <summary>
     /// The number of route values present.
     /// </summary>
-    public int Count => values.Count;
+    public int Count => Values.Count;
 
 
     /// <summary>
@@ -76,7 +76,7 @@ public sealed class RouteValues
     public bool TryGetValue(string name, out string? value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        return values.TryGetValue(name, out value);
+        return Values.TryGetValue(name, out value);
     }
 
 
@@ -87,6 +87,6 @@ public sealed class RouteValues
     public bool Contains(string name)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        return values.ContainsKey(name);
+        return Values.ContainsKey(name);
     }
 }

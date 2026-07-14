@@ -41,7 +41,7 @@ internal static class CbeffBiometricTemplate
     private const int BiometricDataConstructedTag = 0x7F2E;
 
     /// <summary>A minimal Biometric Header Template; Passive Authentication skips it, so the writer emits a placeholder.</summary>
-    private static readonly byte[] BiometricHeaderPlaceholder = [0x80, 0x01, 0x00];
+    private static byte[] BiometricHeaderPlaceholder { get; } = [0x80, 0x01, 0x00];
 
 
     /// <summary>

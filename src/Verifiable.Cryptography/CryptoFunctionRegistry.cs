@@ -11,7 +11,20 @@ namespace Verifiable.Cryptography;
 /// <param name="signaturePool">Memory pool for allocating the signature buffer.</param>
 /// <param name="context">Optional context parameters for the signing operation.</param>
 /// <param name="cancellationToken">Cancellation token for async operations.</param>
-/// <returns>The signature as pooled memory that the caller must dispose.</returns>
+/// <returns>
+/// The signature as pooled memory that the caller must dispose, paired with an optional
+/// <see cref="SignatureProducedEvent"/> describing the operation. A backend that does not
+/// support observability returns <see langword="null"/> for the event; every currently
+/// registered backend constructs one using the <c>Backend</c>/<c>Algorithm</c> it already
+/// has in scope from its Activity-span instrumentation. This mirrors the entropy/digest/HMAC
+/// delegate shape (<see cref="ComputeDigestDelegate"/>, <see cref="ComputeHmacDelegate"/>) and
+/// is unwrapped at <see cref="PrivateKey.SignAsync"/> for key-object-mediated signing, which emits
+/// the event through <see cref="CryptographicKeyEvents.Events"/>; a caller that invokes a resolved
+/// delegate directly instead emits through its own <see cref="CryptoEventSink"/> parameter — see
+/// <see cref="CryptoEventSink"/> for the two-route rationale. The event allocates a
+/// <see cref="Guid"/> and a record per call whenever constructed — accepted deliberately,
+/// since the asymmetric-signing cost this wraps dwarfs one record allocation.
+/// </returns>
 /// <remarks>
 /// <para>
 /// <strong>Dual-Delegate Design</strong>
@@ -66,7 +79,7 @@ namespace Verifiable.Cryptography;
 /// ready-to-use key objects.
 /// </para>
 /// </remarks>
-public delegate ValueTask<Signature> SigningDelegate(
+public delegate ValueTask<(Signature Signature, CryptoEvent? Event)> SigningDelegate(
     ReadOnlyMemory<byte> privateKeyBytes,
     ReadOnlyMemory<byte> dataToSign,
     MemoryPool<byte> signaturePool,
@@ -82,8 +95,13 @@ public delegate ValueTask<Signature> SigningDelegate(
 /// <param name="publicKeyMaterial">The public key material.</param>
 /// <param name="context">Optional context parameters for the verification operation.</param>
 /// <param name="cancellationToken">Cancellation token for async operations.</param>
-/// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
-public delegate ValueTask<bool> VerificationDelegate(
+/// <returns>
+/// <see langword="true"/> if the signature is valid; otherwise <see langword="false"/>, paired
+/// with an optional <see cref="VerificationCompletedEvent"/> describing the operation. See the
+/// <see cref="SigningDelegate"/> remarks for the tuple rationale; the matching choke point is
+/// <see cref="PublicKey.VerifyAsync"/>.
+/// </returns>
+public delegate ValueTask<(bool IsVerified, CryptoEvent? Event)> VerificationDelegate(
     ReadOnlyMemory<byte> dataToVerify,
     ReadOnlyMemory<byte> signature,
     ReadOnlyMemory<byte> publicKeyMaterial,

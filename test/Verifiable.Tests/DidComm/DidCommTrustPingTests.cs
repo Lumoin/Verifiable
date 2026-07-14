@@ -307,7 +307,7 @@ internal sealed class DidCommTrustPingTests
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
             MicrosoftEntropyFunctions.GenerateNonce,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 
@@ -325,7 +325,7 @@ internal sealed class DidCommTrustPingTests
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 
@@ -349,7 +349,7 @@ internal sealed class DidCommTrustPingTests
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
             MicrosoftEntropyFunctions.GenerateNonce,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 
@@ -367,7 +367,7 @@ internal sealed class DidCommTrustPingTests
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 

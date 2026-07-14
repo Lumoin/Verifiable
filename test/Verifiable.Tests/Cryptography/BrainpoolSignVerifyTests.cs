@@ -94,7 +94,7 @@ internal sealed class BrainpoolSignVerifyTests
         var keyMaterial = TestKeyMaterialProvider.CreateBrainpoolP256r1KeyMaterial();
         try
         {
-            Signature signature = await BouncyCastleCryptographicFunctions.SignBrainpoolP256r1Async(
+            (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignBrainpoolP256r1Async(
                 keyMaterial.PrivateKey.AsReadOnlyMemory(),
                 SampleData,
                 BaseMemoryPool.Shared,
@@ -105,7 +105,7 @@ internal sealed class BrainpoolSignVerifyTests
                 byte[] tampered = (byte[])SampleData.Clone();
                 tampered[0] ^= 0x01;
 
-                bool valid = await BouncyCastleCryptographicFunctions.VerifyBrainpoolP256r1Async(
+                (bool valid, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.VerifyBrainpoolP256r1Async(
                     tampered,
                     signature.AsReadOnlyMemory(),
                     keyMaterial.PublicKey.AsReadOnlyMemory(),
@@ -130,14 +130,14 @@ internal sealed class BrainpoolSignVerifyTests
 
     private static async Task AssertBcRoundTrip(
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial,
-        Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, System.Buffers.MemoryPool<byte>, System.Collections.Frozen.FrozenDictionary<string, object>?, CancellationToken, ValueTask<Signature>> signAsync,
-        Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, System.Collections.Frozen.FrozenDictionary<string, object>?, CancellationToken, ValueTask<bool>> verifyAsync,
+        Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, System.Buffers.MemoryPool<byte>, System.Collections.Frozen.FrozenDictionary<string, object>?, CancellationToken, ValueTask<(Signature Signature, CryptoEvent? Event)>> signAsync,
+        Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, System.Collections.Frozen.FrozenDictionary<string, object>?, CancellationToken, ValueTask<(bool IsVerified, CryptoEvent? Event)>> verifyAsync,
         int expectedSignatureLength,
         CancellationToken cancellationToken)
     {
         try
         {
-            Signature signature = await signAsync(
+            (Signature signature, CryptoEvent? _) = await signAsync(
                 keyMaterial.PrivateKey.AsReadOnlyMemory(),
                 SampleData,
                 BaseMemoryPool.Shared,
@@ -148,7 +148,7 @@ internal sealed class BrainpoolSignVerifyTests
                 Assert.AreEqual(expectedSignatureLength, signature.AsReadOnlySpan().Length,
                     "IEEE P1363 signature length must match 2× the curve field byte size.");
 
-                bool valid = await verifyAsync(
+                (bool valid, CryptoEvent? _) = await verifyAsync(
                     SampleData,
                     signature.AsReadOnlyMemory(),
                     keyMaterial.PublicKey.AsReadOnlyMemory(),

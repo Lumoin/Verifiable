@@ -65,8 +65,7 @@ internal sealed class VcalmHolderEndpointTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new(
-        new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
+    private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
@@ -317,7 +316,7 @@ internal sealed class VcalmHolderEndpointTests
         const string Challenge = "challenge-roundtrip-123";
         const string Domain = "verifier.example";
 
-        string presentationJson = SerializeUnproofedPresentation(holder.HolderDid);
+        string presentationJson = VcalmWireFixtures.SerializeUnproofedPresentation(holder.HolderDid, SerializePresentation);
         string createBody = "{\"presentation\":" + presentationJson
             + ",\"options\":{\"challenge\":\"" + Challenge + "\",\"domain\":\"" + Domain + "\"}}";
 
@@ -357,7 +356,7 @@ internal sealed class VcalmHolderEndpointTests
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
         string segment = RegisterHolder(app, holder);
 
-        string presentationJson = SerializeUnproofedPresentation(holder.HolderDid);
+        string presentationJson = VcalmWireFixtures.SerializeUnproofedPresentation(holder.HolderDid, SerializePresentation);
         string createBody = "{\"presentation\":" + presentationJson + ",\"options\":{\"domain\":\"verifier.example\"}}";
 
         using JsonDocument response = await PostCreatePresentationAsync(app, segment, createBody, expectedStatus: 400).ConfigureAwait(false);
@@ -381,7 +380,7 @@ internal sealed class VcalmHolderEndpointTests
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
         string segment = RegisterHolder(app, holder);
 
-        string presentationJson = SerializeUnproofedPresentation(holder.HolderDid);
+        string presentationJson = VcalmWireFixtures.SerializeUnproofedPresentation(holder.HolderDid, SerializePresentation);
         string createBody = "{\"presentation\":" + presentationJson
             + ",\"options\":{\"challenge\":\"c-1\",\"domain\":\"verifier.example\"}}";
 
@@ -416,7 +415,7 @@ internal sealed class VcalmHolderEndpointTests
         string segment = RegisterHolder(app, holder);
 
         const string Domain = "verifier.example";
-        string presentationJson = SerializeUnproofedPresentation(holder.HolderDid);
+        string presentationJson = VcalmWireFixtures.SerializeUnproofedPresentation(holder.HolderDid, SerializePresentation);
         string createBody = "{\"presentation\":" + presentationJson
             + ",\"options\":{\"challenge\":\"c-1\",\"domain\":\"" + Domain + "\"}}";
 
@@ -443,7 +442,7 @@ internal sealed class VcalmHolderEndpointTests
         string segment = RegisterHolder(app, holder);
 
         const string PresentationId = "urn:uuid:presentation-crud-1";
-        string presentationJson = SerializeUnproofedPresentation(holder.HolderDid, PresentationId);
+        string presentationJson = VcalmWireFixtures.SerializeUnproofedPresentation(holder.HolderDid, SerializePresentation, PresentationId);
         string createBody = "{\"presentation\":" + presentationJson
             + ",\"options\":{\"challenge\":\"c-1\",\"domain\":\"verifier.example\"}}";
 
@@ -508,7 +507,7 @@ internal sealed class VcalmHolderEndpointTests
         HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
         string segment = RegisterHolder(app, holder);
 
-        string presentationJson = SerializeUnproofedPresentation(holder.HolderDid);
+        string presentationJson = VcalmWireFixtures.SerializeUnproofedPresentation(holder.HolderDid, SerializePresentation);
         string createBody = "{\"presentation\":" + presentationJson
             + ",\"options\":{\"challenge\":\"c-1\",\"domain\":\"d\",\"notARealOption\":true}}";
 
@@ -845,18 +844,6 @@ internal sealed class VcalmHolderEndpointTests
 
         return new HolderSigningContext(signing, holderDid);
     }
-
-
-    //A minimal unproofed VC-DM 2.0 presentation JSON the holder service secures. JCS is context-free,
-    //so the base context alone yields a non-empty canonical form.
-    private static string SerializeUnproofedPresentation(string holderDid, string? presentationId = null) =>
-        SerializePresentation(new VerifiablePresentation
-        {
-            Context = new Context { Contexts = [Context.Credentials20] },
-            Id = presentationId,
-            Type = ["VerifiablePresentation"],
-            Holder = holderDid
-        });
 
 
     private async Task<JsonDocument> PostDeriveAsync(

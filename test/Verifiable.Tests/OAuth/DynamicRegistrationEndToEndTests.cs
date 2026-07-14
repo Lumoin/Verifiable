@@ -18,7 +18,7 @@ internal sealed class DynamicRegistrationEndToEndTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private static readonly Uri DefaultRedirectUri = new("https://client.example.com/callback");
 

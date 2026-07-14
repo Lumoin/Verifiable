@@ -99,7 +99,7 @@ public static class JwtSigningExtensions
             base64UrlEncoder,
             signingDelegate,
             memoryPool,
-            cancellationToken);
+            cancellationToken: cancellationToken);
     }
 
 
@@ -118,6 +118,14 @@ public static class JwtSigningExtensions
     /// <param name="signingDelegate">The signing function to use.</param>
     /// <param name="memoryPool">Memory pool for signature allocation.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="eventSink">
+    /// Receives the <see cref="SignatureProducedEvent"/> the resolved <paramref name="signingDelegate"/>
+    /// constructs, or <see langword="null"/> to route it to <see cref="CryptographicKeyEvents.DefaultSink"/>.
+    /// This is the overload <c>Verifiable.DidComm</c>'s <c>PackFromPriorAsync</c> reaches; passing no
+    /// explicit sink still publishes to the global stream via the default, matching what
+    /// <c>DidCommFromPriorExtensions.VerifyFromPriorAsync</c> already does for the verify side of the same
+    /// rotation feature.
+    /// </param>
     /// <returns>
     /// A <see cref="JwsMessage"/> containing the signed JWT. The caller owns
     /// the returned message and must dispose it.
@@ -130,6 +138,7 @@ public static class JwtSigningExtensions
         EncodeDelegate base64UrlEncoder,
         SigningDelegate signingDelegate,
         MemoryPool<byte> memoryPool,
+        CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(unsignedJwt);
@@ -163,12 +172,17 @@ public static class JwtSigningExtensions
         Debug.Assert(dataToSignOwner.Memory.Length == signingInputByteCount, "Pool must return exact-size allocations.");
         Encoding.ASCII.GetBytes(signingInput, dataToSignOwner.Memory.Span);
 
-        Signature signature = await signingDelegate(
+        (Signature signature, CryptoEvent? evt) = await signingDelegate(
             privateKey.AsReadOnlyMemory(),
             dataToSignOwner.Memory,
             memoryPool,
             context: null,
             cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        if(evt is not null)
+        {
+            (eventSink ?? CryptographicKeyEvents.DefaultSink)(evt);
+        }
 
         var signatureComponent = new JwsSignatureComponent(
             headerSegment,

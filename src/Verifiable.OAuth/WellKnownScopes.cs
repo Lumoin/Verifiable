@@ -237,7 +237,7 @@ public static class WellKnownScopes
     public static bool IsSsfManage(string scope) => Equals(scope, SsfManage);
 
 
-    private static readonly string SsfManageGranularPrefix = SsfManage + ".";
+    private static string SsfManageGranularPrefix { get; } = SsfManage + ".";
 
 
     /// <summary>

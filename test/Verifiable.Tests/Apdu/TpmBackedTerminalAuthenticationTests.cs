@@ -98,6 +98,8 @@ internal sealed class TpmBackedTerminalAuthenticationTests
             TpmCryptographicFunctions.CreateP256SigningContext(tpm));
 
         //Mint the Inspection System chain; the Document Verifier certifies the TPM-exported point as the terminal's.
+        //The CVCA and Document Verifier keys stay framework ECDsa: CardVerifiableCertificateMinter, the test-side
+        //certificate factory minting this CA/attestation chain, signs and exports through ECDsa's own API surface.
         using ECDsa cvcaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa documentVerifierKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 

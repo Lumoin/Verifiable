@@ -24,7 +24,7 @@ internal sealed class SiopPostQuantumTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
@@ -56,14 +56,14 @@ internal sealed class SiopPostQuantumTests
             subjectPrivate, subjectPublic, ClientId, RequestNonce,
             issuedAt: TimeProvider.GetUtcNow(), lifetime: TimeSpan.FromMinutes(5),
             TestSetup.Base64UrlEncoder, HeaderSerializer, PayloadSerializer, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string[] allowedAlgorithms = [algorithm];
         SelfIssuedIdTokenValidationResult result = await SelfIssuedIdTokenValidation.ValidateAsync(
             idToken, ClientId, RequestNonce, allowedAlgorithms, TimeProvider.GetUtcNow(),
             resolveDidVerificationKey: null,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsValid,
             $"A Self-Issued ID Token signed with {algorithm} must validate end to end.");
@@ -128,7 +128,7 @@ internal sealed class SiopPostQuantumTests
         using JwsMessage jws = await unsigned.SignAsync(
             subjectPrivate, HeaderSerializer, PayloadSerializer,
             TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         string idToken = JwsSerialization.SerializeCompact(jws, TestSetup.Base64UrlEncoder);
 
         string[] allowedAlgorithms = [algorithm];
@@ -136,7 +136,7 @@ internal sealed class SiopPostQuantumTests
             idToken, ClientId, RequestNonce, allowedAlgorithms, TimeProvider.GetUtcNow(),
             resolveDidVerificationKey: null,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSubJwkShapeValid,
             "An AKP sub_jwk carrying 'priv' is not a bare public key.");

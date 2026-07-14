@@ -27,6 +27,8 @@ internal sealed class CardVerifiableCertificateChainTests
     [TestMethod]
     public async Task VerifiesWellFormedCvcaToDocumentVerifierToTerminalChain()
     {
+        //The framework's own ECDSA keys are the independent signer and subject keys the certificate factory
+        //below mints into a chain; the library only ever verifies from the resulting wire bytes.
         using ECDsa cvcaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa documentVerifierKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa terminalKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -46,6 +48,8 @@ internal sealed class CardVerifiableCertificateChainTests
     [TestMethod]
     public async Task RejectsChainWithAForgedSignature()
     {
+        //The framework's own ECDSA keys are the independent signer and subject keys the certificate factory
+        //below mints into a chain; the library only ever verifies from the resulting wire bytes.
         using ECDsa cvcaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa documentVerifierKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa terminalKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -67,6 +71,8 @@ internal sealed class CardVerifiableCertificateChainTests
     [TestMethod]
     public async Task RejectsChainWithABrokenReference()
     {
+        //The framework's own ECDSA keys are the independent signer and subject keys the certificate factory
+        //below mints into a chain; the library only ever verifies from the resulting wire bytes.
         using ECDsa cvcaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa documentVerifierKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
@@ -85,6 +91,8 @@ internal sealed class CardVerifiableCertificateChainTests
     [TestMethod]
     public async Task RejectsCvcaIssuingATerminalDirectly()
     {
+        //The framework's own ECDSA keys are the independent signer and subject keys the certificate factory
+        //below mints into a chain; the library only ever verifies from the resulting wire bytes.
         using ECDsa cvcaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa terminalKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
@@ -103,6 +111,8 @@ internal sealed class CardVerifiableCertificateChainTests
     [TestMethod]
     public async Task RejectsAChainThatDoesNotEndInATerminal()
     {
+        //The framework's own ECDSA keys are the independent signer and subject keys the certificate factory
+        //below mints into a chain; the library only ever verifies from the resulting wire bytes.
         using ECDsa cvcaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa documentVerifierKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
@@ -123,6 +133,8 @@ internal sealed class CardVerifiableCertificateChainTests
     [TestMethod]
     public async Task VerifiesAFullRsaCvcaToDocumentVerifierToTerminalChain()
     {
+        //The framework's own RSA keys are the independent signer/subject pair the certificate factory below
+        //mints into a chain; the library only ever verifies from the resulting wire bytes.
         using RSA cvcaKey = RSA.Create(2048);
         using RSA documentVerifierKey = RSA.Create(2048);
         using RSA terminalKey = RSA.Create(2048);
@@ -146,6 +158,8 @@ internal sealed class CardVerifiableCertificateChainTests
     [TestMethod]
     public async Task RejectsRsaChainWithAForgedSignature()
     {
+        //The framework's own RSA keys mint the chain (the same certificate-factory pattern as the ECDSA
+        //tests above); the library only ever verifies from the resulting wire bytes.
         using RSA cvcaKey = RSA.Create(2048);
         using RSA documentVerifierKey = RSA.Create(2048);
 
@@ -165,6 +179,8 @@ internal sealed class CardVerifiableCertificateChainTests
     [TestMethod]
     public async Task RejectsExpiredCertificate()
     {
+        //The framework's own ECDSA keys are the independent signer and subject keys the certificate factory
+        //below mints into a chain; the library only ever verifies from the resulting wire bytes.
         using ECDsa cvcaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa documentVerifierKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 

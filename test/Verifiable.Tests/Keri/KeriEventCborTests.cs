@@ -5,6 +5,7 @@ using System.Formats.Cbor;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.Keri;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Keri;
 
@@ -99,19 +100,19 @@ internal sealed class KeriEventCborTests
         var writer = new CborWriter();
         writer.WriteStartMap(13);
 
-        WriteScalar(writer, KeriMessageFields.Version, "KERICAACAACBOR00012c.");
-        WriteScalar(writer, KeriMessageFields.MessageType, KeriMessageTypes.Inception);
-        WriteScalar(writer, KeriMessageFields.Said, Aid);
-        WriteScalar(writer, KeriMessageFields.Prefix, Aid);
-        WriteScalar(writer, KeriMessageFields.SequenceNumber, "0");
-        WriteScalar(writer, KeriMessageFields.KeysSigningThreshold, "2");
-        WriteList(writer, KeriMessageFields.SigningKeys, SigningKeys);
-        WriteScalar(writer, KeriMessageFields.NextKeysSigningThreshold, "2");
-        WriteList(writer, KeriMessageFields.NextKeyDigests, NextKeyDigests);
-        WriteScalar(writer, KeriMessageFields.BackerThreshold, "1");
-        WriteList(writer, KeriMessageFields.Backers, Backers);
-        WriteList(writer, KeriMessageFields.ConfigurationTraits, ConfigurationTraits);
-        WriteList(writer, KeriMessageFields.Anchors, []);
+        KeriEventWireFixtures.WriteScalar(writer, KeriMessageFields.Version, "KERICAACAACBOR00012c.");
+        KeriEventWireFixtures.WriteScalar(writer, KeriMessageFields.MessageType, KeriMessageTypes.Inception);
+        KeriEventWireFixtures.WriteScalar(writer, KeriMessageFields.Said, Aid);
+        KeriEventWireFixtures.WriteScalar(writer, KeriMessageFields.Prefix, Aid);
+        KeriEventWireFixtures.WriteScalar(writer, KeriMessageFields.SequenceNumber, "0");
+        KeriEventWireFixtures.WriteScalar(writer, KeriMessageFields.KeysSigningThreshold, "2");
+        KeriEventWireFixtures.WriteList(writer, KeriMessageFields.SigningKeys, SigningKeys);
+        KeriEventWireFixtures.WriteScalar(writer, KeriMessageFields.NextKeysSigningThreshold, "2");
+        KeriEventWireFixtures.WriteList(writer, KeriMessageFields.NextKeyDigests, NextKeyDigests);
+        KeriEventWireFixtures.WriteScalar(writer, KeriMessageFields.BackerThreshold, "1");
+        KeriEventWireFixtures.WriteList(writer, KeriMessageFields.Backers, Backers);
+        KeriEventWireFixtures.WriteList(writer, KeriMessageFields.ConfigurationTraits, ConfigurationTraits);
+        KeriEventWireFixtures.WriteList(writer, KeriMessageFields.Anchors, []);
 
         writer.WriteEndMap();
 
@@ -120,26 +121,6 @@ internal sealed class KeriEventCborTests
         writer.Encode(owner.Memory.Span);
 
         return new MintedEvent(owner, length);
-    }
-
-
-    private static void WriteScalar(CborWriter writer, string label, string value)
-    {
-        writer.WriteTextString(label);
-        writer.WriteTextString(value);
-    }
-
-
-    private static void WriteList(CborWriter writer, string label, string[] values)
-    {
-        writer.WriteTextString(label);
-        writer.WriteStartArray(values.Length);
-        foreach(string value in values)
-        {
-            writer.WriteTextString(value);
-        }
-
-        writer.WriteEndArray();
     }
 
 

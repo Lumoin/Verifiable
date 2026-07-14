@@ -51,8 +51,20 @@ namespace Verifiable.Security.Windows
         public TResult WithSensitiveMemory<TResult>(ReadOnlySpanFunc<byte, TResult> sensitiveFunc)
         {
             ArgumentNullException.ThrowIfNull(sensitiveFunc);
-            ReadOnlySpan<byte> unEncryptedData = ProtectedData.Unprotect(AsReadOnlySpan().ToArray(), Entropy, DataProtectionScope);
-            return sensitiveFunc(unEncryptedData);
+
+            //The DPAPI-encrypted-at-rest ciphertext is public relative to DPAPI, so it passes to the
+            //span-based overload directly with no array copy. Unprotect always allocates a fresh
+            //plaintext array regardless of overload, so the recovered secret is zeroed here in finally
+            //once the caller's continuation has consumed it.
+            byte[] unprotectedData = ProtectedData.Unprotect(AsReadOnlySpan(), DataProtectionScope, Entropy);
+            try
+            {
+                return sensitiveFunc(unprotectedData);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(unprotectedData);
+            }
         }
 
 

@@ -1,9 +1,10 @@
 using System;
-using System.Security.Cryptography;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Lds;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Tests.TestDataProviders;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -19,7 +20,7 @@ internal sealed class DataGroup15WriterTests
     [TestMethod]
     public void RoundTripsP256ActiveAuthenticationPublicKey()
     {
-        byte[] point = BuildUncompressedPoint(coordinateSize: 32, fill: 0x33);
+        byte[] point = ApduWireFixtures.BuildUncompressedPoint(coordinateSize: 32, fill: 0x33);
         using EncodedEcPoint publicKey = EncodedEcPoint.FromBytes(point, CryptoTags.P256ExchangePublicKey, BaseMemoryPool.Shared);
         using ElementaryFile dataGroup15 = DataGroup15.Write(publicKey, BaseMemoryPool.Shared);
 
@@ -39,7 +40,7 @@ internal sealed class DataGroup15WriterTests
     {
         //brainpoolP224r1 is the curve the BSI eMRTD reference chips use; its 28-byte coordinates make a
         //57-byte uncompressed point, exercising the named-curve OID added with the curve.
-        byte[] point = BuildUncompressedPoint(coordinateSize: 28, fill: 0x44);
+        byte[] point = ApduWireFixtures.BuildUncompressedPoint(coordinateSize: 28, fill: 0x44);
         using EncodedEcPoint publicKey = EncodedEcPoint.FromBytes(point, CryptoTags.BrainpoolP224r1ExchangePublicKey, BaseMemoryPool.Shared);
         using ElementaryFile dataGroup15 = DataGroup15.Write(publicKey, BaseMemoryPool.Shared);
 
@@ -55,9 +56,13 @@ internal sealed class DataGroup15WriterTests
     [TestMethod]
     public void RoundTripsAnRsaActiveAuthenticationPublicKey()
     {
-        //A real RSA public key in DER RSAPublicKey form (modulus + exponent), minted with an independent oracle.
-        using RSA rsa = RSA.Create(2048);
-        byte[] derRsaPublicKey = rsa.ExportRSAPublicKey();
+        //A real RSA public key in DER RSAPublicKey form (modulus + exponent) is mere fixture material here: the
+        //test proves DG15 round-tripping, not RSA key generation, so the shared provider key's DER encoding
+        //(RsaUtilities.Encode's modulus-plus-fixed-65537-exponent SEQUENCE) already matches the wire shape DG15 expects.
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> rsaKeyMaterial = TestKeyMaterialProvider.CreateRsa2048KeyMaterial();
+        using PublicKeyMemory rsaPublicKeyMemory = rsaKeyMaterial.PublicKey;
+        using PrivateKeyMemory rsaPrivateKeyMemory = rsaKeyMaterial.PrivateKey;
+        ReadOnlySpan<byte> derRsaPublicKey = rsaPublicKeyMemory.AsReadOnlySpan();
 
         using RsaPublicKey rsaPublicKey = RsaPublicKey.FromBytes(derRsaPublicKey, BaseMemoryPool.Shared);
         using ElementaryFile dataGroup15 = DataGroup15.Write(rsaPublicKey, BaseMemoryPool.Shared);
@@ -69,16 +74,5 @@ internal sealed class DataGroup15WriterTests
         Assert.AreEqual(ActiveAuthenticationKeyType.Rsa, parsed.KeyType, "DG15 reports the RSA key type.");
         Assert.AreEqual(Convert.ToHexString(derRsaPublicKey), Convert.ToHexString(parsed.RsaPublicKey.AsReadOnlySpan()),
             "The DER RSAPublicKey (modulus and exponent) must round-trip.");
-    }
-
-
-    /// <summary>Builds a SEC1 uncompressed point: <c>0x04</c> then two filler coordinates of the given size.</summary>
-    private static byte[] BuildUncompressedPoint(int coordinateSize, byte fill)
-    {
-        byte[] point = new byte[1 + (2 * coordinateSize)];
-        point[0] = 0x04;
-        point.AsSpan(1).Fill(fill);
-
-        return point;
     }
 }

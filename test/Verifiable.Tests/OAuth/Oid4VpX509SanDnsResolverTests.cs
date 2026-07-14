@@ -3,7 +3,6 @@ using System.Security;
 using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
-using Verifiable.Core.Model.Dcql;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
@@ -37,7 +36,7 @@ internal sealed class Oid4VpX509SanDnsResolverTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider Time { get; } = new FakeTimeProvider();
+    private FakeTimeProvider Time { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
     private static EncodeDelegate Encoder => TestSetup.Base64UrlEncoder;
@@ -202,7 +201,7 @@ internal sealed class Oid4VpX509SanDnsResolverTests
                 clientId: clientIdWithPrefix,
                 responseUri: new Uri("https://verifier.example.com/cb"),
                 nonce: "nonce-x509-resolver",
-                dcqlQuery: BuildPidDcqlQuery(),
+                dcqlQuery: DcqlFixtures.BuildPidDcqlQuery(),
                 clientMetadata: clientMetadata,
                 state: "state-x509-resolver",
                 iat: now,
@@ -252,23 +251,4 @@ internal sealed class Oid4VpX509SanDnsResolverTests
 
         return new UnverifiedJwtHeader(unverified.Signatures[0].ProtectedHeader);
     }
-
-
-    private static DcqlQuery BuildPidDcqlQuery() =>
-        new()
-        {
-            Credentials =
-            [
-                new CredentialQuery
-                {
-                    Id = "pid",
-                    Format = WellKnownMediaTypes.Jwt.DcSdJwt,
-                    Claims =
-                    [
-                        ClaimsQuery.ForPath(["given_name"]),
-                        ClaimsQuery.ForPath(["family_name"])
-                    ]
-                }
-            ]
-        };
 }

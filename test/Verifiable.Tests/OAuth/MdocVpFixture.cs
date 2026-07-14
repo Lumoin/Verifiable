@@ -316,6 +316,8 @@ internal static class MdocVpFixture
         //The IACA root + leaf are setup-only: their DER is copied into the IssuerAuth x5chain
         //(during signing) and into the trust anchor, after which the X509 / ECDsa handles are
         //released. The leaf's private key signs the MSO; the verifier resolves it from the chain.
+        //Framework ECDsa + CertificateRequest mint the chain (the test-side CA/attestation-chain
+        //certificate-factory carve-out; CertificateRequest has no project-side equivalent).
         MdocDocument issued;
         PkiCertificateMemory rootTrustAnchor;
         using(ECDsa rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256))
@@ -379,6 +381,8 @@ internal static class MdocVpFixture
     /// <summary>Creates a self-issued IACA root CA certificate (with a SubjectKeyIdentifier).</summary>
     private static X509Certificate2 CreateIacaRoot(string subjectName, ECDsa key)
     {
+        //Test-side CA certificate factory carve-out: CertificateRequest mints the actual
+        //self-signed X.509 structure the verifier's chain validator parses.
         var request = new CertificateRequest(subjectName, key, HashAlgorithmName.SHA256);
         request.CertificateExtensions.Add(new X509BasicConstraintsExtension(
             certificateAuthority: true, hasPathLengthConstraint: true, pathLengthConstraint: 1, critical: true));
@@ -399,6 +403,8 @@ internal static class MdocVpFixture
     /// </summary>
     private static X509Certificate2 CreateIacaLeaf(string subjectName, ECDsa leafKey, X509Certificate2 issuerCert)
     {
+        //Test-side CA certificate factory carve-out: CertificateRequest signs the leaf against
+        //the root, producing the AuthorityKeyIdentifier the DCQL trusted_authorities check reads.
         var request = new CertificateRequest(subjectName, leafKey, HashAlgorithmName.SHA256);
         request.CertificateExtensions.Add(new X509BasicConstraintsExtension(
             certificateAuthority: false, hasPathLengthConstraint: false, pathLengthConstraint: 0, critical: true));
@@ -409,6 +415,8 @@ internal static class MdocVpFixture
             X509AuthorityKeyIdentifierExtension.CreateFromCertificate(
                 issuerCert, includeKeyIdentifier: true, includeIssuerAndSerial: false));
 
+        //Test-side CA certificate factory carve-out: the serial number is an X.509 structural
+        //field of the leaf CertificateRequest.Create call, not fixture key material.
         byte[] serialNumber = RandomNumberGenerator.GetBytes(16);
         return request.Create(
             issuerCert,
@@ -421,6 +429,8 @@ internal static class MdocVpFixture
     /// <summary>Wraps an <see cref="ECDsa"/> private scalar into the project's <see cref="PrivateKeyMemory"/> carrier.</summary>
     private static PrivateKeyMemory LoadP256PrivateKey(ECDsa key)
     {
+        //Bridges the leaf key out of the test-side certificate factory carve-out into the
+        //project's key-material carrier so the library's signing API can consume it.
         ECParameters parameters = key.ExportParameters(includePrivateParameters: true);
         byte[] dBytes = parameters.D!;
 

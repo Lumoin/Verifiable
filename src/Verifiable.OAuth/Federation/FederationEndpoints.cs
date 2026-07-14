@@ -550,7 +550,7 @@ public static class FederationEndpoints
     /// supports only the <c>entity_type</c> filter (parsed below and passed to the
     /// application delegate).
     /// </summary>
-    private static readonly string[] UnsupportedSubordinateListingFilters =
+    private static string[] UnsupportedSubordinateListingFilters { get; } =
     [
         FederationEndpointParameterNames.TrustMarked,
         FederationEndpointParameterNames.TrustMarkType,

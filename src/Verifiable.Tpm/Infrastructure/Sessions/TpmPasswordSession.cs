@@ -36,7 +36,7 @@ namespace Verifiable.Tpm.Infrastructure.Sessions;
 /// </remarks>
 public sealed class TpmPasswordSession: TpmSessionBase, IDisposable
 {
-    private readonly Tpm2bAuth password;
+    private Tpm2bAuth Password { get; }
     private bool disposed;
 
     /// <summary>
@@ -45,7 +45,7 @@ public sealed class TpmPasswordSession: TpmSessionBase, IDisposable
     /// <param name="password">The password/authValue. Ownership is transferred to this session.</param>
     private TpmPasswordSession(Tpm2bAuth password)
     {
-        this.password = password;
+        this.Password = password;
     }
 
     /// <inheritdoc/>
@@ -109,7 +109,7 @@ public sealed class TpmPasswordSession: TpmSessionBase, IDisposable
         return sizeof(uint) +          // sessionHandle
                sizeof(ushort) +        // nonceCaller.size (always 0)
                sizeof(byte) +          // sessionAttributes
-               password.               SerializedSize; // hmac (TPM2B_AUTH)
+               Password.               SerializedSize; // hmac (TPM2B_AUTH)
     }
 
     /// <inheritdoc/>
@@ -143,7 +143,7 @@ public sealed class TpmPasswordSession: TpmSessionBase, IDisposable
         writer.WriteByte(0);
 
         //hmac = password.
-        password.WriteTo(ref writer);
+        Password.WriteTo(ref writer);
     }
 
     /// <inheritdoc/>
@@ -165,7 +165,7 @@ public sealed class TpmPasswordSession: TpmSessionBase, IDisposable
     {
         if(!disposed)
         {
-            password.Dispose();
+            Password.Dispose();
             disposed = true;
         }
     }

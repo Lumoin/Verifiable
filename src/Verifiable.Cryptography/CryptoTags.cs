@@ -82,6 +82,29 @@ public static class CryptoTags
     /// <summary>Tag for RSA-4096 signature values.</summary>
     public static Tag Rsa4096Signature { get; } = Tag.Create(CryptoAlgorithm.Rsa4096).With(Purpose.Signature).With(EncodingScheme.Raw);
 
+    /// <summary>
+    /// Tag for RSA public keys whose COSE/JOSE <c>alg</c> pins RSASSA-PKCS1-v1.5 with SHA-256
+    /// (COSE <c>RS256</c>, -257). DER encoding. Resolved from a COSE_Key's <c>alg</c> parameter
+    /// (RFC 8812 §2) rather than modulus length alone, so a verifier picks the padding/hash the
+    /// credential actually declared.
+    /// </summary>
+    public static Tag RsaSha256PublicKey { get; } = Tag.Create(CryptoAlgorithm.RsaSha256).With(Purpose.Verification).With(EncodingScheme.Der);
+
+    /// <summary>Tag for RSA public keys whose COSE/JOSE <c>alg</c> pins RSASSA-PSS with SHA-256 (COSE <c>PS256</c>, -37). DER encoding.</summary>
+    public static Tag RsaSha256PssPublicKey { get; } = Tag.Create(CryptoAlgorithm.RsaSha256Pss).With(Purpose.Verification).With(EncodingScheme.Der);
+
+    /// <summary>Tag for RSA public keys whose COSE/JOSE <c>alg</c> pins RSASSA-PKCS1-v1.5 with SHA-384 (COSE <c>RS384</c>, -258). DER encoding.</summary>
+    public static Tag RsaSha384PublicKey { get; } = Tag.Create(CryptoAlgorithm.RsaSha384).With(Purpose.Verification).With(EncodingScheme.Der);
+
+    /// <summary>Tag for RSA public keys whose COSE/JOSE <c>alg</c> pins RSASSA-PSS with SHA-384 (COSE <c>PS384</c>, -38). DER encoding.</summary>
+    public static Tag RsaSha384PssPublicKey { get; } = Tag.Create(CryptoAlgorithm.RsaSha384Pss).With(Purpose.Verification).With(EncodingScheme.Der);
+
+    /// <summary>Tag for RSA public keys whose COSE/JOSE <c>alg</c> pins RSASSA-PKCS1-v1.5 with SHA-512 (COSE <c>RS512</c>, -259). DER encoding.</summary>
+    public static Tag RsaSha512PublicKey { get; } = Tag.Create(CryptoAlgorithm.RsaSha512).With(Purpose.Verification).With(EncodingScheme.Der);
+
+    /// <summary>Tag for RSA public keys whose COSE/JOSE <c>alg</c> pins RSASSA-PSS with SHA-512 (COSE <c>PS512</c>, -39). DER encoding.</summary>
+    public static Tag RsaSha512PssPublicKey { get; } = Tag.Create(CryptoAlgorithm.RsaSha512Pss).With(Purpose.Verification).With(EncodingScheme.Der);
+
     /// <summary>Tag for RSA-SHA256 PKCS#1 v1.5 signatures.</summary>
     public static Tag RsaSha256Pkcs1Signature { get; } = Tag.Create(CryptoAlgorithm.RsaSha256).With(Purpose.Signature).With(EncodingScheme.Raw);
 
@@ -681,6 +704,9 @@ public static class CryptoTags
         Secp256k1PublicKey, Secp256k1PrivateKey, Secp256k1Signature,
         Rsa2048PublicKey, Rsa2048PrivateKey, Rsa2048Signature,
         Rsa4096PublicKey, Rsa4096PrivateKey, Rsa4096Signature,
+        RsaSha256PublicKey, RsaSha256PssPublicKey,
+        RsaSha384PublicKey, RsaSha384PssPublicKey,
+        RsaSha512PublicKey, RsaSha512PssPublicKey,
         RsaSha256Pkcs1Signature, RsaSha256PssSignature,
         RsaSha384Pkcs1Signature, RsaSha384PssSignature,
         RsaSha512Pkcs1Signature, RsaSha512PssSignature,

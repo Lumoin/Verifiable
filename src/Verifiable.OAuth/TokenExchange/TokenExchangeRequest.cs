@@ -66,7 +66,7 @@ public sealed record TokenExchangeRequest
     /// <summary>
     /// The RFC 9396 <c>authorization_details</c> the client requested (a JSON array of authorization
     /// detail objects), or <see langword="null"/> when absent. Carried verbatim for the
-    /// draft-ietf-oauth-identity-assertion-authz-grant §4.3.3 policy decision, where the IdP parses
+    /// draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §4.3.3 policy decision, where the IdP parses
     /// and processes each object; the granted result is returned as
     /// <see cref="TokenExchangeAuthorization.AuthorizationDetailsClaim"/>. Populated for the ID-JAG
     /// profile (<see cref="RequestedTokenType"/> id-jag); base RFC 8693 token exchange does not define

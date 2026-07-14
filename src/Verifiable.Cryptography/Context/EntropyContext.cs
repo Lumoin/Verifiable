@@ -42,7 +42,7 @@ public readonly struct EntropyAssessor: IEquatable<EntropyAssessor>
     public static EntropyAssessor Unknown { get; } = new(4);
 
 
-    private static readonly List<EntropyAssessor> assessors =
+    private static List<EntropyAssessor> assessors { get; } =
         [Source, OperatingSystem, Registry, ExternalMonitor, Unknown];
 
     /// <summary>Gets all registered assessor values.</summary>
@@ -143,7 +143,7 @@ public readonly struct EntropyAssessmentMethod: IEquatable<EntropyAssessmentMeth
     public static EntropyAssessmentMethod Unknown { get; } = new(3);
 
 
-    private static readonly List<EntropyAssessmentMethod> methods =
+    private static List<EntropyAssessmentMethod> methods { get; } =
         [SelfTest, OnlineStatistical, ExternalAudit, Unknown];
 
     /// <summary>Gets all registered assessment method values.</summary>
@@ -240,7 +240,7 @@ public readonly struct EntropyOutcome: IEquatable<EntropyOutcome>
     public static EntropyOutcome Unknown { get; } = new(3);
 
 
-    private static readonly List<EntropyOutcome> outcomes =
+    private static List<EntropyOutcome> outcomes { get; } =
         [Healthy, Degraded, Failed, Unknown];
 
     /// <summary>Gets all registered outcome values.</summary>

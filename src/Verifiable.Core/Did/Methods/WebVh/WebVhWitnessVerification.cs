@@ -310,7 +310,9 @@ public static class WebVhWitnessVerification
             }
 
             VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, Purpose.Verification);
-            bool isValid = await verify(hashOwner.Memory[..HashDataLength], signatureOwner.Memory, keyData.Memory, null, cancellationToken).ConfigureAwait(false);
+            (bool isValid, CryptoEvent? evt) = await verify(hashOwner.Memory[..HashDataLength], signatureOwner.Memory, keyData.Memory, null, cancellationToken).ConfigureAwait(false);
+
+            CryptographicKeyEvents.Emit(evt);
 
             return isValid ? DidKeyPrefix + multikey : null;
         }

@@ -53,8 +53,7 @@ internal sealed class FederatedBackChannelLogoutHttpTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>A fixed clock so issued artefacts are reproducible.</summary>
-    private FakeTimeProvider TimeProvider { get; } = new(
-        new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
+    private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     /// <summary>The memory pool used for all transient signing/verification buffers.</summary>
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
@@ -110,9 +109,9 @@ internal sealed class FederatedBackChannelLogoutHttpTests
         //verifies an incoming Logout Token against the OP public key and its own
         //client_id, and on a valid §2.6 token drops the session keyed by sid.
         await using RelyingPartyReceiver rp1 = await RelyingPartyReceiver.StartAsync(
-            "https://rp1.example.com", opPublic, OpIssuer, TestContext.CancellationToken).ConfigureAwait(false);
+            "https://rp1.example.com", opPublic, OpIssuer, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         await using RelyingPartyReceiver rp2 = await RelyingPartyReceiver.StartAsync(
-            "https://rp2.example.com", opPublic, OpIssuer, TestContext.CancellationToken).ConfigureAwait(false);
+            "https://rp2.example.com", opPublic, OpIssuer, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         using VerifierKeyMaterial rp1Material = op.RegisterBackChannelLogoutClient(
             rp1.ClientId, new Uri(rp1.ClientId), rp1.BackChannelLogoutUri, RpCapabilities);
@@ -154,13 +153,13 @@ internal sealed class FederatedBackChannelLogoutHttpTests
                     SecurityEventTestJson.HeaderSerializer,
                     SecurityEventTestJson.PayloadSerializer,
                     Pool,
-                    ct,
+                    cancellationToken: ct,
                     signingKeyId: "op-key-1").ConfigureAwait(false);
 
                 using FormUrlEncodedContent content = new(
                     [new KeyValuePair<string, string>(WellKnownTokenTypes.LogoutToken, logoutToken)]);
                 using HttpResponseMessage delivery = await deliveryClient.PostAsync(
-                    relyingParty.BackChannelLogoutUri, content, ct).ConfigureAwait(false);
+                    relyingParty.BackChannelLogoutUri, content, cancellationToken: ct).ConfigureAwait(false);
 
                 Assert.AreEqual(200, (int)delivery.StatusCode,
                     $"RP '{relyingParty.ClientId}' must acknowledge the Logout Token with 200.");
@@ -175,7 +174,7 @@ internal sealed class FederatedBackChannelLogoutHttpTests
             "GET",
             new RequestFields { [OAuthRequestParameterNames.IdTokenHint] = rp1IdToken },
             new ExchangeContext(),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, response.StatusCode, response.Body);
 
         //Both RPs verified the Logout Token and dropped exactly the shared SSO session.
@@ -215,7 +214,7 @@ internal sealed class FederatedBackChannelLogoutHttpTests
         };
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             tenant, WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            parFields, new ExchangeContext(), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
         using JsonDocument parDoc = JsonDocument.Parse(parResponse.Body);
         string requestUri = parDoc.RootElement.GetProperty("request_uri").GetString()!;
@@ -230,7 +229,7 @@ internal sealed class FederatedBackChannelLogoutHttpTests
                 [OAuthRequestParameterNames.ClientId] = clientId,
                 [OAuthRequestParameterNames.RequestUri] = requestUri
             },
-            authorizeContext, TestContext.CancellationToken).ConfigureAwait(false);
+            authorizeContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(302, authorizeResponse.StatusCode, authorizeResponse.Body);
         string code = ExtractCode(authorizeResponse.Location!);
 
@@ -244,7 +243,7 @@ internal sealed class FederatedBackChannelLogoutHttpTests
                 [OAuthRequestParameterNames.ClientId] = clientId,
                 [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
             },
-            new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new ExchangeContext(), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
 
         using JsonDocument tokenDoc = JsonDocument.Parse(tokenResponse.Body);
@@ -346,7 +345,7 @@ internal sealed class RelyingPartyReceiver: IAsyncDisposable
         //listening — safe because no delivery arrives until the test POSTs later.
         RelyingPartyReceiver? receiver = null;
         MinimalHttpHost startedHost = await MinimalHttpHost.StartAsync(
-            (request, ct) => receiver!.HandleAsync(request, ct), cancellationToken).ConfigureAwait(false);
+            (request, ct) => receiver!.HandleAsync(request, ct), cancellationToken: cancellationToken).ConfigureAwait(false);
         receiver = new RelyingPartyReceiver(startedHost, clientId, opPublic, expectedIssuer);
 
         return receiver;
@@ -399,7 +398,7 @@ internal sealed class RelyingPartyReceiver: IAsyncDisposable
             TestSetup.Base64UrlDecoder,
             bytes => SecurityEventTestJson.DeserializePart(bytes),
             BaseMemoryPool.Shared,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if(!result.IsValid)
         {

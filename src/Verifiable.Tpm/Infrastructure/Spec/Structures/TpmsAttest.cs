@@ -172,12 +172,30 @@ public sealed class TpmsAttest: ITpmWireType, IDisposable
         uint magic = reader.ReadUInt32();
         var type = (TpmStConstants)reader.ReadUInt16();
         Tpm2bName qualifiedSigner = Tpm2bName.Parse(ref reader, pool);
-        Tpm2bData extraData = Tpm2bData.Parse(ref reader, pool);
-        TpmsClockInfo clockInfo = TpmsClockInfo.Parse(ref reader);
-        ulong firmwareVersion = reader.ReadUInt64();
-        TpmuAttest attested = TpmuAttest.Parse(type, ref reader, pool);
+        try
+        {
+            Tpm2bData extraData = Tpm2bData.Parse(ref reader, pool);
+            try
+            {
+                //A malformed clockInfo/firmwareVersion/attested field throws after qualifiedSigner and extraData
+                //are already rented; the two catch blocks unwind those pooled buffers rather than leaking them.
+                TpmsClockInfo clockInfo = TpmsClockInfo.Parse(ref reader);
+                ulong firmwareVersion = reader.ReadUInt64();
+                TpmuAttest attested = TpmuAttest.Parse(type, ref reader, pool);
 
-        return new TpmsAttest(magic, type, qualifiedSigner, extraData, clockInfo, firmwareVersion, attested);
+                return new TpmsAttest(magic, type, qualifiedSigner, extraData, clockInfo, firmwareVersion, attested);
+            }
+            catch
+            {
+                extraData.Dispose();
+                throw;
+            }
+        }
+        catch
+        {
+            qualifiedSigner.Dispose();
+            throw;
+        }
     }
 
     /// <summary>

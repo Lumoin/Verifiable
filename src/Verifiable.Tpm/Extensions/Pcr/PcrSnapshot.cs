@@ -17,7 +17,7 @@ namespace Verifiable.Tpm.Extensions.Pcr;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class PcrSnapshot
 {
-    private readonly Dictionary<string, PcrBank> banksByAlgorithm;
+    private Dictionary<string, PcrBank> BanksByAlgorithm { get; }
 
     /// <summary>
     /// Gets all active PCR banks (banks with at least one PCR allocated).
@@ -55,7 +55,7 @@ public sealed class PcrSnapshot
         get
         {
             ArgumentNullException.ThrowIfNull(algorithm);
-            return banksByAlgorithm[NormalizeAlgorithmName(algorithm)];
+            return BanksByAlgorithm[NormalizeAlgorithmName(algorithm)];
         }
     }
 
@@ -68,10 +68,10 @@ public sealed class PcrSnapshot
         UpdateCounter = updateCounter;
         IsConsistent = isConsistent;
 
-        banksByAlgorithm = new Dictionary<string, PcrBank>(StringComparer.OrdinalIgnoreCase);
+        BanksByAlgorithm = new Dictionary<string, PcrBank>(StringComparer.OrdinalIgnoreCase);
         foreach(var bank in banks)
         {
-            banksByAlgorithm[bank.Algorithm] = bank;
+            BanksByAlgorithm[bank.Algorithm] = bank;
         }
     }
 
@@ -83,7 +83,7 @@ public sealed class PcrSnapshot
     public bool HasBank(string algorithm)
     {
         ArgumentNullException.ThrowIfNull(algorithm);
-        return banksByAlgorithm.ContainsKey(NormalizeAlgorithmName(algorithm));
+        return BanksByAlgorithm.ContainsKey(NormalizeAlgorithmName(algorithm));
     }
 
     /// <summary>
@@ -95,7 +95,7 @@ public sealed class PcrSnapshot
     public bool TryGetBank(string algorithm, [NotNullWhen(true)] out PcrBank? bank)
     {
         ArgumentNullException.ThrowIfNull(algorithm);
-        return banksByAlgorithm.TryGetValue(NormalizeAlgorithmName(algorithm), out bank);
+        return BanksByAlgorithm.TryGetValue(NormalizeAlgorithmName(algorithm), out bank);
     }
 
     /// <summary>

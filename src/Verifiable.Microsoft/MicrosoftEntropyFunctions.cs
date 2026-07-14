@@ -33,18 +33,18 @@ namespace Verifiable.Microsoft;
 /// </remarks>
 public static class MicrosoftEntropyFunctions
 {
-    private static readonly ProviderLibrary ProviderLib = new(
+    private static ProviderLibrary ProviderLib { get; } = new(
         typeof(MicrosoftEntropyFunctions).Assembly.GetName().Name
             ?? "Verifiable.Microsoft",
         typeof(MicrosoftEntropyFunctions).Assembly.GetName().Version?.ToString()
             ?? "Unknown");
 
-    private static readonly CryptoLibraryInfo CryptoLib = new(
+    private static CryptoLibraryInfo CryptoLib { get; } = new(
         "System.Security.Cryptography",
         typeof(RandomNumberGenerator).Assembly.GetName().Version?.ToString()
             ?? System.Environment.Version.ToString());
 
-    private static readonly ProviderClass ProviderCls =
+    private static ProviderClass ProviderCls { get; } =
         new(nameof(MicrosoftEntropyFunctions));
 
 

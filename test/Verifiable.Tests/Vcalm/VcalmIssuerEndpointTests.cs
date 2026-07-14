@@ -5,7 +5,6 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
-using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
@@ -46,8 +45,7 @@ internal sealed class VcalmIssuerEndpointTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new(
-        new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
+    private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
@@ -119,7 +117,7 @@ internal sealed class VcalmIssuerEndpointTests
         await using TestHostShell app = new(TimeProvider);
         IssuerContext ctx = await RegisterIssuerAsync(app).ConfigureAwait(false);
 
-        string body = BuildIssueRequestBody(ctx.IssuerDid, credentialId: "urn:uuid:issued-credential-1");
+        string body = VcalmWireFixtures.BuildIssueRequestBody(ctx.IssuerDid, credentialId: "urn:uuid:issued-credential-1", SerializeCredential);
 
         using JsonDocument response = await PostIssueAsync(app, ctx.Segment, body, expectedStatus: 201).ConfigureAwait(false);
 
@@ -152,7 +150,7 @@ internal sealed class VcalmIssuerEndpointTests
         ///credentials/verify on the same tenant (the registration already allows both roles).
         WireVerificationSeam(app);
 
-        string issueBody = BuildIssueRequestBody(ctx.IssuerDid, credentialId: "urn:uuid:roundtrip-1");
+        string issueBody = VcalmWireFixtures.BuildIssueRequestBody(ctx.IssuerDid, credentialId: "urn:uuid:roundtrip-1", SerializeCredential);
         using JsonDocument issued = await PostIssueAsync(app, ctx.Segment, issueBody, expectedStatus: 201).ConfigureAwait(false);
 
         string securedCredentialJson = issued.RootElement.GetProperty(VcalmParameterNames.VerifiableCredential).GetRawText();
@@ -185,7 +183,7 @@ internal sealed class VcalmIssuerEndpointTests
         await using TestHostShell app = new(TimeProvider);
         IssuerContext ctx = await RegisterIssuerAsync(app).ConfigureAwait(false);
 
-        string body = BuildIssueRequestBody(issuerDid: "did:example:not-this-instance", credentialId: "urn:uuid:mismatch");
+        string body = VcalmWireFixtures.BuildIssueRequestBody(issuerDid: "did:example:not-this-instance", credentialId: "urn:uuid:mismatch", SerializeCredential);
 
         using JsonDocument response = await PostIssueAsync(app, ctx.Segment, body, expectedStatus: 400).ConfigureAwait(false);
 
@@ -303,7 +301,7 @@ internal sealed class VcalmIssuerEndpointTests
         IssuerContext ctx = await RegisterIssuerAsync(app).ConfigureAwait(false);
 
         const string CredentialDotId = "urn:uuid:autopopulate-source";
-        string body = BuildIssueRequestBody(ctx.IssuerDid, credentialId: CredentialDotId);
+        string body = VcalmWireFixtures.BuildIssueRequestBody(ctx.IssuerDid, credentialId: CredentialDotId, SerializeCredential);
         using JsonDocument _ = await PostIssueAsync(app, ctx.Segment, body, expectedStatus: 201).ConfigureAwait(false);
 
         //The §3.2.2 GET by the credential.id resolves the stored credential — auto-populated key.
@@ -369,7 +367,7 @@ internal sealed class VcalmIssuerEndpointTests
         IssuerContext ctx = await RegisterIssuerAsync(app, secondDescriptor: true, alsoVerifier: true).ConfigureAwait(false);
         WireVerificationSeam(app);
 
-        string body = BuildIssueRequestBody(ctx.IssuerDid, credentialId: "urn:uuid:multiproof-1");
+        string body = VcalmWireFixtures.BuildIssueRequestBody(ctx.IssuerDid, credentialId: "urn:uuid:multiproof-1", SerializeCredential);
         using JsonDocument issued = await PostIssueAsync(app, ctx.Segment, body, expectedStatus: 201).ConfigureAwait(false);
 
         JsonElement proof = issued.RootElement
@@ -505,7 +503,7 @@ internal sealed class VcalmIssuerEndpointTests
         IssuerContext ctx = await RegisterIssuerAsync(app).ConfigureAwait(false);
 
         const string CredentialId = "urn:uuid:get-target";
-        string body = BuildIssueRequestBody(ctx.IssuerDid, credentialId: CredentialId);
+        string body = VcalmWireFixtures.BuildIssueRequestBody(ctx.IssuerDid, credentialId: CredentialId, SerializeCredential);
         using JsonDocument issued = await PostIssueAsync(app, ctx.Segment, body, expectedStatus: 201).ConfigureAwait(false);
 
         //200: the stored credential.
@@ -541,7 +539,7 @@ internal sealed class VcalmIssuerEndpointTests
         IssuerContext ctx = await RegisterIssuerAsync(app).ConfigureAwait(false);
 
         const string CredentialId = "urn:uuid:delete-target";
-        string body = BuildIssueRequestBody(ctx.IssuerDid, credentialId: CredentialId);
+        string body = VcalmWireFixtures.BuildIssueRequestBody(ctx.IssuerDid, credentialId: CredentialId, SerializeCredential);
         using JsonDocument _ = await PostIssueAsync(app, ctx.Segment, body, expectedStatus: 201).ConfigureAwait(false);
 
         //202: the soft delete.
@@ -715,7 +713,7 @@ internal sealed class VcalmIssuerEndpointTests
     //carry a caller-supplied existing proof (the §3.2.1 existing-proof config cases).
     private async Task<DataIntegritySecuredCredential> SignCredentialAsync(IssuerContext ctx, string credentialId)
     {
-        VerifiableCredential credential = BuildCredential(ctx.IssuerDid, credentialId);
+        VerifiableCredential credential = VcalmWireFixtures.BuildCredential(ctx.IssuerDid, credentialId);
         DateTime proofCreated = TimeProvider.GetUtcNow().UtcDateTime;
 
         return await credential.SignAsync(
@@ -737,46 +735,8 @@ internal sealed class VcalmIssuerEndpointTests
     }
 
 
-    private static VerifiableCredential BuildCredential(string issuerDid, string? credentialId) =>
-        new()
-        {
-            Context = new Context
-            {
-                Contexts =
-                [
-                    Context.Credentials20,
-                    CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl
-                ]
-            },
-            Id = credentialId,
-            Type = ["VerifiableCredential", "ExampleAlumniCredential"],
-            Issuer = new Issuer { Id = issuerDid },
-            ValidFrom = "2023-01-01T00:00:00Z",
-            ValidUntil = "2030-01-01T00:00:00Z",
-            CredentialSubject =
-            [
-                new CredentialSubject
-                {
-                    Id = "did:example:alumni-subject",
-                    AdditionalData = new Dictionary<string, object>(StringComparer.Ordinal)
-                    {
-                        ["alumniOf"] = "The School of Examples"
-                    }
-                }
-            ]
-        };
-
-
     private static string BuildCredentialJson(string issuerDid, string? credentialId) =>
-        SerializeCredential(BuildCredential(issuerDid, credentialId));
-
-
-    private static string BuildIssueRequestBody(string issuerDid, string? credentialId)
-    {
-        string credentialJson = BuildCredentialJson(issuerDid, credentialId);
-
-        return "{\"credential\":" + credentialJson + "}";
-    }
+        SerializeCredential(VcalmWireFixtures.BuildCredential(issuerDid, credentialId));
 
 
     private async Task<JsonDocument> PostIssueAsync(

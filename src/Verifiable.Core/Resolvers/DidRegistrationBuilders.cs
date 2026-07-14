@@ -60,13 +60,13 @@ public sealed class DidRegistrationBuilders
         ReadOnlyDictionary<string, object?>.Empty;
 
     /// <summary>The registered builders keyed by DID method name (the token after <c>did:</c>, e.g. <c>key</c>).</summary>
-    private readonly Dictionary<string, DidDocumentBuildDelegate> builders = new(StringComparer.Ordinal);
+    private Dictionary<string, DidDocumentBuildDelegate> Builders { get; } = new(StringComparer.Ordinal);
 
     /// <summary>
     /// The DID method names whose DIDs are immutable (generative — fully determined by their content, with no
     /// registrar-side state to mutate), so <c>update</c> and <c>deactivate</c> are rejected for them.
     /// </summary>
-    private readonly HashSet<string> generativeMethods = new(StringComparer.Ordinal);
+    private HashSet<string> GenerativeMethods { get; } = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Registers <paramref name="builder"/> as the document builder for <paramref name="method"/>, replacing any
@@ -80,7 +80,7 @@ public sealed class DidRegistrationBuilders
         ArgumentException.ThrowIfNullOrWhiteSpace(method, nameof(method));
         ArgumentNullException.ThrowIfNull(builder);
 
-        builders[method] = builder;
+        Builders[method] = builder;
 
         return this;
     }
@@ -96,7 +96,7 @@ public sealed class DidRegistrationBuilders
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(method, nameof(method));
 
-        _ = generativeMethods.Add(method);
+        _ = GenerativeMethods.Add(method);
 
         return this;
     }
@@ -111,7 +111,7 @@ public sealed class DidRegistrationBuilders
     {
         ArgumentNullException.ThrowIfNull(method);
 
-        return builders.TryGetValue(method, out builder);
+        return Builders.TryGetValue(method, out builder);
     }
 
     /// <summary>
@@ -189,7 +189,7 @@ public sealed class DidRegistrationBuilders
     {
         if(create.Keys is { Count: > 0 } keys)
         {
-            if(!builders.TryGetValue(create.Method, out DidDocumentBuildDelegate? builder))
+            if(!Builders.TryGetValue(create.Method, out DidDocumentBuildDelegate? builder))
             {
                 return new RegistrationFailed($"methodNotSupported: no builder registered for did:{create.Method}.");
             }
@@ -217,7 +217,7 @@ public sealed class DidRegistrationBuilders
     /// <returns>The resulting registration state — completed, or failed with a DIF-shaped error code.</returns>
     private RegistrationFlowState HandleUpdate(BeginUpdate update)
     {
-        if(DidMethodOf(update.Did) is { } method && generativeMethods.Contains(method))
+        if(DidMethodOf(update.Did) is { } method && GenerativeMethods.Contains(method))
         {
             return new RegistrationFailed(
                 $"methodNotSupported: did:{method} DIDs are immutable; update is not a valid operation for them.");
@@ -261,7 +261,7 @@ public sealed class DidRegistrationBuilders
     /// <returns>The resulting registration state — completed with a <see langword="null"/> document, or failed with a DIF-shaped error code.</returns>
     private RegistrationFlowState HandleDeactivate(BeginDeactivate deactivate)
     {
-        if(DidMethodOf(deactivate.Did) is { } method && generativeMethods.Contains(method))
+        if(DidMethodOf(deactivate.Did) is { } method && GenerativeMethods.Contains(method))
         {
             return new RegistrationFailed(
                 $"methodNotSupported: did:{method} DIDs are immutable; deactivate is not a valid operation for them.");

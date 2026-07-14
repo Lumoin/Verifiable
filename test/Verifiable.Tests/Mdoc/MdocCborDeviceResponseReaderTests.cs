@@ -198,21 +198,28 @@ internal sealed class MdocCborDeviceResponseReaderTests
     }
 
 
+    //Family anchor: not a clean single-call TestClock.CanonicalEpoch offset
+    //(2026-06-01T12:00:00Z is 7 days 4 hours after this signed instant), so
+    //the one-year window anchors itself.
+    private static readonly DateTimeOffset SampleValiditySigned = new(2026, 5, 25, 8, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset SampleValidityValidUntil = SampleValiditySigned.AddYears(1);
+
+
     private static MdocValidityInfo SampleValidity() =>
         new(
-            signed: new DateTimeOffset(2026, 5, 25, 8, 0, 0, TimeSpan.Zero),
-            validFrom: new DateTimeOffset(2026, 5, 25, 8, 0, 0, TimeSpan.Zero),
-            validUntil: new DateTimeOffset(2027, 5, 25, 8, 0, 0, TimeSpan.Zero));
+            signed: SampleValiditySigned,
+            validFrom: SampleValiditySigned,
+            validUntil: SampleValidityValidUntil);
 
 
-    private static MdocCoseKey CoseKeyFromP256Public(PublicKeyMemory publicKey)
+    private static CoseKey CoseKeyFromP256Public(PublicKeyMemory publicKey)
     {
         ReadOnlySpan<byte> compressed = publicKey.AsReadOnlySpan();
         byte[] uncompressed = EllipticCurveUtilities.Decompress(compressed, EllipticCurveTypes.P256);
 
-        return new MdocCoseKey(
-            kty: MdocCoseKeyTypes.Ec2,
-            curve: MdocCoseKeyCurves.P256,
+        return new CoseKey(
+            kty: CoseKeyTypes.Ec2,
+            curve: CoseKeyCurves.P256,
             x: compressed[1..].ToArray(),
             y: uncompressed);
     }

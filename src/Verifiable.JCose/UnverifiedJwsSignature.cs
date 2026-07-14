@@ -111,8 +111,15 @@ public sealed class UnverifiedJwsSignature: IDisposable, IEquatable<UnverifiedJw
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool Equals(UnverifiedJwsSignature? other)
     {
-        if(other is null) return false;
-        if(ReferenceEquals(this, other)) return true;
+        if(other is null)
+        {
+            return false;
+        }
+
+        if(ReferenceEquals(this, other))
+        {
+            return true;
+        }
 
         return Protected == other.Protected
             && SignatureBytes.Memory.Span.SequenceEqual(other.SignatureBytes.Memory.Span);

@@ -3,6 +3,7 @@ using System.Net.Http;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.OAuth.Federation;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Federation;
 
@@ -20,7 +21,7 @@ internal sealed class FederationHttpClientTransportTests
     [TestMethod]
     public async Task FetchEntityStatementRoundTripsViaMockHandler()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
 

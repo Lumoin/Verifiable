@@ -336,7 +336,7 @@ internal sealed class PassiveAuthenticationTests
         try
         {
             using PublicKeyMemory microsoftKey = await MicrosoftX509Functions.ValidateChainAsync(
-                chain, anchors, ValidationTime, BaseMemoryPool.Shared, TestContext.CancellationToken, ReportsRevoked).ConfigureAwait(false);
+                chain, anchors, ValidationTime, BaseMemoryPool.Shared, ReportsRevoked, TestContext.CancellationToken).ConfigureAwait(false);
         }
         catch(SecurityException exception)
         {
@@ -347,7 +347,7 @@ internal sealed class PassiveAuthenticationTests
         try
         {
             using PublicKeyMemory bouncyCastleKey = await BouncyCastleX509Functions.ValidateChainAsync(
-                chain, anchors, ValidationTime, BaseMemoryPool.Shared, TestContext.CancellationToken, ReportsRevoked).ConfigureAwait(false);
+                chain, anchors, ValidationTime, BaseMemoryPool.Shared, ReportsRevoked, TestContext.CancellationToken).ConfigureAwait(false);
         }
         catch(SecurityException exception)
         {
@@ -370,7 +370,7 @@ internal sealed class PassiveAuthenticationTests
 
         //A Good revocation status does not block an otherwise-valid chain: the leaf key is returned.
         using PublicKeyMemory leafKey = await MicrosoftX509Functions.ValidateChainAsync(
-            chain, anchors, ValidationTime, BaseMemoryPool.Shared, TestContext.CancellationToken, ReportsGood).ConfigureAwait(false);
+            chain, anchors, ValidationTime, BaseMemoryPool.Shared, ReportsGood, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(leafKey, "A Good revocation status must let chain validation return the leaf key.");
     }

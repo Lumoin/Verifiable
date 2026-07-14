@@ -1,9 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Title>...</Title>
-    <Description>...</Description>
-    <PackageTags>...</PackageTags>
+    <Title>JSON Pointer and JSONata expression evaluation</Title>
+    <Description>Implements JSON Pointer (RFC 6901) and a first-party JSONata expression engine, a superset of JSON Pointer, with an extensible and interpreter-safety-bounded evaluation core anchored to the jsonata-js conformance vectors. Used for credential template evaluation in workflow exchanges.</Description>
+    <PackageTags>JSONata JSONPointer RFC6901 JSON query</PackageTags>
   </PropertyGroup>
-  
+
 </Project>

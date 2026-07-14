@@ -1,9 +1,7 @@
 using System.Buffers;
 using System.Security.Cryptography;
-using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Json;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -25,6 +23,8 @@ internal sealed class JwsTestsWithPredefinedData
     [DynamicData(nameof(JwtTestDataProvider.GetESTestData), typeof(JwtTestDataProvider))]
     public async Task EcdsaJwtFromTestDataVerifies(ESTestData testData)
     {
+        //Decodes the external jwt.io PEM test vector — no project PEM parser exists, and this
+        //file's cross-checks are built around these specific external key values.
         using ECDsa ecdsa = ECDsa.Create();
         ecdsa.ImportFromPem(testData.PrivateKeyInPem);
         ECParameters parameters = ecdsa.ExportParameters(includePrivateParameters: true);
@@ -36,24 +36,26 @@ internal sealed class JwsTestsWithPredefinedData
 
         using PrivateKeyMemory privateKey = CreatePrivateKeyMemory(parameters.D!, privateKeyTag);
 
+        //Signs with framework ECDsa, independent of the project's own crypto drivers — the
+        //self-consistency firewall this file's jwt.io cross-checks rely on.
         SigningDelegate signingDelegate = (privateKeyBytes, dataToSign, signaturePool, context, cancellationToken) =>
         {
             using ECDsa key = ECDsa.Create(new ECParameters { Curve = curve, D = privateKeyBytes.ToArray() });
             byte[] signatureBytes = key.SignData(dataToSign.Span, hashAlgorithm);
             IMemoryOwner<byte> memoryOwner = signaturePool.Rent(signatureBytes.Length);
             signatureBytes.CopyTo(memoryOwner.Memory.Span);
-            return ValueTask.FromResult(new Signature(memoryOwner, signatureTag));
+            return ValueTask.FromResult<(Signature, CryptoEvent?)>((new Signature(memoryOwner, signatureTag), null));
         };
 
         JwsMessage jwsMessage = await Jws.SignAsync(
             testData.Header,
             testData.Payload,
-            EncodeJwtPart,
+            JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             privateKey,
             signingDelegate,
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string signedJwt = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -61,7 +63,8 @@ internal sealed class JwsTestsWithPredefinedData
         Assert.AreEqual(testData.CrossCheckJwt.Split('.')[0], signedJwt.Split('.')[0], "Header segment should match.");
         Assert.AreEqual(testData.CrossCheckJwt.Split('.')[1], signedJwt.Split('.')[1], "Payload segment should match.");
 
-        //Verify the signature we created.
+        //Verify the signature we created; framework ECDsa decodes the external public-key PEM
+        //for the same reason as the private key above.
         using ECDsa verifyKey = ECDsa.Create();
         verifyKey.ImportFromPem(testData.PublicKeyInPem);
         byte[] publicKeyBytes = verifyKey.ExportSubjectPublicKeyInfo();
@@ -69,11 +72,13 @@ internal sealed class JwsTestsWithPredefinedData
         Tag publicKeyTag = GetEcdsaPublicKeyTag(testData.Header);
         using PublicKeyMemory publicKey = CreatePublicKeyMemory(publicKeyBytes, publicKeyTag);
 
+        //Verifies with framework ECDsa, independent of the project's own crypto drivers — an
+        //independent-oracle check of the signature Jws.SignAsync produced.
         VerificationDelegate verificationDelegate = (dataToVerify, signature, publicKeyBytes, context, cancellationToken) =>
         {
             using ECDsa key = ECDsa.Create();
             key.ImportSubjectPublicKeyInfo(publicKeyBytes.Span, out _);
-            return ValueTask.FromResult(key.VerifyData(dataToVerify.Span, signature.Span, hashAlgorithm));
+            return ValueTask.FromResult<(bool, CryptoEvent?)>((key.VerifyData(dataToVerify.Span, signature.Span, hashAlgorithm), null));
         };
 
         bool isValid = await Jws.VerifyAsync(
@@ -82,7 +87,7 @@ internal sealed class JwsTestsWithPredefinedData
             BaseMemoryPool.Shared,
             publicKey,
             verificationDelegate,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "Signature verification should succeed.");
     }
@@ -92,6 +97,8 @@ internal sealed class JwsTestsWithPredefinedData
     [DynamicData(nameof(JwtTestDataProvider.GetRsaRsTestData), typeof(JwtTestDataProvider))]
     public async Task RsaRsJwtFromTestDataVerifies(RsaRSTestData testData)
     {
+        //Decodes the external jwt.io PEM test vector — the exact key is required to reproduce
+        //jwt.io's deterministic RSA-PKCS1 signature below.
         using RSA rsa = RSA.Create();
         rsa.ImportFromPem(testData.PrivateKeyInPem);
         byte[] privateKeyBytes = rsa.ExportPkcs8PrivateKey();
@@ -100,6 +107,8 @@ internal sealed class JwsTestsWithPredefinedData
 
         using PrivateKeyMemory privateKey = CreatePrivateKeyMemory(privateKeyBytes, CryptoTags.Rsa2048PrivateKey);
 
+        //RSA-PKCS1 signing is deterministic — this framework implementation recomputes jwt.io's
+        //exact signature, the self-consistency firewall the full-JWT assertion below relies on.
         SigningDelegate signingDelegate = (privKey, dataToSign, signaturePool, context, cancellationToken) =>
         {
             using RSA key = RSA.Create();
@@ -107,18 +116,18 @@ internal sealed class JwsTestsWithPredefinedData
             byte[] signatureBytes = key.SignData(dataToSign.Span, hashAlgorithm, RSASignaturePadding.Pkcs1);
             IMemoryOwner<byte> memoryOwner = signaturePool.Rent(signatureBytes.Length);
             signatureBytes.CopyTo(memoryOwner.Memory.Span);
-            return ValueTask.FromResult(new Signature(memoryOwner, Tag.Empty));
+            return ValueTask.FromResult<(Signature, CryptoEvent?)>((new Signature(memoryOwner, Tag.Empty), null));
         };
 
         JwsMessage jwsMessage = await Jws.SignAsync(
             testData.Header,
             testData.Payload,
-            EncodeJwtPart,
+            JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             privateKey,
             signingDelegate,
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string signedJwt = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -131,6 +140,8 @@ internal sealed class JwsTestsWithPredefinedData
     [DynamicData(nameof(JwtTestDataProvider.GetRsaPsTestData), typeof(JwtTestDataProvider))]
     public async Task RsaPsJwtFromTestDataVerifies(RsaPSTestData testData)
     {
+        //Decodes the external jwt.io PEM test vector — no project PEM parser exists, and this
+        //file's cross-checks are built around these specific external key values.
         using RSA rsa = RSA.Create();
         rsa.ImportFromPem(testData.PrivateKeyInPem);
         byte[] privateKeyBytes = rsa.ExportPkcs8PrivateKey();
@@ -140,6 +151,8 @@ internal sealed class JwsTestsWithPredefinedData
 
         using PrivateKeyMemory privateKey = CreatePrivateKeyMemory(privateKeyBytes, CryptoTags.Rsa2048PrivateKey);
 
+        //Signs with framework RSA-PSS, independent of the project's own crypto drivers — the
+        //self-consistency firewall this file's jwt.io cross-checks rely on.
         SigningDelegate signingDelegate = (privKey, dataToSign, signaturePool, context, cancellationToken) =>
         {
             using RSA key = RSA.Create();
@@ -147,18 +160,18 @@ internal sealed class JwsTestsWithPredefinedData
             byte[] signatureBytes = key.SignData(dataToSign.Span, hashAlgorithm, RSASignaturePadding.Pss);
             IMemoryOwner<byte> memoryOwner = signaturePool.Rent(signatureBytes.Length);
             signatureBytes.CopyTo(memoryOwner.Memory.Span);
-            return ValueTask.FromResult(new Signature(memoryOwner, Tag.Empty));
+            return ValueTask.FromResult<(Signature, CryptoEvent?)>((new Signature(memoryOwner, Tag.Empty), null));
         };
 
         JwsMessage jwsMessage = await Jws.SignAsync(
             testData.Header,
             testData.Payload,
-            EncodeJwtPart,
+            JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             privateKey,
             signingDelegate,
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string signedJwt = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -166,14 +179,15 @@ internal sealed class JwsTestsWithPredefinedData
         Assert.AreEqual(testData.CrossCheckJwt.Split('.')[0], signedJwt.Split('.')[0], "Header segment should match.");
         Assert.AreEqual(testData.CrossCheckJwt.Split('.')[1], signedJwt.Split('.')[1], "Payload segment should match.");
 
-        //Verify the signature since PSS uses random padding.
+        //Verify the signature since PSS uses random padding; framework RSA verifies independently
+        //of the project's own crypto drivers, closing the self-consistency-firewall loop.
         using PublicKeyMemory publicKey = CreatePublicKeyMemory(publicKeyBytes, CryptoTags.Rsa2048PublicKey);
 
         VerificationDelegate verificationDelegate = (dataToVerify, signature, pubKey, context, cancellationToken) =>
         {
             using RSA key = RSA.Create();
             key.ImportSubjectPublicKeyInfo(pubKey.Span, out _);
-            return ValueTask.FromResult(key.VerifyData(dataToVerify.Span, signature.Span, hashAlgorithm, RSASignaturePadding.Pss));
+            return ValueTask.FromResult<(bool, CryptoEvent?)>((key.VerifyData(dataToVerify.Span, signature.Span, hashAlgorithm, RSASignaturePadding.Pss), null));
         };
 
         bool isValid = await Jws.VerifyAsync(
@@ -182,7 +196,7 @@ internal sealed class JwsTestsWithPredefinedData
             BaseMemoryPool.Shared,
             publicKey,
             verificationDelegate,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "RSA-PSS signature verification should succeed.");
     }
@@ -214,11 +228,11 @@ internal sealed class JwsTestsWithPredefinedData
         JwsMessage jwsMessage = await Jws.SignAsync(
             header,
             payload,
-            EncodeJwtPart,
+            JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             privateKey,
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string signedJwt = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
         string[] segments = signedJwt.Split('.');
@@ -234,7 +248,7 @@ internal sealed class JwsTestsWithPredefinedData
             TestSetup.Base64UrlDecoder,
             BaseMemoryPool.Shared,
             publicKey,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(invalidCharIsValid, "An out-of-alphabet base64url signature must verify as false, not throw.");
 
@@ -248,7 +262,7 @@ internal sealed class JwsTestsWithPredefinedData
             TestSetup.Base64UrlDecoder,
             BaseMemoryPool.Shared,
             publicKey,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(nonCanonicalIsValid, "A non-canonical base64url signature must verify as false, not throw.");
     }
@@ -434,15 +448,5 @@ internal sealed class JwsTestsWithPredefinedData
         }
 
         throw new NotSupportedException($"Algorithm '{alg}' is not supported.");
-    }
-
-
-    /// <summary>
-    /// Encodes a JWT part (dictionary) to tagged memory with UTF-8 JSON bytes.
-    /// </summary>
-    private static TaggedMemory<byte> EncodeJwtPart(Dictionary<string, object> part)
-    {
-        byte[] bytes = Encoding.UTF8.GetBytes(JsonSerializerExtensions.Serialize(part, TestSetup.DefaultSerializationOptions));
-        return new TaggedMemory<byte>(bytes, BufferTags.Json);
     }
 }

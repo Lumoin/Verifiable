@@ -17,7 +17,7 @@ namespace Verifiable.Apdu.SecureMessaging;
 /// </remarks>
 public sealed class SecureMessagingCommand: IDisposable
 {
-    private readonly DecryptedContent? commandData;
+    private DecryptedContent? CommandData { get; }
     private bool disposed;
 
 
@@ -36,7 +36,7 @@ public sealed class SecureMessagingCommand: IDisposable
         Instruction = instruction;
         Parameter1 = parameter1;
         Parameter2 = parameter2;
-        this.commandData = commandData;
+        this.CommandData = commandData;
         ExpectedResponseLength = expectedResponseLength;
     }
 
@@ -57,7 +57,7 @@ public sealed class SecureMessagingCommand: IDisposable
     public int? ExpectedResponseLength { get; }
 
     /// <summary>Gets the decrypted command data; empty when the command carried no DO'87'.</summary>
-    public ReadOnlySpan<byte> Data => commandData is null ? ReadOnlySpan<byte>.Empty : commandData.AsReadOnlySpan();
+    public ReadOnlySpan<byte> Data => CommandData is null ? ReadOnlySpan<byte>.Empty : CommandData.AsReadOnlySpan();
 
 
     /// <inheritdoc/>
@@ -65,7 +65,7 @@ public sealed class SecureMessagingCommand: IDisposable
     {
         if(!disposed)
         {
-            commandData?.Dispose();
+            CommandData?.Dispose();
             disposed = true;
         }
     }

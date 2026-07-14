@@ -446,7 +446,7 @@ internal sealed class PeerDidGeneratorTests
 
 
     private static string SerializeDidDocument(DidDocument document) =>
-        JsonSerializerExtensions.Serialize(document, TestSetup.DefaultSerializationOptions);
+        DidDocumentWireFixtures.SerializeDidDocument(document, TestSetup.DefaultSerializationOptions);
 
 
     private static DidDocument? DeserializeDidDocument(ReadOnlySpan<byte> jsonUtf8)

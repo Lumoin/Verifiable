@@ -121,6 +121,7 @@ See full changelog at https://github.com/lumoin/Verifiable/blob/main/CHANGELOG.m
 
     <AnalysisLevel>latest</AnalysisLevel>
     <AnalysisMode>All</AnalysisMode>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
 
   </PropertyGroup>
 

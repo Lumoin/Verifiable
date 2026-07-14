@@ -27,19 +27,19 @@ namespace Verifiable.Keri;
 /// </remarks>
 public sealed class KeriThreshold: IEquatable<KeriThreshold>
 {
-    private readonly int unweightedCount;
-    private readonly Fraction[][]? clauses;
+    private int UnweightedCount { get; }
+    private Fraction[][]? Clauses { get; }
 
 
     private KeriThreshold(int unweightedCount)
     {
-        this.unweightedCount = unweightedCount;
+        this.UnweightedCount = unweightedCount;
     }
 
 
     private KeriThreshold(Fraction[][] clauses)
     {
-        this.clauses = clauses;
+        this.Clauses = clauses;
     }
 
 
@@ -47,7 +47,7 @@ public sealed class KeriThreshold: IEquatable<KeriThreshold>
     /// Whether this threshold is the weighted form (a list of rational-weight clauses) rather than an unweighted
     /// count.
     /// </summary>
-    public bool IsWeighted => clauses is not null;
+    public bool IsWeighted => Clauses is not null;
 
 
     /// <summary>
@@ -117,13 +117,13 @@ public sealed class KeriThreshold: IEquatable<KeriThreshold>
         ArgumentNullException.ThrowIfNull(signedKeyIndices);
 
         var signed = new HashSet<int>(signedKeyIndices);
-        if(clauses is null)
+        if(Clauses is null)
         {
-            return signed.Count >= unweightedCount;
+            return signed.Count >= UnweightedCount;
         }
 
         int offset = 0;
-        foreach(Fraction[] clause in clauses)
+        foreach(Fraction[] clause in Clauses)
         {
             Fraction sum = Fraction.Zero;
             for(int position = 0; position < clause.Length; position++)
@@ -154,20 +154,20 @@ public sealed class KeriThreshold: IEquatable<KeriThreshold>
             return false;
         }
 
-        if(clauses is null || other.clauses is null)
+        if(Clauses is null || other.Clauses is null)
         {
-            return clauses is null && other.clauses is null && unweightedCount == other.unweightedCount;
+            return Clauses is null && other.Clauses is null && UnweightedCount == other.UnweightedCount;
         }
 
-        if(clauses.Length != other.clauses.Length)
+        if(Clauses.Length != other.Clauses.Length)
         {
             return false;
         }
 
-        for(int clauseIndex = 0; clauseIndex < clauses.Length; clauseIndex++)
+        for(int clauseIndex = 0; clauseIndex < Clauses.Length; clauseIndex++)
         {
-            Fraction[] clause = clauses[clauseIndex];
-            Fraction[] otherClause = other.clauses[clauseIndex];
+            Fraction[] clause = Clauses[clauseIndex];
+            Fraction[] otherClause = other.Clauses[clauseIndex];
             if(clause.Length != otherClause.Length)
             {
                 return false;
@@ -193,14 +193,14 @@ public sealed class KeriThreshold: IEquatable<KeriThreshold>
     /// <inheritdoc/>
     public override int GetHashCode()
     {
-        if(clauses is null)
+        if(Clauses is null)
         {
-            return HashCode.Combine(false, unweightedCount);
+            return HashCode.Combine(false, UnweightedCount);
         }
 
         HashCode hash = new();
         hash.Add(true);
-        foreach(Fraction[] clause in clauses)
+        foreach(Fraction[] clause in Clauses)
         {
             foreach(Fraction weight in clause)
             {
@@ -219,28 +219,28 @@ public sealed class KeriThreshold: IEquatable<KeriThreshold>
     /// <returns>The canonical textual form.</returns>
     public override string ToString()
     {
-        if(clauses is null)
+        if(Clauses is null)
         {
-            return unweightedCount.ToString("x", CultureInfo.InvariantCulture);
+            return UnweightedCount.ToString("x", CultureInfo.InvariantCulture);
         }
 
         var builder = new StringBuilder();
         builder.Append('[');
-        for(int clauseIndex = 0; clauseIndex < clauses.Length; clauseIndex++)
+        for(int clauseIndex = 0; clauseIndex < Clauses.Length; clauseIndex++)
         {
             if(clauseIndex > 0)
             {
                 builder.Append(',');
             }
 
-            if(clauses.Length > 1)
+            if(Clauses.Length > 1)
             {
                 builder.Append('[');
             }
 
-            AppendClause(builder, clauses[clauseIndex]);
+            AppendClause(builder, Clauses[clauseIndex]);
 
-            if(clauses.Length > 1)
+            if(Clauses.Length > 1)
             {
                 builder.Append(']');
             }

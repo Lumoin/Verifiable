@@ -21,11 +21,21 @@ namespace Verifiable;
 /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>; entropy, salt,
 /// and digest register through <see cref="CryptographicKeyFactory"/>. The set wired here
 /// is the subset the AOT-clean Microsoft backend supports natively
-/// (ECDSA P-256/384/521 plus CSPRNG entropy and SHA-2 digests).
+/// (ECDSA P-256/384/521 signing and verification, RSA-2048/4096 verification and the six
+/// RSA padding/hash family verifications — PKCS#1 v1.5 and PSS at SHA-256/384/512 — plus
+/// CSPRNG entropy and SHA-2 digests). EdDSA verification is deferred until an Ed25519 backend
+/// (<c>Verifiable.NSec</c> or <c>Verifiable.BouncyCastle</c>) is referenced from this project.
+/// secp256k1 (ES256K, RFC 8812 §3) is deferred for the same reason: the CLI wires only the
+/// AOT-clean Microsoft backend, and this project does not reference
+/// <c>Verifiable.BouncyCastle</c>, which secp256k1 needs for key material and signing.
 /// </para>
 /// </remarks>
 internal static class CryptoProviderStartup
 {
+    /// <summary>
+    /// Guards <see cref="EnsureRegistered"/> so the registry initializes exactly once per process;
+    /// <c>0</c> before registration, <c>1</c> after.
+    /// </summary>
     private static int isRegistered;
 
 
@@ -42,9 +52,21 @@ internal static class CryptoProviderStartup
 
         RegisterSigningAndVerification();
         RegisterEntropyAndDigest();
+        RegisterKeyCreation();
     }
 
 
+    /// <summary>
+    /// Initializes <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/> with the
+    /// <c>Verifiable.Microsoft</c> signing and verification functions this CLI supports: ECDSA
+    /// P-256/384/521 signing and verification, plus RSA-2048/4096 verification and the six
+    /// alg-resolved RSA padding/hash family verifications (RSASSA-PKCS1-v1.5 and RSASSA-PSS at
+    /// SHA-256/384/512, RFC 8812 §2 / RFC 8230 §2) that <see cref="Verifiable.JCose.CoseKeyExtensions.ToPublicKeyMemory"/>
+    /// resolves from a COSE_Key's <c>alg</c> parameter. RSA-2048/4096 signing and EdDSA (Ed25519)
+    /// verification are not wired here — RSA signing has no CLI caller yet, and EdDSA verification
+    /// needs an Ed25519 backend (<c>Verifiable.NSec</c> or <c>Verifiable.BouncyCastle</c>) that this
+    /// project does not currently reference.
+    /// </summary>
     private static void RegisterSigningAndVerification()
     {
         CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.Initialize(
@@ -63,12 +85,26 @@ internal static class CryptoProviderStartup
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyP256Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyP384Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyP521Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsa2048Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsa4096Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha256) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsaSha256Pkcs1Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha256Pss) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsaSha256PssAsync,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha384) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsaSha384Pkcs1Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha384Pss) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsaSha384PssAsync,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha512) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsaSha512Pkcs1Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha512Pss) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsaSha512PssAsync,
                     _ => throw new ArgumentException(
                         $"No verification function registered for '{algorithm}', '{purpose}' with qualifier '{qualifier}'.")
                 });
     }
 
 
+    /// <summary>
+    /// Registers the <c>Verifiable.Microsoft</c> entropy, salt, and digest functions with
+    /// <see cref="CryptographicKeyFactory"/>: CSPRNG-backed nonce/salt generation, the async SHA-2
+    /// digest, and the synchronous SHA-256/384/512 hash functions (SHA-256 default, SHA-384/512
+    /// under qualifiers).
+    /// </summary>
     private static void RegisterEntropyAndDigest()
     {
         CryptographicKeyFactory.RegisterFunction(
@@ -101,5 +137,36 @@ internal static class CryptoProviderStartup
             typeof(HashFunctionDelegate),
             (HashFunctionDelegate)SHA512.HashData,
             qualifier: nameof(HashAlgorithmName.SHA512));
+    }
+
+
+    /// <summary>
+    /// Initializes <see cref="KeyCreationFunctionRegistry{TDiscriminator1, TDiscriminator2}"/> with the
+    /// <c>Verifiable.Microsoft</c> key-creation adapters for exactly the algorithm/purpose combinations this
+    /// CLI can also bind for signing: ECDSA P-256/384/521. RSA-2048/4096 keygen is not wired here because
+    /// this CLI never registers RSA <em>signing</em> (only RSA verification, see
+    /// <see cref="RegisterSigningAndVerification"/>) — a minted RSA key could never be bound for signing
+    /// through <see cref="CryptographicKeyFactory"/> anyway. secp256k1 and the P-256/384/521 exchange keys
+    /// are deferred for the same reason as their sign/exchange counterparts: this project references neither
+    /// <c>Verifiable.BouncyCastle</c> (secp256k1) nor wires <c>KeyAgreementFunctionRegistry</c> (exchange).
+    /// </summary>
+    private static void RegisterKeyCreation()
+    {
+        KeyCreationFunctionRegistry<CryptoAlgorithm, Purpose>.Initialize(
+            (CryptoAlgorithm algorithm, Purpose purpose, string? qualifier) =>
+                (algorithm, purpose) switch
+                {
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Signing) =>
+                        pool => MicrosoftKeyMaterialCreator.CreateKeysWithEvent(
+                            MicrosoftKeyMaterialCreator.CreateP256Keys, CryptoAlgorithm.P256, Purpose.Signing, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Signing) =>
+                        pool => MicrosoftKeyMaterialCreator.CreateKeysWithEvent(
+                            MicrosoftKeyMaterialCreator.CreateP384Keys, CryptoAlgorithm.P384, Purpose.Signing, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Signing) =>
+                        pool => MicrosoftKeyMaterialCreator.CreateKeysWithEvent(
+                            MicrosoftKeyMaterialCreator.CreateP521Keys, CryptoAlgorithm.P521, Purpose.Signing, pool),
+                    _ => throw new ArgumentException(
+                        $"No key creation function registered for '{algorithm}', '{purpose}' with qualifier '{qualifier}'.")
+                });
     }
 }

@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Formats.Cbor;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Core.Dcql;
@@ -247,14 +246,14 @@ internal sealed class MdocDcqlAdapterTests
             digestId: 0,
             random: familySalt,
             elementIdentifier: EudiPid.Mdoc.FamilyName,
-            encodedElementValue: CborText("Mustermann"),
+            encodedElementValue: MdocTestFixtures.CborText("Mustermann"),
             wireBytes: PlaceholderWireBytes);
 
         MdocIssuerSignedItem givenItem = new(
             digestId: 1,
             random: givenSalt,
             elementIdentifier: EudiPid.Mdoc.GivenName,
-            encodedElementValue: CborText("Erika"),
+            encodedElementValue: MdocTestFixtures.CborText("Erika"),
             wireBytes: PlaceholderWireBytes);
 
         Dictionary<string, IReadOnlyList<MdocIssuerSignedItem>> nameSpaces = new(StringComparer.Ordinal)
@@ -266,7 +265,7 @@ internal sealed class MdocDcqlAdapterTests
             version: MdocMsoWellKnownKeys.Version10,
             digestAlgorithm: MdocMsoWellKnownKeys.DigestAlgorithmSha256,
             valueDigests: new Dictionary<string, IReadOnlyDictionary<uint, ReadOnlyMemory<byte>>>(StringComparer.Ordinal),
-            deviceKeyInfo: new MdocDeviceKeyInfo(new MdocCoseKey(kty: MdocCoseKeyTypes.Ec2, curve: MdocCoseKeyCurves.P256)),
+            deviceKeyInfo: new MdocDeviceKeyInfo(new CoseKey(kty: CoseKeyTypes.Ec2, curve: CoseKeyCurves.P256)),
             docType: PidDocType,
             validityInfo: new MdocValidityInfo(
                 signed: new DateTimeOffset(2026, 5, 25, 0, 0, 0, TimeSpan.Zero),
@@ -287,14 +286,5 @@ internal sealed class MdocDcqlAdapterTests
         Assert.IsTrue(pattern.TryResolve(out CredentialPath path));
 
         return path;
-    }
-
-
-    private static byte[] CborText(string value)
-    {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        writer.WriteTextString(value);
-
-        return writer.Encode();
     }
 }

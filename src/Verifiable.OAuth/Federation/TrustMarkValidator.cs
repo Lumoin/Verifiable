@@ -21,7 +21,7 @@ namespace Verifiable.OAuth.Federation;
 [DebuggerDisplay("TrustMarkValidator")]
 public sealed class TrustMarkValidator
 {
-    private readonly ClaimIssuer<TrustMarkValidationContext> issuer;
+    private ClaimIssuer<TrustMarkValidationContext> Issuer { get; }
 
 
     /// <summary>
@@ -35,7 +35,7 @@ public sealed class TrustMarkValidator
         ArgumentException.ThrowIfNullOrEmpty(issuerId);
         ArgumentNullException.ThrowIfNull(validationRules);
 
-        issuer = new ClaimIssuer<TrustMarkValidationContext>(
+        Issuer = new ClaimIssuer<TrustMarkValidationContext>(
             issuerId, validationRules, timeProvider);
     }
 
@@ -63,6 +63,6 @@ public sealed class TrustMarkValidator
         ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrEmpty(correlationId);
 
-        return issuer.GenerateClaimsAsync(context, correlationId, cancellationToken);
+        return Issuer.GenerateClaimsAsync(context, correlationId, cancellationToken);
     }
 }

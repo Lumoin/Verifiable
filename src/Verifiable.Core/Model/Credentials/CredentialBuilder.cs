@@ -1,6 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core;
-using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.JCose;
 

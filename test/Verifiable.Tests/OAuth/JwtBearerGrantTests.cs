@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Collections.Immutable;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
@@ -50,7 +51,7 @@ internal sealed class JwtBearerGrantTests
 
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
@@ -74,13 +75,13 @@ internal sealed class JwtBearerGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
-            [OAuthRequestParameterNames.Assertion] = "eyJhbGciOiJFUzI1NiJ9.opaque-assertion-blob.signature"
-        }).ConfigureAwait(false);
+            Assertion = "eyJhbGciOiJFUzI1NiJ9.opaque-assertion-blob.signature"
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)response.StatusCode, body);
@@ -105,6 +106,14 @@ internal sealed class JwtBearerGrantTests
     /// request with no <c>assertion</c>, and one with an empty <c>assertion</c>, are both rejected
     /// with <c>invalid_request</c> before the validation seam runs.
     /// </summary>
+    /// <remarks>
+    /// Case (a) is deliberately NOT built via <see cref="JwtBearerRequestBuilder"/>: omitting
+    /// <see cref="JwtBearerBuilderOptions.Assertion"/> entirely does not compile (it is
+    /// <see langword="required"/>), so a missing <c>assertion</c> is exactly what the builder makes
+    /// unrepresentable — this hand-built form is the only way to prove the AS ALSO fails closed on the
+    /// same rule. Case (b) — an assertion that is present but the empty string — is representable
+    /// (<see langword="required"/> only forbids omission, not an empty value) and migrates.
+    /// </remarks>
     [TestMethod]
     public async Task MissingOrEmptyAssertionIsRejectedAsInvalidRequest()
     {
@@ -119,24 +128,23 @@ internal sealed class JwtBearerGrantTests
         HttpClient http = host.SharedHttpClient!;
 
         //(a) Missing assertion — RFC 7523 §2.1 REQUIRED.
-        using HttpResponseMessage missing = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage missing = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.ClientSecret] = ClientSecret
-        }).ConfigureAwait(false);
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string missingBody = await missing.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)missing.StatusCode, missingBody);
         Assert.Contains(OAuthErrors.InvalidRequest, missingBody);
 
         //(b) Empty assertion — still a missing single JWT.
-        using HttpResponseMessage empty = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields emptyForm = BuildRequest(new JwtBearerBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
-            [OAuthRequestParameterNames.Assertion] = string.Empty
-        }).ConfigureAwait(false);
+            Assertion = string.Empty
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage empty = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, emptyForm, TestContext.CancellationToken).ConfigureAwait(false);
         string emptyBody = await empty.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)empty.StatusCode, emptyBody);
         Assert.Contains(OAuthErrors.InvalidRequest, emptyBody);
@@ -166,13 +174,13 @@ internal sealed class JwtBearerGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
-            [OAuthRequestParameterNames.Assertion] = "eyJhbGciOiJFUzI1NiJ9.tampered.signature"
-        }).ConfigureAwait(false);
+            Assertion = "eyJhbGciOiJFUzI1NiJ9.tampered.signature"
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)response.StatusCode, body);
@@ -216,25 +224,23 @@ internal sealed class JwtBearerGrantTests
         HttpClient http = host.SharedHttpClient!;
 
         //(a) Assertion naming THIS AS as audience → accepted.
-        using HttpResponseMessage accepted = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields acceptedForm = BuildRequest(new JwtBearerBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
-            [OAuthRequestParameterNames.Assertion] = $"eyJhbGciOiJFUzI1NiJ9.{AsAudienceMarker}.signature"
-        }).ConfigureAwait(false);
+            Assertion = $"eyJhbGciOiJFUzI1NiJ9.{AsAudienceMarker}.signature"
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage accepted = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, acceptedForm, TestContext.CancellationToken).ConfigureAwait(false);
         string acceptedBody = await accepted.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)accepted.StatusCode, acceptedBody);
 
         //(b) Assertion naming a DIFFERENT AS as audience → rejected per §3 rule 3, surfaced as §3.1
         //invalid_grant.
-        using HttpResponseMessage rejected = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields rejectedForm = BuildRequest(new JwtBearerBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
-            [OAuthRequestParameterNames.Assertion] = $"eyJhbGciOiJFUzI1NiJ9.{WrongAudienceMarker}.signature"
-        }).ConfigureAwait(false);
+            Assertion = $"eyJhbGciOiJFUzI1NiJ9.{WrongAudienceMarker}.signature"
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage rejected = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, rejectedForm, TestContext.CancellationToken).ConfigureAwait(false);
         string rejectedBody = await rejected.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)rejected.StatusCode, rejectedBody);
         Assert.Contains(OAuthErrors.InvalidGrant, rejectedBody);
@@ -264,13 +270,13 @@ internal sealed class JwtBearerGrantTests
         //A tenant segment that resolves no registration — the request cannot be tied to a client_id.
         Uri unknownTenantUrl = new(host.HttpBaseAddress!, "/connect/unregistered-tenant/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, unknownTenantUrl, new Dictionary<string, string>
+        OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
-            [OAuthRequestParameterNames.Assertion] = "eyJhbGciOiJFUzI1NiJ9.opaque.signature"
-        }).ConfigureAwait(false);
+            Assertion = "eyJhbGciOiJFUzI1NiJ9.opaque.signature"
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, unknownTenantUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreNotEqual(200, (int)response.StatusCode, body);
@@ -295,13 +301,13 @@ internal sealed class JwtBearerGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ClientSecret] = "guessed-wrong",
-            [OAuthRequestParameterNames.Assertion] = "eyJhbGciOiJFUzI1NiJ9.opaque.signature"
-        }).ConfigureAwait(false);
+            Assertion = "eyJhbGciOiJFUzI1NiJ9.opaque.signature"
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes("guessed-wrong"));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(401, (int)response.StatusCode, body);
@@ -328,13 +334,13 @@ internal sealed class JwtBearerGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
-            [OAuthRequestParameterNames.Assertion] = "eyJhbGciOiJFUzI1NiJ9.opaque.signature"
-        }).ConfigureAwait(false);
+            Assertion = "eyJhbGciOiJFUzI1NiJ9.opaque.signature"
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreNotEqual(200, (int)response.StatusCode,
             "The jwt-bearer grant must not be reachable without its assertion-validation seam.");
@@ -446,14 +452,14 @@ internal sealed class JwtBearerGrantTests
             };
 
         //STEP 3 — Present the REAL assertion to the jwt-bearer grant (RFC 7523 §2.1).
-        using HttpResponseMessage grantResponse = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields grantForm = BuildRequest(new JwtBearerBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
-            [OAuthRequestParameterNames.Assertion] = assertion,
-            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
-        }).ConfigureAwait(false);
+            Assertion = assertion,
+            Scope = WellKnownScopes.OpenId
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage grantResponse = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, grantForm, TestContext.CancellationToken).ConfigureAwait(false);
 
         string grantBody = await grantResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)grantResponse.StatusCode, grantBody);
@@ -503,12 +509,16 @@ internal sealed class JwtBearerGrantTests
 
         //client_id identifies the client (required for a conformant RFC 9068 token), but NO
         //client_secret and NO Authorization header — the request carries no credentials at all.
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        //RFC 6749 §2.3.1: "the client MAY omit the parameter if the client secret is an empty string" —
+        //an empty secret through WithClientSecretPost sets client_id and omits client_secret entirely,
+        //the same wire shape as never mentioning it.
+        OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.Assertion] = "eyJhbGciOiJFUzI1NiJ9.opaque-assertion-blob.signature"
-        }).ConfigureAwait(false);
+            Assertion = "eyJhbGciOiJFUzI1NiJ9.opaque-assertion-blob.signature"
+        }).WithClientSecretPost(ClientId, ReadOnlySpan<byte>.Empty);
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)response.StatusCode, body);
@@ -545,13 +555,13 @@ internal sealed class JwtBearerGrantTests
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
         //A client_secret IS present — §3.1 requires it be validated, but no seam exists to do so.
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
-            [OAuthRequestParameterNames.Assertion] = "eyJhbGciOiJFUzI1NiJ9.opaque.signature"
-        }).ConfigureAwait(false);
+            Assertion = "eyJhbGciOiJFUzI1NiJ9.opaque.signature"
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(401, (int)response.StatusCode, body);
@@ -621,13 +631,12 @@ internal sealed class JwtBearerGrantTests
         string wrongAssertion = string.Join('.', segments[0], segments[1], flippedFirst + signatureSegment[1..]);
         Assert.AreNotEqual(realAssertion, wrongAssertion, "The tamper must change the assertion string.");
 
-        using HttpResponseMessage wrongResponse = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields wrongForm = BuildRequest(new JwtBearerBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
-            [OAuthRequestParameterNames.Assertion] = wrongAssertion
-        }).ConfigureAwait(false);
+            Assertion = wrongAssertion
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage wrongResponse = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, wrongForm, TestContext.CancellationToken).ConfigureAwait(false);
         string wrongBody = await wrongResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)wrongResponse.StatusCode, wrongBody);
         Assert.Contains(OAuthErrors.InvalidGrant, wrongBody, StringComparison.Ordinal);
@@ -643,13 +652,12 @@ internal sealed class JwtBearerGrantTests
         string malformedAssertion = string.Join('.', segments[0], segments[1], signatureSegment[..^1] + "B");
         Assert.AreNotEqual(realAssertion, malformedAssertion, "The tamper must change the assertion string.");
 
-        using HttpResponseMessage malformedResponse = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields malformedForm = BuildRequest(new JwtBearerBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
-            [OAuthRequestParameterNames.Assertion] = malformedAssertion
-        }).ConfigureAwait(false);
+            Assertion = malformedAssertion
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage malformedResponse = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, malformedForm, TestContext.CancellationToken).ConfigureAwait(false);
         string malformedBody = await malformedResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)malformedResponse.StatusCode, malformedBody);
         Assert.Contains(OAuthErrors.InvalidGrant, malformedBody, StringComparison.Ordinal);
@@ -659,13 +667,12 @@ internal sealed class JwtBearerGrantTests
         //(b) EXPIRED — present the untampered real assertion but advance time past its exp. The real
         //timing check (§3 rules 4–5) rejects it → §3.1 invalid_grant.
         TimeProvider.Advance(TimeSpan.FromDays(1));
-        using HttpResponseMessage expiredResponse = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields expiredForm = BuildRequest(new JwtBearerBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
-            [OAuthRequestParameterNames.Assertion] = realAssertion
-        }).ConfigureAwait(false);
+            Assertion = realAssertion
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage expiredResponse = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, expiredForm, TestContext.CancellationToken).ConfigureAwait(false);
         string expiredBody = await expiredResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)expiredResponse.StatusCode, expiredBody);
         Assert.Contains(OAuthErrors.InvalidGrant, expiredBody, StringComparison.Ordinal);
@@ -699,14 +706,14 @@ internal sealed class JwtBearerGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
-            [OAuthRequestParameterNames.Assertion] = "eyJhbGciOiJFUzI1NiJ9.opaque.signature",
-            [OAuthRequestParameterNames.Scope] = RequestedScope
-        }).ConfigureAwait(false);
+            Assertion = "eyJhbGciOiJFUzI1NiJ9.opaque.signature",
+            Scope = RequestedScope
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)response.StatusCode, body);
@@ -755,13 +762,13 @@ internal sealed class JwtBearerGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
-            [OAuthRequestParameterNames.Assertion] = "eyJhbGciOiJFUzI1NiJ9.opaque.signature"
-        }).ConfigureAwait(false);
+            Assertion = "eyJhbGciOiJFUzI1NiJ9.opaque.signature"
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)response.StatusCode, body);
@@ -797,13 +804,13 @@ internal sealed class JwtBearerGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
-            [OAuthRequestParameterNames.Assertion] = "eyJhbGciOiJFUzI1NiJ9.opaque.signature"
-        }).ConfigureAwait(false);
+            Assertion = "eyJhbGciOiJFUzI1NiJ9.opaque.signature"
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)response.StatusCode, body);
@@ -839,13 +846,13 @@ internal sealed class JwtBearerGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
-            [OAuthRequestParameterNames.Assertion] = "eyJhbGciOiJFUzI1NiJ9.tampered.signature"
-        }).ConfigureAwait(false);
+            Assertion = "eyJhbGciOiJFUzI1NiJ9.tampered.signature"
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)response.StatusCode, body);
@@ -885,13 +892,13 @@ internal sealed class JwtBearerGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
-            [OAuthRequestParameterNames.Assertion] = "eyJhbGciOiJFUzI1NiJ9.opaque.signature"
-        }).ConfigureAwait(false);
+            Assertion = "eyJhbGciOiJFUzI1NiJ9.opaque.signature"
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreNotEqual(200, (int)response.StatusCode, body,
@@ -954,13 +961,13 @@ internal sealed class JwtBearerGrantTests
     private async Task<string> ObtainClientCredentialsAccessTokenAsync(
         HttpClient http, Uri tokenUrl, string clientId, string clientSecret, string scope)
     {
-        using HttpResponseMessage response = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
             [OAuthRequestParameterNames.ClientId] = clientId,
             [OAuthRequestParameterNames.ClientSecret] = clientSecret,
             [OAuthRequestParameterNames.Scope] = scope
-        }).ConfigureAwait(false);
+        }, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)response.StatusCode, body);
@@ -1048,11 +1055,17 @@ internal sealed class JwtBearerGrantTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
 
-    private async Task<HttpResponseMessage> PostFormAsync(
-        HttpClient http, Uri url, Dictionary<string, string> fields)
+    /// <summary>
+    /// Builds a well-formed RFC 7523 §2.1 JWT Bearer request via
+    /// <see cref="JwtBearerRequestBuilder.Build(JwtBearerBuilderOptions)"/> and asserts the build
+    /// succeeded — every call site here supplies a well-formed <paramref name="options"/>, so a build
+    /// failure is a test-fixture bug, not something under test.
+    /// </summary>
+    private static OutgoingFormFields BuildRequest(JwtBearerBuilderOptions options)
     {
-        using FormUrlEncodedContent content = new(fields);
+        Result<OutgoingFormFields, TokenRequestBuilderError> built = JwtBearerRequestBuilder.Build(options);
+        Assert.IsTrue(built.IsSuccess, "The builder must accept a well-formed jwt-bearer request.");
 
-        return await http.PostAsync(url, content, TestContext.CancellationToken).ConfigureAwait(false);
+        return built.Value!;
     }
 }

@@ -77,7 +77,63 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
-        Assert.AreEqual(42m, result["count"]);
+        Assert.AreEqual(42L, result["count"]);
+    }
+
+
+    /// <summary>
+    /// A JSON integer that fits <see cref="long"/> (e.g. a JWT/CWT <c>iat</c> claim) boxes as
+    /// <see cref="long"/>, not <see cref="decimal"/>: <see cref="Utf8JsonReader.TryGetInt64(out long)"/>
+    /// succeeding must select the <see cref="long"/> arm without the ternary operator's numeric type
+    /// unification widening it to <see cref="decimal"/>.
+    /// </summary>
+    [TestMethod]
+    public void DeserializeIntegerClaimBoxesAsInt64Exactly()
+    {
+        const string json = /*lang=json,strict*/ """{"iat":1700000000}""";
+        var options = CreateOptions();
+
+        var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
+
+        Assert.IsNotNull(result);
+        Assert.IsInstanceOfType<long>(result["iat"]);
+        Assert.AreEqual(1700000000L, result["iat"]);
+    }
+
+
+    /// <summary>
+    /// A JSON number too large for <see cref="long"/> falls through to
+    /// <see cref="Utf8JsonReader.GetDecimal"/> and boxes as <see cref="decimal"/>.
+    /// </summary>
+    [TestMethod]
+    public void DeserializeOversizedIntegerBoxesAsDecimal()
+    {
+        const string json = /*lang=json,strict*/ """{"bigNumber":99999999999999999999999}""";
+        var options = CreateOptions();
+
+        var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
+
+        Assert.IsNotNull(result);
+        Assert.IsInstanceOfType<decimal>(result["bigNumber"]);
+        Assert.AreEqual(99999999999999999999999m, result["bigNumber"]);
+    }
+
+
+    /// <summary>
+    /// A fractional JSON number falls through to <see cref="Utf8JsonReader.GetDecimal"/> and boxes as
+    /// <see cref="decimal"/>, exactly as an oversized integer does.
+    /// </summary>
+    [TestMethod]
+    public void DeserializeFractionalValueBoxesAsDecimal()
+    {
+        const string json = /*lang=json,strict*/ """{"price":19.99}""";
+        var options = CreateOptions();
+
+        var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
+
+        Assert.IsNotNull(result);
+        Assert.IsInstanceOfType<decimal>(result["price"]);
+        Assert.AreEqual(19.99m, result["price"]);
     }
 
     [TestMethod]
@@ -101,7 +157,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
-        Assert.AreEqual(9223372036854775807m, result["bigNumber"]);
+        Assert.AreEqual(9223372036854775807L, result["bigNumber"]);
     }
 
     [TestMethod]
@@ -175,7 +231,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var mixed = result["mixed"] as List<object>;
         Assert.IsNotNull(mixed);
         Assert.HasCount(4, mixed);
-        Assert.AreEqual(1m, mixed[0]);
+        Assert.AreEqual(1L, mixed[0]);
         Assert.AreEqual("two", mixed[1]);
         Assert.IsTrue((bool)mixed[2]);
         Assert.IsNull(mixed[3]);
@@ -568,7 +624,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         string serialized = JsonSerializerExtensions.Serialize(dictionary, options);
         var roundtripped = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(serialized, options);
         Assert.IsNotNull(roundtripped);
-        Assert.AreEqual(42m, roundtripped["integer"]);
+        Assert.AreEqual(42L, roundtripped["integer"]);
         Assert.AreEqual(3.14159265358979m, roundtripped["decimal"]);
     }
 
@@ -601,12 +657,12 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
 
         var row1 = matrix[0] as List<object>;
         Assert.IsNotNull(row1);
-        Assert.AreEqual(1m, row1[0]);
-        Assert.AreEqual(2m, row1[1]);
+        Assert.AreEqual(1L, row1[0]);
+        Assert.AreEqual(2L, row1[1]);
 
         var row2 = matrix[1] as List<object>;
         Assert.IsNotNull(row2);
-        Assert.AreEqual(3m, row2[0]);
-        Assert.AreEqual(4m, row2[1]);
+        Assert.AreEqual(3L, row2[0]);
+        Assert.AreEqual(4L, row2[1]);
     }
 }

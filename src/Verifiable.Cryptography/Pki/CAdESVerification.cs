@@ -377,14 +377,14 @@ public enum CAdESLevel
 /// </summary>
 public sealed class CAdESVerificationResult: IDisposable
 {
-    private readonly CmsVerifiedContent? verifiedContent;
+    private CmsVerifiedContent? VerifiedContent { get; }
     private bool disposed;
 
 
     private CAdESVerificationResult(CAdESVerificationStatus status, CmsVerifiedContent? verifiedContent, DateTimeOffset? signingTime, CAdESLevel level, DateTimeOffset? timestampTime)
     {
         Status = status;
-        this.verifiedContent = verifiedContent;
+        this.VerifiedContent = verifiedContent;
         SigningTime = signingTime;
         Level = level;
         TimestampTime = timestampTime;
@@ -407,10 +407,10 @@ public sealed class CAdESVerificationResult: IDisposable
     public DateTimeOffset? TimestampTime { get; }
 
     /// <summary>Gets the verified, encapsulated content; valid only when <see cref="IsValid"/>.</summary>
-    public ReadOnlyMemory<byte> Content => verifiedContent is null ? ReadOnlyMemory<byte>.Empty : verifiedContent.Content;
+    public ReadOnlyMemory<byte> Content => VerifiedContent is null ? ReadOnlyMemory<byte>.Empty : VerifiedContent.Content;
 
     /// <summary>Gets the signer certificate the signing-certificate-v2 attribute bound; <see langword="null"/> on failure.</summary>
-    public PkiCertificateMemory? SignerCertificate => verifiedContent?.SignerCertificate;
+    public PkiCertificateMemory? SignerCertificate => VerifiedContent?.SignerCertificate;
 
 
     /// <summary>Creates a successful result owning the verified content.</summary>
@@ -427,7 +427,7 @@ public sealed class CAdESVerificationResult: IDisposable
     {
         if(!disposed)
         {
-            verifiedContent?.Dispose();
+            VerifiedContent?.Dispose();
             disposed = true;
         }
     }

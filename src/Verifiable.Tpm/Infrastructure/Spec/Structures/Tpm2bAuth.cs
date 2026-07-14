@@ -46,7 +46,7 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
     /// <summary>
     /// Shared empty instance (EmptyAuth) backed by <see cref="EmptyMemoryOwner"/>.
     /// </summary>
-    private static readonly Tpm2bAuth EmptyInstance = new(EmptyMemoryOwner.Instance);
+    private static Tpm2bAuth EmptyInstance { get; } = new(EmptyMemoryOwner.Instance);
 
     /// <summary>
     /// Initializes a new auth value with the specified storage.

@@ -50,45 +50,46 @@ internal static class CbomJsonRenderer
     }
 
 
-    private static readonly JsonSerializerOptions IndentedOptions = new() { WriteIndented = true };
+    private static JsonSerializerOptions IndentedOptions { get; } = new() { WriteIndented = true };
 
 
     //Recursively renames the camelCase 'bomRef' key to the CycloneDX 'bom-ref' key.
     private static void RewriteBomRefKeys(JsonNode? node)
     {
-        switch(node)
+        _ = node switch
         {
-            case JsonObject obj:
+            JsonObject obj => RewriteObjectArm(obj),
+            JsonArray array => RewriteArrayArm(array),
+            _ => 0
+        };
+
+        return;
+
+        static int RewriteObjectArm(JsonObject obj)
+        {
+            if(obj.ContainsKey("bomRef"))
             {
-                if(obj.ContainsKey("bomRef"))
-                {
-                    JsonNode? value = obj["bomRef"]?.DeepClone();
-                    obj.Remove("bomRef");
-                    obj["bom-ref"] = value;
-                }
-
-                foreach(var property in obj)
-                {
-                    RewriteBomRefKeys(property.Value);
-                }
-
-                break;
+                JsonNode? value = obj["bomRef"]?.DeepClone();
+                obj.Remove("bomRef");
+                obj["bom-ref"] = value;
             }
 
-            case JsonArray array:
+            foreach(var property in obj)
             {
-                foreach(JsonNode? item in array)
-                {
-                    RewriteBomRefKeys(item);
-                }
-
-                break;
+                RewriteBomRefKeys(property.Value);
             }
 
-            default:
+            return 0;
+        }
+
+        static int RewriteArrayArm(JsonArray array)
+        {
+            foreach(JsonNode? item in array)
             {
-                break;
+                RewriteBomRefKeys(item);
             }
+
+            return 0;
         }
     }
 }

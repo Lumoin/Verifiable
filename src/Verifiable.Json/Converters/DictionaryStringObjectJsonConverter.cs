@@ -27,7 +27,7 @@ namespace Verifiable.Json.Converters
     /// </remarks>
     public sealed class DictionaryStringObjectJsonConverter: JsonConverter<Dictionary<string, object>>
     {
-        private readonly IJsonTypeInfoResolver resolver;
+        private IJsonTypeInfoResolver Resolver { get; }
 
         /// <summary>
         /// Initializes a new instance of <see cref="DictionaryStringObjectJsonConverter"/>.
@@ -40,7 +40,7 @@ namespace Verifiable.Json.Converters
         public DictionaryStringObjectJsonConverter(IJsonTypeInfoResolver resolver)
         {
             ArgumentNullException.ThrowIfNull(resolver);
-            this.resolver = resolver;
+            this.Resolver = resolver;
         }
 
 
@@ -95,98 +95,140 @@ namespace Verifiable.Json.Converters
 
         private void WriteValue(Utf8JsonWriter writer, object? value, JsonSerializerOptions options)
         {
-            switch(value)
+            _ = value switch
             {
-                case null:
+                null => WriteNull(writer),
+                string s => WriteString(writer, s),
+                bool b => WriteBoolean(writer, b),
+                int i => WriteInt(writer, i),
+                long l => WriteLong(writer, l),
+                float f => WriteFloat(writer, f),
+                double d => WriteDouble(writer, d),
+                decimal m => WriteDecimal(writer, m),
+                DateTime dt => WriteDateTime(writer, dt),
+                Dictionary<string, string> dict => WriteStringDictionary(writer, dict),
+                Dictionary<string, object> dict => WriteNestedDictionary(this, writer, dict, options),
+                IList<object> list => WriteList(this, writer, list, options),
+                JsonElement jsonElement => WriteElement(writer, jsonElement, options),
+                _ => WriteFallback(Resolver, writer, value, options)
+            };
+
+            static object? WriteNull(Utf8JsonWriter writer)
+            {
+                writer.WriteNullValue();
+
+                return null;
+            }
+
+            static object? WriteString(Utf8JsonWriter writer, string s)
+            {
+                writer.WriteStringValue(s);
+
+                return null;
+            }
+
+            static object? WriteBoolean(Utf8JsonWriter writer, bool b)
+            {
+                writer.WriteBooleanValue(b);
+
+                return null;
+            }
+
+            static object? WriteInt(Utf8JsonWriter writer, int i)
+            {
+                writer.WriteNumberValue(i);
+
+                return null;
+            }
+
+            static object? WriteLong(Utf8JsonWriter writer, long l)
+            {
+                writer.WriteNumberValue(l);
+
+                return null;
+            }
+
+            static object? WriteFloat(Utf8JsonWriter writer, float f)
+            {
+                writer.WriteNumberValue(f);
+
+                return null;
+            }
+
+            static object? WriteDouble(Utf8JsonWriter writer, double d)
+            {
+                writer.WriteNumberValue(d);
+
+                return null;
+            }
+
+            static object? WriteDecimal(Utf8JsonWriter writer, decimal m)
+            {
+                writer.WriteNumberValue(m);
+
+                return null;
+            }
+
+            static object? WriteDateTime(Utf8JsonWriter writer, DateTime dt)
+            {
+                writer.WriteStringValue(dt);
+
+                return null;
+            }
+
+            static object? WriteStringDictionary(Utf8JsonWriter writer, Dictionary<string, string> dict)
+            {
+                writer.WriteStartObject();
+                foreach(var (k, v) in dict)
                 {
-                    writer.WriteNullValue();
-                    break;
+                    writer.WritePropertyName(k);
+                    writer.WriteStringValue(v);
                 }
-                case string s:
+                writer.WriteEndObject();
+
+                return null;
+            }
+
+            static object? WriteNestedDictionary(DictionaryStringObjectJsonConverter converter, Utf8JsonWriter writer, Dictionary<string, object> dict, JsonSerializerOptions options)
+            {
+                converter.Write(writer, dict, options);
+
+                return null;
+            }
+
+            static object? WriteList(DictionaryStringObjectJsonConverter converter, Utf8JsonWriter writer, IList<object> list, JsonSerializerOptions options)
+            {
+                writer.WriteStartArray();
+                foreach(var item in list)
                 {
-                    writer.WriteStringValue(s);
-                    break;
+                    converter.WriteValue(writer, item, options);
                 }
-                case bool b:
+                writer.WriteEndArray();
+
+                return null;
+            }
+
+            static object? WriteElement(Utf8JsonWriter writer, JsonElement jsonElement, JsonSerializerOptions options)
+            {
+                WriteJsonElement(writer, jsonElement, options);
+
+                return null;
+            }
+
+            static object? WriteFallback(IJsonTypeInfoResolver resolver, Utf8JsonWriter writer, object? value, JsonSerializerOptions options)
+            {
+                Type runtimeType = value!.GetType();
+                JsonTypeInfo? typeInfo = resolver.GetTypeInfo(runtimeType, options);
+                if(typeInfo is null)
                 {
-                    writer.WriteBooleanValue(b);
-                    break;
+                    throw new NotSupportedException(
+                        $"Type '{runtimeType}' is not supported. Ensure it is annotated with " +
+                        $"[JsonSerializable] in the JsonSerializerContext passed to " +
+                        $"{nameof(DictionaryStringObjectJsonConverter)}.");
                 }
-                case int i:
-                {
-                    writer.WriteNumberValue(i);
-                    break;
-                }
-                case long l:
-                {
-                    writer.WriteNumberValue(l);
-                    break;
-                }
-                case float f:
-                {
-                    writer.WriteNumberValue(f);
-                    break;
-                }
-                case double d:
-                {
-                    writer.WriteNumberValue(d);
-                    break;
-                }
-                case decimal m:
-                {
-                    writer.WriteNumberValue(m);
-                    break;
-                }
-                case DateTime dt:
-                {
-                    writer.WriteStringValue(dt);
-                    break;
-                }
-                case Dictionary<string, string> { } dict:
-                {
-                    writer.WriteStartObject();
-                    foreach(var (k, v) in dict)
-                    {
-                        writer.WritePropertyName(k);
-                        writer.WriteStringValue(v);
-                    }
-                    writer.WriteEndObject();
-                    break;
-                }
-                case Dictionary<string, object> { } dict:
-                {
-                    Write(writer, dict, options);
-                    break;
-                }
-                case IList<object> { } list:
-                {
-                    writer.WriteStartArray();
-                    foreach(var item in list)
-                    {
-                        WriteValue(writer, item, options);
-                    }
-                    writer.WriteEndArray();
-                    break;
-                }
-                case JsonElement jsonElement:
-                {
-                    WriteJsonElement(writer, jsonElement, options);
-                    break;
-                }
-                default:
-                {
-                    Type runtimeType = value.GetType();
-                    JsonTypeInfo? typeInfo = resolver.GetTypeInfo(runtimeType, options);
-                    if(typeInfo is null)
-                    {
-                        throw new NotSupportedException(
-                            $"Type '{runtimeType}' is not supported. Ensure it is annotated with " +
-                            $"[JsonSerializable] in the JsonSerializerContext passed to " +
-                            $"{nameof(DictionaryStringObjectJsonConverter)}.");
-                    }
-                    JsonSerializer.Serialize(writer, value, typeInfo);
-                    break;
-                }
+                JsonSerializer.Serialize(writer, value, typeInfo);
+
+                return null;
             }
         }
 
@@ -200,7 +242,7 @@ namespace Verifiable.Json.Converters
                 JsonTokenType.False => false,
                 JsonTokenType.True => true,
                 JsonTokenType.Null => null,
-                JsonTokenType.Number => reader.TryGetInt64(out long result) ? result : reader.GetDecimal(),
+                JsonTokenType.Number => reader.TryGetInt64(out long result) ? (object)result : reader.GetDecimal(),
                 JsonTokenType.StartObject => Read(ref reader, null, options),
                 JsonTokenType.StartArray => ExtractArray(ref reader, options),
                 _ => throw new JsonException($"Token '{reader.TokenType}' is not supported.")
@@ -222,59 +264,69 @@ namespace Verifiable.Json.Converters
 
         private static void WriteJsonElement(Utf8JsonWriter writer, JsonElement element, JsonSerializerOptions options)
         {
-            switch(element.ValueKind)
+            _ = element.ValueKind switch
             {
-                case JsonValueKind.Object:
+                JsonValueKind.Object => WriteObject(writer, element, options),
+                JsonValueKind.Array => WriteArray(writer, element, options),
+                JsonValueKind.String => WriteString(writer, element),
+                JsonValueKind.Number => WriteNumber(writer, element),
+                JsonValueKind.True => WriteBoolean(writer, true),
+                JsonValueKind.False => WriteBoolean(writer, false),
+                JsonValueKind.Null => WriteNull(writer),
+                _ => throw new JsonException($"Unsupported JsonValueKind: {element.ValueKind}.")
+            };
+
+            static object? WriteObject(Utf8JsonWriter writer, JsonElement element, JsonSerializerOptions options)
+            {
+                writer.WriteStartObject();
+                foreach(var property in element.EnumerateObject())
                 {
-                    writer.WriteStartObject();
-                    foreach(var property in element.EnumerateObject())
-                    {
-                        writer.WritePropertyName(property.Name);
-                        WriteJsonElement(writer, property.Value, options);
-                    }
-                    writer.WriteEndObject();
-                    break;
+                    writer.WritePropertyName(property.Name);
+                    WriteJsonElement(writer, property.Value, options);
                 }
-                case JsonValueKind.Array:
+                writer.WriteEndObject();
+
+                return null;
+            }
+
+            static object? WriteArray(Utf8JsonWriter writer, JsonElement element, JsonSerializerOptions options)
+            {
+                writer.WriteStartArray();
+                foreach(var item in element.EnumerateArray())
                 {
-                    writer.WriteStartArray();
-                    foreach(var item in element.EnumerateArray())
-                    {
-                        WriteJsonElement(writer, item, options);
-                    }
-                    writer.WriteEndArray();
-                    break;
+                    WriteJsonElement(writer, item, options);
                 }
-                case JsonValueKind.String:
-                {
-                    writer.WriteStringValue(element.GetString());
-                    break;
-                }
-                case JsonValueKind.Number:
-                {
-                    writer.WriteRawValue(element.GetRawText());
-                    break;
-                }
-                case JsonValueKind.True:
-                {
-                    writer.WriteBooleanValue(true);
-                    break;
-                }
-                case JsonValueKind.False:
-                {
-                    writer.WriteBooleanValue(false);
-                    break;
-                }
-                case JsonValueKind.Null:
-                {
-                    writer.WriteNullValue();
-                    break;
-                }
-                case JsonValueKind.Undefined:
-                default:
-                {
-                    throw new JsonException($"Unsupported JsonValueKind: {element.ValueKind}.");
-                }
+                writer.WriteEndArray();
+
+                return null;
+            }
+
+            static object? WriteString(Utf8JsonWriter writer, JsonElement element)
+            {
+                writer.WriteStringValue(element.GetString());
+
+                return null;
+            }
+
+            static object? WriteNumber(Utf8JsonWriter writer, JsonElement element)
+            {
+                writer.WriteRawValue(element.GetRawText());
+
+                return null;
+            }
+
+            static object? WriteBoolean(Utf8JsonWriter writer, bool value)
+            {
+                writer.WriteBooleanValue(value);
+
+                return null;
+            }
+
+            static object? WriteNull(Utf8JsonWriter writer)
+            {
+                writer.WriteNullValue();
+
+                return null;
             }
         }
     }

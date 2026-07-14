@@ -54,7 +54,7 @@ namespace Verifiable.Cryptography;
 public sealed class Nonce: SensitiveMemory, IEquatable<Nonce>
 {
     private int useCount;
-    private readonly Activity? lifetime;
+    private Activity? Lifetime { get; }
 
     /// <summary>Gets the length of the nonce in bytes.</summary>
     public int Length => MemoryOwner.Memory.Length;
@@ -81,7 +81,7 @@ public sealed class Nonce: SensitiveMemory, IEquatable<Nonce>
     /// </param>
     public Nonce(IMemoryOwner<byte> sensitiveMemory, Tag tag, Activity? lifetime = null): base(sensitiveMemory, tag, lifetime)
     {
-        this.lifetime = lifetime;
+        this.Lifetime = lifetime;
     }
 
 
@@ -108,7 +108,7 @@ public sealed class Nonce: SensitiveMemory, IEquatable<Nonce>
     public ReadOnlySpan<byte> UseNonce()
     {
         int count = Interlocked.Increment(ref useCount);
-        lifetime?.SetTag(CryptoTelemetry.Nonce.UseCount, count);
+        Lifetime?.SetTag(CryptoTelemetry.Nonce.UseCount, count);
 
         return AsReadOnlySpan();
     }
@@ -169,8 +169,8 @@ public sealed class Nonce: SensitiveMemory, IEquatable<Nonce>
     {
         if(disposing)
         {
-            lifetime?.SetTag(CryptoTelemetry.Nonce.FinalUseCount, useCount);
-            lifetime?.SetTag(CryptoTelemetry.Nonce.Used, useCount > 0);
+            Lifetime?.SetTag(CryptoTelemetry.Nonce.FinalUseCount, useCount);
+            Lifetime?.SetTag(CryptoTelemetry.Nonce.Used, useCount > 0);
         }
 
         base.Dispose(disposing);

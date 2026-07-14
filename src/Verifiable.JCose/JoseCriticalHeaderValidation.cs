@@ -27,7 +27,7 @@ public static class JoseCriticalHeaderValidation
     //(epk/apu/apv) plus draft-madden-jose-ecdh-1pu-04 §2.2.1 (skid). A producer MUST NOT list any of
     //these in "crit" (RFC 7515 §4.1.11), and this implementation already understands them, so a "crit"
     //entry naming any of them is rejected on both grounds — for JWS and JWE alike.
-    private static readonly HashSet<string> RegisteredHeaderParameterNames = new(StringComparer.Ordinal)
+    private static HashSet<string> RegisteredHeaderParameterNames { get; } = new(StringComparer.Ordinal)
     {
         WellKnownJwkMemberNames.Alg,
         WellKnownJoseHeaderNames.Enc,

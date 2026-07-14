@@ -30,7 +30,7 @@ internal sealed class JarAuthCodeClientTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private const string ClientId = "https://client.example.com";
     private static readonly Uri ClientBaseUri = new("https://client.example.com");
@@ -208,7 +208,7 @@ internal sealed class JarAuthCodeClientPqTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private const string ClientId = "https://client.example.com";
     private static readonly Uri ClientBaseUri = new("https://client.example.com");

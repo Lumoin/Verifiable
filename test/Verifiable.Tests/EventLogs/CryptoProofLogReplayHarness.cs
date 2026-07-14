@@ -4,7 +4,9 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography.EventLogs;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.EventLogs;
 
@@ -37,7 +39,7 @@ internal static class CryptoProofLogReplayHarness
                 genesis: static (_, _, _) => ValueTask.FromResult((new ActiveLogState<int>(1), (string?)null)),
                 update: static (active, _, _) => ValueTask.FromResult((new ActiveLogState<int>(active.Value + 1), (string?)null)),
                 deactivate: static (active, _, _) => ValueTask.FromResult((new DeactivatedLogState<int>(active.Value), (string?)null))),
-            TimeProvider = TimeProvider.System
+            TimeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch)
         };
 
         var replayer = new LogReplayer<int, ReadOnlyMemory<byte>, CryptoProof, object>();

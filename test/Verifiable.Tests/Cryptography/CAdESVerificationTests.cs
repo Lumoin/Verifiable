@@ -17,8 +17,8 @@ namespace Verifiable.Tests.Cryptography;
 [TestClass]
 internal sealed class CAdESVerificationTests
 {
-    private static readonly DateTimeOffset NotBefore = new(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
-    private static readonly DateTimeOffset NotAfter = new(2034, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset NotBefore = SyntheticPassportFactory.NotBefore;
+    private static readonly DateTimeOffset NotAfter = SyntheticPassportFactory.NotAfter;
     private static readonly DateTimeOffset SigningTime = new(2025, 3, 14, 0, 0, 0, TimeSpan.Zero);
 
 

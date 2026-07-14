@@ -43,21 +43,20 @@ namespace Verifiable.Tpm.Infrastructure.Sessions;
 /// </remarks>
 public sealed class TpmPolicySession: TpmSessionBase, IDisposable
 {
-    private readonly TpmHandle sessionHandle;
-    private readonly TpmAlgIdConstants sessionAlg;
-    private readonly int digestSize;
+    private TpmAlgIdConstants SessionAlg { get; }
+    private int DigestSize { get; }
     private Tpm2bNonce nonceCaller;
     private bool disposed;
 
     private TpmPolicySession(TpmHandle sessionHandle, TpmAlgIdConstants sessionAlg, MemoryPool<byte> pool)
     {
-        this.sessionHandle = sessionHandle;
-        this.sessionAlg = sessionAlg;
-        digestSize = GetDigestSize(sessionAlg);
+        this.SessionHandle = sessionHandle;
+        this.SessionAlg = sessionAlg;
+        DigestSize = GetDigestSize(sessionAlg);
 
         //A policy session has a rolling caller nonce sized to the session's hash; the executor rolls a fresh one
         //at the start of each command. This initial value keeps the session well-formed before the first command.
-        nonceCaller = Tpm2bNonce.CreateRandom(digestSize, pool);
+        nonceCaller = Tpm2bNonce.CreateRandom(DigestSize, pool);
         SessionAttributes = TpmaSession.CONTINUE_SESSION;
     }
 
@@ -76,17 +75,17 @@ public sealed class TpmPolicySession: TpmSessionBase, IDisposable
     }
 
     /// <inheritdoc/>
-    public override TpmHandle SessionHandle => sessionHandle;
+    public override TpmHandle SessionHandle { get; }
 
     /// <inheritdoc/>
-    public override TpmAlgIdConstants HashAlgorithm => sessionAlg;
+    public override TpmAlgIdConstants HashAlgorithm => SessionAlg;
 
     /// <inheritdoc/>
     public override void RollNonceCaller(MemoryPool<byte> pool)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        Tpm2bNonce fresh = Tpm2bNonce.CreateRandom(digestSize, pool);
+        Tpm2bNonce fresh = Tpm2bNonce.CreateRandom(DigestSize, pool);
         nonceCaller.Dispose();
         nonceCaller = fresh;
     }
@@ -128,7 +127,7 @@ public sealed class TpmPolicySession: TpmSessionBase, IDisposable
         }
 
         var authCommand = new TpmsAuthCommand(
-            sessionHandle,
+            SessionHandle,
             new Tpm2bRef<Tpm2bNonce>(nonceCaller),
             SessionAttributes,
             new Tpm2bRef<Tpm2bAuth>(precomputedHmac));

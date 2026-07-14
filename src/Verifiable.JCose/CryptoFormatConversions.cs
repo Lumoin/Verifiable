@@ -313,6 +313,18 @@ namespace Verifiable.JCose
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsPs384(alg) && p.Equals(Purpose.Verification) => CryptoTags.Rsa2048PublicKey,
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsPs512(alg) && p.Equals(Purpose.Verification) => CryptoTags.Rsa2048PublicKey,
 
+                //RSA PKCS#1 v1.5 signing. As with RSA PSS above, the tag names the
+                //2048-bit key; the actual modulus size is resolved where the modulus
+                //is visible (CoseKeyExtensions), not from the algorithm identifier alone.
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsRs256(alg) && p.Equals(Purpose.Signing) => CryptoTags.Rsa2048PrivateKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsRs384(alg) && p.Equals(Purpose.Signing) => CryptoTags.Rsa2048PrivateKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsRs512(alg) && p.Equals(Purpose.Signing) => CryptoTags.Rsa2048PrivateKey,
+
+                //RSA PKCS#1 v1.5 verification.
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsRs256(alg) && p.Equals(Purpose.Verification) => CryptoTags.Rsa2048PublicKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsRs384(alg) && p.Equals(Purpose.Verification) => CryptoTags.Rsa2048PublicKey,
+                (int alg, Purpose p) when WellKnownCoseAlgorithms.IsRs512(alg) && p.Equals(Purpose.Verification) => CryptoTags.Rsa2048PublicKey,
+
                 //ML-DSA signing.
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsMlDsa44(alg) && p.Equals(Purpose.Signing) => CryptoTags.MlDsa44PrivateKey,
                 (int alg, Purpose p) when WellKnownCoseAlgorithms.IsMlDsa65(alg) && p.Equals(Purpose.Signing) => CryptoTags.MlDsa65PrivateKey,
@@ -325,6 +337,46 @@ namespace Verifiable.JCose
 
                 _ => throw new NotSupportedException($"COSE algorithm '{coseAlgorithm}' with purpose '{purpose}' is not supported.")
             };
+        };
+
+
+        /// <summary>
+        /// Maps a COSE algorithm identifier to the corresponding <see cref="CryptoAlgorithm"/>.
+        /// </summary>
+        /// <param name="algorithm">
+        /// The COSE algorithm identifier, as registered in the
+        /// <see href="https://www.iana.org/assignments/cose/cose.xhtml#algorithms">IANA COSE Algorithms</see>
+        /// registry (e.g. <c>-7</c> for ES256, <c>-257</c> for RS256).
+        /// </param>
+        /// <returns>
+        /// The corresponding <see cref="CryptoAlgorithm"/>, or <see langword="null"/> if
+        /// <paramref name="algorithm"/> has no mapping.
+        /// </returns>
+        /// <remarks>
+        /// See <see href="https://www.rfc-editor.org/rfc/rfc9053">RFC 9053 - COSE Algorithms</see>,
+        /// <see href="https://www.rfc-editor.org/rfc/rfc8812">RFC 8812</see>, and the
+        /// <see href="https://www.iana.org/assignments/cose/cose.xhtml#algorithms">IANA COSE Algorithms</see>
+        /// registry. The RSA arms (<see cref="CryptoAlgorithm.RsaSha256"/>,
+        /// <see cref="CryptoAlgorithm.RsaSha256Pss"/>, <see cref="CryptoAlgorithm.RsaSha384"/>,
+        /// <see cref="CryptoAlgorithm.RsaSha384Pss"/>, <see cref="CryptoAlgorithm.RsaSha512"/>,
+        /// <see cref="CryptoAlgorithm.RsaSha512Pss"/>) identify a padding-and-hash family only —
+        /// they carry no key size. The modulus size (2048 vs 4096 bit) is resolved separately,
+        /// where the modulus bytes are visible (<see cref="CoseKeyExtensions"/>).
+        /// </remarks>
+        public static CryptoAlgorithm? CoseAlgorithmToCryptoAlgorithm(int algorithm) => algorithm switch
+        {
+            var a when WellKnownCoseAlgorithms.IsEs256(a) => CryptoAlgorithm.P256,
+            var a when WellKnownCoseAlgorithms.IsEs384(a) => CryptoAlgorithm.P384,
+            var a when WellKnownCoseAlgorithms.IsEs512(a) => CryptoAlgorithm.P521,
+            var a when WellKnownCoseAlgorithms.IsEs256K(a) => CryptoAlgorithm.Secp256k1,
+            var a when WellKnownCoseAlgorithms.IsRs256(a) => CryptoAlgorithm.RsaSha256,
+            var a when WellKnownCoseAlgorithms.IsPs256(a) => CryptoAlgorithm.RsaSha256Pss,
+            var a when WellKnownCoseAlgorithms.IsRs384(a) => CryptoAlgorithm.RsaSha384,
+            var a when WellKnownCoseAlgorithms.IsPs384(a) => CryptoAlgorithm.RsaSha384Pss,
+            var a when WellKnownCoseAlgorithms.IsRs512(a) => CryptoAlgorithm.RsaSha512,
+            var a when WellKnownCoseAlgorithms.IsPs512(a) => CryptoAlgorithm.RsaSha512Pss,
+            var a when WellKnownCoseAlgorithms.IsEdDsa(a) => CryptoAlgorithm.Ed25519,
+            _ => null
         };
 
 
@@ -590,7 +642,17 @@ namespace Verifiable.JCose
 
             static void ValidateRequiredFields(Dictionary<string, object> jwk, string keyType)
             {
-                if(WellKnownKeyTypeValues.IsEc(keyType))
+                _ = keyType switch
+                {
+                    var kt when WellKnownKeyTypeValues.IsEc(kt) => ValidateEc(jwk),
+                    var kt when WellKnownKeyTypeValues.IsOkp(kt) => ValidateOkp(jwk),
+                    var kt when WellKnownKeyTypeValues.IsRsa(kt) => ValidateRsa(jwk),
+                    var kt when WellKnownKeyTypeValues.IsAkp(kt) => ValidateAkp(jwk),
+                    _ => throw new ArgumentException($"Unsupported key type: '{keyType}'.")
+                };
+
+
+                static bool ValidateEc(Dictionary<string, object> jwk)
                 {
                     if(!jwk.TryGetValue(WellKnownJwkMemberNames.X, out object? ecX) || ecX is not string)
                     {
@@ -601,15 +663,23 @@ namespace Verifiable.JCose
                     {
                         throw new ArgumentException($"EC JWK must contain a valid '{WellKnownJwkMemberNames.Y}' field.", nameof(jwk));
                     }
+
+                    return true;
                 }
-                else if(WellKnownKeyTypeValues.IsOkp(keyType))
+
+
+                static bool ValidateOkp(Dictionary<string, object> jwk)
                 {
                     if(!jwk.TryGetValue(WellKnownJwkMemberNames.X, out object? okpX) || okpX is not string)
                     {
                         throw new ArgumentException($"OKP JWK must contain a valid '{WellKnownJwkMemberNames.X}' field.", nameof(jwk));
                     }
+
+                    return true;
                 }
-                else if(WellKnownKeyTypeValues.IsRsa(keyType))
+
+
+                static bool ValidateRsa(Dictionary<string, object> jwk)
                 {
                     if(!jwk.TryGetValue(WellKnownJwkMemberNames.N, out object? rsaN) || rsaN is not string)
                     {
@@ -620,17 +690,19 @@ namespace Verifiable.JCose
                     {
                         throw new ArgumentException($"RSA JWK must contain a valid '{WellKnownJwkMemberNames.E}' field.", nameof(jwk));
                     }
+
+                    return true;
                 }
-                else if(WellKnownKeyTypeValues.IsAkp(keyType))
+
+
+                static bool ValidateAkp(Dictionary<string, object> jwk)
                 {
                     if(!jwk.TryGetValue(WellKnownJwkMemberNames.Pub, out object? akpPub) || akpPub is not string)
                     {
                         throw new ArgumentException($"AKP JWK must contain a valid '{WellKnownJwkMemberNames.Pub}' field.", nameof(jwk));
                     }
-                }
-                else
-                {
-                    throw new ArgumentException($"Unsupported key type: '{keyType}'.");
+
+                    return true;
                 }
             }
 
@@ -638,15 +710,14 @@ namespace Verifiable.JCose
             static byte[] DecodeKeyMaterial(
                 Dictionary<string, object> jwk,
                 string keyType,
-                DecodeDelegate decoder)
-            {
-                if(WellKnownKeyTypeValues.IsEc(keyType)) { return DecodeEcKey(jwk, decoder); }
-                if(WellKnownKeyTypeValues.IsOkp(keyType)) { return DecodeOkpKey(jwk, decoder); }
-                if(WellKnownKeyTypeValues.IsRsa(keyType)) { return DecodeRsaKey(jwk, decoder); }
-                if(WellKnownKeyTypeValues.IsAkp(keyType)) { return DecodeAkpKey(jwk, decoder); }
-
-                throw new ArgumentException($"Unsupported key type: '{keyType}'.");
-            }
+                DecodeDelegate decoder) => keyType switch
+                {
+                    var kt when WellKnownKeyTypeValues.IsEc(kt) => DecodeEcKey(jwk, decoder),
+                    var kt when WellKnownKeyTypeValues.IsOkp(kt) => DecodeOkpKey(jwk, decoder),
+                    var kt when WellKnownKeyTypeValues.IsRsa(kt) => DecodeRsaKey(jwk, decoder),
+                    var kt when WellKnownKeyTypeValues.IsAkp(kt) => DecodeAkpKey(jwk, decoder),
+                    _ => throw new ArgumentException($"Unsupported key type: '{keyType}'.")
+                };
 
 
             static byte[] DecodeEcKey(Dictionary<string, object> jwk, DecodeDelegate decoder)
@@ -691,68 +762,70 @@ namespace Verifiable.JCose
                 Purpose explicitPurpose,
                 int keyMaterialLength)
             {
-                if(WellKnownKeyTypeValues.IsEc(keyType))
+                return keyType switch
+                {
+                    var kt when WellKnownKeyTypeValues.IsEc(kt) => MapEc(crv, algorithm, explicitPurpose, keyType),
+                    var kt when WellKnownKeyTypeValues.IsOkp(kt) => MapOkp(crv, algorithm, keyType),
+                    var kt when WellKnownKeyTypeValues.IsRsa(kt) => MapRsa(keyMaterialLength),
+                    var kt when WellKnownKeyTypeValues.IsAkp(kt) => MapAkp(algorithm, keyType),
+                    _ => throw new ArgumentException($"Unsupported key type or algorithm: '{keyType}', '{algorithm}'.")
+                };
+
+
+                static (CryptoAlgorithm, Purpose) MapEc(string crv, string algorithm, Purpose explicitPurpose, string keyType) => crv switch
                 {
                     //Prefer crv for EC key identification per RFC 7518 §6.2.1.1; fall back to alg.
-                    if(WellKnownCurveValues.IsP256(crv)) { return (CryptoAlgorithm.P256, explicitPurpose); }
-                    if(WellKnownCurveValues.IsP384(crv)) { return (CryptoAlgorithm.P384, explicitPurpose); }
-                    if(WellKnownCurveValues.IsP521(crv)) { return (CryptoAlgorithm.P521, explicitPurpose); }
-                    if(WellKnownCurveValues.IsSecp256k1(crv) || WellKnownJwaValues.IsEs256K(algorithm))
-                    {
-                        return (CryptoAlgorithm.Secp256k1, Purpose.Verification);
-                    }
+                    var c when WellKnownCurveValues.IsP256(c) => (CryptoAlgorithm.P256, explicitPurpose),
+                    var c when WellKnownCurveValues.IsP384(c) => (CryptoAlgorithm.P384, explicitPurpose),
+                    var c when WellKnownCurveValues.IsP521(c) => (CryptoAlgorithm.P521, explicitPurpose),
+                    var c when WellKnownCurveValues.IsSecp256k1(c) || WellKnownJwaValues.IsEs256K(algorithm) => (CryptoAlgorithm.Secp256k1, Purpose.Verification),
 
                     //Brainpool curves per RFC 5639. ESB JWA fallback mirrors the ES* path
                     //above — alg alone identifies the curve when crv is absent.
-                    if(WellKnownCurveValues.IsBrainpoolP224r1(crv)) { return (CryptoAlgorithm.BrainpoolP224r1, explicitPurpose); }
-                    if(WellKnownCurveValues.IsBrainpoolP256r1(crv)) { return (CryptoAlgorithm.BrainpoolP256r1, explicitPurpose); }
-                    if(WellKnownCurveValues.IsBrainpoolP320r1(crv)) { return (CryptoAlgorithm.BrainpoolP320r1, explicitPurpose); }
-                    if(WellKnownCurveValues.IsBrainpoolP384r1(crv)) { return (CryptoAlgorithm.BrainpoolP384r1, explicitPurpose); }
-                    if(WellKnownCurveValues.IsBrainpoolP512r1(crv)) { return (CryptoAlgorithm.BrainpoolP512r1, explicitPurpose); }
+                    var c when WellKnownCurveValues.IsBrainpoolP224r1(c) => (CryptoAlgorithm.BrainpoolP224r1, explicitPurpose),
+                    var c when WellKnownCurveValues.IsBrainpoolP256r1(c) => (CryptoAlgorithm.BrainpoolP256r1, explicitPurpose),
+                    var c when WellKnownCurveValues.IsBrainpoolP320r1(c) => (CryptoAlgorithm.BrainpoolP320r1, explicitPurpose),
+                    var c when WellKnownCurveValues.IsBrainpoolP384r1(c) => (CryptoAlgorithm.BrainpoolP384r1, explicitPurpose),
+                    var c when WellKnownCurveValues.IsBrainpoolP512r1(c) => (CryptoAlgorithm.BrainpoolP512r1, explicitPurpose),
 
                     //Fall back to alg when crv is absent.
-                    if(WellKnownJwaValues.IsEs256(algorithm)) { return (CryptoAlgorithm.P256, explicitPurpose); }
-                    if(WellKnownJwaValues.IsEs384(algorithm)) { return (CryptoAlgorithm.P384, explicitPurpose); }
-                    if(WellKnownJwaValues.IsEs512(algorithm)) { return (CryptoAlgorithm.P521, explicitPurpose); }
-                    if(WellKnownJwaValues.IsEsb256(algorithm)) { return (CryptoAlgorithm.BrainpoolP256r1, explicitPurpose); }
-                    if(WellKnownJwaValues.IsEsb320(algorithm)) { return (CryptoAlgorithm.BrainpoolP320r1, explicitPurpose); }
-                    if(WellKnownJwaValues.IsEsb384(algorithm)) { return (CryptoAlgorithm.BrainpoolP384r1, explicitPurpose); }
-                    if(WellKnownJwaValues.IsEsb512(algorithm)) { return (CryptoAlgorithm.BrainpoolP512r1, explicitPurpose); }
-                }
+                    _ when WellKnownJwaValues.IsEs256(algorithm) => (CryptoAlgorithm.P256, explicitPurpose),
+                    _ when WellKnownJwaValues.IsEs384(algorithm) => (CryptoAlgorithm.P384, explicitPurpose),
+                    _ when WellKnownJwaValues.IsEs512(algorithm) => (CryptoAlgorithm.P521, explicitPurpose),
+                    _ when WellKnownJwaValues.IsEsb256(algorithm) => (CryptoAlgorithm.BrainpoolP256r1, explicitPurpose),
+                    _ when WellKnownJwaValues.IsEsb320(algorithm) => (CryptoAlgorithm.BrainpoolP320r1, explicitPurpose),
+                    _ when WellKnownJwaValues.IsEsb384(algorithm) => (CryptoAlgorithm.BrainpoolP384r1, explicitPurpose),
+                    _ when WellKnownJwaValues.IsEsb512(algorithm) => (CryptoAlgorithm.BrainpoolP512r1, explicitPurpose),
 
-                if(WellKnownKeyTypeValues.IsOkp(keyType))
+                    _ => throw new ArgumentException($"Unsupported key type or algorithm: '{keyType}', '{algorithm}'.")
+                };
+
+
+                static (CryptoAlgorithm, Purpose) MapOkp(string crv, string algorithm, string keyType) => crv switch
                 {
-                    if(WellKnownCurveValues.IsEd25519(crv) || WellKnownJwaValues.IsEdDsa(algorithm))
-                    {
-                        return (CryptoAlgorithm.Ed25519, Purpose.Verification);
-                    }
+                    var c when WellKnownCurveValues.IsEd25519(c) || WellKnownJwaValues.IsEdDsa(algorithm) => (CryptoAlgorithm.Ed25519, Purpose.Verification),
+                    var c when WellKnownCurveValues.IsX25519(c) || WellKnownJwaValues.IsEcdha(algorithm) => (CryptoAlgorithm.X25519, Purpose.Exchange),
+                    _ => throw new ArgumentException($"Unsupported key type or algorithm: '{keyType}', '{algorithm}'.")
+                };
 
-                    if(WellKnownCurveValues.IsX25519(crv) || WellKnownJwaValues.IsEcdha(algorithm))
-                    {
-                        return (CryptoAlgorithm.X25519, Purpose.Exchange);
-                    }
-                }
 
-                if(WellKnownKeyTypeValues.IsRsa(keyType))
+                static (CryptoAlgorithm, Purpose) MapRsa(int keyMaterialLength) => keyMaterialLength switch
                 {
-                    return keyMaterialLength switch
-                    {
-                        256 => (CryptoAlgorithm.Rsa2048, Purpose.Verification),
-                        512 => (CryptoAlgorithm.Rsa4096, Purpose.Verification),
-                        _ => throw new ArgumentException($"Unsupported RSA key size: '{keyMaterialLength}' bytes.")
-                    };
-                }
+                    256 => (CryptoAlgorithm.Rsa2048, Purpose.Verification),
+                    512 => (CryptoAlgorithm.Rsa4096, Purpose.Verification),
+                    _ => throw new ArgumentException($"Unsupported RSA key size: '{keyMaterialLength}' bytes.")
+                };
 
-                if(WellKnownKeyTypeValues.IsAkp(keyType))
+
+                static (CryptoAlgorithm, Purpose) MapAkp(string algorithm, string keyType) => algorithm switch
                 {
                     //An Algorithm Key Pair carries its algorithm in the REQUIRED alg member —
                     //there is no curve dimension to dispatch on.
-                    if(WellKnownJwaValues.IsMlDsa44(algorithm)) { return (CryptoAlgorithm.MlDsa44, Purpose.Verification); }
-                    if(WellKnownJwaValues.IsMlDsa65(algorithm)) { return (CryptoAlgorithm.MlDsa65, Purpose.Verification); }
-                    if(WellKnownJwaValues.IsMlDsa87(algorithm)) { return (CryptoAlgorithm.MlDsa87, Purpose.Verification); }
-                }
-
-                throw new ArgumentException($"Unsupported key type or algorithm: '{keyType}', '{algorithm}'.");
+                    var a when WellKnownJwaValues.IsMlDsa44(a) => (CryptoAlgorithm.MlDsa44, Purpose.Verification),
+                    var a when WellKnownJwaValues.IsMlDsa65(a) => (CryptoAlgorithm.MlDsa65, Purpose.Verification),
+                    var a when WellKnownJwaValues.IsMlDsa87(a) => (CryptoAlgorithm.MlDsa87, Purpose.Verification),
+                    _ => throw new ArgumentException($"Unsupported key type or algorithm: '{keyType}', '{algorithm}'.")
+                };
             }
         };
 

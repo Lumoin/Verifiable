@@ -41,7 +41,7 @@ internal sealed class BitstringStatusListRevocationDualChannelHttpTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new(new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
+    private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
@@ -88,7 +88,7 @@ internal sealed class BitstringStatusListRevocationDualChannelHttpTests
         async Task<string> PublishAsync(CancellationToken token)
         {
             string encodedList = BitstringStatusListCodec.EncodeList(statusList);
-            VerifiableCredential credential = BuildStatusListCredential(encodedList);
+            VerifiableCredential credential = StatusListTokenJwtFixtures.BuildStatusListCredential(StatusListCredentialTemplate, encodedList);
             JwsMessage signed = await credential.SignJwsAsync(
                 issuerPrivate,
                 VerificationMethodId,
@@ -133,7 +133,7 @@ internal sealed class BitstringStatusListRevocationDualChannelHttpTests
             SsfDeliveryDecision decision = await SecurityEventTokenReception.ReceiveAsync(
                 request.Body, issuerPublic, Issuer, ReceiverAudience,
                 SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
-                TestSetup.Base64UrlDecoder, isSeen, new ExchangeContext(), Pool, token).ConfigureAwait(false);
+                TestSetup.Base64UrlDecoder, isSeen, new ExchangeContext(), Pool, cancellationToken: token).ConfigureAwait(false);
 
             if(decision.Outcome is SsfDeliveryOutcome.Accepted or SsfDeliveryOutcome.AcceptedDuplicate)
             {
@@ -212,9 +212,9 @@ internal sealed class BitstringStatusListRevocationDualChannelHttpTests
                 SecurityEventTestJson.HeaderSerializer,
                 SecurityEventTestJson.PayloadSerializer,
                 Pool,
-                token,
                 signingKeyId: "status-key-1",
-                subjectId: SubjectIdentifier.IssuerSubject(Issuer, RevokedHolderSubject)).ConfigureAwait(false);
+                subjectId: SubjectIdentifier.IssuerSubject(Issuer, RevokedHolderSubject),
+                cancellationToken: token).ConfigureAwait(false);
 
             using StringContent setContent = new(set, Encoding.UTF8, WellKnownMediaTypes.Application.SecEventJwt);
             using HttpResponseMessage push = await transmitterClient.PostAsync(new Uri(ssfReceiver.BaseAddress, "/ssf/push"), setContent, token).ConfigureAwait(false);
@@ -244,15 +244,6 @@ internal sealed class BitstringStatusListRevocationDualChannelHttpTests
 
         Assert.IsNotNull(receivedToken.SubjectId);
         Assert.AreEqual(RevokedHolderSubject, receivedToken.SubjectId.Members[SubjectIdentifierMemberNames.Sub], "The SET must be about exactly the revoked credential's subject.");
-    }
-
-
-    private static VerifiableCredential BuildStatusListCredential(string encodedList)
-    {
-        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(StatusListCredentialTemplate, CredentialSecuringMaterial.JsonOptions)!;
-        credential.CredentialSubject![0].AdditionalData![BitstringStatusListConstants.EncodedListProperty] = encodedList;
-
-        return credential;
     }
 
 

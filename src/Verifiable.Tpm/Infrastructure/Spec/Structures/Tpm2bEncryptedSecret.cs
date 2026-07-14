@@ -35,10 +35,9 @@ public sealed class Tpm2bEncryptedSecret: IDisposable
     /// </summary>
     public const int MaxSize = 512;
 
-    private static readonly Tpm2bEncryptedSecret EmptyInstance = new();
+    private static Tpm2bEncryptedSecret EmptyInstance { get; } = new();
 
-    private readonly IMemoryOwner<byte>? storage;
-    private readonly int length;
+    private IMemoryOwner<byte>? Storage { get; }
     private bool disposed;
 
     /// <summary>
@@ -46,8 +45,8 @@ public sealed class Tpm2bEncryptedSecret: IDisposable
     /// </summary>
     private Tpm2bEncryptedSecret()
     {
-        storage = null;
-        length = 0;
+        Storage = null;
+        Length = 0;
     }
 
     /// <summary>
@@ -57,8 +56,8 @@ public sealed class Tpm2bEncryptedSecret: IDisposable
     /// <param name="length">The actual length of the secret.</param>
     private Tpm2bEncryptedSecret(IMemoryOwner<byte> storage, int length)
     {
-        this.storage = storage;
-        this.length = length;
+        this.Storage = storage;
+        this.Length = length;
     }
 
     /// <summary>
@@ -69,12 +68,12 @@ public sealed class Tpm2bEncryptedSecret: IDisposable
     /// <summary>
     /// Gets whether this secret is empty.
     /// </summary>
-    public bool IsEmpty => length == 0;
+    public bool IsEmpty => Length == 0;
 
     /// <summary>
     /// Gets the length of the secret.
     /// </summary>
-    public int Length => length;
+    public int Length { get; }
 
     /// <summary>
     /// Gets the secret as a read-only span.
@@ -85,19 +84,19 @@ public sealed class Tpm2bEncryptedSecret: IDisposable
         {
             ObjectDisposedException.ThrowIf(disposed, this);
 
-            if(storage is null)
+            if(Storage is null)
             {
                 return ReadOnlySpan<byte>.Empty;
             }
 
-            return storage.Memory.Span.Slice(0, length);
+            return Storage.Memory.Span.Slice(0, Length);
         }
     }
 
     /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
-    public int SerializedSize => sizeof(ushort) + length;
+    public int SerializedSize => sizeof(ushort) + Length;
 
     /// <summary>
     /// Writes this structure to a TPM writer.
@@ -107,9 +106,9 @@ public sealed class Tpm2bEncryptedSecret: IDisposable
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        writer.WriteUInt16((ushort)length);
+        writer.WriteUInt16((ushort)Length);
 
-        if(length > 0)
+        if(Length > 0)
         {
             writer.WriteBytes(Span);
         }
@@ -175,10 +174,10 @@ public sealed class Tpm2bEncryptedSecret: IDisposable
     {
         if(!disposed && this != EmptyInstance)
         {
-            storage?.Dispose();
+            Storage?.Dispose();
             disposed = true;
         }
     }
 
-    private string DebuggerDisplay => $"TPM2B_ENCRYPTED_SECRET({length} bytes)";
+    private string DebuggerDisplay => $"TPM2B_ENCRYPTED_SECRET({Length} bytes)";
 }

@@ -76,9 +76,8 @@ namespace Verifiable.Tpm.Infrastructure.Sessions;
 /// </remarks>
 public sealed class TpmSession: TpmSessionBase, IDisposable
 {
-    private readonly TpmHandle sessionHandle;
-    private readonly TpmAlgIdConstants sessionAlg;
-    private readonly int digestSize;
+    private TpmAlgIdConstants SessionAlg { get; }
+    private int DigestSize { get; }
     private Tpm2bNonce nonceTPM;
     private Tpm2bNonce nonceCaller;
     private Tpm2bAuth sessionKey;
@@ -119,16 +118,16 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
         MemoryPool<byte> pool,
         TpmtSymDef? symmetric)
     {
-        this.sessionHandle = sessionHandle;
-        this.sessionAlg = sessionAlg;
-        digestSize = GetDigestSize(sessionAlg);
+        this.SessionHandle = sessionHandle;
+        this.SessionAlg = sessionAlg;
+        DigestSize = GetDigestSize(sessionAlg);
 
         //Take ownership of nonceTPM from caller.
         this.nonceTPM = nonceTPM;
 
         //Generate initial nonceCaller. The executor rolls a fresh caller nonce at the start of each command;
         //this initial value keeps the session well-formed for size/auth queries before the first command.
-        nonceCaller = Tpm2bNonce.CreateRandom(digestSize, pool);
+        nonceCaller = Tpm2bNonce.CreateRandom(DigestSize, pool);
 
         //The session key is empty for an unbound/unsalted session and the KDFa-derived key for a
         //bound or salted session; authValue starts empty (the caller sets the authorized entity's value).
@@ -224,10 +223,10 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     }
 
     /// <inheritdoc/>
-    public override TpmHandle SessionHandle => sessionHandle;
+    public override TpmHandle SessionHandle { get; }
 
     /// <inheritdoc/>
-    public override TpmAlgIdConstants HashAlgorithm => sessionAlg;
+    public override TpmAlgIdConstants HashAlgorithm => SessionAlg;
 
     /// <summary>
     /// Sets the authorization value for entities requiring authorization.
@@ -253,7 +252,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
         return sizeof(uint) +
                nonceCaller.SerializedSize +
                sizeof(byte) +
-               sizeof(ushort) + digestSize;
+               sizeof(ushort) + DigestSize;
     }
 
     /// <inheritdoc/>
@@ -286,8 +285,8 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
 
         dataSpan[offset] = (byte)SessionAttributes;
 
-        using IMemoryOwner<byte> hmacOwner = pool.Rent(digestSize);
-        Memory<byte> hmacBuffer = hmacOwner.Memory[..digestSize];
+        using IMemoryOwner<byte> hmacOwner = pool.Rent(DigestSize);
+        Memory<byte> hmacBuffer = hmacOwner.Memory[..DigestSize];
         await ComputeSessionHmacAsync(dataMemory, hmacBuffer, pool, cancellationToken).ConfigureAwait(false);
 
         return Tpm2bAuth.Create(hmacBuffer.Span, pool);
@@ -305,7 +304,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
         }
 
         var authCommand = new TpmsAuthCommand(
-            sessionHandle,
+            SessionHandle,
             new Tpm2bRef<Tpm2bNonce>(nonceCaller),
             SessionAttributes,
             new Tpm2bRef<Tpm2bAuth>(precomputedHmac));
@@ -357,8 +356,8 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
 
         dataSpan[offset] = (byte)response.SessionAttributes;
 
-        using IMemoryOwner<byte> expectedOwner = pool.Rent(digestSize);
-        Memory<byte> expectedHmac = expectedOwner.Memory[..digestSize];
+        using IMemoryOwner<byte> expectedOwner = pool.Rent(DigestSize);
+        Memory<byte> expectedHmac = expectedOwner.Memory[..DigestSize];
         await ComputeSessionHmacAsync(dataMemory, expectedHmac, pool, cancellationToken).ConfigureAwait(false);
 
         if(!CryptographicOperations.FixedTimeEquals(expectedHmac.Span, response.Hmac.AsReadOnlySpan()))
@@ -381,7 +380,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        Tpm2bNonce freshNonceCaller = Tpm2bNonce.CreateRandom(digestSize, pool);
+        Tpm2bNonce freshNonceCaller = Tpm2bNonce.CreateRandom(DigestSize, pool);
         nonceCaller.Dispose();
         nonceCaller = freshNonceCaller;
     }
@@ -446,7 +445,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
             if(Symmetric.IsXor)
             {
                 await TpmParameterEncryption.XorAsync(
-                    ToHashAlgorithmName(sessionAlg),
+                    ToHashAlgorithmName(SessionAlg),
                     sessionValue,
                     nonceNewer.AsReadOnlyMemory(),
                     nonceOlder.AsReadOnlyMemory(),
@@ -457,7 +456,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
             else if(Symmetric.Algorithm == TpmAlgIdConstants.TPM_ALG_AES && Symmetric.Mode == TpmAlgIdConstants.TPM_ALG_CFB)
             {
                 await TpmParameterEncryption.CfbAsync(
-                    ToHashAlgorithmName(sessionAlg),
+                    ToHashAlgorithmName(SessionAlg),
                     Symmetric.KeyBits,
                     sessionValue,
                     nonceNewer.AsReadOnlyMemory(),
@@ -519,7 +518,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
 
         try
         {
-            HashAlgorithmName algorithmName = ToHashAlgorithmName(sessionAlg);
+            HashAlgorithmName algorithmName = ToHashAlgorithmName(SessionAlg);
             Tag tag = Tag.Create(algorithmName)
                 .With(Purpose.Hmac)
                 .With(EncodingScheme.Raw)
@@ -528,7 +527,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
             using HmacValue result = await CryptographicKeyEvents.ComputeHmacAsync(
                 data,
                 keyMemory,
-                outputByteLength: digestSize,
+                outputByteLength: DigestSize,
                 tag: tag,
                 pool: pool,
                 cancellationToken: cancellationToken).ConfigureAwait(false);

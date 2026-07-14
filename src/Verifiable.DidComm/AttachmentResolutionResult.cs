@@ -80,8 +80,8 @@ public enum AttachmentResolutionSource
 /// </remarks>
 public sealed class AttachmentResolutionResult: IDisposable
 {
-    private readonly IMemoryOwner<byte>? payloadOwner;
-    private readonly int payloadLength;
+    private IMemoryOwner<byte>? PayloadOwner { get; }
+    private int PayloadLength { get; }
 
 
     private AttachmentResolutionResult(
@@ -93,8 +93,8 @@ public sealed class AttachmentResolutionResult: IDisposable
         AttachmentResolutionError error)
     {
         IsResolved = isResolved;
-        this.payloadOwner = payloadOwner;
-        this.payloadLength = payloadLength;
+        this.PayloadOwner = payloadOwner;
+        this.PayloadLength = payloadLength;
         Source = source;
         ResolvedFrom = resolvedFrom;
         Error = error;
@@ -109,7 +109,7 @@ public sealed class AttachmentResolutionResult: IDisposable
     /// resolution failed. Exposed as <see cref="ReadOnlyMemory{T}"/> — never as a naked array.
     /// </summary>
     public ReadOnlyMemory<byte> Payload =>
-        payloadOwner is null ? ReadOnlyMemory<byte>.Empty : payloadOwner.Memory[..payloadLength];
+        PayloadOwner is null ? ReadOnlyMemory<byte>.Empty : PayloadOwner.Memory[..PayloadLength];
 
     /// <summary>Whether the payload was carried by value (inline) or fetched by reference. Meaningful only when <see cref="IsResolved"/>.</summary>
     public AttachmentResolutionSource Source { get; }
@@ -173,6 +173,6 @@ public sealed class AttachmentResolutionResult: IDisposable
     /// <inheritdoc/>
     public void Dispose()
     {
-        payloadOwner?.Dispose();
+        PayloadOwner?.Dispose();
     }
 }

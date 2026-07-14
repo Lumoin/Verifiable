@@ -38,12 +38,12 @@ internal sealed class JoseTests
         using JwsMessage jwsMessage = await Jws.SignAsync(
             header,
             payload,
-            EncodeJwtPart,
+            JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             privateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -57,7 +57,7 @@ internal sealed class JoseTests
             BaseMemoryPool.Shared,
             publicKey,
             MicrosoftCryptographicFunctions.VerifyP256Async,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "Signature verification should succeed.");
     }
@@ -80,14 +80,14 @@ internal sealed class JoseTests
         using JwsMessage jwsMessage = await Jws.SignAsync(
             header,
             payload,
-            EncodeJwtPart,
+            JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             BaseMemoryPool.Shared,
             resolverState,
             ResolvePrivateKeyMaterial,
             0,
             BindPrivateKey,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -104,7 +104,7 @@ internal sealed class JoseTests
             ResolvePublicKeyMaterial,
             0,
             BindPublicKey,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "Signature verification with resolver/binder should succeed.");
     }
@@ -123,12 +123,12 @@ internal sealed class JoseTests
         using JwsMessage jwsMessage = await Jws.SignAsync(
             header,
             payload,
-            EncodeJwtPart,
+            JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             privateKey,
             MicrosoftCryptographicFunctions.SignP384Async,
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -138,7 +138,7 @@ internal sealed class JoseTests
             BaseMemoryPool.Shared,
             publicKey,
             MicrosoftCryptographicFunctions.VerifyP384Async,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "P-384 signature verification should succeed.");
     }
@@ -157,12 +157,12 @@ internal sealed class JoseTests
         using JwsMessage jwsMessage = await Jws.SignAsync(
             header,
             payload,
-            EncodeJwtPart,
+            JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             privateKey,
             MicrosoftCryptographicFunctions.SignP521Async,
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -172,7 +172,7 @@ internal sealed class JoseTests
             BaseMemoryPool.Shared,
             publicKey,
             MicrosoftCryptographicFunctions.VerifyP521Async,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "P-521 signature verification should succeed.");
     }
@@ -197,12 +197,12 @@ internal sealed class JoseTests
         using JwsMessage jwsMessage = await Jws.SignAsync(
             header,
             payload,
-            EncodeJwtPart,
+            JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             signingPrivateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -212,7 +212,7 @@ internal sealed class JoseTests
             BaseMemoryPool.Shared,
             wrongPublicKey,
             MicrosoftCryptographicFunctions.VerifyP256Async,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(isValid, "Verification with wrong key should fail.");
     }
@@ -235,12 +235,12 @@ internal sealed class JoseTests
         using JwsMessage jwsMessage = await Jws.SignAsync(
             header,
             payload,
-            EncodeJwtPart,
+            JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             privateKey,
             MicrosoftCryptographicFunctions.SignP256Async,
             BaseMemoryPool.Shared,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -253,7 +253,7 @@ internal sealed class JoseTests
             ResolvePublicKeyMaterial,
             0,
             BindPublicKey,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsValid, "Signature should be valid.");
         Assert.AreEqual(WellKnownJwaValues.Es256, result.Header[WellKnownJwkMemberNames.Alg]?.ToString());
@@ -274,7 +274,7 @@ internal sealed class JoseTests
             await Jws.SignAsync(
                 header,
                 payload,
-                EncodeJwtPart,
+                JwtWireFixtures.EncodeJwtPart,
                 TestSetup.Base64UrlEncoder,
                 BaseMemoryPool.Shared,
                 0,
@@ -374,16 +374,6 @@ internal sealed class JoseTests
         CancellationToken cancellationToken)
     {
         return ValueTask.FromResult(new PublicKey(material, "test-key", MicrosoftCryptographicFunctions.VerifyP256Async));
-    }
-
-
-    /// <summary>
-    /// Encodes a JWT part (dictionary) to tagged memory with UTF-8 JSON bytes.
-    /// </summary>
-    private static TaggedMemory<byte> EncodeJwtPart(Dictionary<string, object> part)
-    {
-        byte[] bytes = Encoding.UTF8.GetBytes(JsonSerializerExtensions.Serialize(part, TestSetup.DefaultSerializationOptions));
-        return new TaggedMemory<byte>(bytes, BufferTags.Json);
     }
 
 

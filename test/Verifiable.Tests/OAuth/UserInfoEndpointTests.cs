@@ -40,8 +40,7 @@ internal sealed class UserInfoEndpointTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new(
-        new DateTimeOffset(2026, 5, 17, 12, 0, 0, TimeSpan.Zero));
+    private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch.AddDays(-15));
 
     private const string ClientId = "https://userinfo.client.test";
     private const string SubjectId = "subject-userinfo";

@@ -15,7 +15,7 @@ namespace Verifiable.JCose;
 [DebuggerDisplay("AeadGeneralRecipient KeyId={KeyId} WrappedKeyLength={WrappedKey.Length}")]
 public sealed class AeadGeneralRecipient: IDisposable
 {
-    private readonly IMemoryOwner<byte> wrappedKeyOwner;
+    private IMemoryOwner<byte> WrappedKeyOwner { get; }
     private bool disposed;
 
     /// <summary>
@@ -24,7 +24,7 @@ public sealed class AeadGeneralRecipient: IDisposable
     public string KeyId { get; }
 
     /// <summary>The wrapped CEK bytes decoded from the <c>encrypted_key</c>.</summary>
-    public ReadOnlyMemory<byte> WrappedKey => wrappedKeyOwner.Memory;
+    public ReadOnlyMemory<byte> WrappedKey => WrappedKeyOwner.Memory;
 
 
     /// <summary>
@@ -37,7 +37,7 @@ public sealed class AeadGeneralRecipient: IDisposable
         ArgumentNullException.ThrowIfNull(wrappedKeyOwner);
 
         KeyId = keyId;
-        this.wrappedKeyOwner = wrappedKeyOwner;
+        this.WrappedKeyOwner = wrappedKeyOwner;
     }
 
 
@@ -46,8 +46,8 @@ public sealed class AeadGeneralRecipient: IDisposable
     {
         if(!disposed)
         {
-            wrappedKeyOwner.Memory.Span.Clear();
-            wrappedKeyOwner.Dispose();
+            WrappedKeyOwner.Memory.Span.Clear();
+            WrappedKeyOwner.Dispose();
             disposed = true;
         }
     }

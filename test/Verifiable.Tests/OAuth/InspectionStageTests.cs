@@ -36,7 +36,7 @@ internal sealed class InspectionStageTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private static Uri VerifierBaseUri { get; } = new("https://verifier.example.com");
 

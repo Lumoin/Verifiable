@@ -1,4 +1,3 @@
-using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Did;
 
 namespace Verifiable.Core.Did.Methods.Ebsi

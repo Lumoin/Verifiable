@@ -33,19 +33,17 @@ public sealed class LdsSecurityObject: IDisposable
     private const byte OctetStringTag = 0x04;
 
     //DER value bytes (after the OID tag and length) of the supported digest algorithm identifiers.
-    private static readonly byte[] Sha1Oid = [0x2B, 0x0E, 0x03, 0x02, 0x1A];
-    private static readonly byte[] Sha256Oid = [0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01];
-    private static readonly byte[] Sha384Oid = [0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x02];
-    private static readonly byte[] Sha512Oid = [0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03];
-
-    private readonly IReadOnlyDictionary<int, DigestValue> dataGroupHashes;
+    private static byte[] Sha1Oid { get; } = [0x2B, 0x0E, 0x03, 0x02, 0x1A];
+    private static byte[] Sha256Oid { get; } = [0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01];
+    private static byte[] Sha384Oid { get; } = [0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x02];
+    private static byte[] Sha512Oid { get; } = [0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03];
     private bool disposed;
 
 
     private LdsSecurityObject(HashAlgorithmName hashAlgorithm, IReadOnlyDictionary<int, DigestValue> dataGroupHashes)
     {
         HashAlgorithm = hashAlgorithm;
-        this.dataGroupHashes = dataGroupHashes;
+        this.DataGroupHashes = dataGroupHashes;
     }
 
 
@@ -53,7 +51,7 @@ public sealed class LdsSecurityObject: IDisposable
     public HashAlgorithmName HashAlgorithm { get; }
 
     /// <summary>Gets the expected hash of each data group, keyed by data-group number.</summary>
-    public IReadOnlyDictionary<int, DigestValue> DataGroupHashes => dataGroupHashes;
+    public IReadOnlyDictionary<int, DigestValue> DataGroupHashes { get; }
 
 
     /// <summary>
@@ -124,7 +122,7 @@ public sealed class LdsSecurityObject: IDisposable
     {
         if(!disposed)
         {
-            foreach(DigestValue digest in dataGroupHashes.Values)
+            foreach(DigestValue digest in DataGroupHashes.Values)
             {
                 digest.Dispose();
             }

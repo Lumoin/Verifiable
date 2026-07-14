@@ -97,7 +97,7 @@ public static class SdCwtVerificationExtensions
                 buildSigStructure,
                 issuerVerificationKey,
                 verificationDelegate,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
 

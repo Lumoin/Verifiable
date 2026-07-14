@@ -166,8 +166,12 @@ public static class ManagedCmsVerification
         int fieldWidth = (signerCertificate.PublicPoint.Length - 1) / 2;
         using IMemoryOwner<byte> signature = ConvertDerSignatureToFixedWidth(signer.Signature.Span, fieldWidth, pool);
 
-        return await verify(
+        (bool isVerified, CryptoEvent? evt) = await verify(
             signedMessage, signature.Memory[..(fieldWidth * 2)], signerCertificate.PublicPoint, null, cancellationToken).ConfigureAwait(false);
+
+        CryptographicKeyEvents.Emit(evt);
+
+        return isVerified;
     }
 
 
@@ -203,8 +207,12 @@ public static class ManagedCmsVerification
         VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, Purpose.Verification);
 
         //The registered RSA seam takes the raw modulus and the RSA signature as-is (no re-encoding).
-        return await verify(
+        (bool isVerified, CryptoEvent? evt) = await verify(
             signedMessage, signer.Signature, signerCertificate.RsaModulus, null, cancellationToken).ConfigureAwait(false);
+
+        CryptographicKeyEvents.Emit(evt);
+
+        return isVerified;
     }
 
 

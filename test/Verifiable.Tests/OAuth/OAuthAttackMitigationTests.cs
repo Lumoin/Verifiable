@@ -6,6 +6,7 @@ using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Validation;
 using Verifiable.Tests.TestInfrastructure;
+using static Verifiable.Tests.TestInfrastructure.OAuthJsonResponseFixtures;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -44,7 +45,7 @@ internal sealed class OAuthAttackMitigationTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private static readonly Uri DefaultRedirectUri = new("https://client.example.com/callback");
 
@@ -454,18 +455,6 @@ internal sealed class OAuthAttackMitigationTests
 
         return (infrastructure, registration);
     }
-
-    private static string BuildParJson(string requestUri, int expiresIn) =>
-        /*lang=json,strict*/ $"{{\"request_uri\":\"{requestUri}\",\"expires_in\":{expiresIn}}}";
-
-    private static string BuildTokenJson(
-        string accessToken,
-        string tokenType,
-        int expiresIn,
-        string? refreshToken) =>
-        refreshToken is null
-            ? /*lang=json,strict*/ $"{{\"access_token\":\"{accessToken}\",\"token_type\":\"{tokenType}\",\"expires_in\":{expiresIn}}}"
-            : /*lang=json,strict*/ $"{{\"access_token\":\"{accessToken}\",\"token_type\":\"{tokenType}\",\"expires_in\":{expiresIn},\"refresh_token\":\"{refreshToken}\"}}";
 
     private static string GetSingleFlowId(Dictionary<string, FlowState> store)
     {

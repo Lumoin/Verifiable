@@ -29,7 +29,7 @@ namespace Verifiable.OAuth.Federation;
 [DebuggerDisplay("EntityStatementValidator")]
 public sealed class EntityStatementValidator
 {
-    private readonly ClaimIssuer<EntityStatementValidationContext> issuer;
+    private ClaimIssuer<EntityStatementValidationContext> Issuer { get; }
 
 
     /// <summary>
@@ -59,7 +59,7 @@ public sealed class EntityStatementValidator
         ArgumentException.ThrowIfNullOrEmpty(issuerId);
         ArgumentNullException.ThrowIfNull(validationRules);
 
-        issuer = new ClaimIssuer<EntityStatementValidationContext>(
+        Issuer = new ClaimIssuer<EntityStatementValidationContext>(
             issuerId, validationRules, timeProvider);
     }
 
@@ -87,6 +87,6 @@ public sealed class EntityStatementValidator
         ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrEmpty(correlationId);
 
-        return issuer.GenerateClaimsAsync(context, correlationId, cancellationToken);
+        return Issuer.GenerateClaimsAsync(context, correlationId, cancellationToken);
     }
 }

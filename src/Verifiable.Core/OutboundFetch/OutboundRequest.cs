@@ -30,7 +30,7 @@ namespace Verifiable.Core.OutboundFetch;
 /// </remarks>
 public sealed record OutboundRequest
 {
-    internal static readonly IReadOnlyDictionary<string, string> EmptyHeaders =
+    internal static IReadOnlyDictionary<string, string> EmptyHeaders { get; } =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
 

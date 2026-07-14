@@ -240,4 +240,28 @@ internal static class DcqlFixtures
             }
         ]
     };
+
+
+    /// <summary>
+    /// Single PID credential query (SD-JWT VC, <c>dc+sd-jwt</c>) asking for <c>given_name</c> and
+    /// <c>family_name</c> via <c>ClaimsQuery.ForPath</c> and carrying no <c>meta</c> (no
+    /// <c>vct_values</c> constraint) — the client-identifier and X.509 trust-resolver test corpus's
+    /// own shape, distinct from <see cref="PidGivenAndFamilyName"/>'s <c>vct</c>-constrained one.
+    /// </summary>
+    public static DcqlQuery BuildPidDcqlQuery() => new()
+    {
+        Credentials =
+        [
+            new CredentialQuery
+            {
+                Id = PidCredentialId,
+                Format = WellKnownMediaTypes.Jwt.DcSdJwt,
+                Claims =
+                [
+                    ClaimsQuery.ForPath(["given_name"]),
+                    ClaimsQuery.ForPath(["family_name"])
+                ]
+            }
+        ]
+    };
 }

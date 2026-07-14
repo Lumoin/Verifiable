@@ -1,5 +1,6 @@
 using System.Formats.Cbor;
 using Verifiable.Core.Model.Mdoc;
+using Verifiable.JCose;
 
 namespace Verifiable.Cbor.Mdoc;
 
@@ -54,52 +55,16 @@ public static class MdocCborMsoReader
             string key = reader.ReadTextString();
             entriesRead++;
 
-            switch(key)
+            _ = key switch
             {
-                case MdocMsoWellKnownKeys.Version:
-                {
-                    version = reader.ReadTextString();
-
-                    break;
-                }
-                case MdocMsoWellKnownKeys.DigestAlgorithm:
-                {
-                    digestAlgorithm = reader.ReadTextString();
-
-                    break;
-                }
-                case MdocMsoWellKnownKeys.ValueDigests:
-                {
-                    valueDigests = ReadValueDigests(reader);
-
-                    break;
-                }
-                case MdocMsoWellKnownKeys.DeviceKeyInfo:
-                {
-                    deviceKeyInfo = ReadDeviceKeyInfo(reader);
-
-                    break;
-                }
-                case MdocMsoWellKnownKeys.DocType:
-                {
-                    docType = reader.ReadTextString();
-
-                    break;
-                }
-                case MdocMsoWellKnownKeys.ValidityInfo:
-                {
-                    validityInfo = ReadValidityInfo(reader);
-
-                    break;
-                }
-                default:
-                {
-                    //Unknown keys: forward-compat skip per ISO 18013-5.
-                    reader.SkipValue();
-
-                    break;
-                }
-            }
+                MdocMsoWellKnownKeys.Version => AssignVersion(reader, ref version),
+                MdocMsoWellKnownKeys.DigestAlgorithm => AssignDigestAlgorithm(reader, ref digestAlgorithm),
+                MdocMsoWellKnownKeys.ValueDigests => AssignValueDigests(reader, ref valueDigests),
+                MdocMsoWellKnownKeys.DeviceKeyInfo => AssignDeviceKeyInfo(reader, ref deviceKeyInfo),
+                MdocMsoWellKnownKeys.DocType => AssignDocType(reader, ref docType),
+                MdocMsoWellKnownKeys.ValidityInfo => AssignValidityInfo(reader, ref validityInfo),
+                _ => SkipValue(reader)
+            };
         }
 
         reader.ReadEndMap();
@@ -119,6 +84,62 @@ public static class MdocCborMsoReader
             deviceKeyInfo: deviceKeyInfo,
             docType: docType,
             validityInfo: validityInfo);
+
+        //Assigns the decoded MSO version string.
+        static bool AssignVersion(CborReader reader, ref string? version)
+        {
+            version = reader.ReadTextString();
+
+            return true;
+        }
+
+        //Assigns the decoded digest-algorithm identifier.
+        static bool AssignDigestAlgorithm(CborReader reader, ref string? digestAlgorithm)
+        {
+            digestAlgorithm = reader.ReadTextString();
+
+            return true;
+        }
+
+        //Assigns the decoded namespace -> digestID -> digest map.
+        static bool AssignValueDigests(CborReader reader, ref IReadOnlyDictionary<string, IReadOnlyDictionary<uint, ReadOnlyMemory<byte>>>? valueDigests)
+        {
+            valueDigests = ReadValueDigests(reader);
+
+            return true;
+        }
+
+        //Assigns the decoded DeviceKeyInfo.
+        static bool AssignDeviceKeyInfo(CborReader reader, ref MdocDeviceKeyInfo? deviceKeyInfo)
+        {
+            deviceKeyInfo = ReadDeviceKeyInfo(reader);
+
+            return true;
+        }
+
+        //Assigns the decoded docType string.
+        static bool AssignDocType(CborReader reader, ref string? docType)
+        {
+            docType = reader.ReadTextString();
+
+            return true;
+        }
+
+        //Assigns the decoded ValidityInfo.
+        static bool AssignValidityInfo(CborReader reader, ref MdocValidityInfo? validityInfo)
+        {
+            validityInfo = ReadValidityInfo(reader);
+
+            return true;
+        }
+
+        //Unknown keys: forward-compat skip per ISO 18013-5.
+        static bool SkipValue(CborReader reader)
+        {
+            reader.SkipValue();
+
+            return true;
+        }
     }
 
 
@@ -163,7 +184,7 @@ public static class MdocCborMsoReader
     {
         int? entryCount = reader.ReadStartMap();
 
-        MdocCoseKey? deviceKey = null;
+        CoseKey? deviceKey = null;
         ReadOnlyMemory<byte>? encodedKeyAuthorizations = null;
         ReadOnlyMemory<byte>? encodedKeyInfo = null;
 
@@ -173,33 +194,13 @@ public static class MdocCborMsoReader
             string key = reader.ReadTextString();
             entriesRead++;
 
-            switch(key)
+            _ = key switch
             {
-                case MdocMsoWellKnownKeys.DeviceKey:
-                {
-                    deviceKey = MdocCborCoseKeyReader.ReadFromReader(reader);
-
-                    break;
-                }
-                case MdocMsoWellKnownKeys.KeyAuthorizations:
-                {
-                    encodedKeyAuthorizations = reader.ReadEncodedValue();
-
-                    break;
-                }
-                case MdocMsoWellKnownKeys.KeyInfo:
-                {
-                    encodedKeyInfo = reader.ReadEncodedValue();
-
-                    break;
-                }
-                default:
-                {
-                    reader.SkipValue();
-
-                    break;
-                }
-            }
+                MdocMsoWellKnownKeys.DeviceKey => AssignDeviceKey(reader, ref deviceKey),
+                MdocMsoWellKnownKeys.KeyAuthorizations => AssignKeyAuthorizations(reader, ref encodedKeyAuthorizations),
+                MdocMsoWellKnownKeys.KeyInfo => AssignKeyInfo(reader, ref encodedKeyInfo),
+                _ => SkipValue(reader)
+            };
         }
 
         reader.ReadEndMap();
@@ -214,6 +215,37 @@ public static class MdocCborMsoReader
             deviceKey: deviceKey,
             encodedKeyAuthorizations: encodedKeyAuthorizations,
             encodedKeyInfo: encodedKeyInfo);
+
+        //Assigns the decoded COSE_Key device key.
+        static bool AssignDeviceKey(CborReader reader, ref CoseKey? deviceKey)
+        {
+            deviceKey = MdocCborCoseKeyReader.ReadFromReader(reader);
+
+            return true;
+        }
+
+        //Assigns the encoded keyAuthorizations value.
+        static bool AssignKeyAuthorizations(CborReader reader, ref ReadOnlyMemory<byte>? encodedKeyAuthorizations)
+        {
+            encodedKeyAuthorizations = reader.ReadEncodedValue();
+
+            return true;
+        }
+
+        //Assigns the encoded keyInfo value.
+        static bool AssignKeyInfo(CborReader reader, ref ReadOnlyMemory<byte>? encodedKeyInfo)
+        {
+            encodedKeyInfo = reader.ReadEncodedValue();
+
+            return true;
+        }
+
+        static bool SkipValue(CborReader reader)
+        {
+            reader.SkipValue();
+
+            return true;
+        }
     }
 
 
@@ -232,39 +264,14 @@ public static class MdocCborMsoReader
             string key = reader.ReadTextString();
             entriesRead++;
 
-            switch(key)
+            _ = key switch
             {
-                case MdocMsoWellKnownKeys.Signed:
-                {
-                    signed = ReadTdate(reader);
-
-                    break;
-                }
-                case MdocMsoWellKnownKeys.ValidFrom:
-                {
-                    validFrom = ReadTdate(reader);
-
-                    break;
-                }
-                case MdocMsoWellKnownKeys.ValidUntil:
-                {
-                    validUntil = ReadTdate(reader);
-
-                    break;
-                }
-                case MdocMsoWellKnownKeys.ExpectedUpdate:
-                {
-                    expectedUpdate = ReadTdate(reader);
-
-                    break;
-                }
-                default:
-                {
-                    reader.SkipValue();
-
-                    break;
-                }
-            }
+                MdocMsoWellKnownKeys.Signed => signed = ReadTdate(reader),
+                MdocMsoWellKnownKeys.ValidFrom => validFrom = ReadTdate(reader),
+                MdocMsoWellKnownKeys.ValidUntil => validUntil = ReadTdate(reader),
+                MdocMsoWellKnownKeys.ExpectedUpdate => expectedUpdate = ReadTdate(reader),
+                _ => SkipValue(reader)
+            };
         }
 
         reader.ReadEndMap();
@@ -281,6 +288,13 @@ public static class MdocCborMsoReader
             validFrom: validFrom.Value,
             validUntil: validUntil.Value,
             expectedUpdate: expectedUpdate);
+
+        static DateTimeOffset? SkipValue(CborReader reader)
+        {
+            reader.SkipValue();
+
+            return null;
+        }
     }
 
 

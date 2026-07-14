@@ -1,6 +1,7 @@
 using Verifiable.Core.Assessment;
 using Verifiable.JCose;
 using Verifiable.OAuth.Federation;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Federation;
 
@@ -18,7 +19,7 @@ internal sealed class TrustMarkValidatorTests
     [TestMethod]
     public async Task HappyPathTrustMarkEmitsBothSuccess()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode issuer = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/tm-issuer"));
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
@@ -55,7 +56,7 @@ internal sealed class TrustMarkValidatorTests
     [TestMethod]
     public async Task AlgNoneTrustMarkFailsAlgPresent()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode issuer = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/tm-issuer"));
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
@@ -93,7 +94,7 @@ internal sealed class TrustMarkValidatorTests
     [TestMethod]
     public async Task FutureIssuedTrustMarkFailsIatInRange()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode issuer = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/tm-issuer"));
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
@@ -126,7 +127,7 @@ internal sealed class TrustMarkValidatorTests
     [TestMethod]
     public async Task ExpiredTrustMarkFailsExpInFuture()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode issuer = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/tm-issuer"));
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
@@ -160,7 +161,7 @@ internal sealed class TrustMarkValidatorTests
     [TestMethod]
     public async Task TrustMarkWithExpiryAtOrBeforeIssuanceFailsExpAfterIat()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode issuer = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/tm-issuer"));
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
@@ -202,7 +203,7 @@ internal sealed class TrustMarkValidatorTests
     [TestMethod]
     public async Task IndefiniteValidityMarkEmitsNotApplicableForExp()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode issuer = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/tm-issuer"));
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
@@ -234,7 +235,7 @@ internal sealed class TrustMarkValidatorTests
     [TestMethod]
     public async Task TamperedSignatureFailsSignatureVerifies()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode issuer = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/tm-issuer"));
         using FederationTestRingNode subject = FederationTestRing.CreateNode(

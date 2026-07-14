@@ -30,18 +30,18 @@ public static class MicrosoftKeyAgreementFunctions
     private const int AesGcmTagLength = 16;
     private const int AesGcmIvLength = 12;
 
-    private static readonly ProviderLibrary ProviderLib = new(
+    private static ProviderLibrary ProviderLib { get; } = new(
         typeof(MicrosoftKeyAgreementFunctions).Assembly.GetName().Name
             ?? "Verifiable.Microsoft",
         typeof(MicrosoftKeyAgreementFunctions).Assembly.GetName().Version?.ToString()
             ?? "Unknown");
 
-    private static readonly CryptoLibraryInfo CryptoLib = new(
+    private static CryptoLibraryInfo CryptoLib { get; } = new(
         "System.Security.Cryptography",
         typeof(RandomNumberGenerator).Assembly.GetName().Version?.ToString()
             ?? System.Environment.Version.ToString());
 
-    private static readonly ProviderClass ProviderCls =
+    private static ProviderClass ProviderCls { get; } =
         new(nameof(MicrosoftKeyAgreementFunctions));
 
 
@@ -123,7 +123,7 @@ public static class MicrosoftKeyAgreementFunctions
             byte[] xBytes = ephemeralParams.Q.X!;
             byte[] yBytes = ephemeralParams.Q.Y!;
             IMemoryOwner<byte> epkOwner = pool.Rent(1 + xBytes.Length + yBytes.Length);
-            epkOwner.Memory.Span[0] = 0x04;
+            epkOwner.Memory.Span[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
             xBytes.CopyTo(epkOwner.Memory.Span[1..]);
             yBytes.CopyTo(epkOwner.Memory.Span[(1 + xBytes.Length)..]);
 
@@ -285,7 +285,7 @@ public static class MicrosoftKeyAgreementFunctions
             byte[] xBytes = ephemeralParams.Q.X!;
             byte[] yBytes = ephemeralParams.Q.Y!;
             IMemoryOwner<byte> epkOwner = pool.Rent(1 + xBytes.Length + yBytes.Length);
-            epkOwner.Memory.Span[0] = 0x04;
+            epkOwner.Memory.Span[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
             xBytes.CopyTo(epkOwner.Memory.Span[1..]);
             yBytes.CopyTo(epkOwner.Memory.Span[(1 + xBytes.Length)..]);
 
@@ -502,7 +502,7 @@ public static class MicrosoftKeyAgreementFunctions
             byte[] xBytes = ephemeralParams.Q.X!;
             byte[] yBytes = ephemeralParams.Q.Y!;
             IMemoryOwner<byte> epkOwner = pool.Rent(1 + xBytes.Length + yBytes.Length);
-            epkOwner.Memory.Span[0] = 0x04;
+            epkOwner.Memory.Span[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
             xBytes.CopyTo(epkOwner.Memory.Span[1..]);
             yBytes.CopyTo(epkOwner.Memory.Span[(1 + xBytes.Length)..]);
 
@@ -763,12 +763,14 @@ public static class MicrosoftKeyAgreementFunctions
         System.Buffers.Binary.BinaryPrimitives.WriteUInt64BigEndian(wrapped, AesKwInitialValue);
         keyData.CopyTo(wrapped[8..]);
 
-        byte[] kekArray = keyEncryptionKey.AsReadOnlySpan().ToArray();
         Span<byte> block = stackalloc byte[16];
         try
         {
             using Aes aes = Aes.Create();
-            aes.Key = kekArray;
+
+            //SetKey(ReadOnlySpan<byte>) copies the KEK into the AES instance's own key schedule — no
+            //naked byte[] of key-encryption-key material for us to track and zero.
+            aes.SetKey(keyEncryptionKey.AsReadOnlySpan());
 
             for(int j = 0; j <= 5; ++j)
             {
@@ -788,7 +790,6 @@ public static class MicrosoftKeyAgreementFunctions
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(kekArray);
             CryptographicOperations.ZeroMemory(block);
         }
 
@@ -829,12 +830,14 @@ public static class MicrosoftKeyAgreementFunctions
 
         ulong a = System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(wrappedKey.Span);
 
-        byte[] kekArray = keyEncryptionKey.AsReadOnlySpan().ToArray();
         Span<byte> block = stackalloc byte[16];
         try
         {
             using Aes aes = Aes.Create();
-            aes.Key = kekArray;
+
+            //SetKey(ReadOnlySpan<byte>) copies the KEK into the AES instance's own key schedule — no
+            //naked byte[] of key-encryption-key material for us to track and zero.
+            aes.SetKey(keyEncryptionKey.AsReadOnlySpan());
 
             for(int j = 5; j >= 0; --j)
             {
@@ -853,7 +856,6 @@ public static class MicrosoftKeyAgreementFunctions
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(kekArray);
             CryptographicOperations.ZeroMemory(block);
         }
 
@@ -879,9 +881,9 @@ public static class MicrosoftKeyAgreementFunctions
     //parameter set so each matches the AeadEncryptDelegate / AeadDecryptDelegate shape.
     private readonly record struct AesCbcHmacParameters(int CompositeKeyLength, int TagLength, HashAlgorithmName Hmac);
 
-    private static readonly AesCbcHmacParameters A128CbcHs256Parameters = new(32, 16, HashAlgorithmName.SHA256);
-    private static readonly AesCbcHmacParameters A192CbcHs384Parameters = new(48, 24, HashAlgorithmName.SHA384);
-    private static readonly AesCbcHmacParameters A256CbcHs512Parameters = new(64, 32, HashAlgorithmName.SHA512);
+    private static AesCbcHmacParameters A128CbcHs256Parameters { get; } = new(32, 16, HashAlgorithmName.SHA256);
+    private static AesCbcHmacParameters A192CbcHs384Parameters { get; } = new(48, 24, HashAlgorithmName.SHA384);
+    private static AesCbcHmacParameters A256CbcHs512Parameters { get; } = new(64, 32, HashAlgorithmName.SHA512);
 
 
     /// <summary>Performs A128CBC-HS256 authenticated encryption (RFC 7518 §5.2.3). Matches <see cref="AeadEncryptDelegate"/>.</summary>
@@ -972,20 +974,17 @@ public static class MicrosoftKeyAgreementFunctions
         int ciphertextLength = plaintext.Length - (plaintext.Length % 16) + 16;
         IMemoryOwner<byte> ciphertextOwner = pool.Rent(ciphertextLength);
 
-        byte[] encKeyArray = encKey.ToArray();
-        try
+        using(Aes aes = Aes.Create())
         {
-            using Aes aes = Aes.Create();
-            aes.Key = encKeyArray;
+            //SetKey(ReadOnlySpan<byte>) copies the AES half of the composite key into the AES
+            //instance's own key schedule — encKey is already a span slice of the composite key, so no
+            //array copy exists to zero.
+            aes.SetKey(encKey);
             aes.EncryptCbc(
                 plaintext.Span,
                 ivOwner.Memory.Span[..AesCbcIvLength],
                 ciphertextOwner.Memory.Span[..ciphertextLength],
                 PaddingMode.PKCS7);
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(encKeyArray);
         }
 
         IMemoryOwner<byte> tagOwner = pool.Rent(parameters.TagLength);
@@ -1055,13 +1054,15 @@ public static class MicrosoftKeyAgreementFunctions
         //buffer and copy into an exact-length allocation so the returned content
         //carries no padding residue.
         IMemoryOwner<byte> scratchOwner = pool.Rent(ciphertextSpan.Length);
-        byte[] encKeyArray = encKey.ToArray();
         try
         {
             int plaintextLength;
             using(Aes aes = Aes.Create())
             {
-                aes.Key = encKeyArray;
+                //SetKey(ReadOnlySpan<byte>) copies the AES half of the composite key into the AES
+                //instance's own key schedule — encKey is already a span slice of the composite key, so
+                //no array copy exists to zero.
+                aes.SetKey(encKey);
                 plaintextLength = aes.DecryptCbc(
                     ciphertextSpan,
                     iv.AsReadOnlySpan(),
@@ -1076,7 +1077,6 @@ public static class MicrosoftKeyAgreementFunctions
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(encKeyArray);
             scratchOwner.Memory.Span.Clear();
             scratchOwner.Dispose();
         }

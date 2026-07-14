@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Formats.Cbor;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Sd;
 using Verifiable.Core.Model.SelectiveDisclosure;
@@ -53,7 +52,7 @@ internal sealed class SdCwtIssuanceTests
         };
 
         SdTokenResult result = await claims.IssueSdCwtAsync(
-            SerializeCwtClaimMap, SdCwtIssuance.IssueVerboseAsync, disclosablePaths, TestSalts.DefaultGenerator(),
+            SdCwtWireFixtures.SerializeCwtClaimMap, SdCwtIssuance.IssueVerboseAsync, disclosablePaths, TestSalts.DefaultGenerator(),
             privateKey, CredentialSecuringMaterial.VerificationMethodId, Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -73,7 +72,7 @@ internal sealed class SdCwtIssuanceTests
         };
 
         SdTokenResult result = await claims.IssueSdCwtAsync(
-            SerializeCwtClaimMap, SdCwtIssuance.IssueVerboseAsync, new HashSet<CredentialPath>(), TestSalts.DefaultGenerator(),
+            SdCwtWireFixtures.SerializeCwtClaimMap, SdCwtIssuance.IssueVerboseAsync, new HashSet<CredentialPath>(), TestSalts.DefaultGenerator(),
             privateKey, CredentialSecuringMaterial.VerificationMethodId, Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -101,7 +100,7 @@ internal sealed class SdCwtIssuanceTests
         };
 
         SdTokenResult result = await claims.IssueSdCwtAsync(
-            SerializeCwtClaimMap, SdCwtIssuance.IssueVerboseAsync, disclosablePaths, TestSalts.DefaultGenerator(),
+            SdCwtWireFixtures.SerializeCwtClaimMap, SdCwtIssuance.IssueVerboseAsync, disclosablePaths, TestSalts.DefaultGenerator(),
             privateKey, CredentialSecuringMaterial.VerificationMethodId, Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -124,7 +123,7 @@ internal sealed class SdCwtIssuanceTests
             CredentialPath.FromJsonPointer("/501")
         };
 
-        byte[] cborBytes = SerializeCwtClaimMap(claims).ToArray();
+        byte[] cborBytes = SdCwtWireFixtures.SerializeCwtClaimMap(claims).ToArray();
 
         (SdTokenResult result, ReadOnlyMemory<byte> redactedPayload) = await SdCwtIssuance.IssueVerboseAsync(
             cborBytes, disclosablePaths, TestSalts.DefaultGenerator(),
@@ -156,7 +155,7 @@ internal sealed class SdCwtIssuanceTests
         };
 
         (SdToken<ReadOnlyMemory<byte>> token, ReadOnlyMemory<byte> redactedPayload) = await claims.IssueSdCwtTokenVerboseAsync(
-            SerializeCwtClaimMap, SdCwtIssuance.IssueVerboseAsync, disclosablePaths, TestSalts.DefaultGenerator(),
+            SdCwtWireFixtures.SerializeCwtClaimMap, SdCwtIssuance.IssueVerboseAsync, disclosablePaths, TestSalts.DefaultGenerator(),
             privateKey, CredentialSecuringMaterial.VerificationMethodId, Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -166,19 +165,5 @@ internal sealed class SdCwtIssuanceTests
             Assert.HasCount(1, token.Disclosures);
             Assert.IsGreaterThan(0, redactedPayload.Length, "The redacted payload must be exposed alongside the token.");
         }
-    }
-
-
-    /// <summary>
-    /// Serializes a CWT claim map using the system's standard <see cref="CborValueConverter"/>.
-    /// This is the same serialization path used by production code. Returns
-    /// <see cref="ReadOnlySpan{T}"/> of <see cref="byte"/> to match the
-    /// <see cref="ToCborBytesDelegate{T}"/> contract consumed by <c>IssueSdCwtAsync</c>.
-    /// </summary>
-    private static ReadOnlySpan<byte> SerializeCwtClaimMap(Dictionary<int, object> claims)
-    {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        CborValueConverter.WriteValue(writer, claims);
-        return writer.Encode();
     }
 }

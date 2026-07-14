@@ -208,7 +208,7 @@ public readonly struct KeyUsageContext: IEquatable<KeyUsageContext>
     public static KeyUsageContext IntrospectionResponseSigning { get; } = new(12);
 
 
-    private static readonly List<KeyUsageContext> contexts =
+    private static List<KeyUsageContext> contexts { get; } =
     [
         None,
         AccessTokenIssuance,

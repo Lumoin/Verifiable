@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Generic;
-using System.Formats.Cbor;
 using System.Globalization;
 using System.Security.Cryptography;
 using Verifiable.Cbor;
@@ -286,7 +285,7 @@ internal sealed class SdCwtKeyBindingFlowTests
         {
             [WellKnownCwtClaimNames.Iss] = IssuerId,
             [WellKnownCwtClaimNames.Iat] = TimeProvider.GetUtcNow().ToUnixTimeSeconds(),
-            [WellKnownCwtClaimNames.Cnf] = BuildCnfWithHolderKey(holderPublic),
+            [WellKnownCwtClaimNames.Cnf] = SdCwtWireFixtures.BuildCnfWithHolderKey(holderPublic, CnfCoseKeyMember),
             [ClaimKeyGivenName] = "Erika",
             [ClaimKeyFamilyName] = "Mustermann",
             [ClaimKeyEmail] = "erika@example.de"
@@ -300,31 +299,10 @@ internal sealed class SdCwtKeyBindingFlowTests
         };
 
         return await claims.IssueSdCwtTokenAsync(
-            SerializeCwtClaimMap, SdCwtIssuance.IssueVerboseAsync, disclosablePaths,
+            SdCwtWireFixtures.SerializeCwtClaimMap, SdCwtIssuance.IssueVerboseAsync, disclosablePaths,
             TestSalts.DefaultGenerator(),
             privateKey, IssuerKeyId, Pool,
             cancellationToken: cancellationToken).ConfigureAwait(false);
-    }
-
-
-    //Builds the cnf confirmation map { 1: COSE_Key } from a P-256 holder public key.
-    //The COSE_Key is a nested int-keyed map so it serializes as a CBOR map the verifier's
-    //COSE_Key reader can parse (kty=EC2, crv=P-256, x, y).
-    private static Dictionary<int, object> BuildCnfWithHolderKey(PublicKeyMemory holderPublic)
-    {
-        ReadOnlySpan<byte> compressed = holderPublic.AsReadOnlySpan();
-        byte[] x = compressed[1..].ToArray();
-        byte[] y = EllipticCurveUtilities.Decompress(compressed, EllipticCurveTypes.P256);
-
-        var coseKey = new Dictionary<int, object>
-        {
-            [1] = 2,   //kty = EC2.
-            [-1] = 1,  //crv = P-256.
-            [-2] = x,  //x coordinate.
-            [-3] = y   //y coordinate.
-        };
-
-        return new Dictionary<int, object> { [CnfCoseKeyMember] = coseKey };
     }
 
 
@@ -339,13 +317,5 @@ internal sealed class SdCwtKeyBindingFlowTests
 
         return issuedToken.SelectDisclosures(
             d => d.ClaimName is not null && selected.Contains(d.ClaimName), Pool);
-    }
-
-
-    private static ReadOnlySpan<byte> SerializeCwtClaimMap(Dictionary<int, object> claims)
-    {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        CborValueConverter.WriteValue(writer, claims);
-        return writer.Encode();
     }
 }

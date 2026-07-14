@@ -25,13 +25,15 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             ReadOnlyMemory<byte> data = TestData;
-            using var signature = await NSecCryptographicFunctions.SignEd25519Async(
+            (Signature signature, CryptoEvent? _) = await NSecCryptographicFunctions.SignEd25519Async(
                 privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            using var disposableSignature = signature;
 
-            Assert.IsTrue(await NSecCryptographicFunctions.VerifyEd25519Async(
+            (bool isVerified, CryptoEvent? _) = await NSecCryptographicFunctions.VerifyEd25519Async(
                 data, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory(),
-                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false));
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(isVerified);
         }
 
 
@@ -43,13 +45,15 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             ReadOnlyMemory<byte> data = TestData;
-            using var signature = await BouncyCastleCryptographicFunctions.SignEd25519Async(
+            (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignEd25519Async(
                 privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            using var disposableSignature = signature;
 
-            Assert.IsTrue(await BouncyCastleCryptographicFunctions.VerifyEd25519Async(
+            (bool isVerified, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.VerifyEd25519Async(
                 data, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory(),
-                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false));
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(isVerified);
         }
 
 
@@ -61,13 +65,15 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             ReadOnlyMemory<byte> data = TestData;
-            using var signature = await NSecCryptographicFunctions.SignEd25519Async(
+            (Signature signature, CryptoEvent? _) = await NSecCryptographicFunctions.SignEd25519Async(
                 privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            using var disposableSignature = signature;
 
-            Assert.IsTrue(await BouncyCastleCryptographicFunctions.VerifyEd25519Async(
+            (bool isVerified, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.VerifyEd25519Async(
                 data, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory(),
-                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false));
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(isVerified);
         }
 
 
@@ -79,13 +85,15 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             ReadOnlyMemory<byte> data = TestData;
-            using var signature = await BouncyCastleCryptographicFunctions.SignEd25519Async(
+            (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignEd25519Async(
                 privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            using var disposableSignature = signature;
 
-            Assert.IsTrue(await NSecCryptographicFunctions.VerifyEd25519Async(
+            (bool isVerified, CryptoEvent? _) = await NSecCryptographicFunctions.VerifyEd25519Async(
                 data, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory(),
-                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false));
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(isVerified);
         }
     }
 }

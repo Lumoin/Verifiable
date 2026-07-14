@@ -85,7 +85,9 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         Assert.IsNotNull(attest.Attested.Quote);
 
         //2. Signature: over the RAW attestation bytes, against the AK public key reconstructed from the
-        //simulator's exported public area only (firewalled — no shared in-memory state).
+        //simulator's exported public area only (firewalled — no shared in-memory state). Independent-oracle
+        //carve-out: framework ECDsa verifies the library-produced signature from wire bytes alone, so this
+        //is deliberately not migrated to fixture key material.
         byte[] attestDigest = await ComputeSha256Async(quote.Quoted.GetRawBytes().ToArray(), pool, TestContext.CancellationToken).ConfigureAwait(false);
 
         TpmsEccPoint point = ak.OutPublic.PublicArea.Unique.Ecc!;

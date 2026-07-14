@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Collections.Immutable;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
@@ -62,7 +63,7 @@ internal sealed class TokenExchangeGrantTests
 
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
@@ -87,14 +88,14 @@ internal sealed class TokenExchangeGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
-            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken)
-        }).ConfigureAwait(false);
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)response.StatusCode, body);
@@ -145,16 +146,15 @@ internal sealed class TokenExchangeGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
-            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken),
-            [OAuthRequestParameterNames.ActorToken] = ActorTokenValue,
-            [OAuthRequestParameterNames.ActorTokenType] = TokenTypeNames.GetName(TokenType.AccessToken)
-        }).ConfigureAwait(false);
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken,
+            Actor = new TokenExchangeActor { Token = ActorTokenValue, TokenType = TokenType.AccessToken }
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)response.StatusCode, body);
@@ -209,19 +209,16 @@ internal sealed class TokenExchangeGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
         HttpClient http = host.SharedHttpClient!;
-        string accessTokenType = TokenTypeNames.GetName(TokenType.AccessToken);
 
         //Permitted: the actor token's subject equals the subject's may_act.sub.
-        using HttpResponseMessage permitted = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields permittedForm = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
-            [OAuthRequestParameterNames.SubjectTokenType] = accessTokenType,
-            [OAuthRequestParameterNames.ActorToken] = ActorTokenValue,
-            [OAuthRequestParameterNames.ActorTokenType] = accessTokenType
-        }).ConfigureAwait(false);
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken,
+            Actor = new TokenExchangeActor { Token = ActorTokenValue, TokenType = TokenType.AccessToken }
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage permitted = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, permittedForm, TestContext.CancellationToken).ConfigureAwait(false);
         string permittedBody = await permitted.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)permitted.StatusCode, permittedBody);
 
@@ -233,16 +230,14 @@ internal sealed class TokenExchangeGrantTests
             "When the actor satisfies may_act, the issued token's act.sub is that actor.");
 
         //Denied: a different actor token whose subject does NOT match the subject's may_act.sub.
-        using HttpResponseMessage denied = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields deniedForm = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
-            [OAuthRequestParameterNames.SubjectTokenType] = accessTokenType,
-            [OAuthRequestParameterNames.ActorToken] = "intruder-token-blob",
-            [OAuthRequestParameterNames.ActorTokenType] = accessTokenType
-        }).ConfigureAwait(false);
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken,
+            Actor = new TokenExchangeActor { Token = "intruder-token-blob", TokenType = TokenType.AccessToken }
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage denied = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, deniedForm, TestContext.CancellationToken).ConfigureAwait(false);
         string deniedBody = await denied.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)denied.StatusCode, deniedBody);
         Assert.Contains(OAuthErrors.InvalidRequest, deniedBody);
@@ -291,19 +286,16 @@ internal sealed class TokenExchangeGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
         HttpClient http = host.SharedHttpClient!;
-        string accessTokenType = TokenTypeNames.GetName(TokenType.AccessToken);
 
         //(a) Actor matches BOTH may_act.sub and may_act.iss → permitted; act.sub is the actor.
-        using HttpResponseMessage permitted = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields permittedForm = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
-            [OAuthRequestParameterNames.SubjectTokenType] = accessTokenType,
-            [OAuthRequestParameterNames.ActorToken] = ActorTokenValue,
-            [OAuthRequestParameterNames.ActorTokenType] = accessTokenType
-        }).ConfigureAwait(false);
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken,
+            Actor = new TokenExchangeActor { Token = ActorTokenValue, TokenType = TokenType.AccessToken }
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage permitted = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, permittedForm, TestContext.CancellationToken).ConfigureAwait(false);
         string permittedBody = await permitted.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)permitted.StatusCode, permittedBody);
 
@@ -315,16 +307,14 @@ internal sealed class TokenExchangeGrantTests
             "When the actor matches both may_act members, the issued token's act.sub is that actor.");
 
         //(b) Actor has the right subject but the WRONG issuer → rejected before the policy seam runs.
-        using HttpResponseMessage denied = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields deniedForm = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
-            [OAuthRequestParameterNames.SubjectTokenType] = accessTokenType,
-            [OAuthRequestParameterNames.ActorToken] = "wrong-issuer-actor-blob",
-            [OAuthRequestParameterNames.ActorTokenType] = accessTokenType
-        }).ConfigureAwait(false);
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken,
+            Actor = new TokenExchangeActor { Token = "wrong-issuer-actor-blob", TokenType = TokenType.AccessToken }
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage denied = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, deniedForm, TestContext.CancellationToken).ConfigureAwait(false);
         string deniedBody = await denied.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)denied.StatusCode, deniedBody);
         Assert.Contains(OAuthErrors.InvalidRequest, deniedBody);
@@ -368,14 +358,14 @@ internal sealed class TokenExchangeGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields explicitAudienceForm = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
-            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken)
-        }).ConfigureAwait(false);
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, explicitAudienceForm, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)response.StatusCode, body);
@@ -429,14 +419,14 @@ internal sealed class TokenExchangeGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
-            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken)
-        }).ConfigureAwait(false);
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(500, (int)response.StatusCode, body);
@@ -450,6 +440,14 @@ internal sealed class TokenExchangeGrantTests
     /// fragment-bearing <c>resource</c> are both rejected with <c>invalid_request</c> before the
     /// validation seam runs.
     /// </summary>
+    /// <remarks>
+    /// Deliberately NOT built via <see cref="TokenExchangeRequestBuilder"/>: both values below are
+    /// exactly what <see cref="TokenExchangeRequestBuilderTests.ResourceWithFragmentIsRejectedWithExactError"/>
+    /// and <see cref="TokenExchangeRequestBuilderTests.RelativeResourceIsRejectedWithExactError"/> prove
+    /// the builder itself rejects client-side before a request is ever built — so this test's hand-built
+    /// form is the only way to prove the authorization server ALSO fails closed on the same rule
+    /// (defense in depth for callers that do not go through this library's builder).
+    /// </remarks>
     [TestMethod]
     public async Task MalformedResourceIsRejectedFailClosed()
     {
@@ -464,7 +462,7 @@ internal sealed class TokenExchangeGrantTests
         string accessTokenType = TokenTypeNames.GetName(TokenType.AccessToken);
 
         //(a) resource with a fragment component — RFC 8707 §2 MUST NOT include a fragment.
-        using HttpResponseMessage withFragment = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage withFragment = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
             [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -472,13 +470,13 @@ internal sealed class TokenExchangeGrantTests
             [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
             [OAuthRequestParameterNames.SubjectTokenType] = accessTokenType,
             [OAuthRequestParameterNames.Resource] = "https://api.example/x#frag"
-        }).ConfigureAwait(false);
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string withFragmentBody = await withFragment.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)withFragment.StatusCode, withFragmentBody);
         Assert.Contains(OAuthErrors.InvalidRequest, withFragmentBody);
 
         //(b) relative resource — RFC 8707 §2 MUST be an absolute URI.
-        using HttpResponseMessage relative = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage relative = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
             [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -486,7 +484,7 @@ internal sealed class TokenExchangeGrantTests
             [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
             [OAuthRequestParameterNames.SubjectTokenType] = accessTokenType,
             [OAuthRequestParameterNames.Resource] = "/relative"
-        }).ConfigureAwait(false);
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string relativeBody = await relative.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)relative.StatusCode, relativeBody);
         Assert.Contains(OAuthErrors.InvalidRequest, relativeBody);
@@ -536,17 +534,17 @@ internal sealed class TokenExchangeGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        //The skin's repeated-resource convention: the two indicators arrive space-delimited in the
+        //The builder's repeated-resource convention: the two indicators arrive space-delimited in the
         //single resource field, exactly as the authorization-code path receives them.
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
-            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken),
-            [OAuthRequestParameterNames.Resource] = $"{FirstResource} {SecondResource}"
-        }).ConfigureAwait(false);
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken,
+            Resource = [FirstResource, SecondResource]
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)response.StatusCode, body);
@@ -589,18 +587,15 @@ internal sealed class TokenExchangeGrantTests
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
-        string accessTokenType = TokenTypeNames.GetName(TokenType.AccessToken);
-
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
-            [OAuthRequestParameterNames.SubjectTokenType] = accessTokenType,
-            [OAuthRequestParameterNames.ActorToken] = ActorTokenValue,
-            [OAuthRequestParameterNames.ActorTokenType] = accessTokenType
-        }).ConfigureAwait(false);
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken,
+            Actor = new TokenExchangeActor { Token = ActorTokenValue, TokenType = TokenType.AccessToken }
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)response.StatusCode, body);
@@ -726,14 +721,14 @@ internal sealed class TokenExchangeGrantTests
                     });
 
         //STEP 4 — Exchange the REAL subject token (RFC 8693 §2.1).
-        using HttpResponseMessage exchange = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields exchangeForm = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = subjectToken,
-            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken)
-        }).ConfigureAwait(false);
+            SubjectToken = subjectToken,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage exchange = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, exchangeForm, TestContext.CancellationToken).ConfigureAwait(false);
 
         string exchangeBody = await exchange.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)exchange.StatusCode, exchangeBody);
@@ -887,19 +882,16 @@ internal sealed class TokenExchangeGrantTests
                         IssuedTokenType = TokenType.AccessToken
                     });
 
-        string accessTokenType = TokenTypeNames.GetName(TokenType.AccessToken);
-
         //STEP 4 — DELEGATION exchange on the SUBJECT tenant's token endpoint with both real tokens.
-        using HttpResponseMessage exchange = await PostFormAsync(http, subjectTokenUrl, new Dictionary<string, string>
+        OutgoingFormFields exchangeForm = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = subjectToken,
-            [OAuthRequestParameterNames.SubjectTokenType] = accessTokenType,
-            [OAuthRequestParameterNames.ActorToken] = actorToken,
-            [OAuthRequestParameterNames.ActorTokenType] = accessTokenType
-        }).ConfigureAwait(false);
+            SubjectToken = subjectToken,
+            SubjectTokenType = TokenType.AccessToken,
+            Actor = new TokenExchangeActor { Token = actorToken, TokenType = TokenType.AccessToken }
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage exchange = await OAuthTestTransport.PostFormAsync(
+            http, subjectTokenUrl, exchangeForm, TestContext.CancellationToken).ConfigureAwait(false);
 
         string exchangeBody = await exchange.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)exchange.StatusCode, exchangeBody);
@@ -936,6 +928,15 @@ internal sealed class TokenExchangeGrantTests
     /// named target are <c>invalid_request</c>, while a policy denial against a named <c>resource</c>
     /// target surfaces <c>invalid_target</c>.
     /// </summary>
+    /// <remarks>
+    /// Cases (a)–(d) are deliberately NOT built via <see cref="TokenExchangeRequestBuilder"/>: each
+    /// shape is exactly what the builder makes UNREPRESENTABLE (missing REQUIRED fields do not compile;
+    /// an actor token without its type, or vice versa, cannot be constructed per
+    /// <see cref="TokenExchangeActor"/>) or client-side build-time-rejected in a way that would never
+    /// reach this test's AS-side assertions (an unparseable <c>requested_token_type</c> has no
+    /// corresponding <see cref="TokenType"/> value to pass in). Cases (e)–(i) are ordinary well-formed
+    /// requests the AS itself refuses for policy/authentication reasons, so they migrate to the builder.
+    /// </remarks>
     [TestMethod]
     public async Task MalformedAndUnauthorizedExchangesAreRejectedFailClosed()
     {
@@ -951,32 +952,32 @@ internal sealed class TokenExchangeGrantTests
         string accessTokenType = TokenTypeNames.GetName(TokenType.AccessToken);
 
         //(a) Missing subject_token — RFC 8693 §2.1 REQUIRED.
-        using HttpResponseMessage missingSubject = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage missingSubject = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             ["client_secret"] = ClientSecret,
             [OAuthRequestParameterNames.SubjectTokenType] = accessTokenType
-        }).ConfigureAwait(false);
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string missingSubjectBody = await missingSubject.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)missingSubject.StatusCode, missingSubjectBody);
         Assert.Contains(OAuthErrors.InvalidRequest, missingSubjectBody);
 
         //(b) Missing subject_token_type — RFC 8693 §2.1/§3 REQUIRED and must be a known URI.
-        using HttpResponseMessage missingType = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage missingType = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             ["client_secret"] = ClientSecret,
             [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue
-        }).ConfigureAwait(false);
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string missingTypeBody = await missingType.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)missingType.StatusCode, missingTypeBody);
         Assert.Contains(OAuthErrors.InvalidRequest, missingTypeBody);
 
         //(c) actor_token present but actor_token_type missing — RFC 8693 §2.1 actor_token_type is
         //REQUIRED when actor_token is present.
-        using HttpResponseMessage actorNoType = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage actorNoType = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
             [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -984,14 +985,14 @@ internal sealed class TokenExchangeGrantTests
             [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
             [OAuthRequestParameterNames.SubjectTokenType] = accessTokenType,
             [OAuthRequestParameterNames.ActorToken] = ActorTokenValue
-        }).ConfigureAwait(false);
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string actorNoTypeBody = await actorNoType.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)actorNoType.StatusCode, actorNoTypeBody);
         Assert.Contains(OAuthErrors.InvalidRequest, actorNoTypeBody);
 
         //(c2) actor_token_type present without actor_token — RFC 8693 §2.1 it MUST NOT be present
         //when actor_token is absent.
-        using HttpResponseMessage typeNoActor = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage typeNoActor = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
             [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -999,13 +1000,13 @@ internal sealed class TokenExchangeGrantTests
             [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
             [OAuthRequestParameterNames.SubjectTokenType] = accessTokenType,
             [OAuthRequestParameterNames.ActorTokenType] = accessTokenType
-        }).ConfigureAwait(false);
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string typeNoActorBody = await typeNoActor.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)typeNoActor.StatusCode, typeNoActorBody);
         Assert.Contains(OAuthErrors.InvalidRequest, typeNoActorBody);
 
         //(d) requested_token_type unparseable — RFC 8693 §3 it must be a supported token-type URI.
-        using HttpResponseMessage badRequestedType = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage badRequestedType = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
             [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -1013,7 +1014,7 @@ internal sealed class TokenExchangeGrantTests
             [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
             [OAuthRequestParameterNames.SubjectTokenType] = accessTokenType,
             [OAuthRequestParameterNames.RequestedTokenType] = "not-a-uri"
-        }).ConfigureAwait(false);
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string badRequestedTypeBody = await badRequestedType.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)badRequestedType.StatusCode, badRequestedTypeBody);
         Assert.Contains(OAuthErrors.InvalidRequest, badRequestedTypeBody);
@@ -1033,14 +1034,13 @@ internal sealed class TokenExchangeGrantTests
         HostedAuthorizationServer rejectingHost = rejectingApp.Host("default");
         Uri rejectingTokenUrl = new(rejectingHost.HttpBaseAddress!, $"/connect/{rejectingMaterial.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage subjectRejected = await PostFormAsync(rejectingHost.SharedHttpClient!, rejectingTokenUrl, new Dictionary<string, string>
+        OutgoingFormFields subjectRejectedForm = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
-            [OAuthRequestParameterNames.SubjectTokenType] = accessTokenType
-        }).ConfigureAwait(false);
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage subjectRejected = await OAuthTestTransport.PostFormAsync(
+            rejectingHost.SharedHttpClient!, rejectingTokenUrl, subjectRejectedForm, TestContext.CancellationToken).ConfigureAwait(false);
         string subjectRejectedBody = await subjectRejected.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)subjectRejected.StatusCode, subjectRejectedBody);
         Assert.Contains(OAuthErrors.InvalidRequest, subjectRejectedBody);
@@ -1061,42 +1061,39 @@ internal sealed class TokenExchangeGrantTests
         HostedAuthorizationServer denyingHost = denyingApp.Host("default");
         Uri denyingTokenUrl = new(denyingHost.HttpBaseAddress!, $"/connect/{denyingMaterial.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage deniedNoTarget = await PostFormAsync(denyingHost.SharedHttpClient!, denyingTokenUrl, new Dictionary<string, string>
+        OutgoingFormFields deniedNoTargetForm = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
-            [OAuthRequestParameterNames.SubjectTokenType] = accessTokenType
-        }).ConfigureAwait(false);
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage deniedNoTarget = await OAuthTestTransport.PostFormAsync(
+            denyingHost.SharedHttpClient!, denyingTokenUrl, deniedNoTargetForm, TestContext.CancellationToken).ConfigureAwait(false);
         string deniedNoTargetBody = await deniedNoTarget.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)deniedNoTarget.StatusCode, deniedNoTargetBody);
         Assert.Contains(OAuthErrors.InvalidRequest, deniedNoTargetBody);
 
         //(g) The policy seam denies (null) but the request named a resource target —
         //RFC 8693 §2.2.2 invalid_target.
-        using HttpResponseMessage deniedWithTarget = await PostFormAsync(denyingHost.SharedHttpClient!, denyingTokenUrl, new Dictionary<string, string>
+        OutgoingFormFields deniedWithTargetForm = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
-            [OAuthRequestParameterNames.SubjectTokenType] = accessTokenType,
-            [OAuthRequestParameterNames.Resource] = "https://api.example/orders"
-        }).ConfigureAwait(false);
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken,
+            Resource = ["https://api.example/orders"]
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage deniedWithTarget = await OAuthTestTransport.PostFormAsync(
+            denyingHost.SharedHttpClient!, denyingTokenUrl, deniedWithTargetForm, TestContext.CancellationToken).ConfigureAwait(false);
         string deniedWithTargetBody = await deniedWithTarget.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)deniedWithTarget.StatusCode, deniedWithTargetBody);
         Assert.Contains(OAuthErrors.InvalidTarget, deniedWithTargetBody);
 
         //(h) Wrong client secret — client authentication fails (RFC 8693 §2.1 normal OAuth client auth).
-        using HttpResponseMessage badSecret = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields badSecretForm = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = "guessed-wrong",
-            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
-            [OAuthRequestParameterNames.SubjectTokenType] = accessTokenType
-        }).ConfigureAwait(false);
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes("guessed-wrong"));
+        using HttpResponseMessage badSecret = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, badSecretForm, TestContext.CancellationToken).ConfigureAwait(false);
         string badSecretBody = await badSecret.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(401, (int)badSecret.StatusCode, badSecretBody);
         Assert.Contains(OAuthErrors.InvalidClient, badSecretBody);
@@ -1109,16 +1106,62 @@ internal sealed class TokenExchangeGrantTests
         HostedAuthorizationServer bareHost = bare.Host("default");
         Uri bareTokenUrl = new(bareHost.HttpBaseAddress!, $"/connect/{bareMaterial.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage unwired = await PostFormAsync(bareHost.SharedHttpClient!, bareTokenUrl, new Dictionary<string, string>
+        OutgoingFormFields unwiredForm = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
-            [OAuthRequestParameterNames.SubjectTokenType] = accessTokenType
-        }).ConfigureAwait(false);
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage unwired = await OAuthTestTransport.PostFormAsync(
+            bareHost.SharedHttpClient!, bareTokenUrl, unwiredForm, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreNotEqual(200, (int)unwired.StatusCode,
             "The token-exchange grant must not be reachable without its validation and authorization seams.");
+    }
+
+
+    /// <summary>
+    /// RFC 8693 §2.1 L369: "In processing the request, the authorization server MUST perform the
+    /// appropriate validation procedures for the indicated token type" — validation cannot happen if no
+    /// seam exists to run it. Client authentication AND the authorization-policy seam ARE wired here;
+    /// ONLY <see cref="AuthorizationServerIntegration.ValidateTokenExchangeTokenAsync"/> is deliberately
+    /// left unconfigured, isolating that single seam as the cause. Per <c>AuthCodeEndpoints.cs</c>'s
+    /// capability-and-seam gate (all three token-exchange seams must be present together), the grant
+    /// candidate never materializes, so a well-formed exchange request never reaches the grant at all —
+    /// the same fail-closed pattern
+    /// <see cref="JwtBearerGrantTests.PresentCredentialsWithNoClientAuthSeamAreRejectedAsInvalidClient"/>
+    /// proves for the jwt-bearer grant's client-authentication seam.
+    /// </summary>
+    [TestMethod]
+    public async Task WellFormedExchangeWithoutTokenValidationSeamDoesNotActivateTheGrant()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = RegisterTokenExchangeClient(app);
+
+        //Client authentication AND the authorization-policy seam are wired; ValidateTokenExchangeTokenAsync
+        //is deliberately left unconfigured.
+        WireClientAuthentication(app);
+        WirePermissivePolicy(app);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
+        {
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        //No candidate matches grant_type=token-exchange when BuildTokenExchange is excluded from the
+        //endpoint-candidate set — the dispatcher's unmatched-chain path (the same one
+        //RefreshGrantTests.UnsupportedGrantTypeReturnsNotFound exercises for an unknown grant_type).
+        Assert.AreEqual(404, (int)response.StatusCode, body);
+        Assert.AreNotEqual(200, (int)response.StatusCode,
+            "A well-formed exchange must not be accepted when ValidateTokenExchangeTokenAsync is unwired (RFC 8693 §2.1 L369).");
     }
 
 
@@ -1143,7 +1186,6 @@ internal sealed class TokenExchangeGrantTests
         string segment = material.Registration.TenantId.Value;
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/token");
         string asIssuer = material.Registration.IssuerUri!.OriginalString;
-        string accessTokenType = TokenTypeNames.GetName(TokenType.AccessToken);
 
         //Resolve the AS verification key the way a relying party does (GET /jwks), and wire the REAL
         //subject-token validator — a forged, wrong-issuer, or expired token returns null and the
@@ -1200,14 +1242,13 @@ internal sealed class TokenExchangeGrantTests
         string wrongSignatureToken = string.Join('.', segments[0], segments[1], wrongSignature);
         Assert.AreNotEqual(subjectToken, wrongSignatureToken, "The wrong-signature token must differ from the original.");
 
-        using HttpResponseMessage wrongSig = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields wrongSigForm = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = wrongSignatureToken,
-            [OAuthRequestParameterNames.SubjectTokenType] = accessTokenType
-        }).ConfigureAwait(false);
+            SubjectToken = wrongSignatureToken,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage wrongSig = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, wrongSigForm, TestContext.CancellationToken).ConfigureAwait(false);
         string wrongSigBody = await wrongSig.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)wrongSig.StatusCode, wrongSigBody);
         Assert.Contains(OAuthErrors.InvalidRequest, wrongSigBody);
@@ -1222,14 +1263,13 @@ internal sealed class TokenExchangeGrantTests
         string malformedToken = string.Join('.', segments[0], segments[1], malformedSignature);
         Assert.AreNotEqual(subjectToken, malformedToken, "The malformed-signature token must differ from the original.");
 
-        using HttpResponseMessage malformed = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields malformedForm = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = malformedToken,
-            [OAuthRequestParameterNames.SubjectTokenType] = accessTokenType
-        }).ConfigureAwait(false);
+            SubjectToken = malformedToken,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage malformed = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, malformedForm, TestContext.CancellationToken).ConfigureAwait(false);
         string malformedBody = await malformed.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)malformed.StatusCode, malformedBody);
         Assert.Contains(OAuthErrors.InvalidRequest, malformedBody);
@@ -1239,14 +1279,13 @@ internal sealed class TokenExchangeGrantTests
         //validator's 60-second skew → the real timing check fails → null → invalid_request.
         TimeProvider.Advance(TimeSpan.FromDays(1));
 
-        using HttpResponseMessage expired = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields expiredForm = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = subjectToken,
-            [OAuthRequestParameterNames.SubjectTokenType] = accessTokenType
-        }).ConfigureAwait(false);
+            SubjectToken = subjectToken,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage expired = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, expiredForm, TestContext.CancellationToken).ConfigureAwait(false);
         string expiredBody = await expired.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)expired.StatusCode, expiredBody);
         Assert.Contains(OAuthErrors.InvalidRequest, expiredBody);
@@ -1291,15 +1330,15 @@ internal sealed class TokenExchangeGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
-            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken),
-            [OAuthRequestParameterNames.Scope] = RequestedScope
-        }).ConfigureAwait(false);
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken,
+            Scope = RequestedScope
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)response.StatusCode, body);
@@ -1330,14 +1369,14 @@ internal sealed class TokenExchangeGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
-            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken)
-        }).ConfigureAwait(false);
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)response.StatusCode, body);
@@ -1373,14 +1412,14 @@ internal sealed class TokenExchangeGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
-            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken)
-        }).ConfigureAwait(false);
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)response.StatusCode, body);
@@ -1422,14 +1461,14 @@ internal sealed class TokenExchangeGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
         {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
-            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken)
-        }).ConfigureAwait(false);
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreNotEqual(200, (int)response.StatusCode, body);
@@ -1560,13 +1599,13 @@ internal sealed class TokenExchangeGrantTests
     private async Task<string> ObtainClientCredentialsAccessTokenAsync(
         HttpClient http, Uri tokenUrl, string clientId, string clientSecret, string scope)
     {
-        using HttpResponseMessage response = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
             [OAuthRequestParameterNames.ClientId] = clientId,
             ["client_secret"] = clientSecret,
             [OAuthRequestParameterNames.Scope] = scope
-        }).ConfigureAwait(false);
+        }, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)response.StatusCode, body);
@@ -1656,11 +1695,17 @@ internal sealed class TokenExchangeGrantTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
 
-    private async Task<HttpResponseMessage> PostFormAsync(
-        HttpClient http, Uri url, Dictionary<string, string> fields)
+    /// <summary>
+    /// Builds a well-formed RFC 8693 §2.1 token-exchange request via
+    /// <see cref="TokenExchangeRequestBuilder.Build(TokenExchangeBuilderOptions)"/> and asserts the
+    /// build succeeded — every call site here supplies a well-formed <paramref name="options"/>, so a
+    /// build failure is a test-fixture bug, not something under test.
+    /// </summary>
+    private static OutgoingFormFields BuildRequest(TokenExchangeBuilderOptions options)
     {
-        using FormUrlEncodedContent content = new(fields);
+        Result<OutgoingFormFields, TokenRequestBuilderError> built = TokenExchangeRequestBuilder.Build(options);
+        Assert.IsTrue(built.IsSuccess, "The builder must accept a well-formed token-exchange request.");
 
-        return await http.PostAsync(url, content, TestContext.CancellationToken).ConfigureAwait(false);
+        return built.Value!;
     }
 }

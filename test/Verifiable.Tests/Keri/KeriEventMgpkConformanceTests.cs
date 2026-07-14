@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using MessagePack;
 using Verifiable.Cryptography;
 using Verifiable.Keri;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Keri;
 
@@ -177,19 +178,19 @@ internal sealed class KeriEventMgpkConformanceTests
         var writer = new MessagePackWriter(buffer);
         writer.WriteMapHeader(13);
 
-        WriteScalar(ref writer, KeriMessageFields.Version, "KERICAACAAMGPK0001a0.");
-        WriteScalar(ref writer, KeriMessageFields.MessageType, KeriMessageTypes.Inception);
-        WriteScalar(ref writer, KeriMessageFields.Said, Aid);
-        WriteScalar(ref writer, KeriMessageFields.Prefix, Aid);
-        WriteScalar(ref writer, KeriMessageFields.SequenceNumber, "0");
-        WriteScalar(ref writer, KeriMessageFields.KeysSigningThreshold, "2");
-        WriteList(ref writer, KeriMessageFields.SigningKeys, SigningKeys);
-        WriteScalar(ref writer, KeriMessageFields.NextKeysSigningThreshold, "2");
-        WriteList(ref writer, KeriMessageFields.NextKeyDigests, NextKeyDigests);
-        WriteScalar(ref writer, KeriMessageFields.BackerThreshold, "1");
-        WriteList(ref writer, KeriMessageFields.Backers, Backers);
-        WriteList(ref writer, KeriMessageFields.ConfigurationTraits, ConfigurationTraits);
-        WriteList(ref writer, KeriMessageFields.Anchors, []);
+        KeriEventWireFixtures.WriteScalar(ref writer, KeriMessageFields.Version, "KERICAACAAMGPK0001a0.");
+        KeriEventWireFixtures.WriteScalar(ref writer, KeriMessageFields.MessageType, KeriMessageTypes.Inception);
+        KeriEventWireFixtures.WriteScalar(ref writer, KeriMessageFields.Said, Aid);
+        KeriEventWireFixtures.WriteScalar(ref writer, KeriMessageFields.Prefix, Aid);
+        KeriEventWireFixtures.WriteScalar(ref writer, KeriMessageFields.SequenceNumber, "0");
+        KeriEventWireFixtures.WriteScalar(ref writer, KeriMessageFields.KeysSigningThreshold, "2");
+        KeriEventWireFixtures.WriteList(ref writer, KeriMessageFields.SigningKeys, SigningKeys);
+        KeriEventWireFixtures.WriteScalar(ref writer, KeriMessageFields.NextKeysSigningThreshold, "2");
+        KeriEventWireFixtures.WriteList(ref writer, KeriMessageFields.NextKeyDigests, NextKeyDigests);
+        KeriEventWireFixtures.WriteScalar(ref writer, KeriMessageFields.BackerThreshold, "1");
+        KeriEventWireFixtures.WriteList(ref writer, KeriMessageFields.Backers, Backers);
+        KeriEventWireFixtures.WriteList(ref writer, KeriMessageFields.ConfigurationTraits, ConfigurationTraits);
+        KeriEventWireFixtures.WriteList(ref writer, KeriMessageFields.Anchors, []);
 
         writer.Flush();
 
@@ -198,24 +199,6 @@ internal sealed class KeriEventMgpkConformanceTests
         buffer.WrittenSpan.CopyTo(owner.Memory.Span);
 
         return new MintedEvent(owner, length);
-    }
-
-
-    private static void WriteScalar(ref MessagePackWriter writer, string label, string value)
-    {
-        writer.Write(label);
-        writer.Write(value);
-    }
-
-
-    private static void WriteList(ref MessagePackWriter writer, string label, string[] values)
-    {
-        writer.Write(label);
-        writer.WriteArrayHeader(values.Length);
-        foreach(string value in values)
-        {
-            writer.Write(value);
-        }
     }
 
 

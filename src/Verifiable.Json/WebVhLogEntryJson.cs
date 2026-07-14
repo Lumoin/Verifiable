@@ -279,7 +279,7 @@ public static class WebVhLogEntryJson
     //The parameter property names defined by did:webvh v1.0. The parameters object MUST only include properties
     //defined in the version of the specification being used, so any other property name invalidates the entry
     //(did:webvh v1.0, Parameters: L1035).
-    private static readonly string[] DefinedParameterProperties =
+    private static string[] DefinedParameterProperties { get; } =
     [
         MethodProperty, ScidProperty, UpdateKeysProperty, NextKeyHashesProperty,
         PortableProperty, DeactivatedProperty, TtlProperty, WitnessProperty, WatchersProperty

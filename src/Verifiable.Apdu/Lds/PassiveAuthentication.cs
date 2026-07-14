@@ -93,7 +93,7 @@ public static class PassiveAuthentication
         //revocation universally and the library ships no OCSP/CRL client, so revocation happens only when a deployment
         //supplies the checker; then a revoked or indeterminate signer rejects the document.
         using PublicKeyMemory documentSignerKey = await validateChain(
-            verified.Certificates, cscaTrustAnchors, validationTime, pool, cancellationToken, checkRevocation).ConfigureAwait(false);
+            verified.Certificates, cscaTrustAnchors, validationTime, pool, checkRevocation, cancellationToken).ConfigureAwait(false);
 
         //Step 4: match each read data group's hash against the signed LDS Security Object.
         using LdsSecurityObject securityObject = LdsSecurityObject.Parse(verified.Content, pool);

@@ -40,6 +40,15 @@ public static class WellKnownCoseAlgorithms
     public const int Es512 = -36;
 
     /// <summary>
+    /// ECDSA using the secp256k1 curve and SHA-256.
+    /// </summary>
+    /// <remarks>
+    /// See <see href="https://www.rfc-editor.org/rfc/rfc8812#section-3">RFC 8812 §3, The ECDSA Signature
+    /// Algorithm</see>. The paired COSE elliptic curve identifier (secp256k1) is <see cref="CoseKeyCurves.Secp256k1"/> (8).
+    /// </remarks>
+    public const int Es256K = -47;
+
+    /// <summary>
     /// RSASSA-PSS with SHA-256.
     /// </summary>
     /// <remarks>See <see href="https://www.rfc-editor.org/rfc/rfc8230#section-2">RFC 8230 §2</see>.</remarks>
@@ -264,6 +273,14 @@ public static class WellKnownCoseAlgorithms
 
 
     /// <summary>
+    /// Determines if the algorithm is <see cref="Es256K"/>.
+    /// </summary>
+    /// <param name="algorithm">The algorithm identifier.</param>
+    /// <returns><see langword="true"/> if the algorithm is ES256K; otherwise, <see langword="false"/>.</returns>
+    public static bool IsEs256K(int algorithm) => algorithm == Es256K;
+
+
+    /// <summary>
     /// Determines if the algorithm is <see cref="Ps256"/>.
     /// </summary>
     /// <param name="algorithm">The algorithm identifier.</param>
@@ -285,6 +302,30 @@ public static class WellKnownCoseAlgorithms
     /// <param name="algorithm">The algorithm identifier.</param>
     /// <returns><see langword="true"/> if the algorithm is PS512; otherwise, <see langword="false"/>.</returns>
     public static bool IsPs512(int algorithm) => algorithm == Ps512;
+
+
+    /// <summary>
+    /// Determines if the algorithm is <see cref="Rs256"/>.
+    /// </summary>
+    /// <param name="algorithm">The algorithm identifier.</param>
+    /// <returns><see langword="true"/> if the algorithm is RS256; otherwise, <see langword="false"/>.</returns>
+    public static bool IsRs256(int algorithm) => algorithm == Rs256;
+
+
+    /// <summary>
+    /// Determines if the algorithm is <see cref="Rs384"/>.
+    /// </summary>
+    /// <param name="algorithm">The algorithm identifier.</param>
+    /// <returns><see langword="true"/> if the algorithm is RS384; otherwise, <see langword="false"/>.</returns>
+    public static bool IsRs384(int algorithm) => algorithm == Rs384;
+
+
+    /// <summary>
+    /// Determines if the algorithm is <see cref="Rs512"/>.
+    /// </summary>
+    /// <param name="algorithm">The algorithm identifier.</param>
+    /// <returns><see langword="true"/> if the algorithm is RS512; otherwise, <see langword="false"/>.</returns>
+    public static bool IsRs512(int algorithm) => algorithm == Rs512;
 
 
     /// <summary>
@@ -383,6 +424,7 @@ public static class WellKnownCoseAlgorithms
         Es256 => WellKnownJwaValues.Es256,
         Es384 => WellKnownJwaValues.Es384,
         Es512 => WellKnownJwaValues.Es512,
+        Es256K => WellKnownJwaValues.Es256K,
         Ps256 => WellKnownJwaValues.Ps256,
         Ps384 => WellKnownJwaValues.Ps384,
         Ps512 => WellKnownJwaValues.Ps512,

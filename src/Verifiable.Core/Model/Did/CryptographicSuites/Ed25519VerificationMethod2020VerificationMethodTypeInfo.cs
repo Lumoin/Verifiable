@@ -4,7 +4,7 @@ namespace Verifiable.Core.Model.Did.CryptographicSuites
 {
     public sealed class Ed25519VerificationMethod2020VerificationMethodTypeInfo: VerificationMethodTypeInfo
     {
-        private static readonly ReadOnlyCollection<string> ContextsArray = new(new[] { "https://w3id.org/security/suites/ed25519-2020/v1" });
+        private static ReadOnlyCollection<string> ContextsArray { get; } = new(new[] { "https://w3id.org/security/suites/ed25519-2020/v1" });
 
 
         public static Ed25519VerificationMethod2020VerificationMethodTypeInfo Instance { get; } = new()

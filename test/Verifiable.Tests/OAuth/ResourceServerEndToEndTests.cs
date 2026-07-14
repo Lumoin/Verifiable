@@ -33,7 +33,7 @@ internal sealed class ResourceServerEndToEndTests
     private const string Kid = "test-kid";
     private const string Scope = "openid profile";
 
-    private static readonly DateTimeOffset NowInstant = new(2026, 5, 17, 12, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset NowInstant = TestClock.CanonicalEpoch.AddDays(-15);
 
 
     [TestMethod]
@@ -50,7 +50,15 @@ internal sealed class ResourceServerEndToEndTests
             timeProvider: time);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        string token = await BuildAccessTokenAsync(keys.PrivateKey, BuildPayload()).ConfigureAwait(false);
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: Subject,
+            scope: Scope,
+            clientId: ClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: Issuer,
+            audience: [Audience]);
+        string token = await BuildAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
         using HttpClient client = new() { BaseAddress = rs.HttpBaseAddress };
         using HttpRequestMessage request = new(HttpMethod.Get, "/protected");
@@ -111,7 +119,14 @@ internal sealed class ResourceServerEndToEndTests
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         //Token issued for the wrong audience; RS expects "test-resource-server".
-        JwtPayload payload = BuildPayload(audience: "other-rs");
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: Subject,
+            scope: Scope,
+            clientId: ClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: Issuer,
+            audience: ["other-rs"]);
         string token = await BuildAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
         using HttpClient client = new() { BaseAddress = rs.HttpBaseAddress };
@@ -140,7 +155,14 @@ internal sealed class ResourceServerEndToEndTests
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         //Token carries a cnf.jkt binding — must be presented with DPoP scheme.
-        JwtPayload payload = BuildPayload();
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: Subject,
+            scope: Scope,
+            clientId: ClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: Issuer,
+            audience: [Audience]);
         payload[WellKnownJwtClaimNames.Cnf] = new Dictionary<string, object>
         {
             [WellKnownJwtClaimNames.JwkThumbprint] = "some-bound-thumbprint"
@@ -181,7 +203,14 @@ internal sealed class ResourceServerEndToEndTests
         string thumbprint = dpopKey.GetThumbprint(
             TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
-        JwtPayload payload = BuildPayload();
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: Subject,
+            scope: Scope,
+            clientId: ClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: Issuer,
+            audience: [Audience]);
         payload[WellKnownJwtClaimNames.Cnf] = new Dictionary<string, object>
         {
             [WellKnownJwtClaimNames.JwkThumbprint] = thumbprint
@@ -252,7 +281,14 @@ internal sealed class ResourceServerEndToEndTests
         string thumbprint = dpopKey.GetThumbprint(
             TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
-        JwtPayload payload = BuildPayload();
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: Subject,
+            scope: Scope,
+            clientId: ClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: Issuer,
+            audience: [Audience]);
         payload[WellKnownJwtClaimNames.Cnf] = new Dictionary<string, object>
         {
             [WellKnownJwtClaimNames.JwkThumbprint] = thumbprint
@@ -307,18 +343,6 @@ internal sealed class ResourceServerEndToEndTests
     private static ServerVerificationKeyResolverDelegate BuildResolver(PublicKeyMemory publicKey) =>
         (kid, tenant, ctx, ct) => ValueTask.FromResult<PublicKeyMemory?>(
             string.Equals(kid.Value, Kid, StringComparison.Ordinal) ? publicKey : null);
-
-
-    private static JwtPayload BuildPayload(string audience = Audience) =>
-        JwtPayloadExtensions.ForAccessToken(
-            subject: Subject,
-            jti: Guid.NewGuid().ToString("N"),
-            scope: Scope,
-            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
-            expiresAt: NowInstant + TimeSpan.FromHours(1),
-            issuer: Issuer,
-            audience: [audience],
-            clientId: ClientId);
 
 
     private async Task<string> BuildAccessTokenAsync(PrivateKeyMemory privateKey, JwtPayload payload)

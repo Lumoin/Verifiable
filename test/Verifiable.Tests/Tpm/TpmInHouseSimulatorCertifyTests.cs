@@ -108,6 +108,9 @@ internal sealed class TpmInHouseSimulatorCertifyTests
         //simulator's exported public area only.
         byte[] attestDigest = await ComputeSha256Async(certify.CertifyInfo.GetRawBytes().ToArray(), pool, TestContext.CancellationToken).ConfigureAwait(false);
 
+        //Independent-oracle site: framework ECDsa reconstructs the AK's public key from wire-exported outPublic
+        //and verifies the signature against it, a self-consistency firewall proving the library's signature
+        //against .NET's independent ECDSA implementation rather than minting fixture key material.
         TpmsEccPoint akPoint = ak.OutPublic.PublicArea.Unique.Ecc!;
         var ecParameters = new ECParameters
         {

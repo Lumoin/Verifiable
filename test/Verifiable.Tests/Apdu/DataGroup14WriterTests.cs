@@ -3,6 +3,7 @@ using Verifiable.Apdu;
 using Verifiable.Apdu.Lds;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -18,7 +19,7 @@ internal sealed class DataGroup14WriterTests
     [TestMethod]
     public void RoundTripsChipAuthenticationInfoAndKey()
     {
-        byte[] point = BuildUncompressedPoint(0x11);
+        byte[] point = ApduWireFixtures.BuildUncompressedPoint(0x11);
         using EncodedEcPoint chipPublicKey = EncodedEcPoint.FromBytes(point, CryptoTags.BrainpoolP256r1ExchangePublicKey, BaseMemoryPool.Shared);
         using ElementaryFile dataGroup14 = DataGroup14.Write(chipPublicKey, ChipAuthenticationCipher.Aes128, version: 1, keyId: null, BaseMemoryPool.Shared);
 
@@ -44,7 +45,7 @@ internal sealed class DataGroup14WriterTests
     [TestMethod]
     public void RoundTripsTripleDesWithKeyIdentifier()
     {
-        byte[] point = BuildUncompressedPoint(0x22);
+        byte[] point = ApduWireFixtures.BuildUncompressedPoint(0x22);
         using EncodedEcPoint chipPublicKey = EncodedEcPoint.FromBytes(point, CryptoTags.BrainpoolP256r1ExchangePublicKey, BaseMemoryPool.Shared);
         using ElementaryFile dataGroup14 = DataGroup14.Write(chipPublicKey, ChipAuthenticationCipher.TripleDes, version: 1, keyId: 5, BaseMemoryPool.Shared);
 
@@ -53,16 +54,5 @@ internal sealed class DataGroup14WriterTests
         Assert.AreEqual(ChipAuthenticationCipher.TripleDes, parsed.ChipAuthenticationInfos[0].Cipher, "Triple-DES cipher must round-trip.");
         Assert.AreEqual(5, parsed.ChipAuthenticationInfos[0].KeyId, "The ChipAuthenticationInfo key id must round-trip.");
         Assert.AreEqual(5, parsed.ChipAuthenticationPublicKeyInfos[0].KeyId, "The ChipAuthenticationPublicKeyInfo key id must round-trip.");
-    }
-
-
-    /// <summary>Builds a 65-byte SEC1 uncompressed brainpoolP256r1 point: <c>0x04</c> then 64 filler bytes.</summary>
-    private static byte[] BuildUncompressedPoint(byte fill)
-    {
-        byte[] point = new byte[65];
-        point[0] = 0x04;
-        point.AsSpan(1).Fill(fill);
-
-        return point;
     }
 }

@@ -64,28 +64,28 @@ public sealed record WebPlusDidBuildState(
 public sealed class WebPlusDidBuilder: Builder<DidDocument, WebPlusDidBuildState, WebPlusDidBuilder>
 {
     /// <summary>The serializer producing a document's JCS canonical bytes (the wire form a self-hash commits to).</summary>
-    private readonly WebPlusDidDocumentSerializer serializer;
+    private WebPlusDidDocumentSerializer Serializer { get; }
 
-    /// <summary>The digest implementation matching <see cref="multihashCode"/>, used to compute the self-hash.</summary>
-    private readonly ComputeDigestDelegate computeDigest;
+    /// <summary>The digest implementation matching <see cref="MultihashCode"/>, used to compute the self-hash.</summary>
+    private ComputeDigestDelegate ComputeDigest { get; }
 
     /// <summary>The digest tag naming the self-hash's algorithm for the seam, e.g. <see cref="CryptoTags.Blake3Digest"/>.</summary>
-    private readonly Tag digestTag;
+    private Tag DigestTag { get; }
 
     /// <summary>The multihash code naming the self-hash's hash function, e.g. <see cref="MultihashHeaders.Blake3"/>.</summary>
-    private readonly ReadOnlyMemory<byte> multihashCode;
+    private ReadOnlyMemory<byte> MultihashCode { get; }
 
     /// <summary>The digest length in bytes for the self-hash's hash function.</summary>
-    private readonly int digestLength;
+    private int DigestLength { get; }
 
     /// <summary>The base64url (no padding) encoder the MBHash uses.</summary>
-    private readonly EncodeDelegate base64UrlEncoder;
+    private EncodeDelegate Base64UrlEncoder { get; }
 
     /// <summary>The base58btc encoder producing the key's MBPubKey for the <c>updateRules</c> rule.</summary>
-    private readonly EncodeDelegate base58Encoder;
+    private EncodeDelegate Base58Encoder { get; }
 
     /// <summary>The pool the transient hash buffers are rented from.</summary>
-    private readonly MemoryPool<byte> pool;
+    private MemoryPool<byte> Pool { get; }
 
 
     /// <summary>
@@ -117,14 +117,14 @@ public sealed class WebPlusDidBuilder: Builder<DidDocument, WebPlusDidBuildState
         ArgumentNullException.ThrowIfNull(base58Encoder);
         ArgumentNullException.ThrowIfNull(pool);
 
-        this.serializer = serializer;
-        this.computeDigest = computeDigest;
-        this.digestTag = digestTag;
-        this.multihashCode = multihashCode;
-        this.digestLength = digestLength;
-        this.base64UrlEncoder = base64UrlEncoder;
-        this.base58Encoder = base58Encoder;
-        this.pool = pool;
+        this.Serializer = serializer;
+        this.ComputeDigest = computeDigest;
+        this.DigestTag = digestTag;
+        this.MultihashCode = multihashCode;
+        this.DigestLength = digestLength;
+        this.Base64UrlEncoder = base64UrlEncoder;
+        this.Base58Encoder = base58Encoder;
+        this.Pool = pool;
 
         //First transformation: the standard verification method and its relationships, via the SHARED
         //construction every method builder uses — only the did:webplus verification-method id format is specific.
@@ -163,9 +163,9 @@ public sealed class WebPlusDidBuilder: Builder<DidDocument, WebPlusDidBuildState
         {
             var webPlus = (WebPlusDidDocument)document;
 
-            TaggedMemory<byte> placeholderJcs = builder.serializer(webPlus);
+            TaggedMemory<byte> placeholderJcs = builder.Serializer(webPlus);
             string selfHash = await WebPlusMbHash.ComputeAsync(
-                placeholderJcs.Memory, builder.multihashCode, builder.digestLength, builder.computeDigest, builder.digestTag, builder.base64UrlEncoder, builder.pool, cancellationToken).ConfigureAwait(false);
+                placeholderJcs.Memory, builder.MultihashCode, builder.DigestLength, builder.ComputeDigest, builder.DigestTag, builder.Base64UrlEncoder, builder.Pool, cancellationToken).ConfigureAwait(false);
 
             string placeholder = buildState!.Placeholder;
             webPlus.SelfHash = selfHash;
@@ -214,11 +214,11 @@ public sealed class WebPlusDidBuilder: Builder<DidDocument, WebPlusDidBuildState
         ArgumentException.ThrowIfNullOrWhiteSpace(host);
         ArgumentException.ThrowIfNullOrWhiteSpace(validFrom);
 
-        string placeholder = WebPlusMbHash.Placeholder(multihashCode.Span, digestLength, base64UrlEncoder, pool);
+        string placeholder = WebPlusMbHash.Placeholder(MultihashCode.Span, DigestLength, Base64UrlEncoder, Pool);
         WebPlusDidBuildState buildState = new(
             updateKey,
             verificationMethodType ?? MultikeyVerificationMethodTypeInfo.Instance,
-            MbPubKey: MultibaseSerializer.EncodeKey(updateKey, base58Encoder),
+            MbPubKey: MultibaseSerializer.EncodeKey(updateKey, Base58Encoder),
             placeholder,
             PlaceholderDid: $"{WellKnownDidMethodPrefixes.WebPlusDidMethodPrefix}:{host}:{placeholder}",
             validFrom);

@@ -24,8 +24,9 @@ namespace Verifiable.BouncyCastle;
 /// Points cross the boundary in SEC1 uncompressed form (<c>0x04 || X || Y</c>) and scalars as
 /// unsigned big-endian bytes; the curve is named by the <see cref="CryptoAlgorithm"/> in the tag and
 /// resolved through BouncyCastle's <see cref="ECNamedCurveTable"/> (which covers the brainpool and
-/// NIST prime curves ICAO Doc 9303 PACE uses). Private scalars are copied into a transient array that
-/// is zeroed once BouncyCastle has consumed it.
+/// NIST prime curves ICAO Doc 9303 PACE uses). Private scalars pass to BouncyCastle through a span
+/// constructor that copies into its own immutable magnitude — no naked byte[] of private-key material
+/// for this layer to track and zero.
 /// </para>
 /// </remarks>
 public static class BouncyCastleEcPointFunctions
@@ -225,20 +226,13 @@ public static class BouncyCastleEcPointFunctions
 
 
     /// <summary>
-    /// Converts unsigned big-endian scalar bytes to a positive <see cref="BigInteger"/>, zeroing the
-    /// transient copy once BouncyCastle has taken its own copy of the magnitude.
+    /// Converts unsigned big-endian scalar bytes to a positive <see cref="BigInteger"/>. The span ctor
+    /// copies the scalar into BouncyCastle's own immutable magnitude — no naked byte[] of private-key
+    /// material for us to track and zero.
     /// </summary>
     private static BigInteger ToScalar(ReadOnlyMemory<byte> scalar)
     {
-        byte[] magnitude = scalar.ToArray();
-        try
-        {
-            return new BigInteger(1, magnitude);
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(magnitude);
-        }
+        return new BigInteger(1, scalar.Span);
     }
 
 

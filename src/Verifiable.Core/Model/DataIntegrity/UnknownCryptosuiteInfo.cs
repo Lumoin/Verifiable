@@ -33,7 +33,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </remarks>
 public sealed class UnknownCryptosuiteInfo: CryptosuiteInfo
 {
-    private static readonly IReadOnlyList<string> EmptyContexts = Array.Empty<string>();
+    private static IReadOnlyList<string> EmptyContexts { get; } = Array.Empty<string>();
 
     /// <summary>
     /// Creates an unknown cryptosuite info with the specified name.

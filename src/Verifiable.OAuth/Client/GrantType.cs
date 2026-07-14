@@ -109,7 +109,7 @@ public readonly struct GrantType: IEquatable<GrantType>
     public static GrantType PreAuthorizedCode { get; } = new(9);
 
 
-    private static readonly List<GrantType> grantTypes =
+    private static List<GrantType> grantTypes { get; } =
     [
         AuthorizationCode,
         RefreshToken,

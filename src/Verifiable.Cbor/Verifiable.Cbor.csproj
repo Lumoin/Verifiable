@@ -9,6 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Verifiable.Foundation\Verifiable.Foundation.csproj" />
     <ProjectReference Include="..\Verifiable.Core\Verifiable.Core.csproj" />
+    <ProjectReference Include="..\Verifiable.Fido2\Verifiable.Fido2.csproj" />
     <ProjectReference Include="..\Verifiable.JCose\Verifiable.JCose.csproj" />
   </ItemGroup>
 

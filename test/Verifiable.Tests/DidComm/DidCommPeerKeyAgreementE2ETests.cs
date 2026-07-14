@@ -110,7 +110,7 @@ internal sealed class DidCommPeerKeyAgreementE2ETests
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
             MicrosoftEntropyFunctions.GenerateNonce,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         DidCommEncryptedUnpackResult result = await encrypted.UnpackAnoncryptAsync(
             bobKid,
@@ -122,7 +122,7 @@ internal sealed class DidCommPeerKeyAgreementE2ETests
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsUnpacked, $"The anoncrypt message MUST unpack. Error: {result.Error}.");
         Assert.AreEqual(DidCommDecryptionError.None, result.Error);
@@ -184,7 +184,7 @@ internal sealed class DidCommPeerKeyAgreementE2ETests
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
             MicrosoftEntropyFunctions.GenerateNonce,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Bob unpacks with his own private key; the library resolves Alice's sender key from her did:peer.
         DidCommEncryptedUnpackResult result = await encrypted.UnpackAuthcryptAsync(
@@ -197,7 +197,7 @@ internal sealed class DidCommPeerKeyAgreementE2ETests
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsUnpacked, $"The authcrypt message MUST unpack. Error: {result.Error}.");
         Assert.AreEqual(DidCommDecryptionError.None, result.Error);

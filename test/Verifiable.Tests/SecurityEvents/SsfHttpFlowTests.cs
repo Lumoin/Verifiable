@@ -35,7 +35,7 @@ internal sealed class SsfHttpFlowTests
 
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
@@ -109,7 +109,7 @@ internal sealed class SsfHttpFlowTests
             SsfDeliveryDecision decision = await SecurityEventTokenReception.ReceiveAsync(
                 request.Body, transmitterPublic, TransmitterIssuer, ReceiverAudience,
                 SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
-                TestSetup.Base64UrlDecoder, isSeen, new ExchangeContext(), Pool, ct).ConfigureAwait(false);
+                TestSetup.Base64UrlDecoder, isSeen, new ExchangeContext(), Pool, cancellationToken: ct).ConfigureAwait(false);
 
             if(decision.Outcome is SsfDeliveryOutcome.Accepted or SsfDeliveryOutcome.AcceptedDuplicate)
             {
@@ -233,7 +233,7 @@ internal sealed class SsfHttpFlowTests
                 delivered.Value, transmitterPublic, TransmitterIssuer, ReceiverAudience,
                 SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
                 TestSetup.Base64UrlDecoder, isSeen, new ExchangeContext(), Pool,
-                TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.AreEqual(SsfDeliveryOutcome.Accepted, decision.Outcome);
             Assert.AreEqual(CaepEventTypes.SessionRevoked, decision.Token!.Events[0].EventType);
@@ -269,9 +269,9 @@ internal sealed class SsfHttpFlowTests
             SecurityEventTestJson.HeaderSerializer,
             SecurityEventTestJson.PayloadSerializer,
             Pool,
-            TestContext.CancellationToken,
             signingKeyId: "key-1",
-            subjectId: SubjectIdentifier.Opaque("stream-1")).ConfigureAwait(false);
+            subjectId: SubjectIdentifier.Opaque("stream-1"),
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
 
     private async Task<HttpResponseMessage> PushAsync(HttpClient client, Uri pushUrl, string compactSet)

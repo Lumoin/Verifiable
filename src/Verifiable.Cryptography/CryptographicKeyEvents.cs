@@ -1,6 +1,8 @@
 using System;
 using System.Buffers;
 using System.Collections.Frozen;
+using System.Diagnostics;
+using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Cryptography;
 
@@ -34,7 +36,7 @@ namespace Verifiable.Cryptography;
 /// </remarks>
 public static class CryptographicKeyEvents
 {
-    private static readonly CryptoSubject subject = new();
+    private static CryptoSubject subject { get; } = new();
 
 
     /// <summary>
@@ -42,7 +44,60 @@ public static class CryptographicKeyEvents
     /// delegates produce events. Subscribe at application startup to receive
     /// entropy, digest, and future cryptographic operation events.
     /// </summary>
+    /// <remarks>
+    /// The underlying <see cref="CryptoSubject"/> may deliver concurrently from multiple threads — every
+    /// signing/verification call site across the library publishes to this single process-wide stream, so
+    /// a subscriber observing more than one operation at a time (directly, or indirectly by running
+    /// alongside other concurrent operations in the same process) must synchronize its own state; the
+    /// stream itself never serializes delivery to a single subscriber against itself.
+    /// </remarks>
     public static IObservable<CryptoEvent> Events => subject;
+
+
+    /// <summary>
+    /// The number of currently subscribed observers on <see cref="Events"/>. Not part of the runtime
+    /// public API surface — an application has no legitimate reason to introspect subscriber count — this
+    /// exists solely so a test can prove a consumer's subscription lifetime is bounded: subscribe, run its
+    /// workload, dispose, and leave the count exactly as it found it (see <c>Verifiable</c>'s
+    /// <c>CryptoEventProvenance.CaptureAsync</c>, the wave-7 CLI/MCP consumer).
+    /// </summary>
+    internal static int SubscriberCountForTests => subject.ObserverCount;
+
+
+    /// <summary>
+    /// The default <see cref="CryptoEventSink"/>: forwards directly to <see cref="Events"/>, exactly as
+    /// <see cref="Emit"/> does. Library layers that resolve and invoke a <see cref="SigningDelegate"/>/
+    /// <see cref="VerificationDelegate"/> (or a sibling delegate family sharing the same tuple shape)
+    /// directly — rather than through the <see cref="PrivateKey.SignAsync"/>/<see cref="PublicKey.VerifyAsync"/>
+    /// choke points — invoke <c>(eventSink ?? DefaultSink)(cryptoEvent)</c> when their own trailing
+    /// <c>CryptoEventSink? eventSink</c> parameter is <see langword="null"/>, so every call site publishes
+    /// to the same stream by default regardless of which route reached it. See <see cref="CryptoEventSink"/>
+    /// for the rationale.
+    /// </summary>
+    public static CryptoEventSink DefaultSink { get; } = subject.OnNext;
+
+
+    /// <summary>
+    /// Emits <paramref name="cryptoEvent"/> to <see cref="Events"/> when it is non-null. The internal hook
+    /// used by the <see cref="PrivateKey.SignAsync"/>/<see cref="PublicKey.VerifyAsync"/> choke points, and
+    /// by the handful of call sites this assembly grants <c>InternalsVisibleTo</c> access to, to publish
+    /// the <see cref="SignatureProducedEvent"/>/<see cref="VerificationCompletedEvent"/> a
+    /// <see cref="SigningDelegate"/>/<see cref="VerificationDelegate"/> implementation constructs. Every
+    /// other call site — one without <c>InternalsVisibleTo</c> access, which is the overwhelming majority
+    /// of the library's COSE/JOSE, SD-JWT/SD-CWT, DIDComm, and APDU/eMRTD call sites — reaches the same
+    /// stream through the public <see cref="DefaultSink"/> instead, via its own <see cref="CryptoEventSink"/>
+    /// parameter. Not part of the public API in its own right; the public surface for emitting is
+    /// <see cref="DefaultSink"/> (a value, not a spoofable ambient method) and <see cref="Events"/>
+    /// (subscribing).
+    /// </summary>
+    /// <param name="cryptoEvent">The event to emit, or <see langword="null"/> to emit nothing.</param>
+    internal static void Emit(CryptoEvent? cryptoEvent)
+    {
+        if(cryptoEvent is not null)
+        {
+            subject.OnNext(cryptoEvent);
+        }
+    }
 
 
     /// <summary>
@@ -85,6 +140,54 @@ public static class CryptographicKeyEvents
         }
 
         return result;
+    }
+
+
+    /// <summary>
+    /// Resolves the registered <see cref="KeyCreationDelegate"/> for <paramref name="algorithm"/> and
+    /// <paramref name="purpose"/>, invokes it, and emits any produced <see cref="KeyMaterialGeneratedEvent"/>
+    /// to <see cref="Events"/>.
+    /// </summary>
+    /// <remarks>
+    /// This is the choke point for freshly-minted key material — mirroring <see cref="GenerateNonce"/>'s
+    /// shape for the same reason: the registered creation delegate is resolved, invoked once, and its event
+    /// emitted directly here, unconditionally, because this method (unlike the widened JOSE/COSE/APDU call
+    /// sites) IS the seam, not a caller reaching through it. <see cref="CryptographicKeyFactory.CreatePrivateKey"/>/
+    /// <see cref="CryptographicKeyFactory.CreatePublicKey"/> deliberately do NOT also emit
+    /// <see cref="KeyMaterialGeneratedEvent"/>: those two methods bind both freshly-minted and
+    /// loaded/parsed/stored key material indistinguishably, so emitting there would mislabel every loaded
+    /// key as newly generated. Call this method instead of a backend <c>Create*Keys</c> static directly when
+    /// the resulting <see cref="KeyMaterialGeneratedEvent"/> provenance matters; the existing
+    /// <c>Create*Keys</c> statics remain fully legal to call directly and simply forfeit the event, exactly
+    /// as a direct <see cref="SigningDelegate"/> call forfeits <see cref="SignatureProducedEvent"/>.
+    /// </remarks>
+    /// <param name="algorithm">The algorithm of the key pair to create.</param>
+    /// <param name="purpose">The purpose (signing, exchange) the key pair is created for.</param>
+    /// <param name="pool">The memory pool to allocate key material from.</param>
+    /// <param name="qualifier">Optional qualifier for selecting among multiple registered creators.</param>
+    /// <returns>The created key pair.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no <see cref="KeyCreationDelegate"/> has been registered for the given algorithm/purpose.
+    /// </exception>
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateKeyPair(
+        CryptoAlgorithm algorithm,
+        Purpose purpose,
+        MemoryPool<byte> pool,
+        string? qualifier = null)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+
+        KeyCreationDelegate create = KeyCreationFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveCreation(
+            algorithm, purpose, qualifier);
+
+        (PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys, CryptoEvent? evt) = create(pool);
+
+        if(evt is not null)
+        {
+            subject.OnNext(evt);
+        }
+
+        return keys;
     }
 
 
@@ -360,11 +463,21 @@ public static class CryptographicKeyEvents
 
 
     //Minimal IObservable/IObserver implementation — no System.Reactive dependency.
-    //Thread-safe subscriber list using copy-on-write.
+    //Thread-safe subscriber list using copy-on-write: Subscribe/Remove never mutate an existing array in
+    //place, they build a new one and reassign the volatile field, so a reader that already captured a
+    //snapshot (as OnNext does below) never observes a torn or concurrently-mutated array — the snapshot is
+    //immutable for the lifetime of that OnNext call, regardless of how many Subscribe/Dispose calls a
+    //concurrent emitter or subscriber interleaves with it. This is what makes concurrent subscribe/dispose
+    //during an in-flight emit safe: the emit either sees the observer or it does not, but it never sees a
+    //partially-updated array.
     internal sealed class CryptoSubject: IObservable<CryptoEvent>
     {
         private volatile IObserver<CryptoEvent>[] observers = [];
         private readonly object gate = new();
+
+
+        /// <summary>The number of currently subscribed observers. Test-only introspection hook.</summary>
+        internal int ObserverCount => observers.Length;
 
 
         public IDisposable Subscribe(IObserver<CryptoEvent> observer)
@@ -385,12 +498,35 @@ public static class CryptographicKeyEvents
         }
 
 
+        /// <summary>
+        /// Delivers <paramref name="value"/> to every subscriber captured in the immutable snapshot taken
+        /// at the start of this call (see the type-level remarks). Each subscriber is isolated from every
+        /// other: a subscriber whose <see cref="IObserver{T}.OnNext"/> throws never propagates the exception
+        /// into the crypto call site that produced <paramref name="value"/>, and never prevents delivery to
+        /// subscribers later in the snapshot. The failure is recorded on <see cref="Activity.Current"/> as
+        /// an event carrying the <see cref="CryptoEvent"/>'s runtime type and the exception's runtime type
+        /// only — never the event payload itself, which a telemetry backend already receives once, from a
+        /// non-throwing subscriber, and should not receive a second time embedded in a diagnostic.
+        /// </summary>
         public void OnNext(CryptoEvent value)
         {
             IObserver<CryptoEvent>[] current = observers;
             foreach(IObserver<CryptoEvent> observer in current)
             {
-                observer.OnNext(value);
+                try
+                {
+                    observer.OnNext(value);
+                }
+                catch(Exception exception)
+                {
+                    Activity.Current?.AddEvent(new ActivityEvent(
+                        CryptoTelemetry.ActivityNames.SubscriberException,
+                        tags: new ActivityTagsCollection
+                        {
+                            [CryptoTelemetry.Subscriber.EventType] = value.GetType().Name,
+                            [CryptoTelemetry.Subscriber.ExceptionType] = exception.GetType().Name
+                        }));
+                }
             }
         }
 

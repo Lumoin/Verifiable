@@ -1,7 +1,9 @@
 using System;
 using System.Buffers;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Apdu;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -100,7 +102,7 @@ internal sealed class ApduRecorderTests
         }
 
         //Step 2: Create a recording.
-        var info = CardSessionInfo.Create(null, null, ApduPlatform.Virtual, TimeProvider.System, "test session");
+        var info = CardSessionInfo.Create(null, null, ApduPlatform.Virtual, new FakeTimeProvider(TestClock.CanonicalEpoch), "test session");
         ApduRecording recording = recorder.ToRecording(info);
 
         Assert.HasCount(2, recording.Exchanges);

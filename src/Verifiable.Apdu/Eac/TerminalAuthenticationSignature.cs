@@ -53,6 +53,14 @@ public static class TerminalAuthenticationSignature
     /// <param name="chipChallenge">The chip's challenge <c>r_IC</c> from GET CHALLENGE.</param>
     /// <param name="terminalEphemeralPublicKey">The terminal's ephemeral public key <c>PK_DH,IFD</c> (uncompressed SEC1) from Chip Authentication or PACE Chip Authentication Mapping.</param>
     /// <param name="pool">The memory pool for the message and signature buffers.</param>
+    /// <param name="eventSink">
+    /// Receives the <see cref="SignatureProducedEvent"/> the resolved <see cref="SigningDelegate"/>
+    /// constructs, or <see langword="null"/> to route it to <see cref="CryptographicKeyEvents.DefaultSink"/>.
+    /// This overload resolves and invokes the registry delegate directly rather than through a bound
+    /// <see cref="PrivateKey"/> (there is no key object here, only raw key bytes) — the sibling
+    /// <see cref="SignAsync(PrivateKey, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, MemoryPool{byte}, CancellationToken)"/>
+    /// overload emits through that choke point instead when a <see cref="PrivateKey"/> is already in hand.
+    /// </param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The terminal's signature <c>s_IFD</c>. The caller owns and disposes it.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the curve tag carries no algorithm, or no signing function is registered for it.</exception>
@@ -63,6 +71,7 @@ public static class TerminalAuthenticationSignature
         ReadOnlyMemory<byte> chipChallenge,
         ReadOnlyMemory<byte> terminalEphemeralPublicKey,
         MemoryPool<byte> pool,
+        CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(curve);
@@ -77,7 +86,14 @@ public static class TerminalAuthenticationSignature
 
         using IMemoryOwner<byte> message = BuildSignedMessage(chipIdentifier.Span, chipChallenge.Span, terminalEphemeralPublicKey.Span, pool, out int messageLength);
 
-        return await sign(terminalPrivateKey, message.Memory[..messageLength], pool, null, cancellationToken).ConfigureAwait(false);
+        (Signature signature, CryptoEvent? evt) = await sign(terminalPrivateKey, message.Memory[..messageLength], pool, null, cancellationToken).ConfigureAwait(false);
+
+        if(evt is not null)
+        {
+            (eventSink ?? CryptographicKeyEvents.DefaultSink)(evt);
+        }
+
+        return signature;
     }
 
 
@@ -128,6 +144,12 @@ public static class TerminalAuthenticationSignature
     /// <param name="chipChallenge">The challenge <c>r_IC</c> the chip issued in GET CHALLENGE.</param>
     /// <param name="terminalEphemeralPublicKey">The terminal's ephemeral public key <c>PK_DH,IFD</c> (uncompressed SEC1) the chip retained from Chip Authentication or PACE Chip Authentication Mapping.</param>
     /// <param name="pool">The memory pool for the message buffer.</param>
+    /// <param name="eventSink">
+    /// Receives the <see cref="VerificationCompletedEvent"/> the resolved <see cref="VerificationDelegate"/>
+    /// constructs, or <see langword="null"/> to route it to <see cref="CryptographicKeyEvents.DefaultSink"/>.
+    /// This overload resolves and invokes the registry delegate directly rather than through a bound
+    /// <see cref="PublicKey"/> (the key carrier here is <see cref="EncodedEcPoint"/>, not <see cref="PublicKeyMemory"/>).
+    /// </param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns><see langword="true"/> when the signature verifies; otherwise <see langword="false"/> (including a public key whose tag carries no algorithm).</returns>
     public static async ValueTask<bool> VerifyAsync(
@@ -137,6 +159,7 @@ public static class TerminalAuthenticationSignature
         ReadOnlyMemory<byte> chipChallenge,
         ReadOnlyMemory<byte> terminalEphemeralPublicKey,
         MemoryPool<byte> pool,
+        CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(terminalPublicKey);
@@ -151,7 +174,14 @@ public static class TerminalAuthenticationSignature
 
         using IMemoryOwner<byte> message = BuildSignedMessage(chipIdentifier.Span, chipChallenge.Span, terminalEphemeralPublicKey.Span, pool, out int messageLength);
 
-        return await verify(message.Memory[..messageLength], signature, terminalPublicKey.AsReadOnlyMemory(), null, cancellationToken).ConfigureAwait(false);
+        (bool isVerified, CryptoEvent? evt) = await verify(message.Memory[..messageLength], signature, terminalPublicKey.AsReadOnlyMemory(), null, cancellationToken).ConfigureAwait(false);
+
+        if(evt is not null)
+        {
+            (eventSink ?? CryptographicKeyEvents.DefaultSink)(evt);
+        }
+
+        return isVerified;
     }
 
 
@@ -165,6 +195,10 @@ public static class TerminalAuthenticationSignature
     /// <param name="chipChallenge">The chip's challenge <c>r_IC</c> from GET CHALLENGE.</param>
     /// <param name="terminalEphemeralPublicKey">The terminal's ephemeral public key <c>PK_DH,IFD</c> (uncompressed SEC1) from Chip Authentication or PACE Chip Authentication Mapping.</param>
     /// <param name="pool">The memory pool for the message and signature buffers.</param>
+    /// <param name="eventSink">
+    /// Receives the <see cref="SignatureProducedEvent"/> the resolved <see cref="SigningDelegate"/>
+    /// constructs, or <see langword="null"/> to route it to <see cref="CryptographicKeyEvents.DefaultSink"/>.
+    /// </param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The terminal's signature <c>s_IFD</c>. The caller owns and disposes it.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the scheme is not a supported RSA signing scheme, or no signing function is registered for it.</exception>
@@ -175,6 +209,7 @@ public static class TerminalAuthenticationSignature
         ReadOnlyMemory<byte> chipChallenge,
         ReadOnlyMemory<byte> terminalEphemeralPublicKey,
         MemoryPool<byte> pool,
+        CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -186,7 +221,14 @@ public static class TerminalAuthenticationSignature
 
         using IMemoryOwner<byte> message = BuildSignedMessage(chipIdentifier.Span, chipChallenge.Span, terminalEphemeralPublicKey.Span, pool, out int messageLength);
 
-        return await sign(terminalPrivateKey, message.Memory[..messageLength], pool, null, cancellationToken).ConfigureAwait(false);
+        (Signature signature, CryptoEvent? evt) = await sign(terminalPrivateKey, message.Memory[..messageLength], pool, null, cancellationToken).ConfigureAwait(false);
+
+        if(evt is not null)
+        {
+            (eventSink ?? CryptographicKeyEvents.DefaultSink)(evt);
+        }
+
+        return signature;
     }
 
 
@@ -201,6 +243,10 @@ public static class TerminalAuthenticationSignature
     /// <param name="chipChallenge">The challenge <c>r_IC</c> the chip issued in GET CHALLENGE.</param>
     /// <param name="terminalEphemeralPublicKey">The terminal's ephemeral public key <c>PK_DH,IFD</c> (uncompressed SEC1) the chip retained from Chip Authentication or PACE Chip Authentication Mapping.</param>
     /// <param name="pool">The memory pool for the message buffer.</param>
+    /// <param name="eventSink">
+    /// Receives the <see cref="VerificationCompletedEvent"/> the resolved <see cref="VerificationDelegate"/>
+    /// constructs, or <see langword="null"/> to route it to <see cref="CryptographicKeyEvents.DefaultSink"/>.
+    /// </param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns><see langword="true"/> when the signature verifies; otherwise <see langword="false"/> (including a scheme that is not a supported RSA scheme).</returns>
     public static async ValueTask<bool> VerifyWithRsaAsync(
@@ -211,6 +257,7 @@ public static class TerminalAuthenticationSignature
         ReadOnlyMemory<byte> chipChallenge,
         ReadOnlyMemory<byte> terminalEphemeralPublicKey,
         MemoryPool<byte> pool,
+        CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(terminalPublicKey);
@@ -225,7 +272,14 @@ public static class TerminalAuthenticationSignature
 
         using IMemoryOwner<byte> message = BuildSignedMessage(chipIdentifier.Span, chipChallenge.Span, terminalEphemeralPublicKey.Span, pool, out int messageLength);
 
-        return await verify(message.Memory[..messageLength], signature, terminalPublicKey.AsReadOnlyMemory(), null, cancellationToken).ConfigureAwait(false);
+        (bool isVerified, CryptoEvent? evt) = await verify(message.Memory[..messageLength], signature, terminalPublicKey.AsReadOnlyMemory(), null, cancellationToken).ConfigureAwait(false);
+
+        if(evt is not null)
+        {
+            (eventSink ?? CryptographicKeyEvents.DefaultSink)(evt);
+        }
+
+        return isVerified;
     }
 
 

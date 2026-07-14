@@ -18,7 +18,7 @@ internal sealed class FederationKeyResolverTests
     [TestMethod]
     public async Task ResolvesSelfSignedEcKeyFromJwks()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/leaf"));
 
@@ -41,7 +41,7 @@ internal sealed class FederationKeyResolverTests
     [TestMethod]
     public async Task ReturnsNullWhenIssuerHasNoJwks()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(

@@ -5,7 +5,9 @@ using System.Text.Json;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
+using Verifiable.Microsoft;
 using Verifiable.OAuth.Federation;
+using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Federation;
@@ -44,9 +46,11 @@ internal static class FederationTestRing
     /// </summary>
     public static FederationTestRingNode CreateNode(EntityIdentifier identifier)
     {
-        ECDsa key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        string kid = $"kid-{Guid.NewGuid():N}";
-        return new FederationTestRingNode(identifier, key, kid);
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory publicKey = keyMaterial.PublicKey;
+        using PrivateKeyMemory privateKey = keyMaterial.PrivateKey;
+
+        return CreateNodeFromKey(identifier, privateKey);
     }
 
 
@@ -71,6 +75,9 @@ internal static class FederationTestRing
     {
         ArgumentNullException.ThrowIfNull(privateKey);
 
+        //Adapts the supplied scalar (fresh or caller-provided) into the ECDsa
+        //object FederationTestRingNode.SigningKey requires; no project surface
+        //converts a raw EC private scalar into a driver-usable ECDsa instance.
         ECParameters parameters = new()
         {
             Curve = ECCurve.NamedCurves.nistP256,
@@ -271,11 +278,14 @@ internal static class FederationTestRing
         byte[] publicKeyBytes = signer.SigningKey.ExportSubjectPublicKeyInfo();
         using PublicKeyMemory publicKey = CreatePublicKeyMemory(publicKeyBytes, CryptoTags.P256PublicKey);
 
+        //Independent-oracle site: verifies the compact JWS Jws.SignAsync produced
+        //(wire-exported library output) with a self-contained ECDsa implementation,
+        //a self-consistency firewall proving the library against an independent verifier.
         VerificationDelegate verificationDelegate = (dataToVerify, signature, publicKeyBytesArg, _, _) =>
         {
             using ECDsa ecdsa = ECDsa.Create();
             ecdsa.ImportSubjectPublicKeyInfo(publicKeyBytesArg.Span, out _);
-            return ValueTask.FromResult(ecdsa.VerifyData(dataToVerify.Span, signature.Span, HashAlgorithmName.SHA256));
+            return ValueTask.FromResult<(bool, CryptoEvent?)>((ecdsa.VerifyData(dataToVerify.Span, signature.Span, HashAlgorithmName.SHA256), null));
         };
 
         return await Jws.VerifyAsync(
@@ -396,24 +406,20 @@ internal static class FederationTestRing
         ECParameters parameters = signer.SigningKey.ExportParameters(includePrivateParameters: true);
         using PrivateKeyMemory privateKey = CreatePrivateKeyMemory(parameters.D!, CryptoTags.P256PrivateKey);
 
-        SigningDelegate signingDelegate = (privateKeyBytes, dataToSign, signaturePool, _, _) =>
-        {
-            using ECDsa ecdsa = ECDsa.Create(new ECParameters { Curve = ECCurve.NamedCurves.nistP256, D = privateKeyBytes.ToArray() });
-            byte[] signatureBytes = ecdsa.SignData(dataToSign.Span, HashAlgorithmName.SHA256);
-            IMemoryOwner<byte> memoryOwner = signaturePool.Rent(signatureBytes.Length);
-            signatureBytes.CopyTo(memoryOwner.Memory.Span);
-            return ValueTask.FromResult(new Signature(memoryOwner, CryptoTags.P256Signature));
-        };
+        //The node's key lives as an ECDsa instance (SigningKey), so the exported
+        //scalar is routed through the project's own ES256 driver rather than a
+        //bespoke ECDsa lambda; SignP256Async's parameter shape matches SigningDelegate exactly.
+        SigningDelegate signingDelegate = MicrosoftCryptographicFunctions.SignP256Async;
 
         JwsMessage jwsMessage = await Jws.SignAsync(
             headerDict,
             payloadDict,
-            EncodeJwtPart,
+            JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             privateKey,
             signingDelegate,
             BaseMemoryPool.Shared,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         string compactJws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
         UnverifiedJwtHeader header = new(headerDict);
@@ -437,24 +443,20 @@ internal static class FederationTestRing
         ECParameters parameters = signer.SigningKey.ExportParameters(includePrivateParameters: true);
         using PrivateKeyMemory privateKey = CreatePrivateKeyMemory(parameters.D!, CryptoTags.P256PrivateKey);
 
-        SigningDelegate signingDelegate = (privateKeyBytes, dataToSign, signaturePool, _, _) =>
-        {
-            using ECDsa ecdsa = ECDsa.Create(new ECParameters { Curve = ECCurve.NamedCurves.nistP256, D = privateKeyBytes.ToArray() });
-            byte[] signatureBytes = ecdsa.SignData(dataToSign.Span, HashAlgorithmName.SHA256);
-            IMemoryOwner<byte> memoryOwner = signaturePool.Rent(signatureBytes.Length);
-            signatureBytes.CopyTo(memoryOwner.Memory.Span);
-            return ValueTask.FromResult(new Signature(memoryOwner, CryptoTags.P256Signature));
-        };
+        //The node's key lives as an ECDsa instance (SigningKey), so the exported
+        //scalar is routed through the project's own ES256 driver rather than a
+        //bespoke ECDsa lambda; SignP256Async's parameter shape matches SigningDelegate exactly.
+        SigningDelegate signingDelegate = MicrosoftCryptographicFunctions.SignP256Async;
 
         JwsMessage jwsMessage = await Jws.SignAsync(
             headerDict,
             payloadDict,
-            EncodeJwtPart,
+            JwtWireFixtures.EncodeJwtPart,
             TestSetup.Base64UrlEncoder,
             privateKey,
             signingDelegate,
             BaseMemoryPool.Shared,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         string compactJws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
 
@@ -500,14 +502,6 @@ internal static class FederationTestRing
         {
             target[kvp.Key] = kvp.Value;
         }
-    }
-
-
-    private static TaggedMemory<byte> EncodeJwtPart(Dictionary<string, object> part)
-    {
-        byte[] bytes = Encoding.UTF8.GetBytes(
-            JsonSerializerExtensions.Serialize(part, TestSetup.DefaultSerializationOptions));
-        return new TaggedMemory<byte>(bytes, BufferTags.Json);
     }
 
 

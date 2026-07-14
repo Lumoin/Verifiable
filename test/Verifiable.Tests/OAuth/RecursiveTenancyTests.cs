@@ -3,6 +3,7 @@ using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -28,7 +29,7 @@ internal sealed class RecursiveTenancyTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     //Operator tenant — Dynamic Client Registration capability plus the
     //metadata endpoints. In a real recursive-tenancy deployment the

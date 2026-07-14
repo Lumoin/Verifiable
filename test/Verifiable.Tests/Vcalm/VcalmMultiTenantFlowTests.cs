@@ -4,7 +4,6 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
-using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Did.Methods;
@@ -54,8 +53,7 @@ internal sealed class VcalmMultiTenantFlowTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new(
-        new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
+    private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
@@ -142,9 +140,9 @@ internal sealed class VcalmMultiTenantFlowTests
         TwoTenants t = await StartTwoTenantHostAsync(app).ConfigureAwait(false);
 
         using JsonDocument issuedA = await PostIssueAsync(
-            app, t.SegmentA, BuildIssueRequestBody(t.IssuerDidA, "urn:uuid:a-1"), expectedStatus: 201).ConfigureAwait(false);
+            app, t.SegmentA, VcalmWireFixtures.BuildIssueRequestBody(t.IssuerDidA, "urn:uuid:a-1", SerializeCredential), expectedStatus: 201).ConfigureAwait(false);
         using JsonDocument issuedB = await PostIssueAsync(
-            app, t.SegmentB, BuildIssueRequestBody(t.IssuerDidB, "urn:uuid:b-1"), expectedStatus: 201).ConfigureAwait(false);
+            app, t.SegmentB, VcalmWireFixtures.BuildIssueRequestBody(t.IssuerDidB, "urn:uuid:b-1", SerializeCredential), expectedStatus: 201).ConfigureAwait(false);
 
         JsonElement vcA = issuedA.RootElement.GetProperty(VcalmParameterNames.VerifiableCredential);
         JsonElement vcB = issuedB.RootElement.GetProperty(VcalmParameterNames.VerifiableCredential);
@@ -177,14 +175,14 @@ internal sealed class VcalmMultiTenantFlowTests
         //DETAIL (not merely the shared MalformedValueError type, which six 400 sites emit) proves the
         //rejection is FOR the cross-tenant reason — that tenant B refused to sign as tenant A.
         ServerHttpResponse forward = await DispatchIssueAsync(
-            app, t.SegmentB, BuildIssueRequestBody(t.IssuerDidA, "urn:uuid:cross")).ConfigureAwait(false);
+            app, t.SegmentB, VcalmWireFixtures.BuildIssueRequestBody(t.IssuerDidA, "urn:uuid:cross", SerializeCredential)).ConfigureAwait(false);
         Assert.AreEqual(400, forward.StatusCode, forward.Body);
         Assert.Contains("does not match the expected configuration", forward.Body,
             "Tenant B rejects tenant A's issuer as a §3.2.1 issuer mismatch — not merely 'some 400'.");
 
         //The reverse direction holds too: tenant A will not sign as tenant B.
         ServerHttpResponse reverse = await DispatchIssueAsync(
-            app, t.SegmentA, BuildIssueRequestBody(t.IssuerDidB, "urn:uuid:cross-reverse")).ConfigureAwait(false);
+            app, t.SegmentA, VcalmWireFixtures.BuildIssueRequestBody(t.IssuerDidB, "urn:uuid:cross-reverse", SerializeCredential)).ConfigureAwait(false);
         Assert.AreEqual(400, reverse.StatusCode, reverse.Body);
         Assert.Contains("does not match the expected configuration", reverse.Body,
             "The isolation is symmetric — tenant A rejects tenant B's issuer the same way.");
@@ -204,7 +202,7 @@ internal sealed class VcalmMultiTenantFlowTests
         TwoTenants t = await StartTwoTenantHostAsync(app).ConfigureAwait(false);
 
         using JsonDocument issuedA = await PostIssueAsync(
-            app, t.SegmentA, BuildIssueRequestBody(t.IssuerDidA, "urn:uuid:a-cross-verify"), expectedStatus: 201).ConfigureAwait(false);
+            app, t.SegmentA, VcalmWireFixtures.BuildIssueRequestBody(t.IssuerDidA, "urn:uuid:a-cross-verify", SerializeCredential), expectedStatus: 201).ConfigureAwait(false);
         string securedA = issuedA.RootElement.GetProperty(VcalmParameterNames.VerifiableCredential).GetRawText();
 
         await AssertVerifiedAsync(app, t.SegmentB, securedA, expected: true).ConfigureAwait(false);
@@ -224,7 +222,7 @@ internal sealed class VcalmMultiTenantFlowTests
 
         const string CredentialId = "urn:uuid:tenant-a-private";
         using JsonDocument _ = await PostIssueAsync(
-            app, t.SegmentA, BuildIssueRequestBody(t.IssuerDidA, CredentialId), expectedStatus: 201).ConfigureAwait(false);
+            app, t.SegmentA, VcalmWireFixtures.BuildIssueRequestBody(t.IssuerDidA, CredentialId, SerializeCredential), expectedStatus: 201).ConfigureAwait(false);
 
         //Tenant A retrieves its own credential.
         ServerHttpResponse onOwnTenant = await app.DispatchVcalmCredentialByIdAsync(
@@ -267,7 +265,7 @@ internal sealed class VcalmMultiTenantFlowTests
         ServerHttpResponse response = await DispatchIssueAsync(
             app,
             hostMaterial.Registration.TenantId.Value,
-            BuildIssueRequestBody("did:example:whoever", "urn:uuid:no-issuance")).ConfigureAwait(false);
+            VcalmWireFixtures.BuildIssueRequestBody("did:example:whoever", "urn:uuid:no-issuance", SerializeCredential)).ConfigureAwait(false);
 
         Assert.AreEqual(500, response.StatusCode, response.Body);
         Assert.Contains("No VCALM issuance configuration resolved for this tenant.", response.Body,
@@ -294,7 +292,7 @@ internal sealed class VcalmMultiTenantFlowTests
         app.Server.Vcalm().VcalmCredentialIssuance = flat.Issuance;
 
         using JsonDocument issuedA = await PostIssueAsync(
-            app, t.SegmentA, BuildIssueRequestBody(t.IssuerDidA, "urn:uuid:precedence"), expectedStatus: 201).ConfigureAwait(false);
+            app, t.SegmentA, VcalmWireFixtures.BuildIssueRequestBody(t.IssuerDidA, "urn:uuid:precedence", SerializeCredential), expectedStatus: 201).ConfigureAwait(false);
 
         Assert.AreEqual(t.VmIdA,
             ProofVerificationMethod(issuedA.RootElement.GetProperty(VcalmParameterNames.VerifiableCredential)),
@@ -396,7 +394,7 @@ internal sealed class VcalmMultiTenantFlowTests
         vcalm.ResolveVcalmPresentationSigningAsync = (_, _) =>
             ValueTask.FromResult<VcalmPresentationSigning?>(null);
 
-        string body = "{\"presentation\":" + SerializeUnproofedPresentation("did:example:holder")
+        string body = "{\"presentation\":" + VcalmWireFixtures.SerializeUnproofedPresentation("did:example:holder", SerializePresentation)
             + ",\"options\":{\"challenge\":\"c-1\",\"domain\":\"d.example\"}}";
         ExchangeContext context = new();
         context.SetCurrentChannelDomain("d.example");
@@ -510,11 +508,11 @@ internal sealed class VcalmMultiTenantFlowTests
         await using TestHostShell app = new(TimeProvider);
         Showcase s = await StartShowcaseHostAsync(app).ConfigureAwait(false);
 
-        using JsonDocument issuedA = await PostIssueAsync(app, s.SegmentA, BuildIssueRequestBody(s.IssuerDidA, "urn:uuid:show-a"), 201).ConfigureAwait(false);
+        using JsonDocument issuedA = await PostIssueAsync(app, s.SegmentA, VcalmWireFixtures.BuildIssueRequestBody(s.IssuerDidA, "urn:uuid:show-a", SerializeCredential), 201).ConfigureAwait(false);
         using JsonDocument listA = await PostCreateStatusListAsync(app, s.SegmentA, "https://status.example/show-a", 201).ConfigureAwait(false);
         using JsonDocument presA = await PostCreatePresentationAsync(app, s.SegmentA, s.HolderDidA, "show-a.example", 201).ConfigureAwait(false);
 
-        using JsonDocument issuedB = await PostIssueAsync(app, s.SegmentB, BuildIssueRequestBody(s.IssuerDidB, "urn:uuid:show-b"), 201).ConfigureAwait(false);
+        using JsonDocument issuedB = await PostIssueAsync(app, s.SegmentB, VcalmWireFixtures.BuildIssueRequestBody(s.IssuerDidB, "urn:uuid:show-b", SerializeCredential), 201).ConfigureAwait(false);
         using JsonDocument listB = await PostCreateStatusListAsync(app, s.SegmentB, "https://status.example/show-b", 201).ConfigureAwait(false);
         using JsonDocument presB = await PostCreatePresentationAsync(app, s.SegmentB, s.HolderDidB, "show-b.example", 201).ConfigureAwait(false);
 
@@ -712,40 +710,6 @@ internal sealed class VcalmMultiTenantFlowTests
             : throw new InvalidOperationException("The dispatcher did not stamp a tenant on the request context.");
 
 
-    private static VerifiableCredential BuildCredential(string issuerDid, string credentialId) =>
-        new()
-        {
-            Context = new Context
-            {
-                Contexts =
-                [
-                    Context.Credentials20,
-                    CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl
-                ]
-            },
-            Id = credentialId,
-            Type = ["VerifiableCredential", "ExampleAlumniCredential"],
-            Issuer = new Issuer { Id = issuerDid },
-            ValidFrom = "2023-01-01T00:00:00Z",
-            ValidUntil = "2030-01-01T00:00:00Z",
-            CredentialSubject =
-            [
-                new CredentialSubject
-                {
-                    Id = "did:example:alumni-subject",
-                    AdditionalData = new Dictionary<string, object>(StringComparer.Ordinal)
-                    {
-                        ["alumniOf"] = "The School of Examples"
-                    }
-                }
-            ]
-        };
-
-
-    private static string BuildIssueRequestBody(string issuerDid, string credentialId) =>
-        "{\"credential\":" + SerializeCredential(BuildCredential(issuerDid, credentialId)) + "}";
-
-
     //Signs the standard test credential with an ordinary eddsa-rdfc-2022 proof under a fresh did:key
     //issuer, returning the secured-credential JSON — a §3.5.1 derive request needs a SECURED credential
     //to parse (the non-derivable check happens after the resolution null-guard the fail-closed test hits).
@@ -762,7 +726,7 @@ internal sealed class VcalmMultiTenantFlowTests
             includeDefaultContext: false,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        VerifiableCredential credential = BuildCredential(issuerDidDocument.Id!.ToString(), "urn:uuid:no-derive");
+        VerifiableCredential credential = VcalmWireFixtures.BuildCredential(issuerDidDocument.Id!.ToString(), "urn:uuid:no-derive");
 
         DataIntegritySecuredCredential secured = await credential.SignAsync(
             issuerPrivate,
@@ -913,7 +877,7 @@ internal sealed class VcalmMultiTenantFlowTests
     private async Task<JsonDocument> PostCreatePresentationAsync(
         TestHostShell app, string segment, string holderDid, string domain, int expectedStatus)
     {
-        string body = "{\"presentation\":" + SerializeUnproofedPresentation(holderDid)
+        string body = "{\"presentation\":" + VcalmWireFixtures.SerializeUnproofedPresentation(holderDid, SerializePresentation)
             + ",\"options\":{\"challenge\":\"c-1\",\"domain\":\"" + domain + "\"}}";
 
         //§3.5.2 binds the proof's domain to the channel domain — the holder refuses a domain that does
@@ -929,16 +893,6 @@ internal sealed class VcalmMultiTenantFlowTests
 
         return JsonDocument.Parse(response.Body);
     }
-
-
-    //A minimal unproofed VC-DM 2.0 presentation the §3.5.2 holder endpoint secures.
-    private static string SerializeUnproofedPresentation(string holderDid) =>
-        SerializePresentation(new VerifiablePresentation
-        {
-            Context = new Context { Contexts = [Context.Credentials20] },
-            Type = ["VerifiablePresentation"],
-            Holder = holderDid
-        });
 
 
     //An ExchangeContext stamped with the given tenant segment, for resolution-method tests that do not
