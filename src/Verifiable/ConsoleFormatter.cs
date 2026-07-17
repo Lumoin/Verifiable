@@ -19,8 +19,8 @@ namespace Verifiable;
 /// </remarks>
 internal static partial class ConsoleFormatter
 {
-    private static readonly bool colorsSupported = DetectColorSupport();
-    private static readonly bool trueColorSupported = DetectTrueColorSupport();
+    private static bool colorsSupported { get; } = DetectColorSupport();
+    private static bool trueColorSupported { get; } = DetectTrueColorSupport();
     private static bool colorsDisabled;
 
     /// <summary>

@@ -150,8 +150,11 @@ internal sealed class MdocMsoDigestBindingValidatorTests
             //the salt with the original — the original document stays the
             //owner of the salt; this sibling is read-only and is not disposed).
             IReadOnlyList<MdocIssuerSignedItem> originalItems = signed.IssuerSigned.NameSpaces[PidNamespace];
-            byte[] tamperedWireBytes = originalItems[0].WireBytes.ToArray();
-            tamperedWireBytes[^1] ^= 0xFF;
+            int wireByteLength = originalItems[0].WireBytes.Length;
+            using IMemoryOwner<byte> tamperedWireBytesOwner = BaseMemoryPool.Shared.Rent(wireByteLength);
+            Memory<byte> tamperedWireBytes = tamperedWireBytesOwner.Memory[..wireByteLength];
+            originalItems[0].WireBytes.Span.CopyTo(tamperedWireBytes.Span);
+            tamperedWireBytes.Span[^1] ^= 0xFF;
 
             MdocIssuerSignedItem tamperedItem = new(
                 digestId: originalItems[0].DigestId,
@@ -190,12 +193,19 @@ internal sealed class MdocMsoDigestBindingValidatorTests
         //validator gates on the SHA-256/384/512 set per ISO 18013-5 §9.1.2.5.
         Salt salt = MdocTestFixtures.ItemRandomSalt();
 
+        using IMemoryOwner<byte> wireBytesOwner = BaseMemoryPool.Shared.Rent(10);
+        using IMemoryOwner<byte> digestOwner = BaseMemoryPool.Shared.Rent(32);
+        using IMemoryOwner<byte> encodedElementValueOwner = BaseMemoryPool.Shared.Rent(
+            System.Text.Encoding.UTF8.GetByteCount("Mustermann"));
+        int encodedElementValueLength = System.Text.Encoding.UTF8.GetBytes(
+            "Mustermann", encodedElementValueOwner.Memory.Span);
+
         MdocIssuerSignedItem item = new(
             digestId: 0,
             random: salt,
             elementIdentifier: "family_name",
-            encodedElementValue: System.Text.Encoding.UTF8.GetBytes("Mustermann"),
-            wireBytes: new byte[10]);
+            encodedElementValue: encodedElementValueOwner.Memory[..encodedElementValueLength],
+            wireBytes: wireBytesOwner.Memory[..10]);
 
         Dictionary<string, IReadOnlyList<MdocIssuerSignedItem>> nameSpaces = new(StringComparer.Ordinal)
         {
@@ -204,14 +214,14 @@ internal sealed class MdocMsoDigestBindingValidatorTests
 
         Dictionary<string, IReadOnlyDictionary<uint, ReadOnlyMemory<byte>>> valueDigests = new(StringComparer.Ordinal)
         {
-            [PidNamespace] = new Dictionary<uint, ReadOnlyMemory<byte>> { [0u] = new byte[32] }
+            [PidNamespace] = new Dictionary<uint, ReadOnlyMemory<byte>> { [0u] = digestOwner.Memory[..32] }
         };
 
         MdocMobileSecurityObject mso = new(
             version: MdocMsoWellKnownKeys.Version10,
             digestAlgorithm: "MD5",  //not in the §9.1.2.5 set
             valueDigests: valueDigests,
-            deviceKeyInfo: new MdocDeviceKeyInfo(new MdocCoseKey(kty: MdocCoseKeyTypes.Ec2, curve: MdocCoseKeyCurves.P256)),
+            deviceKeyInfo: new MdocDeviceKeyInfo(new CoseKey(kty: CoseKeyTypes.Ec2, curve: CoseKeyCurves.P256)),
             docType: PidDocType,
             validityInfo: SampleValidity());
 
@@ -277,20 +287,25 @@ internal sealed class MdocMsoDigestBindingValidatorTests
         MdocTestFixtures.ItemRandomSalt();
 
 
+    //Bit-identical to TestClock.CanonicalEpoch.AddDays(-8) (2026-05-24T12:00:00Z).
+    private static readonly DateTimeOffset SampleValiditySigned = TestClock.CanonicalEpoch.AddDays(-8);
+    private static readonly DateTimeOffset SampleValidityValidUntil = SampleValiditySigned.AddYears(1);
+
+
     private static MdocValidityInfo SampleValidity() =>
         new(
-            signed: new DateTimeOffset(2026, 5, 24, 12, 0, 0, TimeSpan.Zero),
-            validFrom: new DateTimeOffset(2026, 5, 24, 12, 0, 0, TimeSpan.Zero),
-            validUntil: new DateTimeOffset(2027, 5, 24, 12, 0, 0, TimeSpan.Zero));
+            signed: SampleValiditySigned,
+            validFrom: SampleValiditySigned,
+            validUntil: SampleValidityValidUntil);
 
 
-    private static MdocCoseKey CoseKeyFromP256Public(PublicKeyMemory publicKey)
+    private static CoseKey CoseKeyFromP256Public(PublicKeyMemory publicKey)
     {
         ReadOnlySpan<byte> compressed = publicKey.AsReadOnlySpan();
         byte[] uncompressed = EllipticCurveUtilities.Decompress(compressed, EllipticCurveTypes.P256);
-        return new MdocCoseKey(
-            kty: MdocCoseKeyTypes.Ec2,
-            curve: MdocCoseKeyCurves.P256,
+        return new CoseKey(
+            kty: CoseKeyTypes.Ec2,
+            curve: CoseKeyCurves.P256,
             x: compressed[1..].ToArray(),
             y: uncompressed);
     }

@@ -14,7 +14,7 @@ namespace Verifiable.Json.Converters.Dcql;
 /// </summary>
 public sealed class CredentialQueryConverter: JsonConverter<CredentialQuery>
 {
-    private readonly bool requireMeta;
+    private bool RequireMeta { get; }
 
 
     /// <summary>
@@ -28,7 +28,7 @@ public sealed class CredentialQueryConverter: JsonConverter<CredentialQuery>
     /// </param>
     public CredentialQueryConverter(bool requireMeta = true)
     {
-        this.requireMeta = requireMeta;
+        this.RequireMeta = requireMeta;
     }
 
 
@@ -130,7 +130,7 @@ public sealed class CredentialQueryConverter: JsonConverter<CredentialQuery>
 
         //OID4VP 1.0 §6.1: 'meta' is REQUIRED (may be empty). Configurable via requireMeta
         //to tolerate non-conformant Verifiers that omit it.
-        if(requireMeta && meta is null)
+        if(RequireMeta && meta is null)
         {
             throw new JsonException("The 'meta' property is required (OID4VP 1.0 §6.1).");
         }

@@ -4,6 +4,7 @@ using Org.BouncyCastle.X509;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography.Pki;
@@ -45,6 +46,7 @@ namespace Verifiable.BouncyCastle;
 /// the cache is refreshed.
 /// </para>
 /// </remarks>
+[DebuggerDisplay("CrlRevocationChecker(Store={CertificateRevocationLists.Count})")]
 public sealed class CrlRevocationChecker
 {
     /// <summary>The BouncyCastle CRL parser (stateless for the byte-array read used here).</summary>

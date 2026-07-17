@@ -550,7 +550,7 @@ public static class FederationValidationChecks
     //are intentionally excluded — they are not top-level Entity Statement
     //claims, and omitting one only ever under-rejects (never a false positive,
     //since every listed name is genuinely spec-defined). Local to the check.
-    private static readonly HashSet<string> SpecifiedEntityStatementClaimNames =
+    private static HashSet<string> SpecifiedEntityStatementClaimNames { get; } =
         new(StringComparer.Ordinal)
         {
             WellKnownJwtClaimNames.Iss, WellKnownJwtClaimNames.Sub, WellKnownJwtClaimNames.Aud,
@@ -649,7 +649,7 @@ public static class FederationValidationChecks
 
     //The federation_entity endpoint metadata keys whose URL values §5.1.1 constrains to
     //https-with-no-fragment. Local to this check.
-    private static readonly string[] FederationEntityEndpointKeys =
+    private static string[] FederationEntityEndpointKeys { get; } =
     [
         FederationMetadataParameterNames.FetchEndpoint,
         FederationMetadataParameterNames.ListEndpoint,
@@ -755,7 +755,7 @@ public static class FederationValidationChecks
     //federation_entity metadata (the Federation Entity Keys live in the Entity
     //Statement's top-level jwks Claim, not in the metadata block). Local to the
     //check below.
-    private static readonly string[] FederationEntityForbiddenJwkSetParams =
+    private static string[] FederationEntityForbiddenJwkSetParams { get; } =
     [
         FederationMetadataParameterNames.Jwks,
         FederationMetadataParameterNames.JwksUri,
@@ -1308,17 +1308,15 @@ public static class FederationValidationChecks
             return false;
         }
 
-        switch(mplObj)
+        (int value, bool isValid) = mplObj switch
         {
-            case int i:
-                maxPathLength = i;
-                return maxPathLength >= 0;
-            case long l when l >= 0 && l <= int.MaxValue:
-                maxPathLength = (int)l;
-                return true;
-            default:
-                return false;
-        }
+            int i => (i, i >= 0),
+            long l when l >= 0 && l <= int.MaxValue => ((int)l, true),
+            _ => (0, false)
+        };
+        maxPathLength = value;
+
+        return isValid;
     }
 
 

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Assessment;
+using Verifiable.Tests.TestInfrastructure;
 
 
 namespace Verifiable.Tests.Assessment;
@@ -111,7 +112,7 @@ internal sealed class ClaimAssessorTests
     [TestMethod]
     public async Task AssessAsyncPropagatesTracingInformation()
     {
-        var timeProvider = new FakeTimeProvider();
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
         var rules = new List<ClaimDelegate<string>>
         {
@@ -144,7 +145,7 @@ internal sealed class ClaimAssessorTests
     [TestMethod]
     public async Task AssessAsyncWithActivityPropagatesDistributedTracing()
     {
-        var timeProvider = new FakeTimeProvider();
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
         var rules = new List<ClaimDelegate<string>>
         {
@@ -196,7 +197,7 @@ internal sealed class ClaimAssessorTests
     [TestMethod]
     public async Task AssessAsyncFailsForIncompleteClaimResults()
     {
-        var timeProvider = new FakeTimeProvider();
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         using var cts = new CancellationTokenSource();
 
         //A rule that cancels after running.
@@ -233,7 +234,7 @@ internal sealed class ClaimAssessorTests
     [TestMethod]
     public async Task AssessAsyncPreservesCorrelationIdThroughPipeline()
     {
-        var timeProvider = new FakeTimeProvider();
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         const string specificCorrelationId = "unique-correlation-id-abc123";
 
         var rules = new List<ClaimDelegate<string>>
@@ -262,7 +263,7 @@ internal sealed class ClaimAssessorTests
     [TestMethod]
     public async Task AssessAsyncWithCustomAssessorLogic()
     {
-        var timeProvider = new FakeTimeProvider();
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         const string customVersion = "2.0.0-custom";
 
         //Custom assessor that has different logic.
@@ -312,7 +313,7 @@ internal sealed class ClaimAssessorTests
     [TestMethod]
     public void ConstructorThrowsOnNullClaimIssuer()
     {
-        var timeProvider = new FakeTimeProvider();
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
         Assert.Throws<ArgumentNullException>(() =>
             new ClaimAssessor<string>(
@@ -326,7 +327,7 @@ internal sealed class ClaimAssessorTests
     [TestMethod]
     public void ConstructorThrowsOnNullAssessor()
     {
-        var timeProvider = new FakeTimeProvider();
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         var rules = new List<ClaimDelegate<string>>();
         var issuer = new ClaimIssuer<string>(TestIssuerId, rules, timeProvider);
 
@@ -338,7 +339,7 @@ internal sealed class ClaimAssessorTests
     [TestMethod]
     public void ConstructorThrowsOnEmptyAssessorId()
     {
-        var timeProvider = new FakeTimeProvider();
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         var rules = new List<ClaimDelegate<string>>();
         var issuer = new ClaimIssuer<string>(TestIssuerId, rules, timeProvider);
 

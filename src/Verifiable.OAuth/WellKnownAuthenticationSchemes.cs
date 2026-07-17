@@ -22,9 +22,8 @@ namespace Verifiable.OAuth;
 /// </para>
 /// <para>
 /// Only schemes the library currently composes or recognises are listed.
-/// Other schemes (<c>Basic</c>, <c>Digest</c>, <c>Negotiate</c>, …) are not
-/// added speculatively — they appear here when a call site actually needs
-/// them.
+/// Other schemes (<c>Digest</c>, <c>Negotiate</c>, …) are not added
+/// speculatively — they appear here when a call site actually needs them.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("WellKnownAuthenticationSchemes")]
@@ -52,6 +51,18 @@ public static class WellKnownAuthenticationSchemes
     /// </summary>
     public static readonly string DPoP = Utf8Constants.ToInternedString(DPoPUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="Basic"/>.</summary>
+    public static ReadOnlySpan<byte> BasicUtf8 => "Basic"u8;
+
+    /// <summary>
+    /// The HTTP Basic authentication scheme per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-2.3.1">RFC 6749 §2.3.1</see> /
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7617">RFC 7617</see>. Used in
+    /// <c>Authorization: Basic &lt;base64(id:secret)&gt;</c> for <c>client_secret_basic</c> client
+    /// authentication at the token endpoint.
+    /// </summary>
+    public static readonly string Basic = Utf8Constants.ToInternedString(BasicUtf8);
+
 
     /// <summary>
     /// Returns <see langword="true"/> when <paramref name="scheme"/> is the
@@ -65,6 +76,12 @@ public static class WellKnownAuthenticationSchemes
     /// </summary>
     public static bool IsDPoP(string scheme) => Equals(scheme, DPoP);
 
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="scheme"/> is the
+    /// <c>Basic</c> scheme.
+    /// </summary>
+    public static bool IsBasic(string scheme) => Equals(scheme, Basic);
+
 
     /// <summary>
     /// Returns the canonical instance for <paramref name="scheme"/> when it
@@ -74,6 +91,7 @@ public static class WellKnownAuthenticationSchemes
     {
         var s when IsBearer(s) => Bearer,
         var s when IsDPoP(s) => DPoP,
+        var s when IsBasic(s) => Basic,
         _ => scheme
     };
 

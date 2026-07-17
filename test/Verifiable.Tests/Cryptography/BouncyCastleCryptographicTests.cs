@@ -217,11 +217,12 @@ namespace Verifiable.Tests.Cryptography
             using var bobPrivateKey = bobKeys.PrivateKey;
 
             ReadOnlyMemory<byte> data = TestData;
-            using var signature = await BouncyCastleCryptographicFunctions.SignMlDsa65Async(
+            (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignMlDsa65Async(
                 alicePrivateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            using var disposableSignature = signature;
 
-            bool isValid = await BouncyCastleCryptographicFunctions.VerifyMlDsa65Async(
+            (bool isValid, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.VerifyMlDsa65Async(
                 data, signature.AsReadOnlyMemory(), bobPublicKey.AsReadOnlyMemory(),
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -349,12 +350,13 @@ namespace Verifiable.Tests.Cryptography
             VerificationDelegate verify)
         {
             ReadOnlyMemory<byte> data = TestData;
-            using var signature = await sign(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
+            (Signature signature, CryptoEvent? _) = await sign(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            using var disposableSignature = signature;
 
             Assert.IsGreaterThan(0, signature.AsReadOnlyMemory().Length);
 
-            bool isValid = await verify(data, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory(),
+            (bool isValid, CryptoEvent? _) = await verify(data, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory(),
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(isValid);
         }
@@ -367,14 +369,15 @@ namespace Verifiable.Tests.Cryptography
             VerificationDelegate verify)
         {
             ReadOnlyMemory<byte> data = TestData;
-            using var signature = await sign(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
+            (Signature signature, CryptoEvent? _) = await sign(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            using var disposableSignature = signature;
 
             byte[] tamperedBytes = signature.AsReadOnlyMemory().ToArray();
             tamperedBytes[0] ^= 0xFF;
             tamperedBytes[tamperedBytes.Length - 1] ^= 0xFF;
 
-            bool isValid = await verify(data, tamperedBytes, publicKey.AsReadOnlyMemory(),
+            (bool isValid, CryptoEvent? _) = await verify(data, tamperedBytes, publicKey.AsReadOnlyMemory(),
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsFalse(isValid);
         }

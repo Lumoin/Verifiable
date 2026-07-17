@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.Text;
-using CsCheck;
 using Lumoin.Veridical.Backends.Managed;
 using Lumoin.Veridical.Bbs;
 using Lumoin.Veridical.Core.Algebraic;
@@ -38,7 +37,7 @@ internal sealed class Bbs2023W3cVectorTests
 
     //Canonicalization/signing here is in-memory; a default context yields the
     //secure-default SSRF policy and satisfies the policy-carrying parameter.
-    private static readonly ExchangeContext EmptyContext = new();
+    internal static readonly ExchangeContext EmptyContext = new();
 
     /// <summary>The bbs-2023 ciphersuite (BLS12-381-SHA-256).</summary>
     private static readonly BbsCiphersuite Ciphersuite = BbsCiphersuite.Bls12Curve381Sha256;
@@ -47,29 +46,29 @@ internal sealed class Bbs2023W3cVectorTests
     /// <summary>
     /// Issuer private key in hexadecimal from W3C Example 7.
     /// </summary>
-    private static string PrivateKeyHex { get; } = "66d36e118832af4c5e28b2dfe1b9577857e57b042a33e06bdea37b811ed09ee0";
+    internal static string PrivateKeyHex { get; } = "66d36e118832af4c5e28b2dfe1b9577857e57b042a33e06bdea37b811ed09ee0";
 
     /// <summary>
     /// Issuer public key (BLS12-381 G2, 96 bytes) in hexadecimal from W3C Example 7.
     /// </summary>
-    private static string PublicKeyHex { get; } = "a4ef1afa3da575496f122b9b78b8c24761531a8a093206ae7c45b80759c168ba4f7a260f9c3367b6c019b4677841104b10665edbe70ba3ebe7d9cfbffbf71eb016f70abfbb163317f372697dc63efd21fc55764f63926a8f02eaea325a2a888f";
+    internal static string PublicKeyHex { get; } = "a4ef1afa3da575496f122b9b78b8c24761531a8a093206ae7c45b80759c168ba4f7a260f9c3367b6c019b4677841104b10665edbe70ba3ebe7d9cfbffbf71eb016f70abfbb163317f372697dc63efd21fc55764f63926a8f02eaea325a2a888f";
 
     /// <summary>
     /// HMAC key in hexadecimal from W3C Example 7.
     /// </summary>
-    private static string HmacKeyHex { get; } = "00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF";
+    internal static string HmacKeyHex { get; } = "00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF";
 
     /// <summary>
     /// The verification method DID URL from W3C Example 15 (the issuer's BLS12-381 G2 Multikey did:key).
     /// </summary>
-    private static string VerificationMethodId { get; } =
+    internal static string VerificationMethodId { get; } =
         "did:key:zUC7DerdEmfZ8f4pFajXgGwJoMkV1ofMTmEG5UoNvnWiPiLuGKNeqgRpLH2TV4Xe5mJ2cXV76gRN7LFQwapF1VFu6x2yrr5ci1mXqC1WNUrnHnLgvfZfMH7h6xP6qsf9EKRQrPQ#zUC7DerdEmfZ8f4pFajXgGwJoMkV1ofMTmEG5UoNvnWiPiLuGKNeqgRpLH2TV4Xe5mJ2cXV76gRN7LFQwapF1VFu6x2yrr5ci1mXqC1WNUrnHnLgvfZfMH7h6xP6qsf9EKRQrPQ";
 
     /// <summary>
     /// The signed base document from W3C Example 18 (without the proof). The description/name use the
     /// signed-document wording (Example 18), which is the form the documented vectors are computed over.
     /// </summary>
-    private static string UnsignedCredential { get; } = /*lang=json,strict*/ """
+    internal static string UnsignedCredential { get; } = /*lang=json,strict*/ """
     {
       "@context": [
         "https://www.w3.org/ns/credentials/v2",
@@ -115,7 +114,7 @@ internal sealed class Bbs2023W3cVectorTests
     /// <summary>
     /// Mandatory pointers from W3C Example 9.
     /// </summary>
-    private static string[] MandatoryPointers { get; } = ["/issuer"];
+    internal static string[] MandatoryPointers { get; } = ["/issuer"];
 
     /// <summary>
     /// Selective disclosure pointers from W3C Example 21.
@@ -145,7 +144,7 @@ internal sealed class Bbs2023W3cVectorTests
     /// <summary>
     /// The presentation header in hexadecimal from W3C Example 19.
     /// </summary>
-    private static string PresentationHeaderHex { get; } = "113377aa";
+    internal static string PresentationHeaderHex { get; } = "113377aa";
 
     /// <summary>
     /// The pseudo-random seed in hexadecimal from W3C Example 19 (ASCII of pi digits).
@@ -206,9 +205,9 @@ internal sealed class Bbs2023W3cVectorTests
             SpecAnchoredPartition,
             SpecAnchoredCanonicalize,
             contextResolver: null,
-            SerializeCredential,
-            DeserializeCredential,
-            SerializeProofOptions,
+            CanonicalizationTestUtilities.SerializeCredential,
+            CanonicalizationTestUtilities.DeserializeCredential,
+            CanonicalizationTestUtilities.SerializeProofOptions,
             Bbs2023CborSerializer.SerializeBaseProof,
             bbs.Sign,
             TestSetup.Base64UrlEncoder,
@@ -266,8 +265,8 @@ internal sealed class Bbs2023W3cVectorTests
             JsonLdSelection.SelectFragments,
             SpecAnchoredCanonicalize,
             contextResolver,
-            SerializeCredential,
-            DeserializeCredential,
+            CanonicalizationTestUtilities.SerializeCredential,
+            CanonicalizationTestUtilities.DeserializeCredential,
             Bbs2023CborSerializer.ParseBaseProof,
             Bbs2023CborSerializer.SerializeDerivedProof,
             deterministicProofGen,
@@ -308,8 +307,8 @@ internal sealed class Bbs2023W3cVectorTests
             Bbs2023CborSerializer.ParseDerivedProof,
             SpecAnchoredCanonicalize,
             contextResolver,
-            SerializeCredential,
-            SerializeProofOptions,
+            CanonicalizationTestUtilities.SerializeCredential,
+            CanonicalizationTestUtilities.SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
             BaseMemoryPool.Shared,
@@ -326,8 +325,8 @@ internal sealed class Bbs2023W3cVectorTests
             Bbs2023CborSerializer.ParseDerivedProof,
             SpecAnchoredCanonicalize,
             contextResolver,
-            SerializeCredential,
-            SerializeProofOptions,
+            CanonicalizationTestUtilities.SerializeCredential,
+            CanonicalizationTestUtilities.SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
             BaseMemoryPool.Shared,
@@ -373,9 +372,9 @@ internal sealed class Bbs2023W3cVectorTests
             JsonLdSelection.PartitionStatements,
             rdfcCanonicalizer,
             contextResolver,
-            SerializeCredential,
-            DeserializeCredential,
-            SerializeProofOptions,
+            CanonicalizationTestUtilities.SerializeCredential,
+            CanonicalizationTestUtilities.DeserializeCredential,
+            CanonicalizationTestUtilities.SerializeProofOptions,
             Bbs2023CborSerializer.SerializeBaseProof,
             bbs.Sign,
             TestSetup.Base64UrlEncoder,
@@ -390,8 +389,8 @@ internal sealed class Bbs2023W3cVectorTests
             JsonLdSelection.PartitionStatements,
             rdfcCanonicalizer,
             contextResolver,
-            SerializeCredential,
-            SerializeProofOptions,
+            CanonicalizationTestUtilities.SerializeCredential,
+            CanonicalizationTestUtilities.SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
             BaseMemoryPool.Shared,
@@ -413,8 +412,8 @@ internal sealed class Bbs2023W3cVectorTests
             JsonLdSelection.SelectFragments,
             rdfcCanonicalizer,
             contextResolver,
-            SerializeCredential,
-            DeserializeCredential,
+            CanonicalizationTestUtilities.SerializeCredential,
+            CanonicalizationTestUtilities.DeserializeCredential,
             Bbs2023CborSerializer.ParseBaseProof,
             Bbs2023CborSerializer.SerializeDerivedProof,
             bbs.ProofGen,
@@ -430,8 +429,8 @@ internal sealed class Bbs2023W3cVectorTests
             Bbs2023CborSerializer.ParseDerivedProof,
             rdfcCanonicalizer,
             contextResolver,
-            SerializeCredential,
-            SerializeProofOptions,
+            CanonicalizationTestUtilities.SerializeCredential,
+            CanonicalizationTestUtilities.SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
             BaseMemoryPool.Shared,
@@ -441,160 +440,12 @@ internal sealed class Bbs2023W3cVectorTests
         Assert.IsTrue(derivedVerify.IsValid, "Verifier must verify the derived proof.");
 
         //The reduced credential discloses the mandatory issuer plus the selected claims, and hides the rest.
-        var derivedJson = SerializeCredential(derivedCredential);
+        var derivedJson = CanonicalizationTestUtilities.SerializeCredential(derivedCredential);
         Assert.Contains("Arcadia", derivedJson, "Disclosed birthCountry must be present.");
         Assert.Contains("2024-12-16T00:00:00Z", derivedJson, "Disclosed validFrom must be present.");
         Assert.Contains("zDnaeTHxNEBZoKaEo6PdA83fq98ebiFvo3X273Ydu4YmV96rg", derivedJson, "Mandatory issuer must be present.");
         Assert.DoesNotContain("JANE", derivedJson, "Undisclosed givenName must be hidden.");
         Assert.DoesNotContain("83627465", derivedJson, "Undisclosed identifier must be hidden.");
-    }
-
-
-    /// <summary>
-    /// A selectable claim of the A.1 credential paired with a value that, when the claim is disclosed,
-    /// must appear in the reduced credential and, when it is hidden, must be absent.
-    /// </summary>
-    private sealed record SelectableClaim(string Pointer, string DisclosedValue);
-
-    /// <summary>
-    /// The leaf claims of the A.1 credential the holder may selectively disclose. The mandatory
-    /// <c>/issuer</c> pointer is always disclosed and is therefore excluded from this set; each value is
-    /// unique enough to assert presence or absence in the reduced JSON.
-    /// </summary>
-    private static SelectableClaim[] SelectableClaims { get; } =
-    [
-        new SelectableClaim("/validFrom", "2024-12-16T00:00:00Z"),
-        new SelectableClaim("/validUntil", "2025-12-16T23:59:59Z"),
-        new SelectableClaim("/credentialSubject/birthCountry", "Arcadia"),
-        new SelectableClaim("/credentialSubject/givenName", "JANE"),
-        new SelectableClaim("/credentialSubject/familyName", "SMITH"),
-        new SelectableClaim("/credentialSubject/birthDate", "1978-07-17")
-    ];
-
-
-    /// <summary>
-    /// Randomized property test over the REAL pipeline (dotNetRdf RDFC-1.0 + <see cref="JsonLdSelection"/>
-    /// partition/select): for any non-empty subset of the A.1 credential's selectable claims, the
-    /// issue -> verify-base -> derive -> verify-derived round-trip must produce a derived proof that
-    /// verifies, and the reduced credential must disclose exactly the chosen claims (plus the mandatory
-    /// issuer) while hiding the rest.
-    /// </summary>
-    [TestMethod]
-    public void RandomDisclosureSubsetsRoundTrip()
-    {
-        byte[] hmacKey = Convert.FromHexString(HmacKeyHex);
-        byte[] publicKeyBytes = Convert.FromHexString(PublicKeyHex);
-        byte[] presentationHeader = Convert.FromHexString(PresentationHeaderHex);
-
-        var rdfcCanonicalizer = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
-        var contextResolver = CanonicalizationTestUtilities.CreateTestContextResolver();
-        var mandatoryPaths = MandatoryPointers.Select(CredentialPath.FromJsonPointer).ToArray();
-
-        //Generate a non-empty subset of the selectable-claim indexes.
-        Gen<int[]> subsetGen =
-            from mask in Gen.Int[1, (1 << SelectableClaims.Length) - 1]
-            select Enumerable.Range(0, SelectableClaims.Length).Where(i => (mask & (1 << i)) != 0).ToArray();
-
-        subsetGen.Sample(subset =>
-        {
-            //CsCheck samples synchronously; drive the async pipeline on the sampling thread.
-            var disclosed = subset.Select(i => SelectableClaims[i]).ToArray();
-
-            using var bbs = BbsOperations.Create(PrivateKeyHex, PublicKeyHex);
-
-            var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredential, TestSetup.DefaultSerializationOptions)!;
-
-            var signedCredential = credential.CreateBaseProofAsync(
-                publicKeyBytes,
-                VerificationMethodId,
-                DateTime.Parse("2023-08-15T23:36:38Z", null, System.Globalization.DateTimeStyles.RoundtripKind),
-                mandatoryPaths,
-                () => hmacKey,
-                JsonLdSelection.PartitionStatements,
-                rdfcCanonicalizer,
-                contextResolver,
-                SerializeCredential,
-                DeserializeCredential,
-                SerializeProofOptions,
-                Bbs2023CborSerializer.SerializeBaseProof,
-                bbs.Sign,
-                TestSetup.Base64UrlEncoder,
-                BaseMemoryPool.Shared,
-                EmptyContext,
-                CancellationToken.None).AsTask().GetAwaiter().GetResult();
-
-            var baseVerify = signedCredential.VerifyBaseProofAsync(
-                bbs.Verify,
-                Bbs2023CborSerializer.ParseBaseProof,
-                JsonLdSelection.PartitionStatements,
-                rdfcCanonicalizer,
-                contextResolver,
-                SerializeCredential,
-                SerializeProofOptions,
-                TestSetup.Base64UrlEncoder,
-                TestSetup.Base64UrlDecoder,
-                BaseMemoryPool.Shared,
-                EmptyContext,
-                CancellationToken.None).AsTask().GetAwaiter().GetResult();
-
-            Assert.IsTrue(baseVerify.IsValid, "Holder must verify the base proof.");
-
-            var verifierRequestedPaths = disclosed
-                .Select(c => CredentialPath.FromJsonPointer(c.Pointer))
-                .ToHashSet();
-
-            var derivedCredential = signedCredential.DeriveProofAsync(
-                verifierRequestedPaths,
-                userExclusions: null,
-                presentationHeader,
-                JsonLdSelection.PartitionStatements,
-                JsonLdSelection.SelectFragments,
-                rdfcCanonicalizer,
-                contextResolver,
-                SerializeCredential,
-                DeserializeCredential,
-                Bbs2023CborSerializer.ParseBaseProof,
-                Bbs2023CborSerializer.SerializeDerivedProof,
-                bbs.ProofGen,
-                TestSetup.Base64UrlEncoder,
-                TestSetup.Base64UrlDecoder,
-                BaseMemoryPool.Shared,
-                EmptyContext,
-                CancellationToken.None).AsTask().GetAwaiter().GetResult();
-
-            var derivedVerify = derivedCredential.VerifyDerivedProofAsync(
-                bbs.ProofVerify,
-                Bbs2023CborSerializer.ParseDerivedProof,
-                rdfcCanonicalizer,
-                contextResolver,
-                SerializeCredential,
-                SerializeProofOptions,
-                TestSetup.Base64UrlEncoder,
-                TestSetup.Base64UrlDecoder,
-                BaseMemoryPool.Shared,
-                EmptyContext,
-                CancellationToken.None).AsTask().GetAwaiter().GetResult();
-
-            Assert.IsTrue(derivedVerify.IsValid, $"Derived proof must verify for subset [{string.Join(",", disclosed.Select(c => c.Pointer))}].");
-
-            //The reduced credential discloses the mandatory issuer plus exactly the chosen claims, and
-            //hides every selectable claim that was not chosen.
-            var derivedJson = SerializeCredential(derivedCredential);
-            Assert.Contains("zDnaeTHxNEBZoKaEo6PdA83fq98ebiFvo3X273Ydu4YmV96rg", derivedJson, "Mandatory issuer must be present.");
-
-            var disclosedPointers = disclosed.Select(c => c.Pointer).ToHashSet();
-            foreach(var claim in SelectableClaims)
-            {
-                if(disclosedPointers.Contains(claim.Pointer))
-                {
-                    Assert.Contains(claim.DisclosedValue, derivedJson, $"Disclosed claim '{claim.Pointer}' must be present.");
-                }
-                else
-                {
-                    Assert.DoesNotContain(claim.DisclosedValue, derivedJson, $"Undisclosed claim '{claim.Pointer}' must be hidden.");
-                }
-            }
-        }, iter: 30);
     }
 
 
@@ -629,7 +480,7 @@ internal sealed class Bbs2023W3cVectorTests
         }
         """, TestSetup.DefaultSerializationOptions)!;
 
-        var derivedCredential = JsonSerializerExtensions.Deserialize<DataIntegritySecuredCredential>(SerializeCredential(revealCredential), TestSetup.DefaultSerializationOptions)!;
+        var derivedCredential = JsonSerializerExtensions.Deserialize<DataIntegritySecuredCredential>(CanonicalizationTestUtilities.SerializeCredential(revealCredential), TestSetup.DefaultSerializationOptions)!;
         derivedCredential.Proof =
         [
             new DataIntegrityProof
@@ -651,7 +502,7 @@ internal sealed class Bbs2023W3cVectorTests
     {
         var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredential, TestSetup.DefaultSerializationOptions)!;
         var signedCredential = JsonSerializerExtensions.Deserialize<DataIntegritySecuredCredential>(
-            SerializeCredential(credential),
+            CanonicalizationTestUtilities.SerializeCredential(credential),
             TestSetup.DefaultSerializationOptions)!;
 
         signedCredential.Proof =
@@ -669,14 +520,6 @@ internal sealed class Bbs2023W3cVectorTests
 
         return signedCredential;
     }
-
-
-    private static string SerializeCredential(VerifiableCredential credential) => JsonSerializerExtensions.Serialize(credential, TestSetup.DefaultSerializationOptions);
-
-    private static VerifiableCredential DeserializeCredential(string json) => JsonSerializerExtensions.Deserialize<VerifiableCredential>(json, TestSetup.DefaultSerializationOptions)!;
-
-    private static string SerializeProofOptions(ProofOptionsDocument proofOptions) =>
-        ProofOptionsSerializer.Serialize(proofOptions, TestSetup.DefaultSerializationOptions);
 
 
     /// <summary>
@@ -890,7 +733,7 @@ internal sealed class Bbs2023W3cVectorTests
     /// Binds the BBS Sign/Verify/ProofGen/ProofVerify operations from Lumoin.Veridical to the cryptosuite
     /// delegate seams, holding the BLS12-381 managed backends and the issuer key material.
     /// </summary>
-    private sealed class BbsOperations: IDisposable
+    internal sealed class BbsOperations: IDisposable
     {
         //BBS secret keys, signatures, and proofs request AllocationKind.Native. The shared pool disallows
         //native degradation, so a dedicated pool that degrades Native to Pinned backs the BBS value types.

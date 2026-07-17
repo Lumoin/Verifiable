@@ -14,7 +14,7 @@ namespace Verifiable.Tpm.Extensions.EventLog;
 /// </remarks>
 public sealed class TcgEventLogData: IDisposable
 {
-    private readonly IMemoryOwner<byte> memoryOwner;
+    private IMemoryOwner<byte> MemoryOwner { get; }
     private bool disposed;
 
     /// <summary>
@@ -31,7 +31,7 @@ public sealed class TcgEventLogData: IDisposable
         get
         {
             ObjectDisposedException.ThrowIf(disposed, this);
-            return memoryOwner.Memory.Span.Slice(0, Length);
+            return MemoryOwner.Memory.Span.Slice(0, Length);
         }
     }
 
@@ -44,7 +44,7 @@ public sealed class TcgEventLogData: IDisposable
         get
         {
             ObjectDisposedException.ThrowIf(disposed, this);
-            return memoryOwner.Memory.Slice(0, Length);
+            return MemoryOwner.Memory.Slice(0, Length);
         }
     }
 
@@ -55,7 +55,7 @@ public sealed class TcgEventLogData: IDisposable
     /// <param name="length">The actual length of the data.</param>
     public TcgEventLogData(IMemoryOwner<byte> memoryOwner, int length)
     {
-        this.memoryOwner = memoryOwner;
+        this.MemoryOwner = memoryOwner;
         Length = length;
     }
 
@@ -77,7 +77,7 @@ public sealed class TcgEventLogData: IDisposable
         if(!disposed)
         {
             disposed = true;
-            memoryOwner.Dispose();
+            MemoryOwner.Dispose();
         }
     }
 }

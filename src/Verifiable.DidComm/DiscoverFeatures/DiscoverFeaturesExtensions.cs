@@ -28,8 +28,8 @@ namespace Verifiable.DidComm.DiscoverFeatures;
 public static class DiscoverFeaturesExtensions
 {
     //The query/disclose Message Type URIs, parsed once for semver-compatible handler dispatch.
-    private static readonly MessageTypeUri QueryMessageType = MessageTypeUri.Parse(WellKnownDiscoverFeaturesNames.QueryType);
-    private static readonly MessageTypeUri DiscloseMessageType = MessageTypeUri.Parse(WellKnownDiscoverFeaturesNames.DiscloseType);
+    private static MessageTypeUri QueryMessageType { get; } = MessageTypeUri.Parse(WellKnownDiscoverFeaturesNames.QueryType);
+    private static MessageTypeUri DiscloseMessageType { get; } = MessageTypeUri.Parse(WellKnownDiscoverFeaturesNames.DiscloseType);
 
 
     /// <summary>Whether <paramref name="message"/> is a discover-features query — its <c>type</c> is the <c>queries</c> Message Type URI (DIDComm v2.1 §query Message Type).</summary>

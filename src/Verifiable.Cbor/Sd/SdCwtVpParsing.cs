@@ -1,7 +1,6 @@
 using System.Buffers;
 using System.Formats.Cbor;
 using Verifiable.Cbor.Mdoc;
-using Verifiable.Core.Model.Mdoc;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
@@ -158,7 +157,7 @@ public static class SdCwtVpParsing
         ArgumentNullException.ThrowIfNull(sdCwt);
         ArgumentNullException.ThrowIfNull(pool);
 
-        MdocCoseKey? coseKey = ReadCnfCoseKey(sdCwt.IssuerSigned);
+        CoseKey? coseKey = ReadCnfCoseKey(sdCwt.IssuerSigned);
         if(coseKey is null)
         {
             return null;
@@ -170,20 +169,13 @@ public static class SdCwtVpParsing
         //EC2 keys carry an uncompressed (x, y) pair; the internal form is the
         //SEC1 compressed point. OKP keys (e.g. Ed25519) carry the public bytes in x
         //with no y and are used verbatim.
-        byte[] keyMaterial;
-        if(coseKey.Y is ReadOnlyMemory<byte> y && coseKey.X is ReadOnlyMemory<byte> x)
+        byte[] keyMaterial = coseKey switch
         {
-            keyMaterial = EllipticCurveUtilities.Compress(x.Span, y.Span);
-        }
-        else if(coseKey.X is ReadOnlyMemory<byte> okpX)
-        {
-            keyMaterial = okpX.ToArray();
-        }
-        else
-        {
-            throw new CborContentException(
-                "The cnf COSE_Key carries no x coordinate, so a public key cannot be reconstructed.");
-        }
+            { X: ReadOnlyMemory<byte> x, Y: ReadOnlyMemory<byte> y } => EllipticCurveUtilities.Compress(x.Span, y.Span),
+            { X: ReadOnlyMemory<byte> okpX } => okpX.ToArray(),
+            _ => throw new CborContentException(
+                "The cnf COSE_Key carries no x coordinate, so a public key cannot be reconstructed.")
+        };
 
         IMemoryOwner<byte> owner = pool.Rent(keyMaterial.Length);
         keyMaterial.AsSpan().CopyTo(owner.Memory.Span);
@@ -221,33 +213,13 @@ public static class SdCwtVpParsing
             int key = reader.ReadInt32();
             read++;
 
-            switch(key)
+            _ = key switch
             {
-                case WellKnownCwtClaimNames.Aud:
-                {
-                    aud = reader.ReadTextString();
-
-                    break;
-                }
-                case WellKnownCwtClaimNames.Iat:
-                {
-                    iat = reader.ReadInt64();
-
-                    break;
-                }
-                case WellKnownCwtClaimNames.Cnonce:
-                {
-                    cnonce = reader.ReadTextString();
-
-                    break;
-                }
-                default:
-                {
-                    reader.SkipValue();
-
-                    break;
-                }
-            }
+                WellKnownCwtClaimNames.Aud => AssignAud(reader, ref aud),
+                WellKnownCwtClaimNames.Iat => AssignIat(reader, ref iat),
+                WellKnownCwtClaimNames.Cnonce => AssignCnonce(reader, ref cnonce),
+                _ => SkipValue(reader)
+            };
         }
 
         return new KbtCwtClaims
@@ -256,6 +228,37 @@ public static class SdCwtVpParsing
             Iat = iat is long seconds ? DateTimeOffset.FromUnixTimeSeconds(seconds) : null,
             Cnonce = cnonce
         };
+
+        //Assigns the decoded aud claim.
+        static bool AssignAud(CborReader reader, ref string? aud)
+        {
+            aud = reader.ReadTextString();
+
+            return true;
+        }
+
+        //Assigns the decoded iat claim.
+        static bool AssignIat(CborReader reader, ref long? iat)
+        {
+            iat = reader.ReadInt64();
+
+            return true;
+        }
+
+        //Assigns the decoded cnonce claim.
+        static bool AssignCnonce(CborReader reader, ref string? cnonce)
+        {
+            cnonce = reader.ReadTextString();
+
+            return true;
+        }
+
+        static bool SkipValue(CborReader reader)
+        {
+            reader.SkipValue();
+
+            return true;
+        }
     }
 
 
@@ -286,8 +289,8 @@ public static class SdCwtVpParsing
 
 
     //Reads the cnf (8) claim from a COSE_Sign1 payload and, when it carries an embedded
-    //COSE_Key confirmation method (cnf map key 1), parses it into an MdocCoseKey view.
-    private static MdocCoseKey? ReadCnfCoseKey(ReadOnlyMemory<byte> coseSign1)
+    //COSE_Key confirmation method (cnf map key 1), parses it into a CoseKey view.
+    private static CoseKey? ReadCnfCoseKey(ReadOnlyMemory<byte> coseSign1)
     {
         ReadOnlyMemory<byte> payload = ReadCoseSign1Payload(coseSign1);
         var reader = new CborReader(payload, CborConformanceMode.Lax);
@@ -309,7 +312,7 @@ public static class SdCwtVpParsing
             //cnf is a confirmation-method map; the COSE_Key method lives under member 1.
             int? cnfCount = reader.ReadStartMap();
             int cnfRead = 0;
-            MdocCoseKey? coseKey = null;
+            CoseKey? coseKey = null;
             while(cnfCount is null ? reader.PeekState() != CborReaderState.EndMap : cnfRead < cnfCount.Value)
             {
                 int cnfKey = reader.ReadInt32();

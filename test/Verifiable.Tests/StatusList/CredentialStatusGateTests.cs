@@ -1,8 +1,8 @@
-using System;
 using System.Buffers;
 using System.Threading.Tasks;
 using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
+using Verifiable.Tests.TestInfrastructure;
 
 using StatusListType = Verifiable.Core.StatusList.StatusList;
 
@@ -20,7 +20,7 @@ internal sealed class CredentialStatusGateTests
 {
     private const string ListUri = "https://issuer.example/statuslists/1";
     private const int CredentialIndex = 42;
-    private static readonly DateTimeOffset Now = new(2026, 6, 1, 12, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset Now = TestClock.CanonicalEpoch;
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 

@@ -28,7 +28,7 @@ public sealed class DataGroup2: IDisposable
     private const int DataGroupTemplateTag = 0x75;
 
     //ISO/IEC 19794-5 facial record header: "FAC\0" then "010\0".
-    private static readonly byte[] FacialRecordFormatIdentifier = [0x46, 0x41, 0x43, 0x00];
+    private static byte[] FacialRecordFormatIdentifier { get; } = [0x46, 0x41, 0x43, 0x00];
 
     private const int FacialRecordHeaderLength = 14;
     private const int FacialInformationBlockLength = 20;

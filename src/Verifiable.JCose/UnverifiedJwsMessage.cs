@@ -17,7 +17,7 @@ public sealed class UnverifiedJwsMessage : IDisposable, IEquatable<UnverifiedJws
     /// <summary>
     /// Owned payload memory (when parsed). Null if payload comes from external source.
     /// </summary>
-    private readonly IMemoryOwner<byte>? ownedPayload;
+    private IMemoryOwner<byte>? OwnedPayload { get; }
 
     /// <summary>
     /// The payload bytes. UNTRUSTED until signature is verified.
@@ -43,7 +43,7 @@ public sealed class UnverifiedJwsMessage : IDisposable, IEquatable<UnverifiedJws
     {
         ArgumentNullException.ThrowIfNull(signature);
 
-        ownedPayload = payloadOwner;
+        OwnedPayload = payloadOwner;
         Payload = payload;
         Signatures = [signature];
         IsDetachedPayload = isDetachedPayload;
@@ -58,9 +58,11 @@ public sealed class UnverifiedJwsMessage : IDisposable, IEquatable<UnverifiedJws
     {
         ArgumentNullException.ThrowIfNull(signatures);
         if(signatures.Count == 0)
+        {
             throw new ArgumentException("At least one signature is required.", nameof(signatures));
+        }
 
-        ownedPayload = payloadOwner;
+        OwnedPayload = payloadOwner;
         Payload = payload;
         Signatures = signatures;
         IsDetachedPayload = isDetachedPayload;
@@ -71,7 +73,7 @@ public sealed class UnverifiedJwsMessage : IDisposable, IEquatable<UnverifiedJws
     {
         if(!disposed)
         {
-            ownedPayload?.Dispose();
+            OwnedPayload?.Dispose();
             foreach(var sig in Signatures)
             {
                 sig.Dispose();
@@ -95,8 +97,15 @@ public sealed class UnverifiedJwsMessage : IDisposable, IEquatable<UnverifiedJws
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool Equals(UnverifiedJwsMessage? other)
     {
-        if(other is null) return false;
-        if(ReferenceEquals(this, other)) return true;
+        if(other is null)
+        {
+            return false;
+        }
+
+        if(ReferenceEquals(this, other))
+        {
+            return true;
+        }
 
         return IsDetachedPayload == other.IsDetachedPayload
             && Payload.Span.SequenceEqual(other.Payload.Span)

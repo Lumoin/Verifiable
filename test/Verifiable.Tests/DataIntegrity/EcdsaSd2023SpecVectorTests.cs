@@ -336,9 +336,9 @@ internal sealed class EcdsaSd2023W3cVectorTests
             JsonLdSelection.PartitionStatements,
             rdfcCanonicalizer,
             contextResolver,
-            SerializeCredential,
+            CanonicalizationTestUtilities.SerializeCredential,
             DeserializeCredential,
-            SerializeProofOptions,
+            CanonicalizationTestUtilities.SerializeProofOptions,
             EcdsaSd2023CborSerializer.SerializeBaseProof,
             TestSetup.Base64UrlEncoder,
             BaseMemoryPool.Shared,
@@ -527,9 +527,9 @@ internal sealed class EcdsaSd2023W3cVectorTests
             JsonLdSelection.PartitionStatements,
             rdfcCanonicalizer,
             contextResolver,
-            SerializeCredential,
+            CanonicalizationTestUtilities.SerializeCredential,
             DeserializeCredential,
-            SerializeProofOptions,
+            CanonicalizationTestUtilities.SerializeProofOptions,
             EcdsaSd2023CborSerializer.SerializeBaseProof,
             TestSetup.Base64UrlEncoder,
             BaseMemoryPool.Shared,
@@ -537,7 +537,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
             cancellationToken).ConfigureAwait(false);
 
         //Construct signed credential from base proof result.
-        var signedCredential = JsonSerializerExtensions.Deserialize<DataIntegritySecuredCredential>(SerializeCredential(credential), TestSetup.DefaultSerializationOptions)!;
+        var signedCredential = JsonSerializerExtensions.Deserialize<DataIntegritySecuredCredential>(CanonicalizationTestUtilities.SerializeCredential(credential), TestSetup.DefaultSerializationOptions)!;
         signedCredential.Proof =
         [
             new DataIntegrityProof
@@ -569,8 +569,8 @@ internal sealed class EcdsaSd2023W3cVectorTests
             JsonLdSelection.PartitionStatements,
             rdfcCanonicalizer,
             contextResolver,
-            SerializeCredential,
-            SerializeProofOptions,
+            CanonicalizationTestUtilities.SerializeCredential,
+            CanonicalizationTestUtilities.SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
             BaseMemoryPool.Shared,
@@ -631,7 +631,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
             JsonLdSelection.SelectFragments,
             rdfcCanonicalizer,
             contextResolver,
-            SerializeCredential,
+            CanonicalizationTestUtilities.SerializeCredential,
             DeserializeCredential,
             EcdsaSd2023CborSerializer.ParseBaseProof,
             EcdsaSd2023CborSerializer.SerializeDerivedProof,
@@ -659,8 +659,8 @@ internal sealed class EcdsaSd2023W3cVectorTests
             EcdsaSd2023CborSerializer.ParseDerivedProof,
             rdfcCanonicalizer,
             contextResolver,
-            SerializeCredential,
-            SerializeProofOptions,
+            CanonicalizationTestUtilities.SerializeCredential,
+            CanonicalizationTestUtilities.SerializeProofOptions,
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
             BaseMemoryPool.Shared,
@@ -724,13 +724,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
         verifierContext.Dispose();
     }
 
-    private static string SerializeCredential(VerifiableCredential credential) => JsonSerializerExtensions.Serialize(credential, TestSetup.DefaultSerializationOptions);
-
     private static VerifiableCredential DeserializeCredential(string json) => JsonSerializerExtensions.Deserialize<VerifiableCredential>(json, TestSetup.DefaultSerializationOptions)!;
-
-
-    private static string SerializeProofOptions(ProofOptionsDocument proofOptions) =>
-        ProofOptionsSerializer.Serialize(proofOptions, TestSetup.DefaultSerializationOptions);
 
     private static PublicKeyMemory DecodeP256PublicKey(string multibaseKey)
     {

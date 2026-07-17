@@ -4,6 +4,7 @@ using Verifiable.Cbor.Mdoc;
 using Verifiable.Core.Model.Mdoc;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using static Verifiable.Tests.TestInfrastructure.MdocTestFixtures;
 
 namespace Verifiable.Tests.Mdoc;
 
@@ -191,7 +192,7 @@ internal static class MdocCborMsoReaderTestFixtures
         WriteValidityInfo(writer);
 
         writer.WriteTextString(MdocMsoWellKnownKeys.ValueDigests);
-        WriteValueDigests(writer);
+        WriteValueDigests(writer, MdlNamespace);
 
         writer.WriteTextString(MdocMsoWellKnownKeys.Version);
         writer.WriteTextString(MdocMsoWellKnownKeys.Version10);
@@ -199,59 +200,5 @@ internal static class MdocCborMsoReaderTestFixtures
         writer.WriteEndMap();
 
         return writer.Encode();
-    }
-
-
-    private static void WriteValueDigests(CborWriter writer)
-    {
-        writer.WriteStartMap(1);
-        writer.WriteTextString(MdlNamespace);
-        writer.WriteStartMap(2);
-        writer.WriteUInt32(0);
-        writer.WriteByteString(new byte[32]);
-        writer.WriteUInt32(1);
-        writer.WriteByteString(new byte[32]);
-        writer.WriteEndMap();
-        writer.WriteEndMap();
-    }
-
-
-    private static void WriteDeviceKeyInfo(CborWriter writer)
-    {
-        writer.WriteStartMap(1);
-        writer.WriteTextString(MdocMsoWellKnownKeys.DeviceKey);
-
-        writer.WriteStartMap(4);
-        writer.WriteInt32(MdocCoseKeyParameters.Kty);
-        writer.WriteInt32(MdocCoseKeyTypes.Ec2);
-        writer.WriteInt32(MdocCoseKeyParameters.Crv);
-        writer.WriteInt32(MdocCoseKeyCurves.P256);
-        writer.WriteInt32(MdocCoseKeyParameters.X);
-        writer.WriteByteString(new byte[32]);
-        writer.WriteInt32(MdocCoseKeyParameters.Y);
-        writer.WriteByteString(new byte[32]);
-        writer.WriteEndMap();
-
-        writer.WriteEndMap();
-    }
-
-
-    private static void WriteValidityInfo(CborWriter writer)
-    {
-        writer.WriteStartMap(3);
-        writer.WriteTextString(MdocMsoWellKnownKeys.Signed);
-        WriteTdate(writer, "2026-05-24T12:00:00Z");
-        writer.WriteTextString(MdocMsoWellKnownKeys.ValidFrom);
-        WriteTdate(writer, "2026-05-24T12:00:00Z");
-        writer.WriteTextString(MdocMsoWellKnownKeys.ValidUntil);
-        WriteTdate(writer, "2027-05-24T12:00:00Z");
-        writer.WriteEndMap();
-    }
-
-
-    private static void WriteTdate(CborWriter writer, string rfc3339)
-    {
-        writer.WriteTag(CborTag.DateTimeString);
-        writer.WriteTextString(rfc3339);
     }
 }

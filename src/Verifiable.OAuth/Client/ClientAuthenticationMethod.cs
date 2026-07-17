@@ -115,7 +115,7 @@ public readonly struct ClientAuthenticationMethod: IEquatable<ClientAuthenticati
     public static ClientAuthenticationMethod SpiffeJwt { get; } = new(8);
 
 
-    private static readonly List<ClientAuthenticationMethod> methods =
+    private static List<ClientAuthenticationMethod> methods { get; } =
     [
         None,
         ClientSecretBasic,

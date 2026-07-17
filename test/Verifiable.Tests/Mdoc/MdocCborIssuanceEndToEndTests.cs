@@ -78,8 +78,8 @@ internal sealed class MdocCborIssuanceEndToEndTests
 
         try
         {
-            MdocLogicalDocument logical = BuildSampleLogicalPid();
-            MdocCoseKey deviceCoseKey = CoseKeyFromP256Public(deviceKeys.PublicKey);
+            MdocLogicalDocument logical = MdocTestFixtures.BuildSampleLogicalPid(SampleRandomGenerator);
+            CoseKey deviceCoseKey = MdocTestFixtures.CoseKeyFromP256Public(deviceKeys.PublicKey);
 
             using MdocDocument signed = await logical.SignAsync(
                 config: new MdocIssuerSigningConfig
@@ -99,8 +99,8 @@ internal sealed class MdocCborIssuanceEndToEndTests
         }
         finally
         {
-            DisposeKeyMaterial(issuerKeys);
-            DisposeKeyMaterial(deviceKeys);
+            MdocTestFixtures.DisposeKeyMaterial(issuerKeys);
+            MdocTestFixtures.DisposeKeyMaterial(deviceKeys);
         }
     }
 
@@ -117,13 +117,13 @@ internal sealed class MdocCborIssuanceEndToEndTests
 
         try
         {
-            MdocLogicalDocument logical = BuildSampleLogicalPid();
+            MdocLogicalDocument logical = MdocTestFixtures.BuildSampleLogicalPid(SampleRandomGenerator);
             using MdocDocument signed = await logical.SignAsync(
                 new MdocIssuerSigningConfig
                 {
                     DigestAlgorithm = MdocMsoWellKnownKeys.DigestAlgorithmSha256,
                     Validity = SampleValidity(),
-                    DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
+                    DeviceKey = MdocTestFixtures.CoseKeyFromP256Public(deviceKeys.PublicKey)
                 },
                 issuerKeys.PrivateKey,
                 BaseMemoryPool.Shared,
@@ -136,9 +136,9 @@ internal sealed class MdocCborIssuanceEndToEndTests
         }
         finally
         {
-            DisposeKeyMaterial(issuerKeys);
-            DisposeKeyMaterial(imposterKeys);
-            DisposeKeyMaterial(deviceKeys);
+            MdocTestFixtures.DisposeKeyMaterial(issuerKeys);
+            MdocTestFixtures.DisposeKeyMaterial(imposterKeys);
+            MdocTestFixtures.DisposeKeyMaterial(deviceKeys);
         }
     }
 
@@ -157,13 +157,13 @@ internal sealed class MdocCborIssuanceEndToEndTests
 
         try
         {
-            MdocLogicalDocument logical = BuildSampleLogicalPid();
+            MdocLogicalDocument logical = MdocTestFixtures.BuildSampleLogicalPid(SampleRandomGenerator);
             using MdocDocument signed = await logical.SignAsync(
                 new MdocIssuerSigningConfig
                 {
                     DigestAlgorithm = MdocMsoWellKnownKeys.DigestAlgorithmSha256,
                     Validity = SampleValidity(),
-                    DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
+                    DeviceKey = MdocTestFixtures.CoseKeyFromP256Public(deviceKeys.PublicKey)
                 },
                 issuerKeys.PrivateKey,
                 BaseMemoryPool.Shared,
@@ -182,8 +182,8 @@ internal sealed class MdocCborIssuanceEndToEndTests
         }
         finally
         {
-            DisposeKeyMaterial(issuerKeys);
-            DisposeKeyMaterial(deviceKeys);
+            MdocTestFixtures.DisposeKeyMaterial(issuerKeys);
+            MdocTestFixtures.DisposeKeyMaterial(deviceKeys);
         }
     }
 
@@ -198,12 +198,12 @@ internal sealed class MdocCborIssuanceEndToEndTests
 
         try
         {
-            (MdocDocument signed, ReadOnlyMemory<byte> signedMsoPayload) = await BuildSampleLogicalPid().SignVerboseAsync(
+            (MdocDocument signed, ReadOnlyMemory<byte> signedMsoPayload) = await MdocTestFixtures.BuildSampleLogicalPid(SampleRandomGenerator).SignVerboseAsync(
                 new MdocIssuerSigningConfig
                 {
                     DigestAlgorithm = MdocMsoWellKnownKeys.DigestAlgorithmSha256,
                     Validity = SampleValidity(),
-                    DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
+                    DeviceKey = MdocTestFixtures.CoseKeyFromP256Public(deviceKeys.PublicKey)
                 },
                 issuerKeys.PrivateKey,
                 BaseMemoryPool.Shared,
@@ -231,8 +231,8 @@ internal sealed class MdocCborIssuanceEndToEndTests
         }
         finally
         {
-            DisposeKeyMaterial(issuerKeys);
-            DisposeKeyMaterial(deviceKeys);
+            MdocTestFixtures.DisposeKeyMaterial(issuerKeys);
+            MdocTestFixtures.DisposeKeyMaterial(deviceKeys);
         }
     }
 
@@ -247,12 +247,12 @@ internal sealed class MdocCborIssuanceEndToEndTests
 
         try
         {
-            using MdocDocument signed = await BuildSampleLogicalPid().SignAsync(
+            using MdocDocument signed = await MdocTestFixtures.BuildSampleLogicalPid(SampleRandomGenerator).SignAsync(
                 new MdocIssuerSigningConfig
                 {
                     DigestAlgorithm = MdocMsoWellKnownKeys.DigestAlgorithmSha256,
                     Validity = SampleValidity(),
-                    DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
+                    DeviceKey = MdocTestFixtures.CoseKeyFromP256Public(deviceKeys.PublicKey)
                 },
                 issuerKeys.PrivateKey,
                 BaseMemoryPool.Shared,
@@ -273,8 +273,8 @@ internal sealed class MdocCborIssuanceEndToEndTests
         }
         finally
         {
-            DisposeKeyMaterial(issuerKeys);
-            DisposeKeyMaterial(deviceKeys);
+            MdocTestFixtures.DisposeKeyMaterial(issuerKeys);
+            MdocTestFixtures.DisposeKeyMaterial(deviceKeys);
         }
     }
 
@@ -291,12 +291,12 @@ internal sealed class MdocCborIssuanceEndToEndTests
 
         try
         {
-            using MdocDocument signed = await BuildSampleLogicalPid().SignAsync(
+            using MdocDocument signed = await MdocTestFixtures.BuildSampleLogicalPid(SampleRandomGenerator).SignAsync(
                 new MdocIssuerSigningConfig
                 {
                     DigestAlgorithm = MdocMsoWellKnownKeys.DigestAlgorithmSha256,
                     Validity = SampleValidity(),
-                    DeviceKey = CoseKeyFromP256Public(deviceKeys.PublicKey)
+                    DeviceKey = MdocTestFixtures.CoseKeyFromP256Public(deviceKeys.PublicKey)
                 },
                 issuerKeys.PrivateKey,
                 BaseMemoryPool.Shared,
@@ -313,9 +313,9 @@ internal sealed class MdocCborIssuanceEndToEndTests
         }
         finally
         {
-            DisposeKeyMaterial(issuerKeys);
-            DisposeKeyMaterial(imposterKeys);
-            DisposeKeyMaterial(deviceKeys);
+            MdocTestFixtures.DisposeKeyMaterial(issuerKeys);
+            MdocTestFixtures.DisposeKeyMaterial(imposterKeys);
+            MdocTestFixtures.DisposeKeyMaterial(deviceKeys);
         }
     }
 
@@ -333,8 +333,8 @@ internal sealed class MdocCborIssuanceEndToEndTests
         try
         {
             //fall through to common body below
-            MdocLogicalDocument logical = BuildSampleLogicalPid();
-            MdocCoseKey deviceCoseKey = CoseKeyFromP256Public(deviceKeys.PublicKey);
+            MdocLogicalDocument logical = MdocTestFixtures.BuildSampleLogicalPid(SampleRandomGenerator);
+            CoseKey deviceCoseKey = MdocTestFixtures.CoseKeyFromP256Public(deviceKeys.PublicKey);
 
             using MdocDocument signed = await logical.SignAsync(
                 config: new MdocIssuerSigningConfig
@@ -367,80 +367,24 @@ internal sealed class MdocCborIssuanceEndToEndTests
         }
         finally
         {
-            DisposeKeyMaterial(issuerKeys);
-            DisposeKeyMaterial(deviceKeys);
+            MdocTestFixtures.DisposeKeyMaterial(issuerKeys);
+            MdocTestFixtures.DisposeKeyMaterial(deviceKeys);
         }
     }
-
-
-    /// <summary>
-    /// Disposes both halves of a <see cref="PublicPrivateKeyMaterial{TPub, TPriv}"/>
-    /// tuple. The tuple type itself isn't IDisposable; the convention across
-    /// the test suite is to dispose the halves explicitly.
-    /// </summary>
-    private static void DisposeKeyMaterial(
-        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial)
-    {
-        keyMaterial.PublicKey.Dispose();
-        keyMaterial.PrivateKey.Dispose();
-    }
-
-
-    /// <summary>
-    /// A small but non-trivial logical PID document — two namespaced claims.
-    /// </summary>
-    private static MdocLogicalDocument BuildSampleLogicalPid() =>
-        MdocIssuance.BuildDocument(
-            docType: PidDocType,
-            claims:
-            [
-                new() { NameSpace = PidNamespace, ElementIdentifier = "family_name", EncodedElementValue = CborText("Mustermann") },
-                new() { NameSpace = PidNamespace, ElementIdentifier = "given_name", EncodedElementValue = CborText("Erika") }
-            ],
-            generateRandom: SampleRandomGenerator);
 
 
     private static Salt SampleRandomGenerator() =>
         MdocTestFixtures.ItemRandomSalt();
 
 
+    //Bit-identical to TestClock.CanonicalEpoch.AddDays(-8) (2026-05-24T12:00:00Z).
+    private static readonly DateTimeOffset SampleValiditySigned = TestClock.CanonicalEpoch.AddDays(-8);
+    private static readonly DateTimeOffset SampleValidityValidUntil = SampleValiditySigned.AddYears(1);
+
+
     private static MdocValidityInfo SampleValidity() =>
         new(
-            signed: new DateTimeOffset(2026, 5, 24, 12, 0, 0, TimeSpan.Zero),
-            validFrom: new DateTimeOffset(2026, 5, 24, 12, 0, 0, TimeSpan.Zero),
-            validUntil: new DateTimeOffset(2027, 5, 24, 12, 0, 0, TimeSpan.Zero));
-
-
-    /// <summary>
-    /// Adapts a P-256 <see cref="PublicKeyMemory"/> (compressed SEC1) into a
-    /// COSE_Key view. The MSO carries the device key as COSE_Key; the wallet
-    /// will use its private half to sign DeviceAuth in M.3b.
-    /// </summary>
-    private static MdocCoseKey CoseKeyFromP256Public(PublicKeyMemory publicKey)
-    {
-        ReadOnlySpan<byte> compressed = publicKey.AsReadOnlySpan();
-        byte[] uncompressed = EllipticCurveUtilities.Decompress(compressed, EllipticCurveTypes.P256);
-        ReadOnlySpan<byte> x = compressed[1..]; //skip the sign byte
-        ReadOnlySpan<byte> y = uncompressed;
-
-        return new MdocCoseKey(
-            kty: MdocCoseKeyTypes.Ec2,
-            curve: MdocCoseKeyCurves.P256,
-            x: x.ToArray(),
-            y: y.ToArray());
-    }
-
-
-    /// <summary>
-    /// Encodes a string as a CBOR text-string value using
-    /// <see cref="CborWriter"/> directly — keeps the test fixture honest by
-    /// going through the same writer the production code does.
-    /// </summary>
-    private static byte[] CborText(string value)
-    {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        writer.WriteTextString(value);
-
-        return writer.Encode();
-    }
+            signed: SampleValiditySigned,
+            validFrom: SampleValiditySigned,
+            validUntil: SampleValidityValidUntil);
 }

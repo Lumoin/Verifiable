@@ -22,8 +22,7 @@ internal sealed class Oid4VciNonceEndpointTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>A fixed clock so issued artefacts are reproducible.</summary>
-    private FakeTimeProvider TimeProvider { get; } = new(
-        new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
+    private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     /// <summary>The Wallet client identifier registered for the nonce tests.</summary>
     private const string ClientId = "https://wallet.client.test";

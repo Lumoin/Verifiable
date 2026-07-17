@@ -55,7 +55,7 @@ public static class WellKnownTokenTypeIdentifiers
 
     /// <summary>
     /// The Identity Assertion JWT Authorization Grant token type identifier
-    /// (draft-ietf-oauth-identity-assertion-authz-grant §4.3 / §10.2).
+    /// (draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §4.3 / §10.2).
     /// </summary>
     public static readonly string IdJag = Utf8Constants.ToInternedString(IdJagUtf8);
 
@@ -65,7 +65,7 @@ public static class WellKnownTokenTypeIdentifiers
     /// <summary>
     /// The <c>N_A</c> value the token endpoint's <c>token_type</c> response field carries when the issued
     /// token is not an OAuth access token — e.g. an ID-JAG returned in <c>access_token</c> for historical
-    /// reasons (draft-ietf-oauth-identity-assertion-authz-grant §4.3.4 / RFC 8693 §2.2.1).
+    /// reasons (draft-ietf-oauth-identity-assertion-authz-grant-04 §4.3.4 / RFC 8693 §2.2.1).
     /// </summary>
     public static readonly string NotApplicable = Utf8Constants.ToInternedString(NotApplicableUtf8);
 

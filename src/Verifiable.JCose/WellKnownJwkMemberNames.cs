@@ -322,7 +322,7 @@ public static class WellKnownJwkMemberNames
     public static IReadOnlyList<string> PrivateAndSymmetricMembers { get; } =
         [D, P, Q, Dp, Dq, Qi, Oth, K, Priv];
 
-    private static readonly HashSet<string> PrivateAndSymmetricMemberSet =
+    private static HashSet<string> PrivateAndSymmetricMemberSet { get; } =
         new(PrivateAndSymmetricMembers, StringComparer.Ordinal);
 
 

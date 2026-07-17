@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 
 namespace Verifiable.Tests.Tpm;
@@ -58,7 +60,7 @@ internal class TpmRecorderTests
         using var recorder = new TpmRecorder();
         recorder.OnNext(new TpmExchange(0, 100, new byte[] { 0x01 }, new byte[] { 0x02 }));
 
-        TpmSessionInfo info = TpmSessionInfo.Create(expectedManufacturer, expectedFirmwareVersion, TpmPlatform.Windows, TimeProvider.System);
+        TpmSessionInfo info = TpmSessionInfo.Create(expectedManufacturer, expectedFirmwareVersion, TpmPlatform.Windows, new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         TpmRecording recording = recorder.ToRecording(info);
 
@@ -87,7 +89,7 @@ internal class TpmRecorderTests
         using var recorder = new TpmRecorder();
         recorder.OnNext(new TpmExchange(0, 100, new byte[] { 0x01 }, new byte[] { 0x02 }));
 
-        TpmSessionInfo info = TpmSessionInfo.Create(null, null, TpmPlatform.Unknown, TimeProvider.System);
+        TpmSessionInfo info = TpmSessionInfo.Create(null, null, TpmPlatform.Unknown, new FakeTimeProvider(TestClock.CanonicalEpoch));
         TpmRecording recording = recorder.ToRecording(info);
 
         recorder.OnNext(new TpmExchange(200, 300, new byte[] { 0x03 }, new byte[] { 0x04 }));

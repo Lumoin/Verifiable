@@ -68,8 +68,7 @@ internal sealed class VcalmConformanceBridgeTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new(
-        new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
+    private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
@@ -149,7 +148,8 @@ internal sealed class VcalmConformanceBridgeTests
         string accessToken = await ObtainClientCredentialsTokenAsync(http, baseAddress).ConfigureAwait(false);
 
         //=== Step 2: POST a credential to /credentials/issue WITH the token → 201 secured VC. ===
-        string issueBody = BuildIssueRequestBody(ctx.IssuerDid, credentialId: "urn:uuid:bridge-credential-1");
+        string issueBody = VcalmWireFixtures.BuildIssueRequestBody(
+            ctx.IssuerDid, credentialId: "urn:uuid:bridge-credential-1", SerializeCredential);
         using HttpResponseMessage issueResponse = await PostJsonAsync(
             http, baseAddress, VcalmConformanceHttpApplication.CredentialsIssuePath, issueBody, accessToken)
             .ConfigureAwait(false);
@@ -194,7 +194,8 @@ internal sealed class VcalmConformanceBridgeTests
         HttpClient http = app.Host("default").SharedHttpClient!;
         Uri baseAddress = app.Host("default").HttpBaseAddress!;
 
-        string issueBody = BuildIssueRequestBody(ctx.IssuerDid, credentialId: "urn:uuid:unauth");
+        string issueBody = VcalmWireFixtures.BuildIssueRequestBody(
+            ctx.IssuerDid, credentialId: "urn:uuid:unauth", SerializeCredential);
 
         //No token at all → 401.
         using HttpResponseMessage noToken = await PostJsonAsync(
@@ -359,40 +360,6 @@ internal sealed class VcalmConformanceBridgeTests
         JsonElement proof = securedCredential.GetProperty(VcalmParameterNames.Proof);
 
         return proof.ValueKind == JsonValueKind.Array ? proof[0] : proof;
-    }
-
-
-    private static string BuildIssueRequestBody(string issuerDid, string credentialId)
-    {
-        VerifiableCredential credential = new()
-        {
-            Context = new Context
-            {
-                Contexts =
-                [
-                    Context.Credentials20,
-                    CanonicalizationTestUtilities.CredentialsExamplesV2ContextUrl
-                ]
-            },
-            Id = credentialId,
-            Type = ["VerifiableCredential", "ExampleAlumniCredential"],
-            Issuer = new Issuer { Id = issuerDid },
-            ValidFrom = "2023-01-01T00:00:00Z",
-            ValidUntil = "2030-01-01T00:00:00Z",
-            CredentialSubject =
-            [
-                new CredentialSubject
-                {
-                    Id = "did:example:alumni-subject",
-                    AdditionalData = new Dictionary<string, object>(StringComparer.Ordinal)
-                    {
-                        ["alumniOf"] = "The School of Examples"
-                    }
-                }
-            ]
-        };
-
-        return "{\"credential\":" + SerializeCredential(credential) + "}";
     }
 
 

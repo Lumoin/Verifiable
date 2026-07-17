@@ -29,8 +29,7 @@ internal sealed class ParRequestIntegrityTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>A fixed clock so authentication-recency arithmetic is reproducible.</summary>
-    private FakeTimeProvider TimeProvider { get; } = new(
-        new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
+    private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     private const string ClientId = "https://client.example.com";
     private const string SubjectId = "subject-par-integrity-1";

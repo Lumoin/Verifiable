@@ -36,8 +36,9 @@ internal sealed class CryptoProofLogReplayTests
         byte[] digest = SHA256.HashData(canonical);
 
         var sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
-        using Signature signature = await sign(
+        (Signature signature, CryptoEvent? _) = await sign(
             privateKey.AsReadOnlyMemory(), canonical, pool, context: null, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        using var disposableSignature = signature;
 
         var proof = new CryptoProof(signature, publicKey, CryptoAlgorithm.P256);
         LogEntry<ReadOnlyMemory<byte>, CryptoProof> entry = new()
@@ -69,8 +70,9 @@ internal sealed class CryptoProofLogReplayTests
         byte[] tamperedBytes = "the bytes that were NOT the signed ones"u8.ToArray();
 
         var sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
-        using Signature signature = await sign(
+        (Signature signature, CryptoEvent? _) = await sign(
             privateKey.AsReadOnlyMemory(), signedBytes, pool, context: null, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        using var disposableSignature = signature;
 
         //The entry is internally consistent (digest matches its canonical bytes), but the signature was produced
         //over different bytes — so proof validation must fail-closed and the genesis state must not be applied.

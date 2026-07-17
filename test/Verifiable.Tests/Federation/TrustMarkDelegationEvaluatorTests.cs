@@ -1,6 +1,7 @@
 using Verifiable.Core.Assessment;
 using Verifiable.JCose;
 using Verifiable.OAuth.Federation;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Federation;
 
@@ -18,7 +19,7 @@ internal sealed class TrustMarkDelegationEvaluatorTests
     [TestMethod]
     public async Task HappyPathDelegationEmitsSuccess()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
@@ -78,7 +79,7 @@ internal sealed class TrustMarkDelegationEvaluatorTests
     [TestMethod]
     public async Task DelegationSubjectMismatchFails()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
@@ -135,7 +136,7 @@ internal sealed class TrustMarkDelegationEvaluatorTests
     [TestMethod]
     public async Task OwnerNotInTrustAnchorOwnersFails()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
@@ -187,7 +188,7 @@ internal sealed class TrustMarkDelegationEvaluatorTests
     [TestMethod]
     public async Task FutureIssuedDelegationFails()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Assessment;
+using Verifiable.Tests.TestInfrastructure;
 
 
 namespace Verifiable.Tests.Assessment;
@@ -33,7 +34,7 @@ internal sealed class CompositeClaimAssessorTests
     [TestMethod]
     public async Task AllAssessorsRunInParallel()
     {
-        var timeProvider = new FakeTimeProvider();
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         var rules = new List<ClaimDelegate<string>> { new(SimpleRule, [ClaimId.AlgIsValid]) };
         var issuer = new ClaimIssuer<string>(TestIssuerId, rules, timeProvider);
 
@@ -68,7 +69,7 @@ internal sealed class CompositeClaimAssessorTests
     [TestMethod]
     public async Task AllMustSucceedFailsIfAnyFails()
     {
-        var timeProvider = new FakeTimeProvider();
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         var rules = new List<ClaimDelegate<string>> { new(SimpleRule, [ClaimId.AlgIsValid]) };
         var issuer = new ClaimIssuer<string>(TestIssuerId, rules, timeProvider);
 
@@ -96,7 +97,7 @@ internal sealed class CompositeClaimAssessorTests
     [TestMethod]
     public async Task AnyMustSucceedPassesIfOneSucceeds()
     {
-        var timeProvider = new FakeTimeProvider();
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         var rules = new List<ClaimDelegate<string>> { new(SimpleRule, [ClaimId.AlgIsValid]) };
         var issuer = new ClaimIssuer<string>(TestIssuerId, rules, timeProvider);
 
@@ -122,7 +123,7 @@ internal sealed class CompositeClaimAssessorTests
     [TestMethod]
     public async Task MajorityMustSucceedPassesWithMajority()
     {
-        var timeProvider = new FakeTimeProvider();
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         var rules = new List<ClaimDelegate<string>> { new(SimpleRule, [ClaimId.AlgIsValid]) };
         var issuer = new ClaimIssuer<string>(TestIssuerId, rules, timeProvider);
 
@@ -148,7 +149,7 @@ internal sealed class CompositeClaimAssessorTests
     [TestMethod]
     public async Task FaultingAssessorDoesNotPreventOthers()
     {
-        var timeProvider = new FakeTimeProvider();
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         var rules = new List<ClaimDelegate<string>> { new(SimpleRule, [ClaimId.AlgIsValid]) };
         var issuer = new ClaimIssuer<string>(TestIssuerId, rules, timeProvider);
 
@@ -180,7 +181,7 @@ internal sealed class CompositeClaimAssessorTests
     [TestMethod]
     public async Task TimeoutAssessorIsMarkedAsTimedOut()
     {
-        var timeProvider = new FakeTimeProvider();
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         var rules = new List<ClaimDelegate<string>> { new(SimpleRule, [ClaimId.AlgIsValid]) };
         var issuer = new ClaimIssuer<string>(TestIssuerId, rules, timeProvider);
 
@@ -209,7 +210,7 @@ internal sealed class CompositeClaimAssessorTests
     [TestMethod]
     public async Task CancellationCollectsPartialResults()
     {
-        var timeProvider = new FakeTimeProvider();
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         var rules = new List<ClaimDelegate<string>> { new(SimpleRule, [ClaimId.AlgIsValid]) };
         var issuer = new ClaimIssuer<string>(TestIssuerId, rules, timeProvider);
 
@@ -278,7 +279,7 @@ internal sealed class CompositeClaimAssessorTests
     [TestMethod]
     public async Task TracingInformationIsPropagated()
     {
-        var timeProvider = new FakeTimeProvider();
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         var rules = new List<ClaimDelegate<string>> { new(SimpleRule, [ClaimId.AlgIsValid]) };
         var issuer = new ClaimIssuer<string>(TestIssuerId, rules, timeProvider);
 
@@ -329,7 +330,7 @@ internal sealed class CompositeClaimAssessorTests
     [TestMethod]
     public async Task QuorumStrategyWithPartialCompletion()
     {
-        var timeProvider = new FakeTimeProvider();
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         var rules = new List<ClaimDelegate<string>> { new(SimpleRule, [ClaimId.AlgIsValid]) };
         var issuer = new ClaimIssuer<string>(TestIssuerId, rules, timeProvider);
 
@@ -359,7 +360,7 @@ internal sealed class CompositeClaimAssessorTests
     [TestMethod]
     public void ConstructorThrowsOnEmptyAssessors()
     {
-        var timeProvider = new FakeTimeProvider();
+        var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         var rules = new List<ClaimDelegate<string>> { new(SimpleRule, [ClaimId.AlgIsValid]) };
         var issuer = new ClaimIssuer<string>(TestIssuerId, rules, timeProvider);
 

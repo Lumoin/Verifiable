@@ -94,12 +94,12 @@ public sealed record AuthorizationDetailHandler
 public sealed class AuthorizationDetailTypeRegistry
 {
     //Keyed by the RFC 9396 §2 type value, compared ordinally (RFC 9396 §12).
-    private readonly Dictionary<string, AuthorizationDetailHandler> handlers =
+    private Dictionary<string, AuthorizationDetailHandler> Handlers { get; } =
         new(StringComparer.Ordinal);
 
     //The type values in registration order — the deterministic order RegisteredTypes
     //advertises; Dictionary enumeration order carries no such guarantee.
-    private readonly List<string> registrationOrder = [];
+    private List<string> RegistrationOrder { get; } = [];
 
 
     /// <summary>
@@ -113,14 +113,14 @@ public sealed class AuthorizationDetailTypeRegistry
     {
         ArgumentNullException.ThrowIfNull(handler);
 
-        if(!handlers.TryAdd(handler.Type, handler))
+        if(!Handlers.TryAdd(handler.Type, handler))
         {
             throw new ArgumentException(
                 $"A handler is already registered for authorization details type '{handler.Type}'.",
                 nameof(handler));
         }
 
-        registrationOrder.Add(handler.Type);
+        RegistrationOrder.Add(handler.Type);
     }
 
 
@@ -133,7 +133,7 @@ public sealed class AuthorizationDetailTypeRegistry
     {
         ArgumentNullException.ThrowIfNull(type);
 
-        return handlers.ContainsKey(type);
+        return Handlers.ContainsKey(type);
     }
 
 
@@ -142,7 +142,7 @@ public sealed class AuthorizationDetailTypeRegistry
     /// <c>authorization_details_types_supported</c> (RFC 9396 §10). Ordered by registration so
     /// the built-in <c>openid_credential</c> leads and the advertisement is deterministic.
     /// </summary>
-    public IReadOnlyList<string> RegisteredTypes => [.. registrationOrder];
+    public IReadOnlyList<string> RegisteredTypes => [.. RegistrationOrder];
 
 
     /// <summary>
@@ -160,7 +160,7 @@ public sealed class AuthorizationDetailTypeRegistry
         ArgumentNullException.ThrowIfNull(detail);
 
         //RFC 9396 §5: "The AS MUST refuse to process any unknown authorization details type."
-        if(!handlers.TryGetValue(detail.Type, out AuthorizationDetailHandler? handler))
+        if(!Handlers.TryGetValue(detail.Type, out AuthorizationDetailHandler? handler))
         {
             return $"Authorization details type '{detail.Type}' is not supported.";
         }

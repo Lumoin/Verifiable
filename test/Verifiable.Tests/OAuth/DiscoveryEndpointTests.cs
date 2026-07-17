@@ -9,6 +9,7 @@ using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Metadata;
 using Verifiable.Server;
 using Verifiable.Server.Routing;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -30,8 +31,7 @@ internal sealed class DiscoveryEndpointTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new(
-        new DateTimeOffset(2026, 5, 17, 12, 0, 0, TimeSpan.Zero));
+    private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch.AddDays(-15));
 
     private const string ClientId = "https://discovery.client.test";
     private static readonly Uri ClientBaseUri = new("https://discovery.client.test");

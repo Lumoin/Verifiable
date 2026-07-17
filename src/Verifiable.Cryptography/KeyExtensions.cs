@@ -65,17 +65,26 @@ public static class KeyExtensions
     /// <param name="signaturePool">The memory pool for allocating the signature buffer.</param>
     /// <param name="context">Optional context parameters for the signing operation.</param>
     /// <returns>The signature of the data.</returns>
-    public static ValueTask<Signature> SignAsync(this PrivateKeyMemory privateKey, ReadOnlyMemory<byte> dataToSign, SigningDelegate signingDelegate, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
+    /// <remarks>
+    /// Unwraps the <see cref="SignatureProducedEvent"/> the bound <paramref name="signingDelegate"/>
+    /// constructs and emits it through <see cref="CryptographicKeyEvents.Events"/> when non-null,
+    /// exactly as <see cref="PrivateKey.SignAsync"/> does.
+    /// </remarks>
+    public static async ValueTask<Signature> SignAsync(this PrivateKeyMemory privateKey, ReadOnlyMemory<byte> dataToSign, SigningDelegate signingDelegate, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
     {
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(signingDelegate);
         ArgumentNullException.ThrowIfNull(signaturePool);
 
-        return privateKey.WithKeyBytesAsync(
+        (Signature signature, CryptoEvent? evt) = await privateKey.WithKeyBytesAsync(
             (privateKeyBytes, dataToSign, signaturePool) =>
                 signingDelegate(privateKeyBytes, dataToSign, signaturePool, context),
             dataToSign,
-            signaturePool);
+            signaturePool).ConfigureAwait(false);
+
+        CryptographicKeyEvents.Emit(evt);
+
+        return signature;
     }
 
 
@@ -130,13 +139,23 @@ public static class KeyExtensions
     /// such as <c>BouncyCastleCryptographicFunctions.VerifyEd25519Async</c>.</param>
     /// <param name="context">Optional context parameters for the verification operation.</param>
     /// <returns>True if the signature matches the data for the used key. False otherwise.</returns>
-    public static ValueTask<bool> VerifyAsync(this PublicKeyMemory publicKey, ReadOnlyMemory<byte> dataToVerify, Signature signature, VerificationDelegate verificationDelegate, FrozenDictionary<string, object>? context = null)
+    /// <remarks>
+    /// Unwraps the <see cref="VerificationCompletedEvent"/> the bound
+    /// <paramref name="verificationDelegate"/> constructs and emits it through
+    /// <see cref="CryptographicKeyEvents.Events"/> when non-null, exactly as
+    /// <see cref="PublicKey.VerifyAsync"/> does.
+    /// </remarks>
+    public static async ValueTask<bool> VerifyAsync(this PublicKeyMemory publicKey, ReadOnlyMemory<byte> dataToVerify, Signature signature, VerificationDelegate verificationDelegate, FrozenDictionary<string, object>? context = null)
     {
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(signature);
         ArgumentNullException.ThrowIfNull(verificationDelegate);
 
-        return publicKey.WithKeyBytesAsync((publicKeyBytes, dataToVerify, sig) => verificationDelegate(dataToVerify, sig.AsReadOnlyMemory(), publicKeyBytes, context), dataToVerify, signature);
+        (bool isVerified, CryptoEvent? evt) = await publicKey.WithKeyBytesAsync((publicKeyBytes, dataToVerify, sig) => verificationDelegate(dataToVerify, sig.AsReadOnlyMemory(), publicKeyBytes, context), dataToVerify, signature).ConfigureAwait(false);
+
+        CryptographicKeyEvents.Emit(evt);
+
+        return isVerified;
     }
 
 

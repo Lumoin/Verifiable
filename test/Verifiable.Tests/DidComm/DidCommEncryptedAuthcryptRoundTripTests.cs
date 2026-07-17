@@ -120,7 +120,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
             MicrosoftEntropyFunctions.GenerateNonce,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolver resolver = CreateResolver(senderPublic, AliceX25519Skid, AliceDid);
 
@@ -134,7 +134,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertAuthcryptSuccess(result, AliceX25519Skid, [BobDid]);
     }
@@ -191,7 +191,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
                 MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
                 MicrosoftKeyAgreementFunctions.AesCbcHmacSha512EncryptAsync,
                 Pool,
-                TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             for(int i = 0; i < recipientCount; ++i)
             {
@@ -272,7 +272,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512EncryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string protectedHeaderJson = DecodeProtectedHeader(encrypted);
 
@@ -598,7 +598,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
                 CryptoFormatConversions.DefaultTagToEpkCrvConverter,
                 MicrosoftEntropyFunctions.GenerateNonce,
                 Pool,
-                TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
 
@@ -644,7 +644,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512EncryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolver resolver = CreateResolver(senderPublic, skid, AliceDid);
 
@@ -691,7 +691,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512EncryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolver resolver = CreateResolver(senderPublic, AliceX25519Skid, AliceDid);
 
@@ -756,7 +756,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512EncryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false))
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false))
         {
             wire = jwe.ToGeneralJson(TestSetup.Base64UrlEncoder);
         }
@@ -787,7 +787,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512DecryptAsync,
             Pool,
-            TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken);
     }
 
 
@@ -832,7 +832,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
                     MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
                     MicrosoftKeyAgreementFunctions.AesCbcHmacSha512EncryptAsync,
                     Pool,
-                    TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                    cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
         }
         finally
         {
@@ -966,7 +966,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512EncryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         return (encrypted, recipient.PrivateKey, sender.PublicKey);
     }

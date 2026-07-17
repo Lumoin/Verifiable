@@ -23,7 +23,7 @@ namespace Verifiable.Cbor.StatusList;
 /// </remarks>
 public sealed class StatusListCborConverter: CborConverter<Core.StatusList.StatusList>
 {
-    private readonly MemoryPool<byte> pool;
+    private MemoryPool<byte> Pool { get; }
 
     /// <summary>
     /// Creates a new converter using the specified memory pool.
@@ -32,7 +32,7 @@ public sealed class StatusListCborConverter: CborConverter<Core.StatusList.Statu
     public StatusListCborConverter(MemoryPool<byte> pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
-        this.pool = pool;
+        this.Pool = pool;
     }
 
     /// <inheritdoc/>
@@ -85,7 +85,7 @@ public sealed class StatusListCborConverter: CborConverter<Core.StatusList.Statu
 
         StatusListBitSize bitSize = (StatusListBitSize)bits.Value;
         var statusList = Core.StatusList.StatusList.FromCompressed(
-            lst, bitSize, pool, Core.StatusList.BitOrder.LeastSignificantFirst);
+            lst, bitSize, Pool, Core.StatusList.BitOrder.LeastSignificantFirst);
 
         if(aggregationUri is not null)
         {
@@ -192,7 +192,7 @@ public sealed class StatusListReferenceCborConverter: CborConverter<StatusListRe
 /// </summary>
 public sealed class StatusListTokenCborConverter: CborConverter<StatusListToken>
 {
-    private readonly StatusListCborConverter statusListConverter;
+    private StatusListCborConverter StatusListConverter { get; }
 
     /// <summary>
     /// Creates a new converter using the specified memory pool.
@@ -201,7 +201,7 @@ public sealed class StatusListTokenCborConverter: CborConverter<StatusListToken>
     public StatusListTokenCborConverter(MemoryPool<byte> pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
-        statusListConverter = new StatusListCborConverter(pool);
+        StatusListConverter = new StatusListCborConverter(pool);
     }
 
     /// <inheritdoc/>
@@ -240,7 +240,7 @@ public sealed class StatusListTokenCborConverter: CborConverter<StatusListToken>
                     timeToLive = reader.ReadInt64();
                     break;
                 case StatusListCborConstants.StatusList:
-                    statusList = statusListConverter.Read(ref reader, typeof(Core.StatusList.StatusList), options);
+                    statusList = StatusListConverter.Read(ref reader, typeof(Core.StatusList.StatusList), options);
                     break;
                 default:
                     reader.SkipValue();
@@ -304,7 +304,7 @@ public sealed class StatusListTokenCborConverter: CborConverter<StatusListToken>
         }
 
         writer.WriteInt32(StatusListCborConstants.StatusList);
-        statusListConverter.Write(writer, value.StatusList, options);
+        StatusListConverter.Write(writer, value.StatusList, options);
 
         writer.WriteEndMap();
     }

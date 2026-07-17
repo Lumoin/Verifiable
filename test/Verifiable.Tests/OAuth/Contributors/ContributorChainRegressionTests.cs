@@ -1,11 +1,13 @@
 using System.Globalization;
 using System.Text;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Core.Assessment;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oidc;
 using Verifiable.OAuth.Server;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth.Contributors;
 
@@ -62,7 +64,7 @@ internal sealed class ContributorChainRegressionTests
         ];
 
         ClaimIssuer<ClaimContributionTarget> issuer = new(
-            "test-chain-order-issuer", rules, TimeProvider.System);
+            "test-chain-order-issuer", rules, new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         IdTokenTarget target = ContributorTestFixtures.BuildIdTokenTarget("openid");
 
@@ -183,7 +185,7 @@ internal sealed class ContributorChainRegressionTests
 
         IdTokenTarget target = new(issuance) { ResolvedOidcClaims = oidcClaims };
 
-        ClaimIssuer<ClaimContributionTarget> issuer = ContributionProfiles.StandardClaimIssuer(TimeProvider.System);
+        ClaimIssuer<ClaimContributionTarget> issuer = ContributionProfiles.StandardClaimIssuer(new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         ClaimIssueResult result = await issuer.GenerateClaimsAsync(
             target, "baseline-correlation", TestContext.CancellationToken).ConfigureAwait(false);

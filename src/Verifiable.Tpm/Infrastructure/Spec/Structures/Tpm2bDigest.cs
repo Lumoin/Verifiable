@@ -45,7 +45,7 @@ public sealed class Tpm2bDigest: SensitiveMemory, ITpmWireType
     /// <summary>
     /// Shared empty instance backed by <see cref="EmptyMemoryOwner"/>.
     /// </summary>
-    private static readonly Tpm2bDigest EmptyInstance = new(EmptyMemoryOwner.Instance);
+    private static Tpm2bDigest EmptyInstance { get; } = new(EmptyMemoryOwner.Instance);
 
     /// <summary>
     /// Gets an empty digest.

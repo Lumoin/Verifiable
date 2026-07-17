@@ -29,7 +29,7 @@ internal sealed class FlowIdentifierTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(new DateTimeOffset(2026, 5, 17, 12, 0, 0, TimeSpan.Zero));
 
     private static Uri VerifierBaseUri { get; } = new("https://verifier.example.com");
 
@@ -45,7 +45,6 @@ internal sealed class FlowIdentifierTests
     [TestMethod]
     public async Task Guid7FlowIdSortsLexicographicallyByGenerationTime()
     {
-        TimeProvider.SetUtcNow(new DateTimeOffset(2026, 5, 17, 12, 0, 0, TimeSpan.Zero));
         await using TestHostShell host = new(TimeProvider);
 
         List<string> flowIds = [];

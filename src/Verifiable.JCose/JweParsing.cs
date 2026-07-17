@@ -312,7 +312,7 @@ public static class JweParsing
 
         //Combine X and Y into a single uncompressed point: 0x04 || X || Y.
         IMemoryOwner<byte> pointOwner = pool.Rent(1 + xSpan.Length + ySpan.Length);
-        pointOwner.Memory.Span[0] = 0x04;
+        pointOwner.Memory.Span[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
         xSpan.CopyTo(pointOwner.Memory.Span[1..]);
         ySpan.CopyTo(pointOwner.Memory.Span[(1 + xSpan.Length)..]);
 

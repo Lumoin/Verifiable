@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -74,24 +75,37 @@ public readonly struct TokenType: IEquatable<TokenType>
     /// Identity Assertion JWT Authorization Grant (ID-JAG). Wire value:
     /// <c>urn:ietf:params:oauth:token-type:id-jag</c>, used as the
     /// <c>requested_token_type</c> when minting and the <c>issued_token_type</c>
-    /// echoed back (draft-ietf-oauth-identity-assertion-authz-grant §4.3, §10.2).
+    /// echoed back (draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §4.3, §10.2).
     /// </summary>
     public static TokenType IdJag { get; } = new(6);
 
 
-    private static readonly List<TokenType> tokenTypes =
-    [
-        AccessToken,
-        RefreshToken,
-        IdToken,
-        Saml1,
-        Saml2,
-        Jwt,
-        IdJag
-    ];
+    /// <summary>
+    /// Thread-safe registry of every library-defined token type plus any application-defined ones
+    /// added through <see cref="Create"/>, keyed by <see cref="Code"/>. Backing store for the
+    /// <see cref="TokenTypes"/> getter; a <see cref="ConcurrentDictionary{TKey, TValue}"/> is used
+    /// rather than a plain list so that concurrent <see cref="Create"/> calls resolve atomically via
+    /// <see cref="ConcurrentDictionary{TKey, TValue}.TryAdd"/> instead of racing on a separate
+    /// contains-check followed by an add.
+    /// </summary>
+    private static ConcurrentDictionary<int, TokenType> registeredTokenTypesByCode { get; } = new()
+    {
+        [AccessToken.Code] = AccessToken,
+        [RefreshToken.Code] = RefreshToken,
+        [IdToken.Code] = IdToken,
+        [Saml1.Code] = Saml1,
+        [Saml2.Code] = Saml2,
+        [Jwt.Code] = Jwt,
+        [IdJag.Code] = IdJag
+    };
 
-    /// <summary>Gets all registered token type values including any custom ones.</summary>
-    public static IReadOnlyList<TokenType> TokenTypes => tokenTypes.AsReadOnly();
+    /// <summary>
+    /// Gets all registered token type values including any custom ones. The enumeration order is
+    /// whatever <see cref="ConcurrentDictionary{TKey, TValue}.Values"/> yields for
+    /// <see cref="registeredTokenTypesByCode"/> — UNSPECIFIED, and MUST NOT be relied upon by callers
+    /// (it is not insertion order, code order, or otherwise stable across framework versions).
+    /// </summary>
+    public static IReadOnlyList<TokenType> TokenTypes => [.. registeredTokenTypesByCode.Values];
 
 
     /// <summary>
@@ -104,17 +118,12 @@ public readonly struct TokenType: IEquatable<TokenType>
     /// <exception cref="ArgumentException">Thrown when <paramref name="code"/> is already registered.</exception>
     public static TokenType Create(int code)
     {
-        for(int i = 0; i < tokenTypes.Count; ++i)
-        {
-            if(tokenTypes[i].Code == code)
-            {
-                throw new ArgumentException(
-                    $"A token type with code {code} is already registered.", nameof(code));
-            }
-        }
-
         TokenType newTokenType = new(code);
-        tokenTypes.Add(newTokenType);
+        if(!registeredTokenTypesByCode.TryAdd(code, newTokenType))
+        {
+            throw new ArgumentException(
+                $"A token type with code {code} is already registered.", nameof(code));
+        }
 
         return newTokenType;
     }

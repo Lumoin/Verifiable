@@ -26,7 +26,7 @@ public sealed class DataGroup4: IDisposable
     private const int DataGroupTemplateTag = 0x76;
 
     //ISO/IEC 19794-6 iris image record format identifier: "IIR\0".
-    private static readonly byte[] IrisRecordFormatIdentifier = [0x49, 0x49, 0x52, 0x00];
+    private static byte[] IrisRecordFormatIdentifier { get; } = [0x49, 0x49, 0x52, 0x00];
 
     private bool disposed;
 

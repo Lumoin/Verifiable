@@ -159,15 +159,49 @@ public sealed class CommandApdu: SensitiveMemory
     /// <param name="le">Expected response length. 0 means maximum.</param>
     /// <param name="pool">Memory pool for the command buffer.</param>
     /// <returns>The command APDU. The caller must dispose it.</returns>
+    /// <remarks>
+    /// Extended-length encoding is chosen automatically when <paramref name="data"/> exceeds 255
+    /// bytes or <paramref name="le"/> exceeds 256. Callers that need to force extended encoding
+    /// independent of that size heuristic (for example, a client that always wants a one-shot
+    /// extended response instead of relying on <c>61xx</c> chaining) should use the
+    /// <see cref="BuildCase4(byte, byte, byte, byte, ReadOnlySpan{byte}, int, bool, MemoryPool{byte})"/>
+    /// overload instead.
+    /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned CommandApdu, which the caller disposes.")]
     public static CommandApdu BuildCase4(
         byte cla, byte ins, byte p1, byte p2,
         ReadOnlySpan<byte> data, int le,
         MemoryPool<byte> pool)
     {
-        ArgumentNullException.ThrowIfNull(pool);
+        return BuildCase4(cla, ins, p1, p2, data, le, data.Length > 255 || le > 256, pool);
+    }
 
-        bool useExtended = data.Length > 255 || le > 256;
+    /// <summary>
+    /// Builds a Case 4 command (data present, response expected), with explicit control over
+    /// extended-length encoding.
+    /// </summary>
+    /// <param name="cla">Class byte.</param>
+    /// <param name="ins">Instruction byte.</param>
+    /// <param name="p1">Parameter 1.</param>
+    /// <param name="p2">Parameter 2.</param>
+    /// <param name="data">Command data field.</param>
+    /// <param name="le">Expected response length. 0 means maximum.</param>
+    /// <param name="useExtended">Use extended-length encoding, regardless of <paramref name="data"/> or <paramref name="le"/> size.</param>
+    /// <param name="pool">Memory pool for the command buffer.</param>
+    /// <returns>The command APDU. The caller must dispose it.</returns>
+    /// <remarks>
+    /// Mirrors the explicit <c>useExtended</c> parameter <see cref="BuildCase2"/> already exposes,
+    /// which Case 4 lacked: without it, a caller could not commit to extended-length framing for a
+    /// small payload with a maximal (<c>le = 0</c>, "give me everything") expected response, since
+    /// neither size heuristic branch would trip.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned CommandApdu, which the caller disposes.")]
+    public static CommandApdu BuildCase4(
+        byte cla, byte ins, byte p1, byte p2,
+        ReadOnlySpan<byte> data, int le, bool useExtended,
+        MemoryPool<byte> pool)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
 
         if(useExtended)
         {

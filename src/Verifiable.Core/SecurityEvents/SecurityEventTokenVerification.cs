@@ -192,12 +192,16 @@ public static class SecurityEventTokenVerification
 
         Debug.Assert(written == verifyInputLength, "Verification input length must match the expected size.");
 
-        return await verificationDelegate(
+        (bool isVerified, CryptoEvent? evt) = await verificationDelegate(
             verifyInput,
             signatureBytes.Memory,
             publicKey.AsReadOnlyMemory(),
             context: null,
             cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        CryptographicKeyEvents.Emit(evt);
+
+        return isVerified;
     }
 
 

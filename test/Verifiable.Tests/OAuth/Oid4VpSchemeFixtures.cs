@@ -259,7 +259,7 @@ internal static class Oid4VpSchemeFixtures
         try
         {
             leafPublic = await MicrosoftX509Functions.ValidateChainAsync(
-                registrationChain, walletTrustAnchors, now, Pool, cancellationToken).ConfigureAwait(false);
+                registrationChain, walletTrustAnchors, now, Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -331,7 +331,7 @@ internal static class Oid4VpSchemeFixtures
         try
         {
             leafPublic = await MicrosoftX509Functions.ValidateChainAsync(
-                registrationChain, walletTrustAnchors, now, Pool, cancellationToken).ConfigureAwait(false);
+                registrationChain, walletTrustAnchors, now, Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         finally
         {

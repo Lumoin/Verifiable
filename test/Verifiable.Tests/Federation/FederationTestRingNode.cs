@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Verifiable.OAuth.Federation;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Federation;
 
@@ -45,8 +46,8 @@ internal sealed class FederationTestRingNode: IDisposable
             ["kid"] = kid,
             ["alg"] = "ES256",
             ["use"] = "sig",
-            ["x"] = Convert.ToBase64String(parameters.Q.X!).TrimEnd('=').Replace('+', '-').Replace('/', '_'),
-            ["y"] = Convert.ToBase64String(parameters.Q.Y!).TrimEnd('=').Replace('+', '-').Replace('/', '_'),
+            ["x"] = TestSetup.Base64UrlEncoder(parameters.Q.X!),
+            ["y"] = TestSetup.Base64UrlEncoder(parameters.Q.Y!),
         };
 
         JwksObject = new Dictionary<string, object>(StringComparer.Ordinal)

@@ -94,20 +94,20 @@ internal sealed class DidCommWebSocketTransportTests
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
             BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Deliver over a real WebSocket through the transport-neutral send seam — the SAME message.TransmitAsync the
         //HTTPS path uses, handed a WebSocket DidCommSendDelegate instead of the HTTPS one.
-        await using DidCommWebSocketInbox inbox = await DidCommWebSocketInbox.StartAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        await using DidCommWebSocketInbox inbox = await DidCommWebSocketInbox.StartAsync(cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         DidCommSendDelegate send = DidCommWebSocketInbox.CreateSendDelegate();
 
-        DidCommTransmitResult transmit = await encrypted.TransmitAsync(inbox.Endpoint, Context, send, TestContext.CancellationToken).ConfigureAwait(false);
+        DidCommTransmitResult transmit = await encrypted.TransmitAsync(inbox.Endpoint, Context, send, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(transmit.IsAccepted, $"The WebSocket inbox MUST accept the delivery. Error: {transmit.Error}.");
         Assert.AreEqual(DidCommTransmitError.None, transmit.Error);
         Assert.IsNull(transmit.TransportStatusCode, "A WebSocket delivery carries no numeric transport status.");
 
-        DidCommWebSocketDelivery delivery = await inbox.ReceivedAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        DidCommWebSocketDelivery delivery = await inbox.ReceivedAsync(cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(DidCommMediaTypes.Encrypted, delivery.MediaType, "The receiver MUST see the encrypted media type the transport conveyed.");
         Assert.IsTrue(
             delivery.Bytes.AsSpan().SequenceEqual(encrypted.AsReadOnlySpan()),
@@ -132,7 +132,7 @@ internal sealed class DidCommWebSocketTransportTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             BouncyCastleKeyAgreementFunctions.AesGcmDecryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(unpacked.IsUnpacked, $"Bob MUST decrypt the message that crossed the WebSocket. Error: {unpacked.Error}.");
         Assert.AreEqual(DidCommEncryptionMode.Anoncrypt, unpacked.Mode);
@@ -163,7 +163,7 @@ internal sealed class DidCommWebSocketTransportTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             BouncyCastleKeyAgreementFunctions.AesGcmDecryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(outsiderResult.IsUnpacked, "Clean WebSocket delivery confers no trust: a wrong key MUST fail to decrypt the bytes that crossed the socket.");
     }

@@ -65,17 +65,16 @@ public static class WebVhProofVerification
             return "The did:webvh log entry carries no parsed content.";
         }
 
-        WebVhState? prior;
-        switch(currentState)
+        (WebVhState? prior, string? deactivatedError) = currentState switch
         {
-            case EmptyLogState<WebVhState>:
-                prior = null;
-                break;
-            case ActiveLogState<WebVhState> active:
-                prior = active.Value;
-                break;
-            default:
-                return "The did:webvh DID is deactivated; no further log entries are permitted.";
+            EmptyLogState<WebVhState> => ((WebVhState?)null, (string?)null),
+            ActiveLogState<WebVhState> active => (active.Value, null),
+            _ => (null, "The did:webvh DID is deactivated; no further log entries are permitted.")
+        };
+
+        if(deactivatedError is not null)
+        {
+            return deactivatedError;
         }
 
         WebVhDeclaredParameters declared = rawEntry.DeclaredParameters;
@@ -175,7 +174,7 @@ public static class WebVhProofVerification
     //example "2024-04-05T07:32:58Z" (The DID Log File, Read (Resolve)). Offset-bearing, date-only and locale
     //forms are rejected so the monotonic and not-in-the-future comparisons run on the asserted instant and
     //match a conformant resolver rather than silently coercing an offset-less value to UTC.
-    private static readonly string[] VersionTimeFormats =
+    private static string[] VersionTimeFormats { get; } =
     [
         "yyyy-MM-dd'T'HH:mm:ss'Z'",
         "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'"
@@ -402,7 +401,9 @@ public static class WebVhProofVerification
             }
 
             VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, Purpose.Verification);
-            bool isValid = await verify(hashOwner.Memory[..HashDataLength], signatureOwner.Memory, keyData.Memory, null, cancellationToken).ConfigureAwait(false);
+            (bool isValid, CryptoEvent? evt) = await verify(hashOwner.Memory[..HashDataLength], signatureOwner.Memory, keyData.Memory, null, cancellationToken).ConfigureAwait(false);
+
+            CryptographicKeyEvents.Emit(evt);
 
             return isValid ? null : "The did:webvh proof signature is invalid.";
         }

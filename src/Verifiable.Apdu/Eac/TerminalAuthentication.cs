@@ -162,10 +162,10 @@ public static class TerminalAuthentication
         using Signature signature = terminalKey.IsEllipticCurve
             ? await TerminalAuthenticationSignature.SignAsync(
                 terminalPrivateKey, terminalKey.EllipticCurvePoint!.Tag, chipIdentifier, challenge.Memory[..ChipChallengeLength], terminalEphemeralPublicKey,
-                pool, cancellationToken).ConfigureAwait(false)
+                pool, cancellationToken: cancellationToken).ConfigureAwait(false)
             : await TerminalAuthenticationSignature.SignWithRsaAsync(
                 terminalPrivateKey, terminalKey.SignatureScheme, chipIdentifier, challenge.Memory[..ChipChallengeLength], terminalEphemeralPublicKey,
-                pool, cancellationToken).ConfigureAwait(false);
+                pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return await SendExternalAuthenticateAsync(device, session, signature, pool, cancellationToken).ConfigureAwait(false);
     }

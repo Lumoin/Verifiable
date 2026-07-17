@@ -134,18 +134,16 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// </example>
 public sealed class PathLattice
 {
-    private readonly IReadOnlySet<CredentialPath> _allPaths;
-    private readonly IReadOnlySet<CredentialPath> _mandatoryPaths;
 
     /// <summary>
     /// All paths known to this lattice.
     /// </summary>
-    public IReadOnlySet<CredentialPath> AllPaths => _allPaths;
+    public IReadOnlySet<CredentialPath> AllPaths { get; }
 
     /// <summary>
     /// Paths that must always be disclosed.
     /// </summary>
-    public IReadOnlySet<CredentialPath> MandatoryPaths => _mandatoryPaths;
+    public IReadOnlySet<CredentialPath> MandatoryPaths { get; }
 
 
     /// <summary>
@@ -171,8 +169,8 @@ public sealed class PathLattice
             }
         }
 
-        _allPaths = allPaths;
-        _mandatoryPaths = mandatoryPaths;
+        AllPaths = allPaths;
+        MandatoryPaths = mandatoryPaths;
     }
 
 
@@ -193,11 +191,11 @@ public sealed class PathLattice
     {
         ArgumentNullException.ThrowIfNull(requestedPaths);
 
-        var result = new HashSet<CredentialPath>(_mandatoryPaths);
+        var result = new HashSet<CredentialPath>(MandatoryPaths);
 
         foreach(CredentialPath path in requestedPaths)
         {
-            if(!_allPaths.Contains(path))
+            if(!AllPaths.Contains(path))
             {
                 continue;
             }
@@ -205,7 +203,7 @@ public sealed class PathLattice
             //Add the path and all its ancestors.
             foreach(CredentialPath ancestor in path.SelfAndAncestors())
             {
-                if(_allPaths.Contains(ancestor))
+                if(AllPaths.Contains(ancestor))
                 {
                     result.Add(ancestor);
                 }
@@ -284,7 +282,7 @@ public sealed class PathLattice
         intersection.IntersectWith(b);
 
         //Always include mandatory paths.
-        intersection.UnionWith(_mandatoryPaths);
+        intersection.UnionWith(MandatoryPaths);
 
         //Ensure closure.
         return ComputeClosure(intersection);
@@ -310,7 +308,7 @@ public sealed class PathLattice
 
         var result = new HashSet<CredentialPath>(minuend);
         result.ExceptWith(subtrahend);
-        result.UnionWith(_mandatoryPaths);
+        result.UnionWith(MandatoryPaths);
 
         return result;
     }
@@ -357,7 +355,7 @@ public sealed class PathLattice
         ArgumentNullException.ThrowIfNull(paths);
 
         //Check mandatory inclusion.
-        foreach(CredentialPath mandatory in _mandatoryPaths)
+        foreach(CredentialPath mandatory in MandatoryPaths)
         {
             if(!paths.Contains(mandatory))
             {
@@ -368,7 +366,7 @@ public sealed class PathLattice
         //Check known paths and upward closure.
         foreach(CredentialPath path in paths)
         {
-            if(!_allPaths.Contains(path))
+            if(!AllPaths.Contains(path))
             {
                 return false;
             }
@@ -376,7 +374,7 @@ public sealed class PathLattice
             //Check ancestors are included.
             foreach(CredentialPath ancestor in path.Ancestors())
             {
-                if(_allPaths.Contains(ancestor) && !paths.Contains(ancestor))
+                if(AllPaths.Contains(ancestor) && !paths.Contains(ancestor))
                 {
                     return false;
                 }
@@ -394,7 +392,7 @@ public sealed class PathLattice
     /// <returns>Paths at the specified depth.</returns>
     public IEnumerable<CredentialPath> GetPathsAtDepth(int depth)
     {
-        return _allPaths.Where(p => p.Depth == depth);
+        return AllPaths.Where(p => p.Depth == depth);
     }
 
 
@@ -405,6 +403,6 @@ public sealed class PathLattice
     /// <returns>All paths that are descendants of the ancestor.</returns>
     public IEnumerable<CredentialPath> GetDescendants(CredentialPath ancestor)
     {
-        return _allPaths.Where(p => ancestor.IsAncestorOf(p));
+        return AllPaths.Where(p => ancestor.IsAncestorOf(p));
     }
 }

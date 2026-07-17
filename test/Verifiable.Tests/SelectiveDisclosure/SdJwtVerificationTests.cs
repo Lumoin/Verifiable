@@ -249,7 +249,7 @@ internal sealed class SdJwtVerificationTests
 
         JwtPayload claims = JwtPayload.ForIssuance(
             issuer: "https://issuer.example",
-            issuedAt: TimeProvider.System.GetUtcNow(),
+            issuedAt: TestClock.CanonicalEpoch,
             claims:
             [
                 new(GivenNameClaim, "Erika"),
@@ -281,7 +281,7 @@ internal sealed class SdJwtVerificationTests
     {
         JwtPayload claims = JwtPayload.ForIssuance(
             issuer: "https://issuer.example",
-            issuedAt: TimeProvider.System.GetUtcNow(),
+            issuedAt: TestClock.CanonicalEpoch,
             claims:
             [
                 new(GivenNameClaim, "Erika"),

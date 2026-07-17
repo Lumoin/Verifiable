@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.WebVh;
@@ -483,7 +484,7 @@ internal sealed class DidResolutionHttpBindingTests
             Base58Encoder,
             Base58Decoder,
             BaseMemoryPool.Shared,
-            TimeProvider.System);
+            new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         DidMethodDereferencerDelegate webVhDereferencer = WebVhDidUrlDereferencer.Build(
             webVhResolver,

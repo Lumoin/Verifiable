@@ -151,7 +151,7 @@ internal sealed class TestWallet
 
         await pda.StepAsync(
             new WalletPostSent(requestUri, walletNonce, Time.GetUtcNow()),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         FlowStore[walletFlowId] = (pda.CurrentState, pda.StepCount);
     }
@@ -208,7 +208,7 @@ internal sealed class TestWallet
                 json, TestSetup.DefaultSerializationOptions)!,
             StateParameterPolicy.Required,
             BaseMemoryPool.Shared,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         (FlowState state, int steps) = FlowStore[walletFlowId];
 
@@ -230,7 +230,7 @@ internal sealed class TestWallet
 
         await pda.StepAsync(
             new JarReceived(requestUri, parsedRequest, Time.GetUtcNow()),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         FlowStore[walletFlowId] = (pda.CurrentState, pda.StepCount);
         PushdownAutomaton<FlowState, FlowInput, WalletFlowStackSymbol> pdaDcql =
@@ -245,7 +245,7 @@ internal sealed class TestWallet
                 preparedQuery,
                 new Dictionary<string, string>(CredentialStore),
                 Time.GetUtcNow()),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         FlowStore[walletFlowId] = (pdaDcql.CurrentState, pdaDcql.StepCount);
         PushdownAutomaton<FlowState, FlowInput, WalletFlowStackSymbol> pdaSelected =
@@ -259,7 +259,7 @@ internal sealed class TestWallet
 
         await pdaSelected.StepAsync(
             new PresentationSelected(vpToken, Time.GetUtcNow()),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         FlowStore[walletFlowId] = (pdaSelected.CurrentState, pdaSelected.StepCount);
     }
@@ -302,7 +302,7 @@ internal sealed class TestWallet
             presentationBuilt.Request.TransactionData,
             presentationBuilt.Request.DcqlQuery!,
             credentialQueryId,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
         //OID4VP 1.0 §8.3.1: the direct_post.jwt JWE plaintext is the response JWT
         //payload carrying vp_token (+ state) as named claims — the same shape the
         //real Oid4VpWalletClient emits (shared serializer keeps them identical).
@@ -332,7 +332,7 @@ internal sealed class TestWallet
                 presentationBuilt.Request.ResponseUri!,
                 presentationBuilt.Request.State,
                 Time.GetUtcNow()),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         FlowStore[walletFlowId] = (pda.CurrentState, pda.StepCount);
 
@@ -384,7 +384,7 @@ internal sealed class TestWallet
             presentationBuilt.Request.TransactionData,
             presentationBuilt.Request.DcqlQuery!,
             credentialQueryId,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         //OID4VP 1.0 §8.3.1: the direct_post.jwt JWE plaintext is the response JWT
         //payload carrying vp_token (+ state) as named claims — the same shape the
@@ -415,7 +415,7 @@ internal sealed class TestWallet
                 presentationBuilt.Request.ResponseUri!,
                 presentationBuilt.Request.State,
                 Time.GetUtcNow()),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         FlowStore[walletFlowId] = (pda.CurrentState, pda.StepCount);
 
@@ -449,7 +449,7 @@ internal sealed class TestWallet
 
         await pda.StepAsync(
             new RedirectReceived(redirectUri, Time.GetUtcNow()),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         FlowStore[walletFlowId] = (pda.CurrentState, pda.StepCount);
         return (BrowserRedirectIssued)pda.CurrentState;
@@ -487,7 +487,7 @@ internal sealed class TestWallet
         //disclosure is revealed. The verifier's CheckNoOverDisclosure rule rejects
         //anything beyond what the engine selected.
         HashSet<string>? selectedClaimNames = await ComputeSelectedClaimNamesAsync(
-            dcqlQuery, credentialQueryId, token, cancellationToken).ConfigureAwait(false);
+            dcqlQuery, credentialQueryId, token, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         using SdToken<string> presentationToken = token.SelectDisclosures(
             selectedClaimNames is null
@@ -505,7 +505,7 @@ internal sealed class TestWallet
                 txData,
                 TestSetup.Base64UrlEncoder,
                 BaseMemoryPool.Shared,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
         string compactKbJwt = await KbJwtIssuance.IssueAsync(
@@ -520,8 +520,8 @@ internal sealed class TestWallet
             static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
                 (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions),
             BaseMemoryPool.Shared,
-            cancellationToken,
-            transactionDataHashes).ConfigureAwait(false);
+            transactionDataHashes,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         using SdToken<string> tokenWithKb = presentationToken.WithKeyBinding(compactKbJwt, BaseMemoryPool.Shared);
 

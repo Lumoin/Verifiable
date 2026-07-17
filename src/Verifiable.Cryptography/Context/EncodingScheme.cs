@@ -222,7 +222,7 @@ public readonly struct EncodingScheme: IEquatable<EncodingScheme>
     public static EncodingScheme Cose { get; } = new EncodingScheme(8);
 
 
-    private static readonly List<EncodingScheme> schemes = new([Der, Pem, EcCompressed, EcUncompressed, Pkcs1, Pkcs8, Raw, Cbor, Cose]);
+    private static List<EncodingScheme> schemes { get; } = new([Der, Pem, EcCompressed, EcUncompressed, Pkcs1, Pkcs8, Raw, Cbor, Cose]);
 
 
     /// <summary>

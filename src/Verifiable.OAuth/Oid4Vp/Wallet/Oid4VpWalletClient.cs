@@ -46,14 +46,12 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet;
 [DebuggerDisplay("Oid4VpWalletClient")]
 public sealed class Oid4VpWalletClient
 {
-    private readonly OAuthClientInfrastructure infrastructure;
-    private readonly Oid4VpWalletConfiguration walletConfiguration;
 
     //HAIP 1.0 §5.1 allows A128GCM and A256GCM as content-encryption
     //algorithms; OID4VP §5.10 JAR encryption inherits that set absent a
     //wallet-side override. Used to validate the JWE's 'enc' header before
     //any cryptographic operation.
-    private static readonly IReadOnlyList<string> HaipAllowedJarEncAlgorithms =
+    private static IReadOnlyList<string> HaipAllowedJarEncAlgorithms { get; } =
     [
         WellKnownJweEncryptionAlgorithms.A128Gcm,
         WellKnownJweEncryptionAlgorithms.A256Gcm
@@ -61,11 +59,11 @@ public sealed class Oid4VpWalletClient
 
 
     /// <summary>The shared infrastructure carrying transport, time, and encoding delegates.</summary>
-    public OAuthClientInfrastructure Infrastructure => infrastructure;
+    public OAuthClientInfrastructure Infrastructure { get; }
 
 
     /// <summary>The format-agnostic wallet configuration carrying JAR-parse/response-encryption delegates and the presentation drop-out.</summary>
-    public Oid4VpWalletConfiguration WalletConfiguration => walletConfiguration;
+    public Oid4VpWalletConfiguration WalletConfiguration { get; }
 
 
     /// <summary>
@@ -81,8 +79,8 @@ public sealed class Oid4VpWalletClient
         ArgumentNullException.ThrowIfNull(infrastructure);
         ArgumentNullException.ThrowIfNull(walletConfiguration);
 
-        this.infrastructure = infrastructure;
-        this.walletConfiguration = walletConfiguration;
+        this.Infrastructure = infrastructure;
+        this.WalletConfiguration = walletConfiguration;
     }
 
 
@@ -195,8 +193,8 @@ public sealed class Oid4VpWalletClient
                     "advertised in wallet_metadata.jwks.");
             }
 
-            if(walletConfiguration.KeyAgreementDecrypt is null
-                || walletConfiguration.AeadDecrypt is null)
+            if(WalletConfiguration.KeyAgreementDecrypt is null
+                || WalletConfiguration.AeadDecrypt is null)
             {
                 throw new InvalidOperationException(
                     "Received a JWE-wrapped JAR but the wallet configuration " +
@@ -209,11 +207,11 @@ public sealed class Oid4VpWalletClient
                 compactJwe: compactJar,
                 ephemeralPrivateKey: presentJarOptions.WalletExchangePrivateKey,
                 allowedEncAlgorithms: HaipAllowedJarEncAlgorithms,
-                decoder: walletConfiguration.Base64UrlDecoder,
-                keyAgreementDecryptDelegate: walletConfiguration.KeyAgreementDecrypt,
-                keyDerivationDelegate: walletConfiguration.KeyDerivation,
-                aeadDecryptDelegate: walletConfiguration.AeadDecrypt,
-                pool: walletConfiguration.MemoryPool,
+                decoder: WalletConfiguration.Base64UrlDecoder,
+                keyAgreementDecryptDelegate: WalletConfiguration.KeyAgreementDecrypt,
+                keyDerivationDelegate: WalletConfiguration.KeyDerivation,
+                aeadDecryptDelegate: WalletConfiguration.AeadDecrypt,
+                pool: WalletConfiguration.MemoryPool,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
             using(decryptedJar)
@@ -233,21 +231,21 @@ public sealed class Oid4VpWalletClient
         //signed-JAR verification path runs as normal.
         string? algHeaderValue = PeekJarAlgHeader(
             jarForParsing,
-            walletConfiguration.Base64UrlDecoder,
-            walletConfiguration.MemoryPool);
+            WalletConfiguration.Base64UrlDecoder,
+            WalletConfiguration.MemoryPool);
 
         AuthorizationRequestObject request;
         if(string.Equals(algHeaderValue, WellKnownJwaValues.None, StringComparison.Ordinal))
         {
             request = await JarExtensions.ParseUnsignedJarAsync(
                 jarForParsing,
-                walletConfiguration.Base64UrlDecoder,
-                walletConfiguration.JarHeaderDeserializer,
-                walletConfiguration.JarPayloadDeserializer,
-                walletConfiguration.DcqlQueryDeserializer,
-                walletConfiguration.ClientMetadataDeserializer,
+                WalletConfiguration.Base64UrlDecoder,
+                WalletConfiguration.JarHeaderDeserializer,
+                WalletConfiguration.JarPayloadDeserializer,
+                WalletConfiguration.DcqlQueryDeserializer,
+                WalletConfiguration.ClientMetadataDeserializer,
                 presentJarOptions.StatePolicy,
-                walletConfiguration.MemoryPool).ConfigureAwait(false);
+                WalletConfiguration.MemoryPool).ConfigureAwait(false);
 
             //An unsigned JAR is only acceptable under the redirect_uri
             //prefix (OID4VP §5.9.3). Enforce the prefix and the
@@ -271,9 +269,9 @@ public sealed class Oid4VpWalletClient
             UnverifiedJwtHeader jarHeader;
             using(UnverifiedJwsMessage unverifiedJar = JwsParsing.ParseCompact(
                 jarForParsing,
-                walletConfiguration.Base64UrlDecoder,
-                walletConfiguration.JarHeaderDeserializer.Invoke,
-                walletConfiguration.MemoryPool))
+                WalletConfiguration.Base64UrlDecoder,
+                WalletConfiguration.JarHeaderDeserializer.Invoke,
+                WalletConfiguration.MemoryPool))
             {
                 //Copy the header into a standalone instance so it survives the
                 //UnverifiedJwsMessage's disposal below.
@@ -282,9 +280,9 @@ public sealed class Oid4VpWalletClient
 
             //Stamp the trust-material evaluation instant from the wallet's
             //TimeProvider so every resolver hook sees one consistent time.
-            context.SetValidationTime(infrastructure.TimeProvider.GetUtcNow());
+            context.SetValidationTime(Infrastructure.TimeProvider.GetUtcNow());
 
-            using PublicKeyMemory verifierSigningKey = await walletConfiguration.VerifierSigningKeyResolver(
+            using PublicKeyMemory verifierSigningKey = await WalletConfiguration.VerifierSigningKeyResolver(
                 context,
                 presentJarOptions.ExpectedVerifierClientId,
                 jarHeader,
@@ -293,13 +291,13 @@ public sealed class Oid4VpWalletClient
             request = await JarExtensions.VerifyAndParseJarAsync(
                 jarForParsing,
                 verifierSigningKey,
-                walletConfiguration.Base64UrlDecoder,
-                walletConfiguration.JarHeaderDeserializer,
-                walletConfiguration.JarPayloadDeserializer,
-                walletConfiguration.DcqlQueryDeserializer,
-                walletConfiguration.ClientMetadataDeserializer,
+                WalletConfiguration.Base64UrlDecoder,
+                WalletConfiguration.JarHeaderDeserializer,
+                WalletConfiguration.JarPayloadDeserializer,
+                WalletConfiguration.DcqlQueryDeserializer,
+                WalletConfiguration.ClientMetadataDeserializer,
                 presentJarOptions.StatePolicy,
-                walletConfiguration.MemoryPool,
+                WalletConfiguration.MemoryPool,
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -448,7 +446,7 @@ public sealed class Oid4VpWalletClient
         IReadOnlyDictionary<string, string> parameters =
             presentJarOptions.InlineAuthorizationParameters!;
 
-        DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
+        DateTimeOffset now = Infrastructure.TimeProvider.GetUtcNow();
 
         //Spec text (OID4VP §5.9.3): "If the Client Identifier Scheme is
         //redirect_uri, the Authorization Request MUST NOT be signed."
@@ -457,8 +455,8 @@ public sealed class Oid4VpWalletClient
         //surfaces immediately.
         AuthorizationRequestObject request = AuthorizationRequestObjectFormFields.Parse(
             parameters,
-            walletConfiguration.DcqlQueryDeserializer,
-            walletConfiguration.ClientMetadataDeserializer,
+            WalletConfiguration.DcqlQueryDeserializer,
+            WalletConfiguration.ClientMetadataDeserializer,
             now,
             InlineRequestObjectLifetime,
             presentJarOptions.StatePolicy);
@@ -475,7 +473,7 @@ public sealed class Oid4VpWalletClient
     //exp/nbf claims accompany them on the wire. Mirrors the JAR profile's
     //request-object lifetime; deployments wanting tighter validity can
     //pre-stamp the timing claims in the inline parameter set.
-    private static readonly TimeSpan InlineRequestObjectLifetime = TimeSpan.FromMinutes(5);
+    private static TimeSpan InlineRequestObjectLifetime { get; } = TimeSpan.FromMinutes(5);
 
 
     private async ValueTask<PresentationResult> PresentWithParsedRequestAsync(
@@ -501,11 +499,11 @@ public sealed class Oid4VpWalletClient
                 "OID4VP presentation requires at least one credential query.");
         }
 
-        string runId = await infrastructure.GenerateIdentifierAsync(
+        string runId = await Infrastructure.GenerateIdentifierAsync(
             WellKnownIdentifierPurposes.OAuthCorrelationId, null, cancellationToken)
             .ConfigureAwait(false);
         string walletFlowId = presentJarOptions.FlowId
-            ?? await infrastructure.GenerateIdentifierAsync(
+            ?? await Infrastructure.GenerateIdentifierAsync(
                 WellKnownIdentifierPurposes.Oid4VpWalletFlowId, null, cancellationToken)
                 .ConfigureAwait(false);
 
@@ -515,7 +513,7 @@ public sealed class Oid4VpWalletClient
                 requestUri: presentJarOptions.RequestUri,
                 expectedVerifierClientId: presentJarOptions.ExpectedVerifierClientId,
                 flowId: walletFlowId,
-                timeProvider: infrastructure.TimeProvider);
+                timeProvider: Infrastructure.TimeProvider);
 
         //When the §5.10 POST path was taken, step the PDA through the
         //intermediate WalletNonceSent state so the trace shows the POST
@@ -527,12 +525,12 @@ public sealed class Oid4VpWalletClient
                 new WalletPostSent(
                     presentJarOptions.RequestUri,
                     walletNonceSent,
-                    infrastructure.TimeProvider.GetUtcNow()),
+                    Infrastructure.TimeProvider.GetUtcNow()),
                 cancellationToken).ConfigureAwait(false);
         }
 
         await pda.StepAsync(
-            new JarReceived(presentJarOptions.RequestUri, request, infrastructure.TimeProvider.GetUtcNow()),
+            new JarReceived(presentJarOptions.RequestUri, request, Infrastructure.TimeProvider.GetUtcNow()),
             cancellationToken).ConfigureAwait(false);
 
         //The single drop-out: hand the request-derived context to the
@@ -546,13 +544,13 @@ public sealed class Oid4VpWalletClient
         {
             Request = request,
             PreparedQuery = preparedQuery,
-            Now = infrastructure.TimeProvider.GetUtcNow(),
-            Base64UrlEncoder = infrastructure.Base64UrlEncoder,
-            MemoryPool = walletConfiguration.MemoryPool,
+            Now = Infrastructure.TimeProvider.GetUtcNow(),
+            Base64UrlEncoder = Infrastructure.Base64UrlEncoder,
+            MemoryPool = WalletConfiguration.MemoryPool,
             ExchangeContext = context
         };
 
-        Oid4VpPresentationSet presentationSet = await walletConfiguration.ProduceVpTokenPresentations(
+        Oid4VpPresentationSet presentationSet = await WalletConfiguration.ProduceVpTokenPresentations(
             presentationContext, cancellationToken).ConfigureAwait(false);
 
         IReadOnlyDictionary<string, string> presentationsByQueryId = presentationSet.PresentationsByQueryId;
@@ -569,20 +567,20 @@ public sealed class Oid4VpWalletClient
             new DcqlMatched(
                 preparedQuery,
                 presentationsByQueryId,
-                infrastructure.TimeProvider.GetUtcNow()),
+                Infrastructure.TimeProvider.GetUtcNow()),
             cancellationToken).ConfigureAwait(false);
 
         string vpTokenJson = presentationsByQueryId.Count == 1
             ? VpTokenSerializer.SerializeSingle(
                 presentationsByQueryId.Keys.First(),
                 presentationsByQueryId.Values.First(),
-                walletConfiguration.JwtPayloadSerializer)
+                WalletConfiguration.JwtPayloadSerializer)
             : VpTokenSerializer.SerializeMultiple(
                 presentationsByQueryId,
-                walletConfiguration.JwtPayloadSerializer);
+                WalletConfiguration.JwtPayloadSerializer);
 
         await pda.StepAsync(
-            new PresentationSelected(vpTokenJson, infrastructure.TimeProvider.GetUtcNow()),
+            new PresentationSelected(vpTokenJson, Infrastructure.TimeProvider.GetUtcNow()),
             cancellationToken).ConfigureAwait(false);
 
         //An apu binding (e.g. an mdoc mdoc_generated_nonce) can only ride the
@@ -606,81 +604,88 @@ public sealed class Oid4VpWalletClient
         //extend the set fail loudly here.
         Dictionary<string, string> postFields;
         string responseArtifact;
-        if(WellKnownResponseModes.IsDirectPostJwt(request.ResponseMode))
+        switch(request.ResponseMode)
         {
-            //OID4VP 1.0 §8.3.1: the JWE plaintext is the response JWT payload that
-            //carries vp_token (+ state) as NAMED CLAIMS — not the bare vp_token
-            //object. state therefore rides inside the encrypted JWT and is NOT
-            //added to the outer form body below.
-            string responseJwtPayloadJson = VpTokenSerializer.SerializeDirectPostJwtResponse(
-                presentationsByQueryId, request.State, walletConfiguration.JwtPayloadSerializer);
-            byte[] responsePayloadBytes = Encoding.UTF8.GetBytes(responseJwtPayloadJson);
-            string compactJwe = await HaipProfile.EncryptResponseAsync(
-                request,
-                responsePayloadBytes,
-                walletConfiguration.JwtHeaderSerializer,
-                walletConfiguration.TagToEpkCrvConverter,
-                walletConfiguration.KeyAgreementEncrypt,
-                walletConfiguration.KeyDerivation,
-                walletConfiguration.AeadEncrypt,
-                infrastructure.Base64UrlEncoder,
-                walletConfiguration.Base64UrlDecoder,
-                walletConfiguration.MemoryPool,
-                agreementPartyUInfo: responseEncryptionApu,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-
-            postFields = new(StringComparer.Ordinal)
+            case var mode when WellKnownResponseModes.IsDirectPostJwt(mode):
             {
-                [AuthorizationResponseParameters.Response] = compactJwe
-            };
-            responseArtifact = compactJwe;
-        }
-        else if(WellKnownResponseModes.IsDirectPost(request.ResponseMode))
-        {
-            //OID4VP 1.0 §8.2 plaintext direct_post — the wallet POSTs the
-            //vp_token JSON object verbatim alongside state. No JWE
-            //construction; the response_uri exposure is at the network layer
-            //rather than at the message layer.
-            postFields = new(StringComparer.Ordinal)
-            {
-                [AuthorizationResponseParameters.VpToken] = vpTokenJson
-            };
-            responseArtifact = vpTokenJson;
-        }
-        else if(WellKnownResponseModes.IsRedirectVariant(request.ResponseMode))
-        {
-            //RFC 6749 §3.1.2 / OIDC Core §3.1.2.4 redirect variants
-            //(query, fragment): the wallet builds a URL the user-agent
-            //navigates to, no HTTP POST. Used for same-device same-process
-            //flows. Skip the SendFormPost path and return the constructed
-            //URL as the response artifact — application code owns the
-            //actual user-agent navigation.
-            string redirectUrl = BuildRedirectResponseUrl(
-                request.ResponseUri,
-                request.ResponseMode,
-                vpTokenJson,
-                request.State);
+                //OID4VP 1.0 §8.3.1: the JWE plaintext is the response JWT payload that
+                //carries vp_token (+ state) as NAMED CLAIMS — not the bare vp_token
+                //object. state therefore rides inside the encrypted JWT and is NOT
+                //added to the outer form body below.
+                string responseJwtPayloadJson = VpTokenSerializer.SerializeDirectPostJwtResponse(
+                    presentationsByQueryId, request.State, WalletConfiguration.JwtPayloadSerializer);
+                byte[] responsePayloadBytes = Encoding.UTF8.GetBytes(responseJwtPayloadJson);
+                string compactJwe = await HaipProfile.EncryptResponseAsync(
+                    request,
+                    responsePayloadBytes,
+                    WalletConfiguration.JwtHeaderSerializer,
+                    WalletConfiguration.TagToEpkCrvConverter,
+                    WalletConfiguration.KeyAgreementEncrypt,
+                    WalletConfiguration.KeyDerivation,
+                    WalletConfiguration.AeadEncrypt,
+                    Infrastructure.Base64UrlEncoder,
+                    WalletConfiguration.Base64UrlDecoder,
+                    WalletConfiguration.MemoryPool,
+                    agreementPartyUInfo: responseEncryptionApu,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            await pda.StepAsync(
-                new ResponsePostedByWallet(
+                postFields = new(StringComparer.Ordinal)
+                {
+                    [AuthorizationResponseParameters.Response] = compactJwe
+                };
+                responseArtifact = compactJwe;
+
+                break;
+            }
+            case var mode when WellKnownResponseModes.IsDirectPost(mode):
+            {
+                //OID4VP 1.0 §8.2 plaintext direct_post — the wallet POSTs the
+                //vp_token JSON object verbatim alongside state. No JWE
+                //construction; the response_uri exposure is at the network layer
+                //rather than at the message layer.
+                postFields = new(StringComparer.Ordinal)
+                {
+                    [AuthorizationResponseParameters.VpToken] = vpTokenJson
+                };
+                responseArtifact = vpTokenJson;
+
+                break;
+            }
+            case var mode when WellKnownResponseModes.IsRedirectVariant(mode):
+            {
+                //RFC 6749 §3.1.2 / OIDC Core §3.1.2.4 redirect variants
+                //(query, fragment): the wallet builds a URL the user-agent
+                //navigates to, no HTTP POST. Used for same-device same-process
+                //flows. Skip the SendFormPost path and return the constructed
+                //URL as the response artifact — application code owns the
+                //actual user-agent navigation.
+                string redirectUrl = BuildRedirectResponseUrl(
                     request.ResponseUri,
-                    request.State,
-                    infrastructure.TimeProvider.GetUtcNow()),
-                cancellationToken).ConfigureAwait(false);
+                    request.ResponseMode,
+                    vpTokenJson,
+                    request.State);
 
-            return new PresentationResult
+                await pda.StepAsync(
+                    new ResponsePostedByWallet(
+                        request.ResponseUri,
+                        request.State,
+                        Infrastructure.TimeProvider.GetUtcNow()),
+                    cancellationToken).ConfigureAwait(false);
+
+                return new PresentationResult
+                {
+                    PostedResponseArtifact = redirectUrl,
+                    TerminalState = pda.CurrentState
+                };
+            }
+            default:
             {
-                PostedResponseArtifact = redirectUrl,
-                TerminalState = pda.CurrentState
-            };
-        }
-        else
-        {
-            throw new InvalidOperationException(
-                $"Unsupported response_mode '{request.ResponseMode}' on JAR. "
-                + "Supported: 'direct_post' (OID4VP §8.2 plaintext), "
-                + "'direct_post.jwt' (HAIP 1.0 §5.1 encrypted), "
-                + "'query' (RFC 6749 §3.1.2), and 'fragment' (OIDC Core §3.1.2.4).");
+                throw new InvalidOperationException(
+                    $"Unsupported response_mode '{request.ResponseMode}' on JAR. "
+                    + "Supported: 'direct_post' (OID4VP §8.2 plaintext), "
+                    + "'direct_post.jwt' (HAIP 1.0 §5.1 encrypted), "
+                    + "'query' (RFC 6749 §3.1.2), and 'fragment' (OIDC Core §3.1.2.4).");
+            }
         }
 
         //state is the outer transport correlator: the Verifier reads it from the
@@ -696,7 +701,7 @@ public sealed class Oid4VpWalletClient
             postFields[OAuthRequestParameterNames.State] = request.State;
         }
 
-        HttpResponseData postResponse = await infrastructure.SendFormPostAsync(
+        HttpResponseData postResponse = await Infrastructure.SendFormPostAsync(
             request.ResponseUri,
             postFields,
             OutgoingHeaders.Empty,
@@ -714,7 +719,7 @@ public sealed class Oid4VpWalletClient
             new ResponsePostedByWallet(
                 request.ResponseUri,
                 request.State,
-                infrastructure.TimeProvider.GetUtcNow()),
+                Infrastructure.TimeProvider.GetUtcNow()),
             cancellationToken).ConfigureAwait(false);
 
         return new PresentationResult
@@ -749,7 +754,7 @@ public sealed class Oid4VpWalletClient
                 "client a pre-fetched JAR via CompactJar.");
         }
 
-        if(walletConfiguration.SendFormPost is null)
+        if(WalletConfiguration.SendFormPost is null)
         {
             throw new InvalidOperationException(
                 "PresentJarOptions.CompactJar is null but the wallet " +
@@ -760,13 +765,13 @@ public sealed class Oid4VpWalletClient
         }
 
         string walletMetadataJson = WalletMetadataWriter.BuildForWalletPost(
-            walletConfiguration.WalletCapabilities,
+            WalletConfiguration.WalletCapabilities,
             presentJarOptions.WalletExchangePublicKey,
             presentJarOptions.JarEncryptionEnc,
-            infrastructure.Base64UrlEncoder,
-            walletConfiguration.MemoryPool);
+            Infrastructure.Base64UrlEncoder,
+            WalletConfiguration.MemoryPool);
 
-        string walletNonce = await infrastructure.GenerateIdentifierAsync(
+        string walletNonce = await Infrastructure.GenerateIdentifierAsync(
             WellKnownIdentifierPurposes.Oid4VpWalletNonce, null, cancellationToken)
             .ConfigureAwait(false);
 
@@ -776,7 +781,7 @@ public sealed class Oid4VpWalletClient
             [Oid4VpAuthorizationRequestParameterNames.WalletMetadata] = walletMetadataJson
         };
 
-        HttpResponseData response = await walletConfiguration.SendFormPost(
+        HttpResponseData response = await WalletConfiguration.SendFormPost(
             presentJarOptions.RequestUri,
             formFields,
             OutgoingHeaders.Empty,

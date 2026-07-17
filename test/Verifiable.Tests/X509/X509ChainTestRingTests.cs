@@ -4,6 +4,7 @@ using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Microsoft;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.X509;
 
@@ -17,7 +18,7 @@ internal sealed class X509ChainTestRingTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private const string DnsName = "verifier.example.com";
 
@@ -182,7 +183,7 @@ internal sealed class X509ChainTestRingTests
         try
         {
             return await MicrosoftX509Functions.ValidateChainAsync(
-                parsed, trustAnchors, now, Pool, cancellationToken).ConfigureAwait(false);
+                parsed, trustAnchors, now, Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         finally
         {

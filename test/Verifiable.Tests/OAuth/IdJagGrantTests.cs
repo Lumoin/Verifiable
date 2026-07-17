@@ -105,7 +105,7 @@ internal sealed class IdJagGrantTests
 
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
@@ -220,7 +220,7 @@ internal sealed class IdJagGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
             [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -228,8 +228,7 @@ internal sealed class IdJagGrantTests
             [OAuthRequestParameterNames.RequestedTokenType] = TokenTypeNames.GetName(TokenType.IdJag),
             [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
             [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.IdToken)
-        }).ConfigureAwait(false);
-
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)response.StatusCode, body);
         Assert.Contains(OAuthErrors.InvalidRequest, body);
@@ -311,7 +310,7 @@ internal sealed class IdJagGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
             [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -319,8 +318,7 @@ internal sealed class IdJagGrantTests
             [OAuthRequestParameterNames.Audience] = ResourceAsIssuer,
             [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
             [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.IdToken)
-        }).ConfigureAwait(false);
-
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(401, (int)response.StatusCode, body);
         Assert.Contains(OAuthErrors.InvalidClient, body);
@@ -396,14 +394,13 @@ internal sealed class IdJagGrantTests
         string jag = mintDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
 
         //Leg 2 — redeem.
-        using HttpResponseMessage redeemResponse = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage redeemResponse = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
             [OAuthRequestParameterNames.Assertion] = jag
-        }).ConfigureAwait(false);
-
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string redeemBody = await redeemResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)redeemResponse.StatusCode, redeemBody);
         Assert.IsTrue(redeemResponse.Headers.CacheControl?.NoStore ?? false, "§4.4.2: Cache-Control: no-store.");
@@ -490,7 +487,7 @@ internal sealed class IdJagGrantTests
         Assert.AreEqual(exampleResource, p.GetProperty("resource").GetString());
 
         //Leg 2 — redeem. §4.4.2 access-token response shape.
-        using HttpResponseMessage redeemResponse = await PostFormAsync(http, tokenUrl, BuildRedeemForm(jag)).ConfigureAwait(false);
+        using HttpResponseMessage redeemResponse = await OAuthTestTransport.PostFormAsync(http, tokenUrl, BuildRedeemForm(jag), TestContext.CancellationToken).ConfigureAwait(false);
         string redeemBody = await redeemResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)redeemResponse.StatusCode, redeemBody);
         using JsonDocument redeemDoc = JsonDocument.Parse(redeemBody);
@@ -546,7 +543,7 @@ internal sealed class IdJagGrantTests
         string segment = material.Registration.TenantId.Value;
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/token");
 
-        using HttpResponseMessage redeem = await PostFormAsync(http, tokenUrl, BuildRedeemForm(foreignJag)).ConfigureAwait(false);
+        using HttpResponseMessage redeem = await OAuthTestTransport.PostFormAsync(http, tokenUrl, BuildRedeemForm(foreignJag), TestContext.CancellationToken).ConfigureAwait(false);
         string body = await redeem.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)redeem.StatusCode, body);
         using JsonDocument doc = JsonDocument.Parse(body);
@@ -605,8 +602,8 @@ internal sealed class IdJagGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage redeem = await PostFormAsync(
-            host.SharedHttpClient!, tokenUrl, BuildRedeemForm(foreignJag)).ConfigureAwait(false);
+        using HttpResponseMessage redeem = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, BuildRedeemForm(foreignJag), TestContext.CancellationToken).ConfigureAwait(false);
         string body = await redeem.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)redeem.StatusCode, body);
         Assert.Contains(OAuthErrors.InvalidGrant, body);
@@ -650,8 +647,8 @@ internal sealed class IdJagGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage redeem = await PostFormAsync(
-            host.SharedHttpClient!, tokenUrl, BuildRedeemForm(foreignJag)).ConfigureAwait(false);
+        using HttpResponseMessage redeem = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, BuildRedeemForm(foreignJag), TestContext.CancellationToken).ConfigureAwait(false);
         string body = await redeem.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)redeem.StatusCode, body);
         Assert.Contains(OAuthErrors.InvalidGrant, body);
@@ -696,12 +693,12 @@ internal sealed class IdJagGrantTests
         string jag = mintDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
 
         //First redemption — accepted; the library records the jti as first-use.
-        using HttpResponseMessage first = await PostFormAsync(http, tokenUrl, BuildRedeemForm(jag)).ConfigureAwait(false);
+        using HttpResponseMessage first = await OAuthTestTransport.PostFormAsync(http, tokenUrl, BuildRedeemForm(jag), TestContext.CancellationToken).ConfigureAwait(false);
         string firstBody = await first.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)first.StatusCode, firstBody);
 
         //Second redemption of the SAME grant — the shared jti store sees the replay and refuses.
-        using HttpResponseMessage second = await PostFormAsync(http, tokenUrl, BuildRedeemForm(jag)).ConfigureAwait(false);
+        using HttpResponseMessage second = await OAuthTestTransport.PostFormAsync(http, tokenUrl, BuildRedeemForm(jag), TestContext.CancellationToken).ConfigureAwait(false);
         string secondBody = await second.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)second.StatusCode, secondBody);
         Assert.Contains(OAuthErrors.InvalidGrant, secondBody);
@@ -735,14 +732,13 @@ internal sealed class IdJagGrantTests
         string accessTokenAsAssertion = await ObtainClientCredentialsAccessTokenAsync(
             http, tokenUrl, ClientId, ClientSecret, WellKnownScopes.OpenId).ConfigureAwait(false);
 
-        using HttpResponseMessage response = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
             [OAuthRequestParameterNames.Assertion] = accessTokenAsAssertion
-        }).ConfigureAwait(false);
-
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)response.StatusCode, body);
         Assert.Contains(OAuthErrors.InvalidGrant, body);
@@ -779,14 +775,13 @@ internal sealed class IdJagGrantTests
         using JsonDocument mintDoc = JsonDocument.Parse(mintBody);
         string jag = mintDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
 
-        using HttpResponseMessage response = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
             [OAuthRequestParameterNames.Assertion] = jag
-        }).ConfigureAwait(false);
-
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)response.StatusCode, body);
         Assert.Contains(OAuthErrors.InvalidGrant, body);
@@ -821,14 +816,13 @@ internal sealed class IdJagGrantTests
         using JsonDocument mintDoc = JsonDocument.Parse(mintBody);
         string jag = mintDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
 
-        using HttpResponseMessage response = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
             [OAuthRequestParameterNames.Assertion] = jag
-        }).ConfigureAwait(false);
-
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)response.StatusCode, body);
         Assert.Contains(OAuthErrors.InvalidGrant, body);
@@ -866,14 +860,13 @@ internal sealed class IdJagGrantTests
         using JsonDocument mintDoc = JsonDocument.Parse(mintBody);
         string jag = mintDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
 
-        using HttpResponseMessage response = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
             [OAuthRequestParameterNames.Assertion] = jag
-        }).ConfigureAwait(false);
-
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)response.StatusCode, body);
         Assert.Contains(OAuthErrors.InvalidGrant, body);
@@ -910,14 +903,13 @@ internal sealed class IdJagGrantTests
         //Advance past the default 5-minute JAG lifetime plus the 60s redeem skew.
         TimeProvider.Advance(TimeSpan.FromMinutes(6) + TimeSpan.FromSeconds(61));
 
-        using HttpResponseMessage response = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
             [OAuthRequestParameterNames.Assertion] = jag
-        }).ConfigureAwait(false);
-
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)response.StatusCode, body);
         Assert.Contains(OAuthErrors.InvalidGrant, body);
@@ -998,14 +990,13 @@ internal sealed class IdJagGrantTests
         using JsonDocument mintDoc = JsonDocument.Parse(mintBody);
         string jag = mintDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
 
-        using HttpResponseMessage response = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
             [OAuthRequestParameterNames.Assertion] = TamperSignature(jag)
-        }).ConfigureAwait(false);
-
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)response.StatusCode, body);
         Assert.Contains(OAuthErrors.InvalidGrant, body);
@@ -1042,14 +1033,13 @@ internal sealed class IdJagGrantTests
         using JsonDocument mintDoc = JsonDocument.Parse(mintBody);
         string jag = mintDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
 
-        using HttpResponseMessage response = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
             [OAuthRequestParameterNames.Assertion] = jag
-        }).ConfigureAwait(false);
-
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)response.StatusCode, body);
         Assert.Contains(OAuthErrors.InvalidGrant, body);
@@ -1222,7 +1212,7 @@ internal sealed class IdJagGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
             [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -1232,8 +1222,7 @@ internal sealed class IdJagGrantTests
             [OAuthRequestParameterNames.Scope] = requestedScope,
             [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
             [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.IdToken)
-        }).ConfigureAwait(false);
-
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)response.StatusCode, body);
 
@@ -1317,7 +1306,7 @@ internal sealed class IdJagGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
             [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -1327,8 +1316,7 @@ internal sealed class IdJagGrantTests
             [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
             [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.IdToken),
             [OAuthRequestParameterNames.AuthorizationDetails] = SampleDetailsJson
-        }).ConfigureAwait(false);
-
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)response.StatusCode, body);
 
@@ -1376,14 +1364,13 @@ internal sealed class IdJagGrantTests
         using JsonDocument mintDoc = JsonDocument.Parse(mintBody);
         string jag = mintDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
 
-        using HttpResponseMessage redeemResponse = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage redeemResponse = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
             [OAuthRequestParameterNames.Assertion] = jag
-        }).ConfigureAwait(false);
-
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string redeemBody = await redeemResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)redeemResponse.StatusCode, redeemBody);
 
@@ -1410,7 +1397,7 @@ internal sealed class IdJagGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        using HttpResponseMessage response = await PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
             [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -1420,8 +1407,7 @@ internal sealed class IdJagGrantTests
             [OAuthRequestParameterNames.Scope] = "chat.read chat.history",
             [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
             [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.IdToken)
-        }).ConfigureAwait(false);
-
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)response.StatusCode, body);
 
@@ -1502,14 +1488,13 @@ internal sealed class IdJagGrantTests
         using JsonDocument mintDoc = JsonDocument.Parse(mintBody);
         string jag = mintDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
 
-        using HttpResponseMessage redeemResponse = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage redeemResponse = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
             [OAuthRequestParameterNames.Assertion] = jag
-        }).ConfigureAwait(false);
-
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string redeemBody = await redeemResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)redeemResponse.StatusCode, redeemBody);
 
@@ -1742,7 +1727,7 @@ internal sealed class IdJagGrantTests
             string jag = await MintBoundJagAsync(http, tokenUrl, dpopKey, segment, material).ConfigureAwait(false);
 
             //Redeem with no DPoP header.
-            using HttpResponseMessage redeemResponse = await PostFormAsync(http, tokenUrl, BuildRedeemForm(jag))
+            using HttpResponseMessage redeemResponse = await OAuthTestTransport.PostFormAsync(http, tokenUrl, BuildRedeemForm(jag), TestContext.CancellationToken)
                 .ConfigureAwait(false);
             string redeemBody = await redeemResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual(400, (int)redeemResponse.StatusCode, redeemBody);
@@ -1900,7 +1885,7 @@ internal sealed class IdJagGrantTests
         using JsonDocument mintDoc = JsonDocument.Parse(mintBody);
         string jag = mintDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
 
-        using HttpResponseMessage redeemResponse = await PostFormAsync(http, tokenUrl, BuildRedeemForm(jag))
+        using HttpResponseMessage redeemResponse = await OAuthTestTransport.PostFormAsync(http, tokenUrl, BuildRedeemForm(jag), TestContext.CancellationToken)
             .ConfigureAwait(false);
         string redeemBody = await redeemResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)redeemResponse.StatusCode, redeemBody);
@@ -2095,7 +2080,7 @@ internal sealed class IdJagGrantTests
         Assert.AreEqual(SubjectIdentity, jagPayload.RootElement.GetProperty(WellKnownJwtClaimNames.Sub).GetString());
 
         //Leg 2 — redeem the JAG for a Bearer access token (§4.4).
-        using HttpResponseMessage redeemResponse = await PostFormAsync(http, tokenUrl, BuildRedeemForm(jag)).ConfigureAwait(false);
+        using HttpResponseMessage redeemResponse = await OAuthTestTransport.PostFormAsync(http, tokenUrl, BuildRedeemForm(jag), TestContext.CancellationToken).ConfigureAwait(false);
         string redeemBody = await redeemResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)redeemResponse.StatusCode, redeemBody);
 
@@ -2223,7 +2208,7 @@ internal sealed class IdJagGrantTests
     /// </summary>
     private Task<HttpResponseMessage> PostRefreshTokenMintAsync(
         HttpClient http, Uri tokenUrl, string audience, string scope, string refreshToken) =>
-        PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
             [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -2233,7 +2218,7 @@ internal sealed class IdJagGrantTests
             [OAuthRequestParameterNames.Scope] = scope,
             [OAuthRequestParameterNames.SubjectToken] = refreshToken,
             [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.RefreshToken)
-        });
+        }, TestContext.CancellationToken);
 
 
     /// <summary>
@@ -2349,7 +2334,7 @@ internal sealed class IdJagGrantTests
         using JsonDocument mintDoc = JsonDocument.Parse(mintBody);
         string jag = mintDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
 
-        using HttpResponseMessage redeemResponse = await PostFormAsync(http, tokenUrl, BuildRedeemForm(jag)).ConfigureAwait(false);
+        using HttpResponseMessage redeemResponse = await OAuthTestTransport.PostFormAsync(http, tokenUrl, BuildRedeemForm(jag), TestContext.CancellationToken).ConfigureAwait(false);
         string redeemBody = await redeemResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)redeemResponse.StatusCode, redeemBody);
         Assert.Contains(OAuthErrors.InvalidGrant, redeemBody);
@@ -2530,7 +2515,7 @@ internal sealed class IdJagGrantTests
         using JsonDocument mintDoc = JsonDocument.Parse(mintBody);
         string jag = mintDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
 
-        using HttpResponseMessage redeemResponse = await PostFormAsync(http, tokenUrl, BuildRedeemForm(jag)).ConfigureAwait(false);
+        using HttpResponseMessage redeemResponse = await OAuthTestTransport.PostFormAsync(http, tokenUrl, BuildRedeemForm(jag), TestContext.CancellationToken).ConfigureAwait(false);
         string redeemBody = await redeemResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(400, (int)redeemResponse.StatusCode, redeemBody);
         Assert.Contains(OAuthErrors.InvalidGrant, redeemBody);
@@ -2665,7 +2650,7 @@ internal sealed class IdJagGrantTests
     /// (<c>subject_token_type</c> = the saml2 URN) requesting an ID-JAG (§4.5).
     /// </summary>
     private Task<HttpResponseMessage> PostSamlMintAsync(HttpClient http, Uri tokenUrl, string subjectToken) =>
-        PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
             [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -2674,7 +2659,7 @@ internal sealed class IdJagGrantTests
             [OAuthRequestParameterNames.Audience] = ResourceAsIssuer,
             [OAuthRequestParameterNames.SubjectToken] = subjectToken,
             [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.Saml2)
-        });
+        }, TestContext.CancellationToken);
 
 
     /// <summary>
@@ -2861,7 +2846,7 @@ internal sealed class IdJagGrantTests
 
         //Leg 1 — mint at the IdP host; the audience names the Resource Authorization Server's issuer.
         Uri idpTokenUrl = new(idpHost.HttpBaseAddress!, $"/connect/{idpSegment}/token");
-        using HttpResponseMessage mintResponse = await PostFormAsync(idpHttp, idpTokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage mintResponse = await OAuthTestTransport.PostFormAsync(idpHttp, idpTokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
             [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -2870,7 +2855,7 @@ internal sealed class IdJagGrantTests
             [OAuthRequestParameterNames.Audience] = rsIssuer,
             [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
             [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.IdToken)
-        }).ConfigureAwait(false);
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string mintBody = await mintResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)mintResponse.StatusCode, mintBody);
         using JsonDocument mintDoc = JsonDocument.Parse(mintBody);
@@ -2878,7 +2863,7 @@ internal sealed class IdJagGrantTests
 
         //Leg 2 — redeem at the Resource Authorization Server host.
         Uri rsTokenUrl = new(rsHost.HttpBaseAddress!, $"/connect/{rsSegment}/token");
-        using HttpResponseMessage redeemResponse = await PostFormAsync(rsHttp, rsTokenUrl, BuildRedeemForm(jag)).ConfigureAwait(false);
+        using HttpResponseMessage redeemResponse = await OAuthTestTransport.PostFormAsync(rsHttp, rsTokenUrl, BuildRedeemForm(jag), TestContext.CancellationToken).ConfigureAwait(false);
         string redeemBody = await redeemResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)redeemResponse.StatusCode, redeemBody);
         using JsonDocument redeemDoc = JsonDocument.Parse(redeemBody);
@@ -3143,7 +3128,7 @@ internal sealed class IdJagGrantTests
         string jag = jagDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
 
         //Leg C — ID-JAG → Bearer access token (§4.4).
-        using HttpResponseMessage redeemResponse = await PostFormAsync(http, tokenUrl, BuildRedeemForm(jag)).ConfigureAwait(false);
+        using HttpResponseMessage redeemResponse = await OAuthTestTransport.PostFormAsync(http, tokenUrl, BuildRedeemForm(jag), TestContext.CancellationToken).ConfigureAwait(false);
         string redeemBody = await redeemResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)redeemResponse.StatusCode, redeemBody);
         using JsonDocument redeemDoc = JsonDocument.Parse(redeemBody);
@@ -3156,7 +3141,7 @@ internal sealed class IdJagGrantTests
     /// Refresh Token (<c>requested_token_type</c> = the refresh_token URN), per §4.5.
     /// </summary>
     private Task<HttpResponseMessage> PostSamlToRefreshTokenAsync(HttpClient http, Uri tokenUrl, string subjectToken) =>
-        PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
             [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -3164,7 +3149,7 @@ internal sealed class IdJagGrantTests
             [OAuthRequestParameterNames.RequestedTokenType] = TokenTypeNames.GetName(TokenType.RefreshToken),
             [OAuthRequestParameterNames.SubjectToken] = subjectToken,
             [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.Saml2)
-        });
+        }, TestContext.CancellationToken);
 
 
     private static Dictionary<string, string> BuildMintForm(string audience) =>
@@ -3389,14 +3374,13 @@ internal sealed class IdJagGrantTests
     private async Task<string> ObtainClientCredentialsAccessTokenAsync(
         HttpClient http, Uri tokenUrl, string clientId, string clientSecret, string scope)
     {
-        using HttpResponseMessage response = await PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
             [OAuthRequestParameterNames.ClientId] = clientId,
             [OAuthRequestParameterNames.ClientSecret] = clientSecret,
             [OAuthRequestParameterNames.Scope] = scope
-        }).ConfigureAwait(false);
-
+        }, TestContext.CancellationToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)response.StatusCode, body);
 
@@ -3507,7 +3491,7 @@ internal sealed class IdJagGrantTests
 
     private Task<HttpResponseMessage> PostMintWithSubjectAsync(
         HttpClient http, Uri tokenUrl, string audience, string subjectToken) =>
-        PostFormAsync(http, tokenUrl, new Dictionary<string, string>
+        OAuthTestTransport.PostFormAsync(http, tokenUrl, new Dictionary<string, string>
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
             [OAuthRequestParameterNames.ClientId] = ClientId,
@@ -3516,7 +3500,7 @@ internal sealed class IdJagGrantTests
             [OAuthRequestParameterNames.Audience] = audience,
             [OAuthRequestParameterNames.SubjectToken] = subjectToken,
             [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.IdToken)
-        });
+        }, TestContext.CancellationToken);
 
 
     private static JsonDocument DecodeHeader(string compactJws)
@@ -3536,14 +3520,5 @@ internal sealed class IdJagGrantTests
         byte[] payloadBytes = SecurityEventTestJson.DecodeSegment(segments[1], Pool);
 
         return JsonDocument.Parse(payloadBytes);
-    }
-
-
-    private async Task<HttpResponseMessage> PostFormAsync(
-        HttpClient http, Uri url, Dictionary<string, string> fields)
-    {
-        using FormUrlEncodedContent content = new(fields);
-
-        return await http.PostAsync(url, content, TestContext.CancellationToken).ConfigureAwait(false);
     }
 }

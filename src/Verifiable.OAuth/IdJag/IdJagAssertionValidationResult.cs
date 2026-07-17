@@ -4,7 +4,7 @@ namespace Verifiable.OAuth.IdJag;
 
 /// <summary>
 /// The outcome of validating an Identity Assertion JWT Authorization Grant (ID-JAG) assertion against
-/// the draft-ietf-oauth-identity-assertion-authz-grant §4.4.1 / §9.3 claim rules via
+/// the draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §4.4.1 / §9.3 claim rules via
 /// <see cref="IdJagAssertionValidation.Validate"/>. A success carries the claims a Resource
 /// Authorization Server shapes its access token from; a failure carries the
 /// <see cref="IdJagValidationFailureReason"/> the caller maps to <c>invalid_grant</c>.
@@ -40,7 +40,7 @@ public sealed record IdJagAssertionValidationResult
 
     /// <summary>
     /// The <c>tenant</c> claim — the IdP (issuer) tenant for a multi-tenant issuer, when present
-    /// (draft-ietf-oauth-identity-assertion-authz-grant §3.1 / §6). Surfaced for the Resource
+    /// (draft-ietf-oauth-identity-assertion-authz-grant-04 §3.1 / §6). Surfaced for the Resource
     /// Authorization Server's subject-identifier scoping (<c>iss + tenant + sub</c>);
     /// <see langword="null"/> for a single-tenant issuer.
     /// </summary>

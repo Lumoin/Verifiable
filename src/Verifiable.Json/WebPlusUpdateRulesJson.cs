@@ -20,21 +20,21 @@ namespace Verifiable.Json;
 /// </remarks>
 public static class WebPlusUpdateRulesJson
 {
-    private static readonly string UpdateRulesProperty = WellKnownWebPlusValues.UpdateRulesField;
-    private static readonly string KeyProperty = WellKnownWebPlusValues.UpdateRuleKey;
-    private static readonly string HashedKeyProperty = WellKnownWebPlusValues.UpdateRuleHashedKey;
-    private static readonly string AnyProperty = WellKnownWebPlusValues.UpdateRuleAny;
-    private static readonly string AllProperty = WellKnownWebPlusValues.UpdateRuleAll;
-    private static readonly string AtLeastProperty = WellKnownWebPlusValues.UpdateRuleAtLeast;
-    private static readonly string OfProperty = WellKnownWebPlusValues.UpdateRuleOf;
-    private static readonly string WeightProperty = WellKnownWebPlusValues.UpdateRuleWeight;
+    private static string UpdateRulesProperty { get; } = WellKnownWebPlusValues.UpdateRulesField;
+    private static string KeyProperty { get; } = WellKnownWebPlusValues.UpdateRuleKey;
+    private static string HashedKeyProperty { get; } = WellKnownWebPlusValues.UpdateRuleHashedKey;
+    private static string AnyProperty { get; } = WellKnownWebPlusValues.UpdateRuleAny;
+    private static string AllProperty { get; } = WellKnownWebPlusValues.UpdateRuleAll;
+    private static string AtLeastProperty { get; } = WellKnownWebPlusValues.UpdateRuleAtLeast;
+    private static string OfProperty { get; } = WellKnownWebPlusValues.UpdateRuleOf;
+    private static string WeightProperty { get; } = WellKnownWebPlusValues.UpdateRuleWeight;
 
     //did:webplus update rules nest (any/all/atLeast), but an adversarial document could nest them deeply; bound
     //the JSON parse depth so a hostile updateRules cannot exhaust the parse, matching the bound used elsewhere
     //for untrusted JSON. Duplicate property names are rejected (AllowDuplicateProperties = false): a self-hashed,
     //self-certifying document MUST have one unambiguous byte form, and RFC 8785 Section 3.1 leaves JCS over
     //duplicate keys undefined, so a duplicated member is a malformed document rather than a last-wins silent pick.
-    private static readonly JsonDocumentOptions ParseOptions = new() { MaxDepth = 32, AllowDuplicateProperties = false };
+    private static JsonDocumentOptions ParseOptions { get; } = new() { MaxDepth = 32, AllowDuplicateProperties = false };
 
     //A did:webplus 'atLeast' threshold and every explicit weight MUST be a positive integer: a non-positive
     //threshold is satisfied by zero proofs (a keyless takeover of a degenerate rule), and a non-positive weight

@@ -9,7 +9,7 @@
     The build system enforces that core libraries do not have hard dependencies on serialization libraries, making them interchangeable.
   -->
   <ItemGroup Label="Library">
-    <PackageVersion Include="Lumoin.Base" Version="0.0.4" />
+    <PackageVersion Include="Lumoin.Base" Version="0.0.6" />
     <PackageVersion Include="Lumoin.Veridical.Core" Version="0.0.4" />
     <PackageVersion Include="Lumoin.Veridical.Hashing" Version="0.0.4" />
     <PackageVersion Include="Lumoin.Veridical.Backends.Managed" Version="0.0.4" />
@@ -70,9 +70,11 @@
     <PackageVersion Include="WinSharpFuzz" Version="1.0.0" />
   </ItemGroup>
   <!--
-    Serialization project references that are restricted to Tests and Benchmarks projects only.
-    Verifiable.Json and Verifiable.Cbor are interchangeable serialization layers. Library projects
-    must not depend on them directly, keeping the core stack serialization-agnostic.
+    Serialization project references that are restricted to Tests, Benchmarks, and application
+    (OutputType Exe) projects. Verifiable.Json and Verifiable.Cbor are interchangeable serialization
+    layers. Library projects must not depend on them directly, keeping the core stack
+    serialization-agnostic; a composition root (an application that packages an executable) is
+    exactly the "consumer that chooses its serialization layer" this restriction exists to allow.
   -->
   <PropertyGroup>
     <RestrictedSerializationProjects>Verifiable.Cbor;Verifiable.Json</RestrictedSerializationProjects>
@@ -98,15 +100,18 @@
   </Target>
   <!--
     Validates that serialization projects (Verifiable.Json, Verifiable.Cbor) are only referenced
-    by Tests and Benchmarks projects. This enforces a clean architecture boundary where the core
-    library stack remains serialization-agnostic and consumers choose their serialization layer.
-    Runs after project references are resolved but before compilation begins.
+    by Tests, Benchmarks, and application (OutputType Exe) projects. This enforces a clean
+    architecture boundary where the core library stack remains serialization-agnostic while
+    applications and tests/benchmarks — the consumers that bind a concrete serialization layer —
+    remain free to reference either. Runs after project references are resolved but before
+    compilation begins.
   -->
   <Target Name="ValidateProjectReferences" AfterTargets="ResolveProjectReferences" Condition="'$(DesignTimeBuild)' != 'true'">
     <PropertyGroup>
       <_IsTestProject Condition="$(MSBuildProjectName.EndsWith('.Tests'))">true</_IsTestProject>
       <_IsBenchmarkProject Condition="$(MSBuildProjectName.EndsWith('.Benchmarks'))">true</_IsBenchmarkProject>
-      <_IsAllowedToReferenceSerializationProjects Condition="'$(_IsTestProject)' == 'true' OR '$(_IsBenchmarkProject)' == 'true'">true</_IsAllowedToReferenceSerializationProjects>
+      <_IsApplicationProject Condition="'$(OutputType)' == 'Exe'">true</_IsApplicationProject>
+      <_IsAllowedToReferenceSerializationProjects Condition="'$(_IsTestProject)' == 'true' OR '$(_IsBenchmarkProject)' == 'true' OR '$(_IsApplicationProject)' == 'true'">true</_IsAllowedToReferenceSerializationProjects>
     </PropertyGroup>
     <ValidateSerializationProjectReferences Condition="'$(_IsAllowedToReferenceSerializationProjects)' != 'true' AND '@(ProjectReference)' != ''" ProjectName="$(MSBuildProjectName)" ProjectReferences="@(ProjectReference)" RestrictedProjects="$(RestrictedSerializationProjects)" />
   </Target>
@@ -223,7 +228,8 @@
                 Log.LogError(
                     $"Restricted project reference(s) '{string.Join(", ", violations)}' " +
                     $"found in '{ProjectName}'. " +
-                    "Verifiable.Json and Verifiable.Cbor can only be referenced by Tests and Benchmarks projects.");
+                    "Libraries stay serialization-agnostic; only applications (OutputType Exe) and " +
+                    "Tests/Benchmarks projects may reference Verifiable.Json and Verifiable.Cbor.");
                 return false;
             }
 

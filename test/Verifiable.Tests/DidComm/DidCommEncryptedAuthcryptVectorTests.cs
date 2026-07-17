@@ -101,7 +101,7 @@ internal sealed class DidCommEncryptedAuthcryptVectorTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512DecryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertRecoveredC1Message(result);
     }
@@ -129,7 +129,7 @@ internal sealed class DidCommEncryptedAuthcryptVectorTests
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertRecoveredC1Message(result);
     }
@@ -221,7 +221,7 @@ internal sealed class DidCommEncryptedAuthcryptVectorTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512DecryptAsync,
             Pool,
-            TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken);
     }
 
 

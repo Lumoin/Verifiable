@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Provider;
 using CryptoLibraryInfo = Verifiable.Cryptography.Provider.CryptoLibrary;
 using PublicKey = NSec.Cryptography.PublicKey;
@@ -19,16 +20,16 @@ namespace Verifiable.NSec;
 /// </summary>
 public static class NSecCryptographicFunctions
 {
-    private static readonly ProviderLibrary ProviderLib = new(
+    private static ProviderLibrary ProviderLib { get; } = new(
         typeof(NSecCryptographicFunctions).Assembly.GetName().Name ?? "Verifiable.NSec",
         typeof(NSecCryptographicFunctions).Assembly.GetName().Version?.ToString() ?? "Unknown");
 
     //NSec wraps the native libsodium binary; its assembly version is the meaningful CBOM identifier.
-    private static readonly CryptoLibraryInfo CryptoLib = new(
+    private static CryptoLibraryInfo CryptoLib { get; } = new(
         "NSec.Cryptography",
         typeof(global::NSec.Cryptography.SignatureAlgorithm).Assembly.GetName().Version?.ToString() ?? "Unknown");
 
-    private static readonly ProviderClass ProviderCls = new(nameof(NSecCryptographicFunctions));
+    private static ProviderClass ProviderCls { get; } = new(nameof(NSecCryptographicFunctions));
 
 
     /// <summary>
@@ -40,7 +41,7 @@ public static class NSecCryptographicFunctions
     /// <param name="context">Optional context (unused).</param>
     /// <returns>The signature created from <paramref name="dataToSign"/> using <paramref name="privateKeyBytes"/>.</returns>
     [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of Signature is transferred to the caller.")]
-    public static ValueTask<Signature> SignEd25519Async(
+    public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignEd25519Async(
         ReadOnlyMemory<byte> privateKeyBytes,
         ReadOnlyMemory<byte> dataToSign,
         MemoryPool<byte> signaturePool,
@@ -63,7 +64,11 @@ public static class NSecCryptographicFunctions
         var memoryPooledSignature = signaturePool.Rent(signature.Length);
         signature.CopyTo(memoryPooledSignature.Memory.Span);
 
-        return ValueTask.FromResult(new Signature(memoryPooledSignature, CryptoTags.Ed25519Signature));
+        var signatureResult = new Signature(memoryPooledSignature, CryptoTags.Ed25519Signature);
+        CryptoEvent evt = SignatureProducedEvent.Create(
+            CryptoAlgorithm.Ed25519, dataToSign.Length, signature.Length, CryptoLib.Name);
+
+        return ValueTask.FromResult<(Signature, CryptoEvent?)>((signatureResult, evt));
     }
 
 
@@ -75,7 +80,7 @@ public static class NSecCryptographicFunctions
     /// <param name="publicKeyMaterial">The public key bytes.</param>
     /// <param name="context">Optional context (unused).</param>
     /// <returns>True if verification succeeds, false otherwise.</returns>
-    public static ValueTask<bool> VerifyEd25519Async(
+    public static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyEd25519Async(
         ReadOnlyMemory<byte> dataToVerify,
         ReadOnlyMemory<byte> signature,
         ReadOnlyMemory<byte> publicKeyMaterial,
@@ -90,7 +95,10 @@ public static class NSecCryptographicFunctions
         }
 
         var publicKey = PublicKey.Import(SignatureAlgorithm.Ed25519, publicKeyMaterial.Span, KeyBlobFormat.RawPublicKey);
+        bool isVerified = SignatureAlgorithm.Ed25519.Verify(publicKey, dataToVerify.Span, signature.Span);
+        CryptoEvent evt = VerificationCompletedEvent.Create(
+            CryptoAlgorithm.Ed25519, isVerified ? VerificationOutcome.Valid : VerificationOutcome.Invalid, dataToVerify.Length, CryptoLib.Name);
 
-        return ValueTask.FromResult(SignatureAlgorithm.Ed25519.Verify(publicKey, dataToVerify.Span, signature.Span));
+        return ValueTask.FromResult<(bool, CryptoEvent?)>((isVerified, evt));
     }
 }

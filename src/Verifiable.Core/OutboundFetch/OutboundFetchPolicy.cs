@@ -35,7 +35,7 @@ namespace Verifiable.Core.OutboundFetch;
 /// </remarks>
 public sealed record OutboundFetchPolicy
 {
-    private static readonly IReadOnlySet<string> HttpsOnly =
+    private static IReadOnlySet<string> HttpsOnly { get; } =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "https" };
 
 

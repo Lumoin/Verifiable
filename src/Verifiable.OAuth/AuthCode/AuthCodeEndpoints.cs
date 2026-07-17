@@ -525,12 +525,13 @@ public static class AuthCodeEndpoints
 
                 ServerHttpResponse? requirementFailure = await EvaluateAuthenticationRequirementsAsync(
                     server, context, parState.AcrValues, parState.MaxAge, grantedScope,
-                    subjectId, now, parState.RedirectUri, parState.State, ct,
+                    subjectId, now, parState.RedirectUri, parState.State,
                     requestedAuthorizationDetails: parState.AuthorizationDetails,
                     responseMode: parState.ResponseMode,
                     clientId: parState.ClientId,
                     requestedIssuerState: parState.IssuerState,
-                    requestedResource: parState.Resource).ConfigureAwait(false);
+                    requestedResource: parState.Resource,
+                    cancellationToken: ct).ConfigureAwait(false);
                 if(requirementFailure is not null)
                 {
                     return ((FlowInput?)null, (ServerHttpResponse?)requirementFailure);
@@ -738,7 +739,8 @@ public static class AuthCodeEndpoints
                 DateTimeOffset authTime = context.AuthTime ?? now;
 
                 ServerHttpResponse? requirementFailure = await EvaluateAuthenticationRequirementsAsync(
-                    server, context, acrValues, maxAge, scope, subjectId, now, redirectUri, requestState, ct,
+                    server, context, acrValues, maxAge, scope, subjectId, now, redirectUri, requestState,
+                    cancellationToken: ct,
                     requestedAuthorizationDetails: authorizationDetails,
                     responseMode: responseMode,
                     clientId: clientId,
@@ -1089,7 +1091,8 @@ public static class AuthCodeEndpoints
 
                 ServerHttpResponse? requirementFailure = await EvaluateAuthenticationRequirementsAsync(
                     server, context, ro.AcrValues, ro.MaxAge, ro.Scope, subjectId, now,
-                    ro.RedirectUri, ro.State, ct,
+                    ro.RedirectUri, ro.State,
+                    cancellationToken: ct,
                     requestedAuthorizationDetails: ro.AuthorizationDetails,
                     responseMode: ro.ResponseMode,
                     clientId: ro.ClientId,
@@ -1525,7 +1528,7 @@ public static class AuthCodeEndpoints
     /// <see cref="AuthorizationServerIntegration.TokenProducers"/> is empty. Single producer
     /// matches the library's historical access-token-only response shape.
     /// </summary>
-    private static readonly IReadOnlyList<TokenProducer> DefaultTokenProducers =
+    private static IReadOnlyList<TokenProducer> DefaultTokenProducers { get; } =
         [TokenProducer.Rfc9068AccessToken];
 
 
@@ -2868,9 +2871,10 @@ public static class AuthCodeEndpoints
     /// Default lifetime of an Identity Assertion JWT Authorization Grant when the registration sets no
     /// <see cref="WellKnownTokenTypes.IdJag"/> entry in <see cref="ClientRecord.TokenLifetimes"/>. A
     /// JAG is short-lived — it is presented once at the Resource Authorization Server and not stored —
-    /// matching the 5-minute example in draft-ietf-oauth-identity-assertion-authz-grant §4.3.4.
+    /// matching the 5-minute example in draft-ietf-oauth-identity-assertion-authz-grant-04
+    /// (21 May 2026) §4.3.4.
     /// </summary>
-    private static readonly TimeSpan DefaultIdJagLifetime = TimeSpan.FromMinutes(5);
+    private static TimeSpan DefaultIdJagLifetime { get; } = TimeSpan.FromMinutes(5);
 
 
     /// <summary>
@@ -2878,7 +2882,7 @@ public static class AuthCodeEndpoints
     /// <see cref="TokenExchange.TokenExchangeAuthorization.AdditionalClaims"/> entry whose key is one of
     /// these is ignored, so application-supplied identity claims can never override the grant semantics.
     /// </summary>
-    private static readonly HashSet<string> ReservedIdJagClaimNames = new(StringComparer.Ordinal)
+    private static HashSet<string> ReservedIdJagClaimNames { get; } = new(StringComparer.Ordinal)
     {
         WellKnownJwtClaimNames.Iss,
         WellKnownJwtClaimNames.Sub,
@@ -2901,7 +2905,7 @@ public static class AuthCodeEndpoints
     /// <summary>
     /// Mints an opaque Refresh Token and writes the
     /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2">RFC 8693 §2.2</see> Token Exchange
-    /// response that carries it, per draft-ietf-oauth-identity-assertion-authz-grant §4.5 — the SAML 2.0
+    /// response that carries it, per draft-ietf-oauth-identity-assertion-authz-grant-04 §4.5 — the SAML 2.0
     /// to OAuth protocol transition: a client exchanges a SAML assertion for a Refresh Token, which it
     /// later uses as a §4.3.2 <c>subject_token</c> to mint an ID-JAG without a new SSO round trip.
     /// Reached from the Token Exchange grant when the authorization seam set
@@ -2993,7 +2997,7 @@ public static class AuthCodeEndpoints
     /// <summary>
     /// Mints an Identity Assertion JWT Authorization Grant (ID-JAG) and writes the
     /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2">RFC 8693 §2.2</see> Token
-    /// Exchange response that carries it, per draft-ietf-oauth-identity-assertion-authz-grant §3.1
+    /// Exchange response that carries it, per draft-ietf-oauth-identity-assertion-authz-grant-04 §3.1
     /// (claim set) and §4.3.4 (response). Reached from the Token Exchange grant when the authorization
     /// seam set <see cref="TokenExchange.TokenExchangeAuthorization.IssuedTokenType"/> to
     /// <see cref="TokenType.IdJag"/>.
@@ -5858,12 +5862,12 @@ public static class AuthCodeEndpoints
         DateTimeOffset now,
         Uri redirectUri,
         string? requestState,
-        CancellationToken cancellationToken,
         string? requestedAuthorizationDetails = null,
         string? responseMode = null,
         string? clientId = null,
         string? requestedIssuerState = null,
-        string? requestedResource = null)
+        string? requestedResource = null,
+        CancellationToken cancellationToken = default)
     {
         var oauth = server.OAuth();
         if(requestedMaxAge is int maxAge)

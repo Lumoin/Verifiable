@@ -10,7 +10,7 @@ namespace Verifiable.OAuth.IdJag;
 
 /// <summary>
 /// Drives the two client-side ID-JAG token-endpoint exchanges of
-/// draft-ietf-oauth-identity-assertion-authz-grant §4.3 (mint) and §4.4 (redeem) over the injected
+/// draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §4.3 (mint) and §4.4 (redeem) over the injected
 /// transport. Both authenticate the confidential client (§9.1) with a <c>private_key_jwt</c> client
 /// assertion (RFC 7523 §2.2) and parse the response through the infrastructure's token-response parser.
 /// </summary>

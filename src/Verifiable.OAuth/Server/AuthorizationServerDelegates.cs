@@ -606,6 +606,17 @@ public delegate ValueTask<Ssf.SsfTransmitterMetadataContribution> ContributeSsfT
 /// only when this seam is wired — an unauthenticated client-credentials grant
 /// would mint tokens for anyone.
 /// </summary>
+/// <remarks>
+/// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-2.3">RFC 6749 §2.3</see> binds the
+/// CLIENT to "MUST NOT use more than one authentication method in each request," but has no
+/// corresponding AS-side "MUST reject a request presenting more than one" sentence in this range.
+/// This delegate is therefore handed BOTH <paramref name="request"/> (which may carry an
+/// <c>Authorization</c> header) and <paramref name="fields"/> (which may carry
+/// <c>client_secret</c>/<c>client_assertion</c>) unconditionally, whether or not the request presents
+/// credentials through more than one channel at once; the library performs no structural rejection of
+/// that shape. Whether to accept, prefer one channel, or reject a double-credentialed request outright
+/// is entirely this delegate's decision.
+/// </remarks>
 /// <param name="request">The incoming request (carries the Authorization header), when available.</param>
 /// <param name="fields">The form fields (carry <c>client_id</c>/<c>client_secret</c> for the POST method).</param>
 /// <param name="registration">The <see cref="ClientRecord"/> the request claims to be.</param>

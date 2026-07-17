@@ -203,7 +203,7 @@ public static class SiopVerifierExecutor
                 payloadSerializer,
                 base64UrlEncoder,
                 pool,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             string compactRequestObject = JwsSerialization.SerializeCompact(signed, base64UrlEncoder);
 
@@ -236,7 +236,7 @@ public static class SiopVerifierExecutor
                 base64UrlDecoder,
                 base64UrlEncoder,
                 pool,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             DateTimeOffset now = timeProvider.GetUtcNow();
             if(result.IsValid)

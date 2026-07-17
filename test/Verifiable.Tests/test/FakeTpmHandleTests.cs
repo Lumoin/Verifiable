@@ -32,8 +32,10 @@ internal class FakeTpmHandleTests
                 string handle = Encoding.UTF8.GetString(verificationContext.Span);
 
                 //Call fake TPM verification logic.
-                return await FakeTpmClient.VerifyAsync(handle, dataToVerify.Span, signature.Span)
+                bool isVerified = await FakeTpmClient.VerifyAsync(handle, dataToVerify.Span, signature.Span)
                     .ConfigureAwait(false);
+
+                return (isVerified, (CryptoEvent?)null);
             };
 
         //Create TPM tag.

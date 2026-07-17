@@ -18,14 +18,14 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// </remarks>
 public sealed class SdJwtVerificationContext: IDisposable
 {
-    private readonly IMemoryOwner<byte> payloadOwner;
+    private IMemoryOwner<byte> PayloadOwner { get; }
     private bool disposed;
 
     internal SdJwtVerificationContext(
         IMemoryOwner<byte> payloadOwner,
         IReadOnlyDictionary<SdDisclosure, CredentialPath> boundPaths)
     {
-        this.payloadOwner = payloadOwner;
+        this.PayloadOwner = payloadOwner;
         BoundPaths = boundPaths;
     }
 
@@ -33,7 +33,7 @@ public sealed class SdJwtVerificationContext: IDisposable
     /// The redacted JWT payload (UTF-8 JSON, with the <c>_sd</c> digest arrays) the signature
     /// covers. Backed by a pooled buffer this context owns; valid until <see cref="Dispose"/>.
     /// </summary>
-    public ReadOnlyMemory<byte> Payload => payloadOwner.Memory;
+    public ReadOnlyMemory<byte> Payload => PayloadOwner.Memory;
 
     /// <summary>
     /// The disclosures that bound to a path in the payload, keyed to their credential path.
@@ -49,7 +49,7 @@ public sealed class SdJwtVerificationContext: IDisposable
             return;
         }
 
-        payloadOwner.Dispose();
+        PayloadOwner.Dispose();
         disposed = true;
     }
 }

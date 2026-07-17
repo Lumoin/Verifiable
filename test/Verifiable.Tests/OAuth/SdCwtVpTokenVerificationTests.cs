@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Formats.Cbor;
 using System.Globalization;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cbor;
@@ -192,7 +191,7 @@ internal sealed class SdCwtVpTokenVerificationTests
         {
             [WellKnownCwtClaimNames.Iss] = IssuerId,
             [WellKnownCwtClaimNames.Iat] = TimeProvider.GetUtcNow().ToUnixTimeSeconds(),
-            [WellKnownCwtClaimNames.Cnf] = BuildCnfWithHolderKey(holderPublic),
+            [WellKnownCwtClaimNames.Cnf] = SdCwtWireFixtures.BuildCnfWithHolderKey(holderPublic, CnfCoseKeyMember),
             [ClaimKeyGivenName] = "Erika",
             [ClaimKeyFamilyName] = "Mustermann",
             [ClaimKeyEmail] = "erika@example.de"
@@ -206,28 +205,10 @@ internal sealed class SdCwtVpTokenVerificationTests
         };
 
         return await claims.IssueSdCwtTokenAsync(
-            SerializeCwtClaimMap, SdCwtIssuance.IssueVerboseAsync, disclosablePaths,
+            SdCwtWireFixtures.SerializeCwtClaimMap, SdCwtIssuance.IssueVerboseAsync, disclosablePaths,
             TestSalts.DefaultGenerator(),
             privateKey, IssuerKeyId, Pool,
             cancellationToken: cancellationToken).ConfigureAwait(false);
-    }
-
-
-    private static Dictionary<int, object> BuildCnfWithHolderKey(PublicKeyMemory holderPublic)
-    {
-        ReadOnlySpan<byte> compressed = holderPublic.AsReadOnlySpan();
-        byte[] x = compressed[1..].ToArray();
-        byte[] y = EllipticCurveUtilities.Decompress(compressed, EllipticCurveTypes.P256);
-
-        var coseKey = new Dictionary<int, object>
-        {
-            [1] = 2,   //kty = EC2.
-            [-1] = 1,  //crv = P-256.
-            [-2] = x,  //x coordinate.
-            [-3] = y   //y coordinate.
-        };
-
-        return new Dictionary<int, object> { [CnfCoseKeyMember] = coseKey };
     }
 
 
@@ -241,14 +222,5 @@ internal sealed class SdCwtVpTokenVerificationTests
 
         return issuedToken.SelectDisclosures(
             d => d.ClaimName is not null && selected.Contains(d.ClaimName), Pool);
-    }
-
-
-    private static ReadOnlySpan<byte> SerializeCwtClaimMap(Dictionary<int, object> claims)
-    {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        CborValueConverter.WriteValue(writer, claims);
-
-        return writer.Encode();
     }
 }

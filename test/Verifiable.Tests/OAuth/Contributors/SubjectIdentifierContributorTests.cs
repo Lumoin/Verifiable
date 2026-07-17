@@ -4,6 +4,7 @@ using Verifiable.Core.Assessment;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth.Contributors;
 
@@ -20,8 +21,7 @@ internal sealed class SubjectIdentifierContributorTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new(
-        new DateTimeOffset(2026, 5, 17, 12, 0, 0, TimeSpan.Zero));
+    private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch.AddDays(-15));
 
 
     [TestMethod]

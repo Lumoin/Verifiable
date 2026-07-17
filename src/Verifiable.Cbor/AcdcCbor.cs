@@ -238,11 +238,11 @@ public static class AcdcCbor
     //are chosen correctly). The reader itself is the cursor, so the frame holds no enumerator.
     private sealed class DecodeFrame
     {
-        private readonly object container;
+        private object Container { get; }
 
         private DecodeFrame(object container, bool isMap)
         {
-            this.container = container;
+            this.Container = container;
             IsMap = isMap;
         }
 
@@ -260,11 +260,11 @@ public static class AcdcCbor
         {
             if(IsMap)
             {
-                ((MessageFieldMap)container)[key!] = value;
+                ((MessageFieldMap)Container)[key!] = value;
             }
             else
             {
-                ((List<object?>)container).Add(value);
+                ((List<object?>)Container).Add(value);
             }
         }
     }
@@ -274,25 +274,24 @@ public static class AcdcCbor
     //the enumerator mutates in place across Stack.Peek() calls.
     private sealed class EncodeFrame
     {
-        private readonly bool isMap;
         private OrderedDictionary<string, object?>.Enumerator mapEnumerator;
         private List<object?>.Enumerator arrayEnumerator;
 
         private EncodeFrame(MessageFieldMap map)
         {
-            isMap = true;
+            IsMap = true;
             mapEnumerator = map.GetEnumerator();
         }
 
 
         private EncodeFrame(List<object?> list)
         {
-            isMap = false;
+            IsMap = false;
             arrayEnumerator = list.GetEnumerator();
         }
 
 
-        public bool IsMap => isMap;
+        public bool IsMap { get; }
 
 
         public static EncodeFrame ForMap(MessageFieldMap map) => new(map);
@@ -303,7 +302,7 @@ public static class AcdcCbor
 
         public bool TryGetNext(out string? name, out object? value)
         {
-            if(isMap)
+            if(IsMap)
             {
                 if(mapEnumerator.MoveNext())
                 {

@@ -48,7 +48,7 @@ namespace Verifiable.Tpm;
 /// <seealso cref="TpmDevice"/>
 public sealed class TpmRecorder: IObserver<TpmExchange>, IDisposable
 {
-    private readonly List<TpmExchange> _exchanges = [];
+    private List<TpmExchange> Exchanges { get; } = [];
     private readonly Lock _lock = new();
     private bool _completed;
 
@@ -61,7 +61,7 @@ public sealed class TpmRecorder: IObserver<TpmExchange>, IDisposable
         {
             lock(_lock)
             {
-                return _exchanges.Count;
+                return Exchanges.Count;
             }
         }
     }
@@ -74,7 +74,7 @@ public sealed class TpmRecorder: IObserver<TpmExchange>, IDisposable
     {
         lock(_lock)
         {
-            return [.. _exchanges];
+            return [.. Exchanges];
         }
     }
 
@@ -89,7 +89,7 @@ public sealed class TpmRecorder: IObserver<TpmExchange>, IDisposable
 
         lock(_lock)
         {
-            return new TpmRecording(info, [.. _exchanges]);
+            return new TpmRecording(info, [.. Exchanges]);
         }
     }
 
@@ -103,7 +103,7 @@ public sealed class TpmRecorder: IObserver<TpmExchange>, IDisposable
         {
             if(!_completed)
             {
-                _exchanges.Add(value);
+                Exchanges.Add(value);
             }
         }
     }
@@ -139,7 +139,7 @@ public sealed class TpmRecorder: IObserver<TpmExchange>, IDisposable
     {
         lock(_lock)
         {
-            _exchanges.Clear();
+            Exchanges.Clear();
             _completed = false;
         }
     }
@@ -152,7 +152,7 @@ public sealed class TpmRecorder: IObserver<TpmExchange>, IDisposable
         lock(_lock)
         {
             _completed = true;
-            _exchanges.Clear();
+            Exchanges.Clear();
         }
     }
 }

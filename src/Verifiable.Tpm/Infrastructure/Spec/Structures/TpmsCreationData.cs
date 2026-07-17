@@ -40,8 +40,8 @@ namespace Verifiable.Tpm.Infrastructure.Spec.Structures;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class TpmsCreationData: IDisposable
 {
-    private readonly IMemoryOwner<byte>? pcrDigestStorage;
-    private readonly int pcrDigestLength;
+    private IMemoryOwner<byte>? PcrDigestStorage { get; }
+    private int PcrDigestLength { get; }
     private bool disposed;
 
     /// <summary>
@@ -97,8 +97,8 @@ public sealed class TpmsCreationData: IDisposable
         Tpm2bData outsideInfo)
     {
         PcrSelect = pcrSelect;
-        this.pcrDigestStorage = pcrDigestStorage;
-        this.pcrDigestLength = pcrDigestLength;
+        this.PcrDigestStorage = pcrDigestStorage;
+        this.PcrDigestLength = pcrDigestLength;
         Locality = locality;
         ParentNameAlg = parentNameAlg;
         ParentName = parentName;
@@ -114,12 +114,12 @@ public sealed class TpmsCreationData: IDisposable
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        if(pcrDigestStorage is null)
+        if(PcrDigestStorage is null)
         {
             return ReadOnlySpan<byte>.Empty;
         }
 
-        return pcrDigestStorage.Memory.Span.Slice(0, pcrDigestLength);
+        return PcrDigestStorage.Memory.Span.Slice(0, PcrDigestLength);
     }
 
     /// <summary>
@@ -168,7 +168,7 @@ public sealed class TpmsCreationData: IDisposable
         if(!disposed)
         {
             PcrSelect.Dispose();
-            pcrDigestStorage?.Dispose();
+            PcrDigestStorage?.Dispose();
             ParentName.Dispose();
             ParentQualifiedName.Dispose();
             OutsideInfo.Dispose();

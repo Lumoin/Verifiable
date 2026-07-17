@@ -131,16 +131,16 @@ internal static class JsonElementConversion
     //Stack.Peek() calls — a struct frame would be copied and lose enumerator progress.
     private sealed class Frame
     {
-        private readonly object container;
-        private readonly bool isObject;
+        private object Container { get; }
+        private bool IsObject { get; }
         private JsonElement.ObjectEnumerator objectEnumerator;
         private JsonElement.ArrayEnumerator arrayEnumerator;
 
         public Frame(JsonElement element, object container)
         {
-            this.container = container;
-            isObject = element.ValueKind == JsonValueKind.Object;
-            if(isObject)
+            this.Container = container;
+            IsObject = element.ValueKind == JsonValueKind.Object;
+            if(IsObject)
             {
                 objectEnumerator = element.EnumerateObject();
             }
@@ -153,7 +153,7 @@ internal static class JsonElementConversion
 
         public bool TryGetNext(out string? name, out JsonElement value)
         {
-            if(isObject)
+            if(IsObject)
             {
                 if(objectEnumerator.MoveNext())
                 {
@@ -181,13 +181,13 @@ internal static class JsonElementConversion
 
         public void Add(string? name, object? value)
         {
-            if(isObject)
+            if(IsObject)
             {
-                ((Dictionary<string, object>)container)[name!] = value!;
+                ((Dictionary<string, object>)Container)[name!] = value!;
             }
             else
             {
-                ((List<object>)container).Add(value!);
+                ((List<object>)Container).Add(value!);
             }
         }
     }

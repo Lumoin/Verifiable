@@ -242,27 +242,15 @@ public static class KeriKeyEventLog
         KeriKeyEvent keyEvent,
         LogState<KeriKeyState> currentState)
     {
-        switch(keyEvent)
+        return keyEvent switch
         {
-            case KeriInceptionEvent inception:
-            {
-                return (inception.SigningKeys, inception.SigningThreshold, null);
-            }
-            case KeriRotationEvent rotation:
-            {
-                return (rotation.SigningKeys, rotation.SigningThreshold, null);
-            }
-            case KeriInteractionEvent interaction:
-            {
-                return currentState is ActiveLogState<KeriKeyState> active
-                    ? (active.Value.SigningKeys, active.Value.SigningThreshold, null)
-                    : (null, null, $"The KERI interaction event at sequence {interaction.SequenceNumber} has no established key state to authorize it.");
-            }
-            default:
-            {
-                return (null, null, "The KERI event is not a modeled key event.");
-            }
-        }
+            KeriInceptionEvent inception => (inception.SigningKeys, inception.SigningThreshold, null),
+            KeriRotationEvent rotation => (rotation.SigningKeys, rotation.SigningThreshold, null),
+            KeriInteractionEvent interaction => currentState is ActiveLogState<KeriKeyState> active
+                ? (active.Value.SigningKeys, active.Value.SigningThreshold, null)
+                : (null, null, $"The KERI interaction event at sequence {interaction.SequenceNumber} has no established key state to authorize it."),
+            _ => (null, null, "The KERI event is not a modeled key event.")
+        };
     }
 
 
@@ -281,7 +269,13 @@ public static class KeriKeyEventLog
         {
             CryptoProof proof = entry.Proofs[proofIndex];
             VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(proof.Algorithm, Purpose.Verification);
-            bool isVerified = await verify(
+
+            //This resolves and invokes the registry delegate directly rather than through
+            //PublicKey.VerifyAsync (no PublicKey is constructed for a bare CryptoProof signer key here), so the
+            //VerificationCompletedEvent the delegate constructs is discarded rather than emitted: the emit hook
+            //is internal to Verifiable.Cryptography by design (only PrivateKey.SignAsync/PublicKey.VerifyAsync
+            //are the sole intended choke points).
+            (bool isVerified, CryptoEvent? _) = await verify(
                 entry.CanonicalBytes, proof.Signature.AsReadOnlyMemory(), proof.SignerKey.AsReadOnlyMemory(), null, cancellationToken).ConfigureAwait(false);
 
             if(isVerified)
@@ -369,31 +363,19 @@ public static class KeriKeyEventLog
 
         try
         {
-            switch(keyEvent)
+            return keyEvent switch
             {
-                case KeriInceptionEvent inception:
-                {
-                    return currentState is EmptyLogState<KeriKeyState>
-                        ? Result(new ActiveLogState<KeriKeyState>(KeriKeyStateMachine.Incept(inception)), null)
-                        : Result(currentState, $"The KERI inception at sequence {inception.SequenceNumber} is not the genesis event.");
-                }
-                case KeriInteractionEvent interaction:
-                {
-                    return currentState is ActiveLogState<KeriKeyState> active
-                        ? Result(new ActiveLogState<KeriKeyState>(KeriKeyStateMachine.Interact(active.Value, interaction)), null)
-                        : Result(currentState, $"The KERI interaction at sequence {interaction.SequenceNumber} has no established key state.");
-                }
-                case KeriRotationEvent rotation:
-                {
-                    return currentState is ActiveLogState<KeriKeyState> active
-                        ? Result(new ActiveLogState<KeriKeyState>(KeriKeyStateMachine.RollKeys(active.Value, rotation)), null)
-                        : Result(currentState, $"The KERI rotation at sequence {rotation.SequenceNumber} has no established key state.");
-                }
-                default:
-                {
-                    return Result(currentState, "The KERI event is not a modeled key event.");
-                }
-            }
+                KeriInceptionEvent inception => currentState is EmptyLogState<KeriKeyState>
+                    ? Result(new ActiveLogState<KeriKeyState>(KeriKeyStateMachine.Incept(inception)), null)
+                    : Result(currentState, $"The KERI inception at sequence {inception.SequenceNumber} is not the genesis event."),
+                KeriInteractionEvent interaction => currentState is ActiveLogState<KeriKeyState> active
+                    ? Result(new ActiveLogState<KeriKeyState>(KeriKeyStateMachine.Interact(active.Value, interaction)), null)
+                    : Result(currentState, $"The KERI interaction at sequence {interaction.SequenceNumber} has no established key state."),
+                KeriRotationEvent rotation => currentState is ActiveLogState<KeriKeyState> active
+                    ? Result(new ActiveLogState<KeriKeyState>(KeriKeyStateMachine.RollKeys(active.Value, rotation)), null)
+                    : Result(currentState, $"The KERI rotation at sequence {rotation.SequenceNumber} has no established key state."),
+                _ => Result(currentState, "The KERI event is not a modeled key event.")
+            };
         }
         catch(KeriException exception)
         {

@@ -35,7 +35,7 @@ internal sealed class FederationHistoricalKeysEndpointTests
     /// <summary>
     /// Deterministic clock the host and the §8.7 <c>iat</c> claim read from.
     /// </summary>
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     /// <summary>
     /// The memory pool the JWS decode and verify helpers rent from.

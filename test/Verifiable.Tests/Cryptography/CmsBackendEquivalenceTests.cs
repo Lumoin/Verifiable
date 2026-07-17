@@ -21,8 +21,8 @@ internal sealed class CmsBackendEquivalenceTests
     private const string BouncyCastleQualifier = "BouncyCastle";
     private const string ManagedQualifier = "Managed";
 
-    private static readonly DateTimeOffset NotBefore = new(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
-    private static readonly DateTimeOffset NotAfter = new(2034, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset NotBefore = SyntheticPassportFactory.NotBefore;
+    private static readonly DateTimeOffset NotAfter = SyntheticPassportFactory.NotAfter;
     private static readonly DateTimeOffset SigningTime = new(2025, 3, 14, 0, 0, 0, TimeSpan.Zero);
 
 
@@ -32,6 +32,7 @@ internal sealed class CmsBackendEquivalenceTests
     [TestMethod]
     public async Task AllThreeBackendsVerifyTheSameSignedDataEquivalently()
     {
+        //The key feeds CertificateRequest directly to mint the self-signed signer certificate (cert-factory carve-out).
         using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using var signerCertificate = CmsSignedDataTestFactory.MintSelfSignedCertificate(signingKey, NotBefore, NotAfter);
         using CmsSignedData carrier = CmsSignedDataTestFactory.SignAsCAdES("the cross-backend content"u8, signerCertificate, SigningTime);
@@ -49,6 +50,7 @@ internal sealed class CmsBackendEquivalenceTests
     [TestMethod]
     public async Task AllThreeBackendsVerifyAnRsaSignedDataEquivalently()
     {
+        //The key feeds CertificateRequest directly to mint the self-signed signer certificate (cert-factory carve-out).
         using RSA signingKey = RSA.Create(2048);
         using var signerCertificate = CmsSignedDataTestFactory.MintSelfSignedCertificate(signingKey, NotBefore, NotAfter);
         using CmsSignedData carrier = CmsSignedDataTestFactory.SignAsCAdES("the cross-backend content"u8, signerCertificate, SigningTime);
@@ -67,6 +69,7 @@ internal sealed class CmsBackendEquivalenceTests
     [TestMethod]
     public async Task TheManagedBackendVerifiesACAdESBaselineSignature()
     {
+        //The key feeds CertificateRequest directly to mint the self-signed signer certificate (cert-factory carve-out).
         using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using var signerCertificate = CmsSignedDataTestFactory.MintSelfSignedCertificate(signingKey, NotBefore, NotAfter);
         using CmsSignedData carrier = CmsSignedDataTestFactory.SignAsCAdES("the cross-backend content"u8, signerCertificate, SigningTime);
@@ -82,6 +85,7 @@ internal sealed class CmsBackendEquivalenceTests
     [TestMethod]
     public async Task TheManagedBackendRejectsTamperedContent()
     {
+        //The key feeds CertificateRequest directly to mint the self-signed signer certificate (cert-factory carve-out).
         using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using var signerCertificate = CmsSignedDataTestFactory.MintSelfSignedCertificate(signingKey, NotBefore, NotAfter);
         using CmsSignedData carrier = CmsSignedDataTestFactory.SignAsCAdES("the cross-backend content"u8, signerCertificate, SigningTime);

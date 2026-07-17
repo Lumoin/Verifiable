@@ -21,6 +21,16 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// outputs are the pooled carriers a real read returns, never naked buffers. Used by Passive Authentication
 /// and CSCA Master List tests so the synthetic-authority machinery has a single source of truth.
 /// </summary>
+/// <remarks>
+/// Two owner-ratified carve-outs keep base class library cryptography here rather than routing through
+/// <c>TestKeyMaterialProvider</c>. The CSCA, Document Signer, and CRL minting go through
+/// <see cref="CertificateRequest"/>, <see cref="CertificateRevocationListBuilder"/>, and their X.509
+/// extension types directly — the test-side certificate-factory carve-out, since these keys and their
+/// signatures are the certificates and CRLs under test, not interchangeable fixture material. The LDS
+/// Security Object's data-group hashes and the EF.SOD's CMS signature are produced by an independent base
+/// class library implementation that the library under test must reproduce or verify against — the
+/// independent-oracle carve-out.
+/// </remarks>
 internal static class SyntheticPassportFactory
 {
     private const string LdsSecurityObjectOid = "2.23.136.1.1.1";
@@ -49,6 +59,7 @@ internal static class SyntheticPassportFactory
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the pooled EF.SOD, data-group buffers, CSCA anchor, and Document Signer certificate transfers to the returned SyntheticPassport, which the caller disposes.")]
     public static SyntheticPassport Mint()
     {
+        //Certificate-factory carve-out (see class remarks): these keys sign the certificates minted below via CertificateRequest.
         using ECDsa cscaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa documentSignerKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
@@ -58,6 +69,7 @@ internal static class SyntheticPassportFactory
         byte[] dg1 = [0x61, 0x05, 0x5F, 0x1F, 0x02, 0x41, 0x42];
         byte[] dg2 = [0x75, 0x04, 0x7F, 0x61, 0x01, 0x00];
 
+        //Independent-oracle carve-out (see class remarks): the expected DG hashes the Passive Authentication verifier under test recomputes and must match.
         byte[] ldsSecurityObject = BuildLdsSecurityObject(
             (1, SHA256.HashData(dg1)),
             (2, SHA256.HashData(dg2)));
@@ -82,6 +94,7 @@ internal static class SyntheticPassportFactory
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the writer-minted data groups, EF.SOD, and certificate carriers transfers to the returned SyntheticPassport, which disposes them.")]
     public static SyntheticPassport MintFromWriters()
     {
+        //Certificate-factory carve-out (see class remarks): these keys sign the certificates minted below via CertificateRequest.
         using ECDsa cscaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa documentSignerKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
@@ -91,6 +104,7 @@ internal static class SyntheticPassportFactory
         ElementaryFile dataGroup1 = DataGroup1.Write(WriterMrz, BaseMemoryPool.Shared);
         ElementaryFile dataGroup2 = DataGroup2.Write(WriterFaceImage, FaceImageFormat.Jpeg, BaseMemoryPool.Shared);
 
+        //Independent-oracle carve-out (see class remarks): the expected DG hashes the Passive Authentication verifier under test recomputes and must match.
         byte[] ldsSecurityObject = BuildLdsSecurityObject(
             (1, SHA256.HashData(dataGroup1.Content)),
             (2, SHA256.HashData(dataGroup2.Content)));
@@ -113,6 +127,7 @@ internal static class SyntheticPassportFactory
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the pooled EF.SOD, data-group buffers, CSCA anchor, and Document Signer certificate transfers to the returned SyntheticPassport, which the caller disposes.")]
     public static SyntheticPassport MintWithSha1SecurityObject()
     {
+        //Certificate-factory carve-out (see class remarks): these keys sign the certificates minted below via CertificateRequest.
         using ECDsa cscaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa documentSignerKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
@@ -148,6 +163,7 @@ internal static class SyntheticPassportFactory
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the pooled EF.SOD, data-group buffers, CSCA anchor, and Document Signer certificate transfers to the returned SyntheticPassport, which the caller disposes.")]
     public static SyntheticPassport MintWithNonConformantDocumentSigner()
     {
+        //Certificate-factory carve-out (see class remarks): these keys sign the certificates minted below via CertificateRequest.
         using ECDsa cscaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa documentSignerKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
@@ -157,6 +173,7 @@ internal static class SyntheticPassportFactory
         byte[] dg1 = [0x61, 0x05, 0x5F, 0x1F, 0x02, 0x41, 0x42];
         byte[] dg2 = [0x75, 0x04, 0x7F, 0x61, 0x01, 0x00];
 
+        //Independent-oracle carve-out (see class remarks): the expected DG hashes the Passive Authentication verifier under test recomputes and must match.
         byte[] ldsSecurityObject = BuildLdsSecurityObject(
             (1, SHA256.HashData(dg1)),
             (2, SHA256.HashData(dg2)));
@@ -271,6 +288,7 @@ internal static class SyntheticPassportFactory
     {
         ArgumentNullException.ThrowIfNull(issuer);
 
+        //Certificate-factory carve-out (see class remarks): builds and signs the CRL via CertificateRevocationListBuilder, using the issuer certificate's own private key.
         var builder = new CertificateRevocationListBuilder();
         if(revokedCertificate is not null)
         {
@@ -294,6 +312,7 @@ internal static class SyntheticPassportFactory
         ArgumentNullException.ThrowIfNull(issuer);
         ArgumentNullException.ThrowIfNull(issuerKey);
 
+        //Certificate-factory carve-out (see class remarks): builds the base CRL via CertificateRevocationListBuilder before the nextUpdate field is stripped and the TBSCertList re-signed below.
         using IMemoryOwner<byte> baseCrl = ToPooled(new CertificateRevocationListBuilder().Build(
             issuer, System.Numerics.BigInteger.One, thisUpdate.AddDays(30), HashAlgorithmName.SHA256, thisUpdate: thisUpdate));
 
@@ -326,6 +345,8 @@ internal static class SyntheticPassportFactory
 
         using IMemoryOwner<byte> modifiedTbs = EncodeToPooled(tbsWriter);
         using IMemoryOwner<byte> signatureBuffer = BaseMemoryPool.Shared.Rent(issuerKey.GetMaxSignatureSize(DSASignatureFormat.Rfc3279DerSequence));
+
+        //Certificate-factory carve-out (see class remarks): re-signs the modified TBSCertList with the issuer's own BCL ECDsa key.
         if(!issuerKey.TrySignData(modifiedTbs.Memory.Span, signatureBuffer.Memory.Span, HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence, out int signatureLength))
         {
             throw new InvalidOperationException("Signing the modified TBSCertList failed.");
@@ -353,6 +374,7 @@ internal static class SyntheticPassportFactory
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the pooled certificate and CRL carriers transfers to the returned RevocationScenario, which the caller disposes.")]
     public static RevocationScenario MintRevocationScenario(DateTimeOffset validationTime)
     {
+        //Certificate-factory carve-out (see class remarks): these keys sign the certificates and CRLs minted below via CertificateRequest / CertificateRevocationListBuilder.
         using ECDsa cscaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa documentSignerKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa impostorCscaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -388,6 +410,7 @@ internal static class SyntheticPassportFactory
     /// <summary>Mints a self-signed Country Signing CA certificate.</summary>
     public static X509Certificate2 MintCsca(ECDsa key)
     {
+        //Certificate-factory carve-out (see class remarks): builds and self-signs the CSCA certificate via CertificateRequest.
         var request = new CertificateRequest("CN=Verifiable Test CSCA", key, HashAlgorithmName.SHA256);
         request.CertificateExtensions.Add(new X509BasicConstraintsExtension(certificateAuthority: true, hasPathLengthConstraint: false, 0, critical: true));
         request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign, critical: true));
@@ -403,6 +426,7 @@ internal static class SyntheticPassportFactory
     /// </summary>
     public static X509Certificate2 MintCscaWithoutCrlSign(ECDsa key)
     {
+        //Certificate-factory carve-out (see class remarks): builds and self-signs the CA certificate via CertificateRequest.
         var request = new CertificateRequest("CN=Verifiable Test CSCA", key, HashAlgorithmName.SHA256);
         request.CertificateExtensions.Add(new X509BasicConstraintsExtension(certificateAuthority: true, hasPathLengthConstraint: false, 0, critical: true));
         request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.KeyCertSign, critical: true));
@@ -415,6 +439,7 @@ internal static class SyntheticPassportFactory
     /// <summary>Mints a Document Signer certificate issued under <paramref name="csca"/> (signed with the CSCA certificate's own private key).</summary>
     public static X509Certificate2 MintDocumentSigner(ECDsa key, X509Certificate2 csca)
     {
+        //Certificate-factory carve-out (see class remarks): builds and issues the Document Signer certificate via CertificateRequest, signed by the CSCA's private key.
         var request = new CertificateRequest("CN=Verifiable Test Document Signer", key, HashAlgorithmName.SHA256);
         request.CertificateExtensions.Add(new X509BasicConstraintsExtension(certificateAuthority: false, hasPathLengthConstraint: false, 0, critical: true));
         request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, critical: true));
@@ -442,6 +467,7 @@ internal static class SyntheticPassportFactory
     /// </summary>
     public static X509Certificate2 MintNonConformantDocumentSigner(ECDsa key, X509Certificate2 csca)
     {
+        //Certificate-factory carve-out (see class remarks): builds and issues the non-conformant Document Signer certificate via CertificateRequest, signed by the CSCA's private key.
         var request = new CertificateRequest("CN=Verifiable Test Non-Conformant Document Signer", key, HashAlgorithmName.SHA256);
         request.CertificateExtensions.Add(new X509BasicConstraintsExtension(certificateAuthority: true, hasPathLengthConstraint: false, 0, critical: true));
         request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyCertSign, critical: true));

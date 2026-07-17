@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging;
 using StringValues = Microsoft.Extensions.Primitives.StringValues;
 using Verifiable.Core;
 using Verifiable.Server.Pipeline;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.WebFinger;
 
 namespace Verifiable.Tests.WebFinger;
@@ -344,6 +345,9 @@ internal sealed class WebFingerHttpApplication
         /// </remarks>
         private static X509Certificate2 CreateLoopbackTestCertificate()
         {
+            //Cert-factory carve-out: CertificateRequest requires a framework AsymmetricAlgorithm
+            //to sign the self-signed leaf certificate; this key is never converted to library
+            //PrivateKeyMemory, so it stays framework-native for its whole lifetime.
             using ECDsa key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
             CertificateRequest request = new("CN=webfinger-loopback-test-node", key, HashAlgorithmName.SHA256);
 
@@ -358,7 +362,7 @@ internal sealed class WebFingerHttpApplication
             OidCollection serverAuthEku = new() { new Oid("1.3.6.1.5.5.7.3.1") };
             request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(serverAuthEku, critical: false));
 
-            DateTimeOffset now = TimeProvider.System.GetUtcNow();
+            DateTimeOffset now = TestClock.CanonicalEpoch;
 
             using X509Certificate2 ephemeral = request.CreateSelfSigned(now.AddMinutes(-5), now.AddDays(1));
             byte[] pfxBytes = ephemeral.Export(X509ContentType.Pfx);

@@ -10,6 +10,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.Peer;
@@ -179,7 +180,7 @@ internal sealed class WebVhDidResolverResolvingTests
             Base58Encoder,
             Base58Decoder,
             BaseMemoryPool.Shared,
-            TimeProvider.System);
+            new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         DidResolutionResult result = await resolver(log.Did, DidResolutionOptions.Empty, context, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -278,7 +279,7 @@ internal sealed class WebVhDidResolverResolvingTests
 
         DidMethodResolverDelegate webVh = WebVhDidResolver.Build(
             transport.Delegate, WebVhLogEntryJson.Parser, WebVhLogEntryJson.WitnessFileParser, WebVhLogEntryJson.DocumentIdentityReader, DeserializeState, WebVhLogEntryJson.Canonicalizer,
-            Base58Encoder, Base58Decoder, BaseMemoryPool.Shared, TimeProvider.System);
+            Base58Encoder, Base58Decoder, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         DidResolver composed = DidResolverComposition.Build(
             BaseMemoryPool.Shared,
@@ -1325,7 +1326,7 @@ internal sealed class WebVhDidResolverResolvingTests
             Base58Encoder,
             Base58Decoder,
             BaseMemoryPool.Shared,
-            TimeProvider.System);
+            new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         return await resolver(did, options ?? DidResolutionOptions.Empty, context, TestContext.CancellationToken).ConfigureAwait(false);
     }

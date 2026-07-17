@@ -74,8 +74,7 @@ internal delegate ITpmWireType TpmResponseParserInternal(ref TpmReader reader, u
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class TpmResponseCodec
 {
-    private readonly TpmResponseParserInternal? parser;
-    private readonly ITpmWireType? emptyResponse;
+    private TpmResponseParserInternal? Parser { get; }
 
     /// <summary>
     /// Gets the number of handles in the response handle area.
@@ -85,7 +84,7 @@ public sealed class TpmResponseCodec
     /// <summary>
     /// Gets whether this command has response parameters.
     /// </summary>
-    public bool HasResponseParameters => parser != null;
+    public bool HasResponseParameters => Parser != null;
 
     /// <summary>
     /// Gets whether the first response parameter is a sized buffer eligible for session-based parameter
@@ -102,7 +101,7 @@ public sealed class TpmResponseCodec
     /// Gets the singleton response instance the executor returns for a parameterless command, or
     /// <see langword="null"/> when none was supplied.
     /// </summary>
-    internal ITpmWireType? EmptyResponse => emptyResponse;
+    internal ITpmWireType? EmptyResponse { get; }
 
     private TpmResponseCodec(
         int outHandleCount,
@@ -111,8 +110,8 @@ public sealed class TpmResponseCodec
         bool responseFirstParameterIsEncryptable = false)
     {
         OutHandleCount = outHandleCount;
-        this.parser = parser;
-        this.emptyResponse = emptyResponse;
+        this.Parser = parser;
+        this.EmptyResponse = emptyResponse;
         ResponseFirstParameterIsEncryptable = responseFirstParameterIsEncryptable;
     }
 
@@ -199,12 +198,12 @@ public sealed class TpmResponseCodec
     /// </exception>
     internal ITpmWireType ParseResponse(ref TpmReader reader, uint[] outHandles, MemoryPool<byte> pool)
     {
-        if(parser == null)
+        if(Parser == null)
         {
             throw new InvalidOperationException("This command has no response parameters.");
         }
 
-        return parser(ref reader, outHandles, pool);
+        return Parser(ref reader, outHandles, pool);
     }
 
     private string DebuggerDisplay => $"TpmResponseCodec(Handles={OutHandleCount}, HasParams={HasResponseParameters})";

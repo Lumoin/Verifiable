@@ -43,10 +43,9 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
     /// </summary>
     public const int MaxSize = 2 + 64; // sizeof(TPMI_ALG_HASH) + SHA-512 digest.
 
-    private static readonly Tpm2bName EmptyInstance = new();
+    private static Tpm2bName EmptyInstance { get; } = new();
 
-    private readonly IMemoryOwner<byte>? storage;
-    private readonly int size;
+    private IMemoryOwner<byte>? Storage { get; }
     private bool disposed;
 
     /// <summary>
@@ -54,8 +53,8 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
     /// </summary>
     private Tpm2bName()
     {
-        storage = null;
-        size = 0;
+        Storage = null;
+        Size = 0;
     }
 
     /// <summary>
@@ -65,8 +64,8 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
     /// <param name="size">The actual length of the Name data.</param>
     private Tpm2bName(IMemoryOwner<byte> storage, int size)
     {
-        this.storage = storage;
-        this.size = size;
+        this.Storage = storage;
+        this.Size = size;
     }
 
     /// <summary>
@@ -77,22 +76,22 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
     /// <summary>
     /// Gets whether this Name is empty.
     /// </summary>
-    public bool IsEmpty => size == 0;
+    public bool IsEmpty => Size == 0;
 
     /// <summary>
     /// Gets the size of the Name in bytes.
     /// </summary>
-    public int Size => size;
+    public int Size { get; }
 
     /// <summary>
     /// Gets whether this is a handle-based Name (4 bytes, no algorithm prefix).
     /// </summary>
-    public bool IsHandleName => size == 4;
+    public bool IsHandleName => Size == 4;
 
     /// <summary>
     /// Gets whether this is a digest-based Name (algorithm prefix + hash).
     /// </summary>
-    public bool IsDigestName => size > 4;
+    public bool IsDigestName => Size > 4;
 
     /// <summary>
     /// Gets the Name data as a read-only span.
@@ -102,12 +101,12 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
         get
         {
             ObjectDisposedException.ThrowIf(disposed, this);
-            if(storage is null)
+            if(Storage is null)
             {
                 return [];
             }
 
-            return storage.Memory.Span.Slice(0, size);
+            return Storage.Memory.Span.Slice(0, Size);
         }
     }
 
@@ -170,7 +169,7 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
     /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
-    public int SerializedSize => sizeof(ushort) + size;
+    public int SerializedSize => sizeof(ushort) + Size;
 
     /// <summary>
     /// Writes this structure to a TPM writer.
@@ -180,9 +179,9 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        writer.WriteUInt16((ushort)size);
+        writer.WriteUInt16((ushort)Size);
 
-        if(size > 0)
+        if(Size > 0)
         {
             writer.WriteBytes(Span);
         }
@@ -248,7 +247,7 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
     {
         if(!disposed && this != EmptyInstance)
         {
-            storage?.Dispose();
+            Storage?.Dispose();
             disposed = true;
         }
     }

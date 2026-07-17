@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.JCose;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Jose;
 
@@ -10,7 +11,7 @@ internal sealed class JwtChecksTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
 
     //IsAlgNone — JwtHeader.

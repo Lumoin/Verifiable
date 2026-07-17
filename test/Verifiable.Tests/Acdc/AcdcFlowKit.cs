@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Lumoin.Base;
 using Verifiable.Acdc;
 using Verifiable.Cesr;
@@ -14,6 +15,7 @@ using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.EventLogs;
 using Verifiable.Json;
 using Verifiable.Keri;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Acdc;
 
@@ -482,7 +484,7 @@ internal static class AcdcFlowKit
     public static async Task<List<LogReplayResult<KeriKeyState, KeriKeyEvent, CryptoProof>>> ReplayKelAsync(List<LogEntry<KeriKeyEvent, CryptoProof>> entries, MemoryPool<byte> pool, DelegationSealResolver? resolveDelegationSeal, CancellationToken cancellationToken)
     {
         LogReplayContext<KeriKeyState, KeriKeyEvent, CryptoProof, KeriReplayValidationContext> context =
-            KeriKeyEventLog.CreateReplayContext(AcdcTestSupport.AgileDigest, pool, TimeProvider.System, resolveDelegationSeal);
+            KeriKeyEventLog.CreateReplayContext(AcdcTestSupport.AgileDigest, pool, new FakeTimeProvider(TestClock.CanonicalEpoch), resolveDelegationSeal);
 
         var replayer = new LogReplayer<KeriKeyState, KeriKeyEvent, CryptoProof, KeriReplayValidationContext>();
         var results = new List<LogReplayResult<KeriKeyState, KeriKeyEvent, CryptoProof>>();
@@ -849,7 +851,9 @@ internal static class AcdcFlowKit
     {
         var sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.Ed25519, Purpose.Signing);
 
-        return await sign(privateKey.AsReadOnlyMemory(), serialization, BaseMemoryPool.Shared, context: null, cancellationToken: cancellationToken).ConfigureAwait(false);
+        (Signature signature, CryptoEvent? _) = await sign(privateKey.AsReadOnlyMemory(), serialization, BaseMemoryPool.Shared, context: null, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        return signature;
     }
 
 

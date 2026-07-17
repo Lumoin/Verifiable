@@ -31,6 +31,13 @@ public static class RsaActiveAuthenticationCardResponder
     /// <param name="activeAuthenticationPrivateKey">The chip's RSA Active Authentication private key (PKCS#1 DER <c>RSAPrivateKey</c>). Borrowed.</param>
     /// <param name="challenge">The terminal's challenge RND.IFD to sign (the non-recovered message part M2).</param>
     /// <param name="pool">The memory pool for the signature buffer.</param>
+    /// <param name="eventSink">
+    /// Receives the <see cref="SignatureProducedEvent"/> the resolved <see cref="RecoverableSigningDelegate"/>
+    /// constructs, or <see langword="null"/> to route it to <see cref="CryptographicKeyEvents.DefaultSink"/>
+    /// (the process-wide <see cref="CryptographicKeyEvents.Events"/> stream) — this responder resolves and
+    /// invokes the registry delegate directly rather than through a bound <see cref="PrivateKey"/> (there is
+    /// no key object here, only raw key bytes), so a <see cref="CryptoEventSink"/> is this call site's route.
+    /// </param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The chip's signature over the challenge. The caller owns and disposes it.</returns>
     /// <exception cref="InvalidOperationException">Thrown when no ISO/IEC 9796-2 signing function is registered.</exception>
@@ -38,12 +45,20 @@ public static class RsaActiveAuthenticationCardResponder
         ReadOnlyMemory<byte> activeAuthenticationPrivateKey,
         ReadOnlyMemory<byte> challenge,
         BaseMemoryPool pool,
+        CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
         RecoverableSigningDelegate sign = RecoverableSignatureFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.RsaIso9796d2, Purpose.Signing);
 
-        return await sign(activeAuthenticationPrivateKey, challenge, pool, null, cancellationToken).ConfigureAwait(false);
+        (Signature signature, CryptoEvent? evt) = await sign(activeAuthenticationPrivateKey, challenge, pool, null, cancellationToken).ConfigureAwait(false);
+
+        if(evt is not null)
+        {
+            (eventSink ?? CryptographicKeyEvents.DefaultSink)(evt);
+        }
+
+        return signature;
     }
 }

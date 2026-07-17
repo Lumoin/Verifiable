@@ -18,7 +18,7 @@ namespace Verifiable.OAuth.Dpop;
 [DebuggerDisplay("InMemoryDpopNonceCache Count={entries.Count}")]
 public sealed class InMemoryDpopNonceCache
 {
-    private readonly ConcurrentDictionary<string, string> entries =
+    private ConcurrentDictionary<string, string> Entries { get; } =
         new(StringComparer.Ordinal);
 
 
@@ -29,7 +29,7 @@ public sealed class InMemoryDpopNonceCache
     public string? Lookup(string authority)
     {
         ArgumentException.ThrowIfNullOrEmpty(authority);
-        return entries.TryGetValue(authority, out string? nonce) ? nonce : null;
+        return Entries.TryGetValue(authority, out string? nonce) ? nonce : null;
     }
 
 
@@ -41,7 +41,7 @@ public sealed class InMemoryDpopNonceCache
     {
         ArgumentException.ThrowIfNullOrEmpty(authority);
         ArgumentException.ThrowIfNullOrEmpty(nonce);
-        entries[authority] = nonce;
+        Entries[authority] = nonce;
     }
 
 

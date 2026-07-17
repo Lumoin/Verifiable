@@ -275,7 +275,7 @@ internal sealed class DidCommSignedMessageTests
             TestSetup.Base64UrlEncoder,
             Pool,
             format,
-            TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken);
     }
 
 
@@ -289,7 +289,7 @@ internal sealed class DidCommSignedMessageTests
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             Pool,
-            TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken);
     }
 
 

@@ -160,7 +160,7 @@ internal sealed class DidCommEncryptedAuthcryptCompressedKeyTests
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512EncryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Correct DID and skid, but a DIFFERENT P-256 key under keyAgreement than the one that signed-in the 1PU
         //agreement at pack time. SenderVerificationMethod re-encodes its x/y, which the converter decodes to a
@@ -185,7 +185,7 @@ internal sealed class DidCommEncryptedAuthcryptCompressedKeyTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512DecryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsUnpacked, "A wrong DID-doc-resolved NIST sender key MUST NOT unpack.");
         Assert.AreEqual(DidCommDecryptionError.DecryptionFailed, result.Error);
@@ -255,7 +255,7 @@ internal sealed class DidCommEncryptedAuthcryptCompressedKeyTests
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512EncryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolver resolver = CreateResolver(senderPublic, skid, AliceDid);
 
@@ -273,7 +273,7 @@ internal sealed class DidCommEncryptedAuthcryptCompressedKeyTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512DecryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsUnpacked, $"A compressed-recipient authcrypt message MUST unpack. Error: {result.Error}.");
         Assert.AreEqual(DidCommDecryptionError.None, result.Error);

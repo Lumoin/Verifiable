@@ -18,7 +18,7 @@ internal sealed class DefaultDpopNonceIssuanceAndValidationTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly DateTimeOffset NowInstant = new(2026, 5, 14, 12, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset NowInstant = TestClock.CanonicalEpoch.AddDays(-18);
     private static readonly TenantId TestTenant = new("test-tenant");
     private static readonly Uri DefaultAudience = new("https://issuer.test/abcd1234");
 

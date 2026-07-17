@@ -12,7 +12,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Mdoc;
 
 /// <summary>
-/// Tests for <see cref="MdocCoseKeyExtensions.ToPublicKeyMemory"/> — deriving the
+/// Tests for <see cref="CoseKeyExtensions.ToPublicKeyMemory"/> — deriving the
 /// device verification key from the issuer-committed MSO COSE_Key. The headline
 /// test extracts the key from a wire-reconstructed MSO and verifies the device
 /// signature against it, proving the verifier never needs the device key out of
@@ -38,7 +38,7 @@ internal sealed class MdocCoseKeyExtensionsTests
 
         try
         {
-            MdocCoseKey coseKey = CoseKeyFromP256Public(keys.PublicKey);
+            CoseKey coseKey = CoseKeyFromP256Public(keys.PublicKey);
 
             using PublicKeyMemory extracted = coseKey.ToPublicKeyMemory(BaseMemoryPool.Shared);
 
@@ -155,14 +155,14 @@ internal sealed class MdocCoseKeyExtensionsTests
             validUntil: new DateTimeOffset(2027, 5, 25, 8, 0, 0, TimeSpan.Zero));
 
 
-    private static MdocCoseKey CoseKeyFromP256Public(PublicKeyMemory publicKey)
+    private static CoseKey CoseKeyFromP256Public(PublicKeyMemory publicKey)
     {
         ReadOnlySpan<byte> compressed = publicKey.AsReadOnlySpan();
         byte[] yCoordinate = EllipticCurveUtilities.Decompress(compressed, EllipticCurveTypes.P256);
 
-        return new MdocCoseKey(
-            kty: MdocCoseKeyTypes.Ec2,
-            curve: MdocCoseKeyCurves.P256,
+        return new CoseKey(
+            kty: CoseKeyTypes.Ec2,
+            curve: CoseKeyCurves.P256,
             x: compressed[1..].ToArray(),
             y: yCoordinate);
     }

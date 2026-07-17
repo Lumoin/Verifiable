@@ -39,7 +39,7 @@ public sealed class Tpm2bSensitiveData: SensitiveMemory, ITpmWireType
     /// <summary>
     /// Shared empty instance backed by <see cref="EmptyMemoryOwner"/>.
     /// </summary>
-    private static readonly Tpm2bSensitiveData EmptyInstance = new(EmptyMemoryOwner.Instance);
+    private static Tpm2bSensitiveData EmptyInstance { get; } = new(EmptyMemoryOwner.Instance);
 
     /// <summary>
     /// Initializes new sensitive data with the specified storage.

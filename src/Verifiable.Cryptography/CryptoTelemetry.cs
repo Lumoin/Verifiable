@@ -1,3 +1,4 @@
+using System;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Cryptography;
@@ -256,6 +257,24 @@ public static class CryptoTelemetry
 
 
     /// <summary>
+    /// Attribute names describing a <see cref="CryptographicKeyEvents.Events"/> subscriber failure —
+    /// recorded on the emitting call site's current <see cref="System.Diagnostics.Activity"/> so a
+    /// throwing subscriber remains observable without being allowed to propagate. Never carries the
+    /// <see cref="CryptoEvent"/> payload itself, only its and the exception's runtime type names.
+    /// </summary>
+    [SuppressMessage("Design", "CA1034:Nested types should not be visible",
+        Justification = "Intentional grouping of related constants — same pattern as WellKnownMediaTypes.")]
+    public static class Subscriber
+    {
+        /// <summary>The runtime type name of the <see cref="CryptoEvent"/> being delivered when the subscriber threw.</summary>
+        public const string EventType = "crypto.subscriber.event_type";
+
+        /// <summary>The runtime type name of the exception the subscriber threw.</summary>
+        public const string ExceptionType = "crypto.subscriber.exception_type";
+    }
+
+
+    /// <summary>
     /// Activity name constants used when starting spans on
     /// <see cref="CryptoActivitySource.Source"/>.
     /// </summary>
@@ -301,6 +320,13 @@ public static class CryptoTelemetry
 
         /// <summary>Activity name for key-agreement (ECDH) operations.</summary>
         public const string KeyAgreement = "crypto.key_agreement";
+
+        /// <summary>
+        /// Activity event name recorded on the current activity when a
+        /// <see cref="CryptographicKeyEvents.Events"/> subscriber throws out of
+        /// <see cref="IObserver{T}.OnNext"/>. See <see cref="Subscriber"/> for the event's tags.
+        /// </summary>
+        public const string SubscriberException = "crypto.subscriber.exception";
     }
 
 

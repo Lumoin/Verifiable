@@ -42,13 +42,13 @@ namespace Verifiable.Server;
 public sealed class RequestFields: IEquatable<RequestFields>
 {
     /// <summary>The backing store: each key maps to the ordered list of values it carried.</summary>
-    private readonly Dictionary<string, List<string>> values;
+    private Dictionary<string, List<string>> Values { get; }
 
 
     /// <summary>Creates an empty <see cref="RequestFields"/> instance.</summary>
     public RequestFields()
     {
-        values = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        Values = new Dictionary<string, List<string>>(StringComparer.Ordinal);
     }
 
 
@@ -56,7 +56,7 @@ public sealed class RequestFields: IEquatable<RequestFields>
     /// <param name="capacity">The initial number of distinct keys the collection can contain.</param>
     public RequestFields(int capacity)
     {
-        values = new Dictionary<string, List<string>>(capacity, StringComparer.Ordinal);
+        Values = new Dictionary<string, List<string>>(capacity, StringComparer.Ordinal);
     }
 
 
@@ -76,11 +76,11 @@ public sealed class RequestFields: IEquatable<RequestFields>
 
 
     /// <summary>The number of distinct parameter keys present.</summary>
-    public int Count => values.Count;
+    public int Count => Values.Count;
 
 
     /// <summary>The distinct parameter keys present, in no particular order.</summary>
-    public IReadOnlyCollection<string> Keys => values.Keys;
+    public IReadOnlyCollection<string> Keys => Values.Keys;
 
 
     /// <summary>
@@ -93,11 +93,11 @@ public sealed class RequestFields: IEquatable<RequestFields>
     /// <exception cref="KeyNotFoundException">The key is absent or does not carry exactly one value.</exception>
     public string this[string key]
     {
-        get => values.TryGetValue(key, out List<string>? list) && list.Count == 1
+        get => Values.TryGetValue(key, out List<string>? list) && list.Count == 1
             ? list[0]
             : throw new KeyNotFoundException(
                 $"Request parameter '{key}' is not present with exactly one value.");
-        set => values[key] = [value];
+        set => Values[key] = [value];
     }
 
 
@@ -109,13 +109,13 @@ public sealed class RequestFields: IEquatable<RequestFields>
     /// <param name="value">A value to append.</param>
     public void Add(string key, string value)
     {
-        if(values.TryGetValue(key, out List<string>? list))
+        if(Values.TryGetValue(key, out List<string>? list))
         {
             list.Add(value);
         }
         else
         {
-            values[key] = [value];
+            Values[key] = [value];
         }
     }
 
@@ -130,7 +130,7 @@ public sealed class RequestFields: IEquatable<RequestFields>
     /// <returns><see langword="true"/> when exactly one value is present; otherwise <see langword="false"/>.</returns>
     public bool TryGetValue(string key, [NotNullWhen(true)] out string? value)
     {
-        if(values.TryGetValue(key, out List<string>? list) && list.Count == 1)
+        if(Values.TryGetValue(key, out List<string>? list) && list.Count == 1)
         {
             value = list[0];
             return true;
@@ -144,7 +144,7 @@ public sealed class RequestFields: IEquatable<RequestFields>
     /// <summary>Whether <paramref name="key"/> is present with at least one value.</summary>
     /// <param name="key">The parameter name.</param>
     /// <returns><see langword="true"/> when the key carried at least one value.</returns>
-    public bool ContainsKey(string key) => values.ContainsKey(key);
+    public bool ContainsKey(string key) => Values.ContainsKey(key);
 
 
     /// <summary>
@@ -154,7 +154,7 @@ public sealed class RequestFields: IEquatable<RequestFields>
     /// <param name="key">The parameter name.</param>
     /// <returns>The ordered values, or an empty list when the key is absent.</returns>
     public IReadOnlyList<string> GetValues(string key) =>
-        values.TryGetValue(key, out List<string>? list) ? list : [];
+        Values.TryGetValue(key, out List<string>? list) ? list : [];
 
 
     /// <summary>
@@ -165,7 +165,7 @@ public sealed class RequestFields: IEquatable<RequestFields>
     /// <returns><see langword="true"/> when the key carried at least one value.</returns>
     public bool TryGetValues(string key, [NotNullWhen(true)] out IReadOnlyList<string>? values)
     {
-        if(this.values.TryGetValue(key, out List<string>? list))
+        if(this.Values.TryGetValue(key, out List<string>? list))
         {
             values = list;
             return true;
@@ -190,14 +190,14 @@ public sealed class RequestFields: IEquatable<RequestFields>
             return true;
         }
 
-        if(values.Count != other.values.Count)
+        if(Values.Count != other.Values.Count)
         {
             return false;
         }
 
-        foreach(KeyValuePair<string, List<string>> entry in values)
+        foreach(KeyValuePair<string, List<string>> entry in Values)
         {
-            if(!other.values.TryGetValue(entry.Key, out List<string>? otherList)
+            if(!other.Values.TryGetValue(entry.Key, out List<string>? otherList)
                 || !entry.Value.SequenceEqual(otherList, StringComparer.Ordinal))
             {
                 return false;
@@ -219,7 +219,7 @@ public sealed class RequestFields: IEquatable<RequestFields>
     public override int GetHashCode()
     {
         HashCode hash = new();
-        foreach(KeyValuePair<string, List<string>> entry in values.OrderBy(
+        foreach(KeyValuePair<string, List<string>> entry in Values.OrderBy(
             static x => x.Key, StringComparer.Ordinal))
         {
             hash.Add(entry.Key, StringComparer.Ordinal);

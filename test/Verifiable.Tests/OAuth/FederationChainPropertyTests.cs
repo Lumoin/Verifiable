@@ -3,8 +3,6 @@ using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Immutable;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
-using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
 using Verifiable.OAuth.Server;
@@ -334,7 +332,7 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
                 }
             });
 
-        Dictionary<string, object> verifierSubjectJwks = BuildSingleEcKeyJwks(verifierFederationKeys.PublicKey);
+        Dictionary<string, object> verifierSubjectJwks = OAuthJwksFixtures.BuildSingleEcKeyJwks(verifierFederationKeys.PublicKey);
         intermediateHost.Server.OAuth().ResolveSubordinateStatementAsync = (subject, _, _, _) =>
         {
             if(!string.Equals(subject.Value, verifierEntityId.ToString(), StringComparison.Ordinal))
@@ -362,7 +360,7 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
                 }
             });
 
-        Dictionary<string, object> intermediateSubjectJwks = BuildSingleEcKeyJwks(intermediateFederationKeys.PublicKey);
+        Dictionary<string, object> intermediateSubjectJwks = OAuthJwksFixtures.BuildSingleEcKeyJwks(intermediateFederationKeys.PublicKey);
         anchorHost.Server.OAuth().ResolveSubordinateStatementAsync = (subject, _, _, _) =>
         {
             if(!string.Equals(subject.Value, intermediateEntityId.ToString(), StringComparison.Ordinal))
@@ -484,22 +482,6 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
         response.EnsureSuccessStatusCode();
 
         return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-
-    private static Dictionary<string, object> BuildSingleEcKeyJwks(PublicKeyMemory publicKey)
-    {
-        JsonWebKey jwk = CryptoFormatConversions.DefaultAlgorithmToJwkConverter(
-            publicKey.Tag.Get<CryptoAlgorithm>(),
-            publicKey.Tag.Get<Purpose>(),
-            publicKey.AsReadOnlySpan(),
-            TestSetup.Base64UrlEncoder);
-        jwk.Use = WellKnownJwkValues.UseSig;
-
-        return new Dictionary<string, object>(StringComparer.Ordinal)
-        {
-            ["keys"] = new List<object> { jwk }
-        };
     }
 
 

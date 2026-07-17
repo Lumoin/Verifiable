@@ -38,7 +38,7 @@ internal sealed class SiopCombinedResponseTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
@@ -81,7 +81,7 @@ internal sealed class SiopCombinedResponseTests
                 siopPrivate, siopPublic, VerifierClientId, RequestNonce,
                 issuedAt: TimeProvider.GetUtcNow(), lifetime: TimeSpan.FromMinutes(5),
                 TestSetup.Base64UrlEncoder, HeaderSerializer, PayloadSerializer, Pool,
-                TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             string vpToken = await PresentWithKeyBindingAsync(
                 serializedSdJwt, holderPrivateKey, RequestNonce, VerifierClientId)
@@ -92,7 +92,7 @@ internal sealed class SiopCombinedResponseTests
                 idToken, VerifierClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
                 resolveDidVerificationKey: null,
                 TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-                TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(idTokenResult.IsValid, "The Self-Issued ID Token must validate per SIOPv2 §11.1.");
 
@@ -139,7 +139,7 @@ internal sealed class SiopCombinedResponseTests
                 siopPrivate, siopPublic, VerifierClientId, StaleNonce,
                 issuedAt: TimeProvider.GetUtcNow(), lifetime: TimeSpan.FromMinutes(5),
                 TestSetup.Base64UrlEncoder, HeaderSerializer, PayloadSerializer, Pool,
-                TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             string staleVpToken = await PresentWithKeyBindingAsync(
                 serializedSdJwt, holderPrivateKey, StaleNonce, VerifierClientId)
@@ -149,7 +149,7 @@ internal sealed class SiopCombinedResponseTests
                 staleIdToken, VerifierClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
                 resolveDidVerificationKey: null,
                 TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-                TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             //The token is cryptographically intact — only the transaction binding fails.
             Assert.IsTrue(idTokenResult.IsSignatureValid);
@@ -241,7 +241,7 @@ internal sealed class SiopCombinedResponseTests
             HeaderSerializer,
             PayloadSerializer,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         using SdToken<string> tokenWithKb = token.WithKeyBinding(compactKbJwt, Pool);
 
@@ -267,6 +267,6 @@ internal sealed class SiopCombinedResponseTests
             TestSetup.Base64UrlEncoder,
             Pool,
             saltReuseSeam: null,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 }

@@ -25,7 +25,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </remarks>
 public sealed class PcrReadInput: ITpmCommandInput, IDisposable
 {
-    private readonly TpmlPcrSelection pcrSelection;
+    private TpmlPcrSelection PcrSelection { get; }
     private bool disposed;
 
     /// <summary>
@@ -34,7 +34,7 @@ public sealed class PcrReadInput: ITpmCommandInput, IDisposable
     /// <param name="pcrSelection">The PCR selection. Ownership is transferred.</param>
     private PcrReadInput(TpmlPcrSelection pcrSelection)
     {
-        this.pcrSelection = pcrSelection;
+        this.PcrSelection = pcrSelection;
     }
 
     /// <inheritdoc/>
@@ -44,7 +44,7 @@ public sealed class PcrReadInput: ITpmCommandInput, IDisposable
     public int GetSerializedSize()
     {
         //No handles, only parameters.
-        return pcrSelection.GetSerializedSize();
+        return PcrSelection.GetSerializedSize();
     }
 
     /// <inheritdoc/>
@@ -58,7 +58,7 @@ public sealed class PcrReadInput: ITpmCommandInput, IDisposable
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        pcrSelection.WriteTo(ref writer);
+        PcrSelection.WriteTo(ref writer);
     }
 
     /// <summary>
@@ -120,7 +120,7 @@ public sealed class PcrReadInput: ITpmCommandInput, IDisposable
     {
         if(!disposed)
         {
-            pcrSelection.Dispose();
+            PcrSelection.Dispose();
             disposed = true;
         }
     }

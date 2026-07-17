@@ -119,6 +119,9 @@ internal static class TestCertificateChainProvider
     {
         DateTimeOffset now = timeProvider.GetUtcNow();
 
+        //Cert-factory carve-out: CertificateRequest requires a framework AsymmetricAlgorithm
+        //to sign the self-signed CA certificate; this key is never converted to library
+        //PrivateKeyMemory, so it stays framework-native for its whole lifetime.
         using ECDsa caKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
         CertificateRequest caRequest = new(
@@ -148,6 +151,10 @@ internal static class TestCertificateChainProvider
             notBefore: now.AddDays(-1).UtcDateTime,
             notAfter: now.AddYears(10).UtcDateTime);
 
+        //Cert-factory carve-out: CertificateRequest requires a framework AsymmetricAlgorithm
+        //to sign the leaf certificate under the CA. Its raw D scalar is exported below into
+        //the library's PrivateKeyMemory, so this key is a byproduct of the chain-minting
+        //process, not fixture material a provider could substitute.
         using ECDsa leafKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
         CertificateRequest leafRequest = new(
@@ -180,6 +187,8 @@ internal static class TestCertificateChainProvider
         leafRequest.CertificateExtensions.Add(
             X509AuthorityKeyIdentifierExtension.CreateFromSubjectKeyIdentifier(caSubjectKeyId));
 
+        //Serial number is a junk/noise payload, not key material; a fresh random value
+        //per chain is appropriate and carries no fixture-determinism requirement.
         byte[] serialNumber = RandomNumberGenerator.GetBytes(8);
 
         using X509Certificate2 leafCertPublicOnly = leafRequest.Create(

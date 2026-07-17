@@ -20,16 +20,16 @@ namespace Verifiable.NSec
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller is responsible for disposing the returned key material instances.")]
     public static class NSecKeyMaterialCreator
     {
-        private static readonly ProviderLibrary ProviderLib = new(
+        private static ProviderLibrary ProviderLib { get; } = new(
             typeof(NSecKeyMaterialCreator).Assembly.GetName().Name ?? "Verifiable.NSec",
             typeof(NSecKeyMaterialCreator).Assembly.GetName().Version?.ToString() ?? "Unknown");
 
         //NSec wraps the native libsodium binary; its assembly version is the meaningful CBOM identifier.
-        private static readonly CryptoLibraryInfo CryptoLib = new(
+        private static CryptoLibraryInfo CryptoLib { get; } = new(
             "NSec.Cryptography",
             typeof(global::NSec.Cryptography.SignatureAlgorithm).Assembly.GetName().Version?.ToString() ?? "Unknown");
 
-        private static readonly ProviderClass ProviderCls = new(nameof(NSecKeyMaterialCreator));
+        private static ProviderClass ProviderCls { get; } = new(nameof(NSecKeyMaterialCreator));
 
 
         /// <summary>

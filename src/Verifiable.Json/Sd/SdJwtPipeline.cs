@@ -57,7 +57,13 @@ internal static class SdJwtPipeline
     /// Signs a redacted JSON payload as a JWS compact serialization using an explicit
     /// <see cref="SigningDelegate"/>. Registry resolution is the caller's concern
     /// (<see cref="SdJwtIssuance"/> resolves the function from the key's tag and
-    /// forwards here); this keeps the pipeline a pure parameter-taking body.
+    /// forwards here); this keeps the pipeline a pure parameter-taking body. Matches
+    /// <see cref="SignPayloadDelegate"/> exactly — that delegate type (and its method-group
+    /// wiring throughout <c>Verifiable.Core</c>'s <c>SdJwtIssuanceExtensions</c> and every
+    /// caller of <see cref="SdJwtIssuance.IssueVerboseAsync"/>) has no <c>CryptoEventSink</c>
+    /// slot, so unlike the sink-threaded JOSE/COSE sites this one routes unconditionally to
+    /// <see cref="CryptographicKeyEvents.DefaultSink"/> rather than accepting a per-call
+    /// override — see <see cref="CryptoEventSink"/> for the two-route rationale.
     /// </summary>
     internal static async ValueTask<ReadOnlyMemory<byte>> Sign(
         SigningDelegate signingDelegate,
@@ -101,12 +107,17 @@ internal static class SdJwtPipeline
 
         Debug.Assert(written == signingInputLength, "Signing input length must match the expected size.");
 
-        Signature signature = await signingDelegate(
+        (Signature signature, CryptoEvent? evt) = await signingDelegate(
             privateKey.AsReadOnlyMemory(),
             signingInputMemory,
             memoryPool,
             context: null,
             cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        if(evt is not null)
+        {
+            CryptographicKeyEvents.DefaultSink(evt);
+        }
 
         string signatureSegment = encoder(signature.AsReadOnlyMemory().Span);
         string compactJws = $"{headerSegment}.{payloadSegment}.{signatureSegment}";

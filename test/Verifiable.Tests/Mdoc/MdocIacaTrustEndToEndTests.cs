@@ -39,15 +39,24 @@ namespace Verifiable.Tests.Mdoc;
 [TestClass]
 internal sealed class MdocIacaTrustEndToEndTests
 {
-    private const string PidDocType = "eu.europa.ec.eudi.pid.1";
-    private const string PidNamespace = "eu.europa.ec.eudi.pid.1";
-
     public required TestContext TestContext { get; set; }
+
+    //Bit-identical to TestClock.CanonicalEpoch.AddDays(-7) (2026-05-25T12:00:00Z) —
+    //the trust delegate's "now" for chain validation; the certs are valid for a
+    //wide window (see CreateSelfSignedCa/CreateLeafCertificate) so this is stable.
+    private static readonly DateTimeOffset TrustResolutionValidationTime = TestClock.CanonicalEpoch.AddDays(-7);
+
+    //Family anchor: not a clean single-call TestClock.CanonicalEpoch offset
+    //(2026-06-01T12:00:00Z is 7 days 4 hours after this signed instant), so
+    //the one-year window anchors itself.
+    private static readonly DateTimeOffset SampleValiditySigned = new(2026, 5, 25, 8, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset SampleValidityValidUntil = SampleValiditySigned.AddYears(1);
 
 
     [TestMethod]
     public async Task IssuerWithIacaChainVerifiesThroughTrustDelegate()
     {
+        //Cert-factory carve-out (see class remarks): CertificateRequest needs a framework ECDsa key to mint the chain.
         //Build a IACA root + leaf cert. The leaf's signing key is what
         //signs the MSO; the IACA root is what the verifier trusts.
         using ECDsa rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -71,7 +80,7 @@ internal sealed class MdocIacaTrustEndToEndTests
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         try
         {
-            MdocLogicalDocument logical = BuildSampleLogicalPid();
+            MdocLogicalDocument logical = MdocTestFixtures.BuildSampleLogicalPid(() => MdocTestFixtures.ItemRandomSalt());
             using MdocDocument issued = await logical.SignAsync(
                 new MdocIssuerSigningConfig
                 {
@@ -90,7 +99,7 @@ internal sealed class MdocIacaTrustEndToEndTests
             ResolveMdocIssuerKeyDelegate trustDelegate = MdocCborIacaTrustResolver.Create(
                 validateChain: MicrosoftX509Functions.ValidateChainAsync,
                 trustAnchors: [rootTrustAnchor],
-                validationTime: new DateTimeOffset(2026, 5, 25, 12, 0, 0, TimeSpan.Zero),
+                validationTime: TrustResolutionValidationTime,
                 pool: BaseMemoryPool.Shared);
 
             //End-to-end: trust resolution + signature verification in one call.
@@ -109,6 +118,7 @@ internal sealed class MdocIacaTrustEndToEndTests
     [TestMethod]
     public async Task VerifyIssuerAuthVerboseExposesTrustResolutionAndMessage()
     {
+        //Cert-factory carve-out (see class remarks): CertificateRequest needs a framework ECDsa key to mint the chain.
         using ECDsa rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa leafKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
@@ -121,7 +131,7 @@ internal sealed class MdocIacaTrustEndToEndTests
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         try
         {
-            using MdocDocument issued = await BuildSampleLogicalPid().SignAsync(
+            using MdocDocument issued = await MdocTestFixtures.BuildSampleLogicalPid(() => MdocTestFixtures.ItemRandomSalt()).SignAsync(
                 new MdocIssuerSigningConfig
                 {
                     DigestAlgorithm = MdocMsoWellKnownKeys.DigestAlgorithmSha256,
@@ -137,7 +147,7 @@ internal sealed class MdocIacaTrustEndToEndTests
             ResolveMdocIssuerKeyDelegate trustDelegate = MdocCborIacaTrustResolver.Create(
                 MicrosoftX509Functions.ValidateChainAsync,
                 trustAnchors: [rootTrustAnchor],
-                validationTime: new DateTimeOffset(2026, 5, 25, 12, 0, 0, TimeSpan.Zero),
+                validationTime: TrustResolutionValidationTime,
                 pool: BaseMemoryPool.Shared);
 
             (bool result, MdocIssuerAuthVerificationContext? context) = await issued.VerifyIssuerAuthVerboseAsync(
@@ -164,11 +174,13 @@ internal sealed class MdocIacaTrustEndToEndTests
     [TestMethod]
     public async Task VerifyIssuerAuthVerboseReturnsNullContextWhenTrustFails()
     {
+        //Cert-factory carve-out (see class remarks): CertificateRequest needs a framework ECDsa key to mint the chain.
         using ECDsa rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa leafKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using X509Certificate2 rootCert = CreateSelfSignedCa("CN=Real IACA Root", rootKey);
         using X509Certificate2 leafCert = CreateLeafCertificate("CN=mDL Issuer", leafKey, rootCert, rootKey);
 
+        //A second, unrelated self-signed CA the trust delegate must reject.
         using ECDsa imposterRootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using X509Certificate2 imposterRootCert = CreateSelfSignedCa("CN=Imposter Root", imposterRootKey);
 
@@ -178,7 +190,7 @@ internal sealed class MdocIacaTrustEndToEndTests
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         try
         {
-            using MdocDocument issued = await BuildSampleLogicalPid().SignAsync(
+            using MdocDocument issued = await MdocTestFixtures.BuildSampleLogicalPid(() => MdocTestFixtures.ItemRandomSalt()).SignAsync(
                 new MdocIssuerSigningConfig
                 {
                     DigestAlgorithm = MdocMsoWellKnownKeys.DigestAlgorithmSha256,
@@ -194,7 +206,7 @@ internal sealed class MdocIacaTrustEndToEndTests
             ResolveMdocIssuerKeyDelegate trustDelegate = MdocCborIacaTrustResolver.Create(
                 MicrosoftX509Functions.ValidateChainAsync,
                 trustAnchors: [imposterAnchor],
-                validationTime: new DateTimeOffset(2026, 5, 25, 12, 0, 0, TimeSpan.Zero),
+                validationTime: TrustResolutionValidationTime,
                 pool: BaseMemoryPool.Shared);
 
             (bool result, MdocIssuerAuthVerificationContext? context) = await issued.VerifyIssuerAuthVerboseAsync(
@@ -224,7 +236,7 @@ internal sealed class MdocIacaTrustEndToEndTests
 
         try
         {
-            using MdocDocument issued = await BuildSampleLogicalPid().SignAsync(
+            using MdocDocument issued = await MdocTestFixtures.BuildSampleLogicalPid(() => MdocTestFixtures.ItemRandomSalt()).SignAsync(
                 new MdocIssuerSigningConfig
                 {
                     DigestAlgorithm = MdocMsoWellKnownKeys.DigestAlgorithmSha256,
@@ -243,7 +255,7 @@ internal sealed class MdocIacaTrustEndToEndTests
             ResolveMdocIssuerKeyDelegate trustDelegate = MdocCborIacaTrustResolver.Create(
                 MicrosoftX509Functions.ValidateChainAsync,
                 trustAnchors: [],
-                validationTime: new DateTimeOffset(2026, 5, 25, 12, 0, 0, TimeSpan.Zero),
+                validationTime: TrustResolutionValidationTime,
                 pool: BaseMemoryPool.Shared);
 
             using MdocIacaTrustResolution resolution = await trustDelegate(
@@ -265,11 +277,13 @@ internal sealed class MdocIacaTrustEndToEndTests
     {
         //Sign with a self-issued IACA root, but resolve trust against a
         //different root. The chain validator must reject.
+        //Cert-factory carve-out (see class remarks): CertificateRequest needs a framework ECDsa key to mint the chain.
         using ECDsa rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa leafKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using X509Certificate2 rootCert = CreateSelfSignedCa("CN=Real IACA Root", rootKey);
         using X509Certificate2 leafCert = CreateLeafCertificate("CN=mDL Issuer", leafKey, rootCert, rootKey);
 
+        //A second, unrelated self-signed CA the chain must not resolve to.
         using ECDsa imposterRootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using X509Certificate2 imposterRootCert = CreateSelfSignedCa("CN=Imposter Root", imposterRootKey);
 
@@ -279,7 +293,7 @@ internal sealed class MdocIacaTrustEndToEndTests
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         try
         {
-            using MdocDocument issued = await BuildSampleLogicalPid().SignAsync(
+            using MdocDocument issued = await MdocTestFixtures.BuildSampleLogicalPid(() => MdocTestFixtures.ItemRandomSalt()).SignAsync(
                 new MdocIssuerSigningConfig
                 {
                     DigestAlgorithm = MdocMsoWellKnownKeys.DigestAlgorithmSha256,
@@ -295,7 +309,7 @@ internal sealed class MdocIacaTrustEndToEndTests
             ResolveMdocIssuerKeyDelegate trustDelegate = MdocCborIacaTrustResolver.Create(
                 MicrosoftX509Functions.ValidateChainAsync,
                 trustAnchors: [imposterAnchor],
-                validationTime: new DateTimeOffset(2026, 5, 25, 12, 0, 0, TimeSpan.Zero),
+                validationTime: TrustResolutionValidationTime,
                 pool: BaseMemoryPool.Shared);
 
             using MdocIacaTrustResolution resolution = await trustDelegate(
@@ -318,6 +332,7 @@ internal sealed class MdocIacaTrustEndToEndTests
         //RFC 9360 §2 allows a single-cert x5chain to be a bare bstr instead
         //of a one-element array. The signer emits the bstr form; the
         //extractor accepts both.
+        //Cert-factory carve-out (see class remarks): CertificateRequest needs a framework ECDsa key to mint the chain.
         using ECDsa rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using X509Certificate2 rootCert = CreateSelfSignedCa("CN=Single-Cert Root", rootKey);
         using PrivateKeyMemory rootPrivateKey = LoadP256PrivateKey(rootKey);
@@ -326,7 +341,7 @@ internal sealed class MdocIacaTrustEndToEndTests
             TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         try
         {
-            using MdocDocument issued = await BuildSampleLogicalPid().SignAsync(
+            using MdocDocument issued = await MdocTestFixtures.BuildSampleLogicalPid(() => MdocTestFixtures.ItemRandomSalt()).SignAsync(
                 new MdocIssuerSigningConfig
                 {
                     DigestAlgorithm = MdocMsoWellKnownKeys.DigestAlgorithmSha256,
@@ -342,7 +357,7 @@ internal sealed class MdocIacaTrustEndToEndTests
             ResolveMdocIssuerKeyDelegate trustDelegate = MdocCborIacaTrustResolver.Create(
                 MicrosoftX509Functions.ValidateChainAsync,
                 trustAnchors: [rootAnchor],
-                validationTime: new DateTimeOffset(2026, 5, 25, 12, 0, 0, TimeSpan.Zero),
+                validationTime: TrustResolutionValidationTime,
                 pool: BaseMemoryPool.Shared);
 
             bool isVerified = await issued.VerifyIssuerAuthAsync(
@@ -364,6 +379,7 @@ internal sealed class MdocIacaTrustEndToEndTests
         //Direct test of the extractor: feed in a signed-with-x5chain
         //IssuerAuth and assert leaf-first ordering. Independent of any
         //trust validation.
+        //Cert-factory carve-out (see class remarks): CertificateRequest needs a framework ECDsa key to mint the chain.
         using ECDsa rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa leafKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using X509Certificate2 rootCert = CreateSelfSignedCa("CN=Root", rootKey);
@@ -394,24 +410,14 @@ internal sealed class MdocIacaTrustEndToEndTests
     }
 
 
-    private static MdocLogicalDocument BuildSampleLogicalPid() =>
-        MdocIssuance.BuildDocument(
-            docType: PidDocType,
-            claims:
-            [
-                new() { NameSpace = PidNamespace, ElementIdentifier = "family_name", EncodedElementValue = CborText("Mustermann") },
-                new() { NameSpace = PidNamespace, ElementIdentifier = "given_name", EncodedElementValue = CborText("Erika") }
-            ],
-            generateRandom: () => MdocTestFixtures.ItemRandomSalt());
-
-
     private static MdocValidityInfo SampleValidity() =>
         new(
-            signed: new DateTimeOffset(2026, 5, 25, 8, 0, 0, TimeSpan.Zero),
-            validFrom: new DateTimeOffset(2026, 5, 25, 8, 0, 0, TimeSpan.Zero),
-            validUntil: new DateTimeOffset(2027, 5, 25, 8, 0, 0, TimeSpan.Zero));
+            signed: SampleValiditySigned,
+            validFrom: SampleValiditySigned,
+            validUntil: SampleValidityValidUntil);
 
 
+    //Cert-factory carve-out (see class remarks): mints the chain with CertificateRequest directly.
     private static X509Certificate2 CreateSelfSignedCa(string subjectName, ECDsa key)
     {
         var request = new CertificateRequest(subjectName, key, HashAlgorithmName.SHA256);
@@ -429,6 +435,7 @@ internal sealed class MdocIacaTrustEndToEndTests
     }
 
 
+    //Cert-factory carve-out (see class remarks): mints the chain with CertificateRequest directly.
     private static X509Certificate2 CreateLeafCertificate(
         string subjectName,
         ECDsa leafKey,
@@ -444,6 +451,7 @@ internal sealed class MdocIacaTrustEndToEndTests
             X509KeyUsageFlags.DigitalSignature, critical: true));
         request.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(request.PublicKey, critical: false));
 
+        //Certificate serial number: required argument for CertificateRequest.Create; cert-factory carve-out (see class remarks).
         byte[] serialNumber = RandomNumberGenerator.GetBytes(16);
         return request.Create(
             issuerCert,
@@ -508,14 +516,14 @@ internal sealed class MdocIacaTrustEndToEndTests
     }
 
 
-    private static MdocCoseKey CoseKeyFromP256Public(PublicKeyMemory publicKey)
+    private static CoseKey CoseKeyFromP256Public(PublicKeyMemory publicKey)
     {
         ReadOnlySpan<byte> compressed = publicKey.AsReadOnlySpan();
         byte[] uncompressed = EllipticCurveUtilities.Decompress(compressed, EllipticCurveTypes.P256);
 
-        return new MdocCoseKey(
-            kty: MdocCoseKeyTypes.Ec2,
-            curve: MdocCoseKeyCurves.P256,
+        return new CoseKey(
+            kty: CoseKeyTypes.Ec2,
+            curve: CoseKeyCurves.P256,
             x: compressed[1..].ToArray(),
             y: uncompressed);
     }
@@ -526,14 +534,5 @@ internal sealed class MdocIacaTrustEndToEndTests
     {
         keyMaterial.PublicKey.Dispose();
         keyMaterial.PrivateKey.Dispose();
-    }
-
-
-    private static byte[] CborText(string value)
-    {
-        var writer = new CborWriter(CborConformanceMode.Canonical);
-        writer.WriteTextString(value);
-
-        return writer.Encode();
     }
 }

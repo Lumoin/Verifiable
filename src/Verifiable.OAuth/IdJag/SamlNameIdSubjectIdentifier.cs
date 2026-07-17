@@ -6,7 +6,7 @@ namespace Verifiable.OAuth.IdJag;
 
 /// <summary>
 /// The member names of a SAML NameID Subject Identifier (the <c>saml-nameid</c> form of the
-/// <c>sub_id</c> claim) per draft-ietf-oauth-identity-assertion-authz-grant §3.2.1 and
+/// <c>sub_id</c> claim) per draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §3.2.1 and
 /// <see href="https://www.rfc-editor.org/rfc/rfc9493">RFC 9493</see>. These are the JSON object member
 /// names inside the <see cref="WellKnownJwtClaimNames.SubId"/> claim.
 /// </summary>
@@ -40,7 +40,7 @@ public static class SamlNameIdMemberNames
 
 /// <summary>
 /// A SAML NameID Subject Identifier — the <c>saml-nameid</c> form of the <c>sub_id</c> claim
-/// (draft-ietf-oauth-identity-assertion-authz-grant §3.2.1, <see href="https://www.rfc-editor.org/rfc/rfc9493">RFC 9493</see>)
+/// (draft-ietf-oauth-identity-assertion-authz-grant-04 §3.2.1, <see href="https://www.rfc-editor.org/rfc/rfc9493">RFC 9493</see>)
 /// — identifying the End-User by a SAML 2.0 Assertion Subject &lt;NameID&gt; within the context of a
 /// SAML issuer. It carries the same subject as the ID-JAG <c>sub</c> claim, but in the SAML subject
 /// namespace a Resource Authorization Server uses for SSO.
@@ -181,24 +181,13 @@ public sealed record SamlNameIdSubjectIdentifier
     /// </summary>
     private static bool TryReadMember(object? claimValue, string member, out string? value)
     {
-        switch(claimValue)
+        (bool found, value) = claimValue switch
         {
-            case IReadOnlyDictionary<string, object> readOnly
-                when readOnly.TryGetValue(member, out object? raw) && raw is string s:
-                value = s;
+            IReadOnlyDictionary<string, object> readOnly when readOnly.TryGetValue(member, out object? raw) && raw is string s => (true, s),
+            IDictionary<string, object> mutable when mutable.TryGetValue(member, out object? raw) && raw is string s => (true, s),
+            _ => (false, null)
+        };
 
-                return true;
-
-            case IDictionary<string, object> mutable
-                when mutable.TryGetValue(member, out object? raw) && raw is string s:
-                value = s;
-
-                return true;
-
-            default:
-                value = null;
-
-                return false;
-        }
+        return found;
     }
 }

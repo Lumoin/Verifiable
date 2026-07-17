@@ -102,13 +102,15 @@ public static class MicrosoftX509Functions
     /// </param>
     /// <param name="validationTime">UTC time for certificate validity evaluation.</param>
     /// <param name="pool">Memory pool for key material allocation.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <param name="checkRevocation">
-    /// An optional revocation-status checker. When supplied, the leaf certificate that chained is additionally
-    /// checked and the result is fail-closed (a revoked or indeterminate status throws); when <see langword="null"/>
-    /// only chain building is performed. The built-in <see cref="X509Chain"/> revocation is left off
-    /// (<see cref="X509RevocationMode.NoCheck"/>) so revocation flows through this supplied seam rather than the OS.
+    /// An optional revocation-status checker. When supplied, every certificate in <paramref name="chain"/> that is
+    /// not byte-equal to a supplied trust anchor — the leaf and every intermediate CA certificate the chain
+    /// carries — is additionally checked, and the result is fail-closed (a revoked or indeterminate status
+    /// throws); when <see langword="null"/> only chain building is performed. The built-in <see cref="X509Chain"/>
+    /// revocation is left off (<see cref="X509RevocationMode.NoCheck"/>) so revocation flows through this supplied
+    /// seam rather than the OS.
     /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Leaf public key. Caller must dispose.</returns>
     /// <remarks>
     /// Chain building is in-memory; the async signature carries the optionally-supplied
@@ -126,8 +128,8 @@ public static class MicrosoftX509Functions
         IReadOnlyList<PkiCertificateMemory> trustAnchors,
         DateTimeOffset validationTime,
         MemoryPool<byte> pool,
-        CancellationToken cancellationToken,
-        CheckCertificateRevocationStatusAsyncDelegate? checkRevocation = null)
+        CheckCertificateRevocationStatusAsyncDelegate? checkRevocation = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(chain);
         ArgumentNullException.ThrowIfNull(trustAnchors);
@@ -179,17 +181,44 @@ public static class MicrosoftX509Functions
                     $"X.509 certificate chain validation failed: {errors}");
             }
 
-            //Revocation is part of path validation: when a revocation source is configured, the leaf that just
-            //chained must additionally be checked and the result is fail-closed — anything but an affirmative Good
-            //(a revoked leaf or an indeterminate status) rejects the chain.
+            //Revocation is part of path validation: when a revocation source is configured, every certificate in
+            //the chain that is not itself a supplied trust anchor must additionally be checked and the result is
+            //fail-closed — anything but an affirmative Good (a revoked certificate or an indeterminate status)
+            //rejects the chain. This covers the leaf AND every intermediate CA certificate the chain carries, per
+            //WebAuthn Level 3 section 7.1's "certificate status information for the intermediate CA certificates".
             if(checkRevocation is not null)
             {
-                CertificateRevocationStatus revocationStatus = await checkRevocation(
-                    chain[0], trustAnchors, validationTime, pool, cancellationToken).ConfigureAwait(false);
-                if(revocationStatus != CertificateRevocationStatus.Good)
+                for(int certificateIndex = 0; certificateIndex < chain.Count; certificateIndex++)
                 {
-                    throw new System.Security.SecurityException(
-                        $"X.509 certificate revocation check failed: the leaf certificate's revocation status is '{revocationStatus}'.");
+                    PkiCertificateMemory candidate = chain[certificateIndex];
+                    if(trustAnchors.Contains(candidate))
+                    {
+                        //A chain entry that is itself a supplied trust anchor (some callers include the root in the
+                        //wire-supplied chain) needs no revocation source — it is trusted by configuration, not path.
+                        continue;
+                    }
+
+                    //The issuer candidates for this certificate are every OTHER chain entry plus the trust anchors,
+                    //so a checker can locate the leaf's intermediate issuer as well as an intermediate's root issuer
+                    //— the single-certificate-chain case (issuerCandidates == trustAnchors) is unchanged.
+                    var issuerCandidates = new List<PkiCertificateMemory>(chain.Count - 1 + trustAnchors.Count);
+                    for(int otherIndex = 0; otherIndex < chain.Count; otherIndex++)
+                    {
+                        if(otherIndex != certificateIndex)
+                        {
+                            issuerCandidates.Add(chain[otherIndex]);
+                        }
+                    }
+
+                    issuerCandidates.AddRange(trustAnchors);
+
+                    CertificateRevocationStatus revocationStatus = await checkRevocation(
+                        candidate, issuerCandidates, validationTime, pool, cancellationToken).ConfigureAwait(false);
+                    if(revocationStatus != CertificateRevocationStatus.Good)
+                    {
+                        throw new System.Security.SecurityException(
+                            $"X.509 certificate revocation check failed: the certificate at chain index {certificateIndex} has revocation status '{revocationStatus}'.");
+                    }
                 }
             }
 
@@ -328,7 +357,8 @@ public static class MicrosoftX509Functions
 
     /// <summary>
     /// Implements <see cref="ReadCertificateProfileDelegate"/>. Reads the certificate's Key Usage
-    /// (<c>2.5.29.15</c>) and Basic Constraints (<c>2.5.29.19</c>) extensions and reports the
+    /// (<c>2.5.29.15</c>) and Basic Constraints (<c>2.5.29.19</c>) extensions, its version, and its
+    /// Subject Organizational Unit, Country, Organization, and Common Name values, and reports the
     /// profile-relevant constraints as backend-neutral booleans.
     /// </summary>
     /// <param name="certificate">The certificate to inspect.</param>
@@ -339,14 +369,113 @@ public static class MicrosoftX509Functions
 
         using X509Certificate2 cert = X509CertificateLoader.LoadCertificate(certificate.AsReadOnlyMemory().Span);
 
+        EnsureNoDuplicateExtensions(cert);
+
+        X509KeyUsageExtension? keyUsage = cert.Extensions.OfType<X509KeyUsageExtension>().FirstOrDefault();
+        X509BasicConstraintsExtension? basicConstraints = cert.Extensions.OfType<X509BasicConstraintsExtension>().FirstOrDefault();
+        (IReadOnlyList<string> organizationalUnits, IReadOnlyList<string> countries, IReadOnlyList<string> organizations, IReadOnlyList<string> commonNames) = ReadSubjectAttributes(cert.SubjectName);
+
+        return new X509CertificateProfile
+        {
+            AssertsDigitalSignature = keyUsage is not null && keyUsage.KeyUsages.HasFlag(X509KeyUsageFlags.DigitalSignature),
+            AssertsKeyCertSign = keyUsage is not null && keyUsage.KeyUsages.HasFlag(X509KeyUsageFlags.KeyCertSign),
+            IsCertificateAuthority = basicConstraints is not null && basicConstraints.CertificateAuthority,
+            Version = cert.Version,
+            HasEmptySubject = !cert.SubjectName.EnumerateRelativeDistinguishedNames(reversed: false).Any(),
+            SubjectOrganizationalUnits = organizationalUnits,
+            SubjectCountries = countries,
+            SubjectOrganizations = organizations,
+            SubjectCommonNames = commonNames
+        };
+
+        //Reads the Subject's Organizational Unit (OID 2.5.4.11), Country (OID 2.5.4.6), Organization
+        //(OID 2.5.4.10), and Common Name (OID 2.5.4.3) attribute values in Subject-field order — the
+        //order the RDNs are encoded in, not the reversed order EnumerateRelativeDistinguishedNames'
+        //default produces to match the conventional display string.
+        static (IReadOnlyList<string> OrganizationalUnits, IReadOnlyList<string> Countries, IReadOnlyList<string> Organizations, IReadOnlyList<string> CommonNames) ReadSubjectAttributes(X500DistinguishedName subjectName)
+        {
+            var organizationalUnits = new List<string>();
+            var countries = new List<string>();
+            var organizations = new List<string>();
+            var commonNames = new List<string>();
+
+            foreach(X500RelativeDistinguishedName rdn in subjectName.EnumerateRelativeDistinguishedNames(reversed: false))
+            {
+                if(rdn.HasMultipleElements || rdn.GetSingleElementValue() is not string value)
+                {
+                    continue;
+                }
+
+                List<string>? target = rdn.GetSingleElementType().Value switch
+                {
+                    WellKnownOids.OrganizationalUnitName => organizationalUnits,
+                    WellKnownOids.CountryName => countries,
+                    WellKnownOids.OrganizationName => organizations,
+                    WellKnownOids.CommonName => commonNames,
+                    _ => null
+                };
+
+                target?.Add(value);
+            }
+
+            return (organizationalUnits, countries, organizations, commonNames);
+        }
+    }
+
+
+    /// <summary>
+    /// Implements <see cref="ReadCertificateExtensionValueDelegate"/>. Reads a single named extension of
+    /// the certificate and returns its raw DER contents and criticality flag.
+    /// </summary>
+    /// <param name="certificate">The certificate to inspect.</param>
+    /// <param name="oid">The dotted-decimal object identifier of the extension to read.</param>
+    /// <returns>
+    /// The <see cref="X509ExtensionValue"/> for <paramref name="oid"/>, or <see langword="null"/> when the
+    /// certificate carries no extension with that identifier.
+    /// </returns>
+    /// <exception cref="CryptographicException">
+    /// Thrown when the certificate includes more than one instance of a single extension (of any OID),
+    /// which RFC 5280 §4.2 forbids.
+    /// </exception>
+    public static X509ExtensionValue? ReadCertificateExtensionValue(PkiCertificateMemory certificate, string oid)
+    {
+        ArgumentNullException.ThrowIfNull(certificate);
+        ArgumentNullException.ThrowIfNull(oid);
+
+        using X509Certificate2 cert = X509CertificateLoader.LoadCertificate(certificate.AsReadOnlyMemory().Span);
+
+        EnsureNoDuplicateExtensions(cert);
+
+        X509Extension? extension = cert.Extensions[oid];
+        if(extension is null)
+        {
+            return null;
+        }
+
+        return new X509ExtensionValue(extension.RawData, extension.Critical);
+    }
+
+
+    /// <summary>
+    /// Throws when <paramref name="certificate"/> includes more than one instance of a single extension,
+    /// which RFC 5280 §4.2 forbids. Shared by <see cref="ReadCertificateProfile"/> and
+    /// <see cref="ReadCertificateExtensionValue"/> so both derive their result only from a certificate that
+    /// cannot yield an ambiguous, arbitrarily-chosen extension instance.
+    /// </summary>
+    /// <param name="certificate">The loaded certificate to check.</param>
+    /// <exception cref="CryptographicException">
+    /// Thrown when the certificate includes more than one instance of a single extension.
+    /// </exception>
+    private static void EnsureNoDuplicateExtensions(X509Certificate2 certificate)
+    {
         //RFC 5280 §4.2: a certificate MUST NOT include more than one instance of a particular extension. The
         //base class library loader tolerates a duplicate, so reading a single instance with
-        //OfType<>().FirstOrDefault() below would derive the profile from whichever instance the DER happens to
-        //encode first — letting a malformed certificate hide a second KeyUsage asserting keyCertSign behind a
-        //conformant one. Reject the certificate instead, so the profile is never taken from an arbitrarily chosen
-        //instance (the BouncyCastle backend's parser refuses a duplicate extension OID outright, so both backends
-        //fail closed on the same bytes).
-        string? duplicateExtensionOid = cert.Extensions
+        //OfType<>().FirstOrDefault() (or the indexer) would derive a result from whichever instance the DER
+        //happens to encode first — letting a malformed certificate hide a second KeyUsage asserting keyCertSign
+        //behind a conformant one. Reject the certificate instead, so no result is ever taken from an arbitrarily
+        //chosen instance (the BouncyCastle backend's parser refuses a duplicate extension OID outright, so both
+        //backends fail closed on the same bytes).
+        string? duplicateExtensionOid = certificate.Extensions
             .GroupBy(extension => extension.Oid?.Value)
             .Where(group => group.Count() > 1)
             .Select(group => group.Key)
@@ -356,16 +485,6 @@ public static class MicrosoftX509Functions
             throw new CryptographicException(
                 $"The certificate includes more than one instance of the extension '{duplicateExtensionOid}', which RFC 5280 §4.2 forbids.");
         }
-
-        X509KeyUsageExtension? keyUsage = cert.Extensions.OfType<X509KeyUsageExtension>().FirstOrDefault();
-        X509BasicConstraintsExtension? basicConstraints = cert.Extensions.OfType<X509BasicConstraintsExtension>().FirstOrDefault();
-
-        return new X509CertificateProfile
-        {
-            AssertsDigitalSignature = keyUsage is not null && keyUsage.KeyUsages.HasFlag(X509KeyUsageFlags.DigitalSignature),
-            AssertsKeyCertSign = keyUsage is not null && keyUsage.KeyUsages.HasFlag(X509KeyUsageFlags.KeyCertSign),
-            IsCertificateAuthority = basicConstraints is not null && basicConstraints.CertificateAuthority
-        };
     }
 
 
@@ -387,20 +506,16 @@ public static class MicrosoftX509Functions
         {
             using(rsa)
             {
-                byte[] spki = rsa.ExportSubjectPublicKeyInfo();
-                IMemoryOwner<byte> owner = pool.Rent(spki.Length);
-                spki.CopyTo(owner.Memory);
+                //PKCS#1 RSAPublicKey DER (SEQUENCE { modulus, publicExponent }), not the full X.509
+                //SubjectPublicKeyInfo: BouncyCastleCryptographicFunctions.ParseRsaPublicKey reads a
+                //bare two-INTEGER sequence, matching the shape CoseKeyExtensions.ToPublicKeyMemory
+                //already builds for the COSE_Key RSA path (CryptoTags.Rsa2048PublicKey/Rsa4096PublicKey
+                //carry no AlgorithmIdentifier wrapper for either source).
+                byte[] rsaPublicKey = rsa.ExportRSAPublicKey();
+                IMemoryOwner<byte> owner = pool.Rent(rsaPublicKey.Length);
+                rsaPublicKey.CopyTo(owner.Memory);
 
-                Tag tag = rsa.KeySize switch
-                {
-                    2048 => CryptoTags.Rsa2048PublicKey,
-                    4096 => CryptoTags.Rsa4096PublicKey,
-                    _ => throw new NotSupportedException(
-                        $"RSA key size {rsa.KeySize} bits is not supported. " +
-                        $"Supported sizes are 2048 and 4096.")
-                };
-
-                return new PublicKeyMemory(owner, tag);
+                return new PublicKeyMemory(owner, X509RsaPublicKeyTags.ResolvePublicKeyTag(rsa.KeySize));
             }
         }
 

@@ -27,7 +27,6 @@ namespace Verifiable.Tpm.Infrastructure.Spec.Structures;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class TpmlDigest: IDisposable
 {
-    private readonly List<Tpm2bDigest> digests;
     private bool disposed;
 
     /// <summary>
@@ -36,25 +35,25 @@ public sealed class TpmlDigest: IDisposable
     /// <param name="digests">The digests.</param>
     private TpmlDigest(List<Tpm2bDigest> digests)
     {
-        this.digests = digests;
+        this.Digests = digests;
     }
 
     /// <summary>
     /// Gets the number of digests.
     /// </summary>
-    public int Count => digests.Count;
+    public int Count => Digests.Count;
 
     /// <summary>
     /// Gets the digest at the specified index.
     /// </summary>
     /// <param name="index">The index.</param>
     /// <returns>The digest.</returns>
-    public Tpm2bDigest this[int index] => digests[index];
+    public Tpm2bDigest this[int index] => Digests[index];
 
     /// <summary>
     /// Gets all digests as a read-only list.
     /// </summary>
-    public IReadOnlyList<Tpm2bDigest> Digests => digests;
+    public List<Tpm2bDigest> Digests { get; }
 
     /// <summary>
     /// Parses a digest list from a TPM reader.
@@ -100,7 +99,7 @@ public sealed class TpmlDigest: IDisposable
     {
         if(!disposed)
         {
-            foreach(var digest in digests)
+            foreach(var digest in Digests)
             {
                 digest.Dispose();
             }

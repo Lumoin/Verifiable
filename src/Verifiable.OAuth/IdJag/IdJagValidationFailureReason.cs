@@ -3,7 +3,7 @@ namespace Verifiable.OAuth.IdJag;
 /// <summary>
 /// The reason an Identity Assertion JWT Authorization Grant (ID-JAG) assertion failed the
 /// <see cref="IdJagAssertionValidation"/> claim rules of
-/// draft-ietf-oauth-identity-assertion-authz-grant §4.4.1 (and the §9.3 same-trust-domain rule).
+/// draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §4.4.1 (and the §9.3 same-trust-domain rule).
 /// Every value maps a Resource Authorization Server to the <c>invalid_grant</c> rejection the
 /// processing rules mandate.
 /// </summary>

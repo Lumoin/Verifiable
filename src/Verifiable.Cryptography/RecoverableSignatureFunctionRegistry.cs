@@ -19,8 +19,14 @@ namespace Verifiable.Cryptography;
 /// <param name="signaturePool">Memory pool for allocating the signature buffer.</param>
 /// <param name="context">Optional context parameters for the signing operation.</param>
 /// <param name="cancellationToken">Cancellation token for async operations.</param>
-/// <returns>The signature as pooled memory that the caller must dispose.</returns>
-public delegate ValueTask<Signature> RecoverableSigningDelegate(
+/// <returns>
+/// The signature as pooled memory that the caller must dispose, paired with an optional
+/// <see cref="SignatureProducedEvent"/> describing the operation — the same tuple shape wave 4 gave
+/// <see cref="SigningDelegate"/>, completing the CryptoEvent seam for the last sign/verify delegate family
+/// that lacked it (ISO/IEC 9796-2 message recovery has no detached-signature contract to share the plain
+/// delegate pair, so it was given its own registry, but the event shape now matches).
+/// </returns>
+public delegate ValueTask<(Signature Signature, CryptoEvent? Event)> RecoverableSigningDelegate(
     ReadOnlyMemory<byte> privateKeyBytes,
     ReadOnlyMemory<byte> nonRecoverableMessage,
     MemoryPool<byte> signaturePool,
@@ -41,8 +47,12 @@ public delegate ValueTask<Signature> RecoverableSigningDelegate(
 /// <param name="publicKeyMaterial">The public key material.</param>
 /// <param name="context">Optional context parameters for the verification operation.</param>
 /// <param name="cancellationToken">Cancellation token for async operations.</param>
-/// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
-public delegate ValueTask<bool> RecoverableVerificationDelegate(
+/// <returns>
+/// <see langword="true"/> if the signature is valid; otherwise <see langword="false"/>, paired with an
+/// optional <see cref="VerificationCompletedEvent"/> describing the operation. See
+/// <see cref="RecoverableSigningDelegate"/> for the tuple rationale.
+/// </returns>
+public delegate ValueTask<(bool IsVerified, CryptoEvent? Event)> RecoverableVerificationDelegate(
     ReadOnlyMemory<byte> nonRecoverableMessage,
     ReadOnlyMemory<byte> signature,
     ReadOnlyMemory<byte> publicKeyMaterial,

@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -7,7 +6,6 @@ using System.Net;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Server;
@@ -30,24 +28,14 @@ internal sealed class JarAuthorizeByValueTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
-    private static EncodeDelegate Encoder => TestSetup.Base64UrlEncoder;
     private static DecodeDelegate Decoder => TestSetup.Base64UrlDecoder;
-
-    private static readonly JwtHeaderSerializer JwtHeaderSerializerDelegate =
-        static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)header,
-            TestSetup.DefaultSerializationOptions);
-
-    private static readonly JwtPayloadSerializer JwtPayloadSerializerDelegate =
-        static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
-            (Dictionary<string, object>)payload,
-            TestSetup.DefaultSerializationOptions);
 
     private const string ClientId = "https://client.example.com";
     private const string TestSubject = "test-subject-001";
+    private const string JarState = "state-jar-direct-01";
+    private const string JarNonce = "nonce-jar-direct-01";
     private static readonly Uri ClientBaseUri = new("https://client.example.com");
     private static readonly Uri RegisteredRedirectUri = new("https://client.example.com/callback");
 
@@ -78,8 +66,10 @@ internal sealed class JarAuthorizeByValueTests
             ClientId, ClientBaseUri, JarDirectCapabilities, PolicyProfile.Rfc6749WithPkce);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
-        string compactJar = await BuildSignedJarAsync(
-            material, now, BuildBaseClaims(material, now), TestContext.CancellationToken)
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material,
+            OAuthJarFixtures.BuildBaseClaims(material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce),
+            TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchAuthorizeAsync(
@@ -107,8 +97,10 @@ internal sealed class JarAuthorizeByValueTests
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
-        string compactJar = await BuildSignedJarAsync(
-            material, now, BuildBaseClaims(material, now), TestContext.CancellationToken)
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material,
+            OAuthJarFixtures.BuildBaseClaims(material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce),
+            TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchAuthorizeAsync(
@@ -128,11 +120,12 @@ internal sealed class JarAuthorizeByValueTests
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
-        Dictionary<string, object> claims = BuildBaseClaims(material, now);
+        Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
+            material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce);
         claims[OAuthRequestParameterNames.RedirectUri] = "https://attacker.example.com/steal";
 
-        string compactJar = await BuildSignedJarAsync(
-            material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material, claims, TestContext.CancellationToken).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchAuthorizeAsync(
             host, material, compactJar, ClientId, TestContext.CancellationToken)
@@ -151,8 +144,9 @@ internal sealed class JarAuthorizeByValueTests
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
         DateTimeOffset signedAt = TimeProvider.GetUtcNow();
-        string compactJar = await BuildSignedJarAsync(
-            material, signedAt, BuildBaseClaims(material, signedAt),
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material,
+            OAuthJarFixtures.BuildBaseClaims(material, signedAt, ClientId, RegisteredRedirectUri, JarState, JarNonce),
             TestContext.CancellationToken).ConfigureAwait(false);
 
         TimeProvider.Advance(TimeSpan.FromMinutes(5));
@@ -174,10 +168,10 @@ internal sealed class JarAuthorizeByValueTests
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
-        string compactJar = await BuildSignedJarWithCustomTypAsync(
+        string compactJar = await OAuthJarFixtures.BuildSignedJarWithCustomTypAsync(
             material.SigningPrivateKey,
             "JWT",
-            BuildBaseClaims(material, now),
+            OAuthJarFixtures.BuildBaseClaims(material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce),
             TestContext.CancellationToken).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchAuthorizeAsync(
@@ -197,11 +191,12 @@ internal sealed class JarAuthorizeByValueTests
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
-        Dictionary<string, object> claims = BuildBaseClaims(material, now);
+        Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
+            material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce);
         claims.Remove(WellKnownJwtClaimNames.ClientId);
 
-        string compactJar = await BuildSignedJarAsync(
-            material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material, claims, TestContext.CancellationToken).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchAuthorizeAsync(
             host, material, compactJar, ClientId, TestContext.CancellationToken)
@@ -220,11 +215,12 @@ internal sealed class JarAuthorizeByValueTests
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
-        Dictionary<string, object> claims = BuildBaseClaims(material, now);
+        Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
+            material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce);
         claims.Remove(WellKnownJwtClaimNames.Exp);
 
-        string compactJar = await BuildSignedJarAsync(
-            material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material, claims, TestContext.CancellationToken).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchAuthorizeAsync(
             host, material, compactJar, ClientId, TestContext.CancellationToken)
@@ -246,13 +242,14 @@ internal sealed class JarAuthorizeByValueTests
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
-        Dictionary<string, object> claims = BuildBaseClaims(material, now);
+        Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
+            material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce);
         claims[WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds();
         claims[WellKnownJwtClaimNames.Nbf] = now.ToUnixTimeSeconds();
         claims[WellKnownJwtClaimNames.Exp] = (now - TimeSpan.FromSeconds(10)).ToUnixTimeSeconds();
 
-        string compactJar = await BuildSignedJarAsync(
-            material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material, claims, TestContext.CancellationToken).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchAuthorizeAsync(
             host, material, compactJar, ClientId, TestContext.CancellationToken)
@@ -273,13 +270,14 @@ internal sealed class JarAuthorizeByValueTests
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
-        Dictionary<string, object> claims = BuildBaseClaims(material, now);
+        Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
+            material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce);
         claims[WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds();
         claims[WellKnownJwtClaimNames.Nbf] = (now + TimeSpan.FromSeconds(30)).ToUnixTimeSeconds();
         claims[WellKnownJwtClaimNames.Exp] = (now + TimeSpan.FromSeconds(10)).ToUnixTimeSeconds();
 
-        string compactJar = await BuildSignedJarAsync(
-            material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material, claims, TestContext.CancellationToken).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchAuthorizeAsync(
             host, material, compactJar, ClientId, TestContext.CancellationToken)
@@ -303,8 +301,9 @@ internal sealed class JarAuthorizeByValueTests
         using PrivateKeyMemory attackerPrivate = attackerKeys.PrivateKey;
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
-        string compactJar = await BuildSignedJarWithKeyAsync(
-            attackerPrivate, BuildBaseClaims(material, now),
+        string compactJar = await OAuthJarFixtures.BuildSignedJarWithKeyAsync(
+            attackerPrivate,
+            OAuthJarFixtures.BuildBaseClaims(material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce),
             TestContext.CancellationToken).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchAuthorizeAsync(
@@ -324,11 +323,12 @@ internal sealed class JarAuthorizeByValueTests
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
-        Dictionary<string, object> claims = BuildBaseClaims(material, now);
+        Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
+            material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce);
         claims[WellKnownJwtClaimNames.Aud] = "https://different-issuer.example.com/";
 
-        string compactJar = await BuildSignedJarAsync(
-            material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material, claims, TestContext.CancellationToken).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchAuthorizeAsync(
             host, material, compactJar, ClientId, TestContext.CancellationToken)
@@ -347,11 +347,12 @@ internal sealed class JarAuthorizeByValueTests
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
-        Dictionary<string, object> claims = BuildBaseClaims(material, now);
+        Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
+            material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce);
         claims[OAuthRequestParameterNames.CodeChallengeMethod] = "plain";
 
-        string compactJar = await BuildSignedJarAsync(
-            material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material, claims, TestContext.CancellationToken).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchAuthorizeAsync(
             host, material, compactJar, ClientId, TestContext.CancellationToken)
@@ -483,10 +484,11 @@ internal sealed class JarAuthorizeByValueTests
             ClientId, ClientBaseUri, JarDirectCapabilities, PolicyProfile.Rfc6749WithPkce);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
-        Dictionary<string, object> claims = BuildBaseClaims(material, now);
+        Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
+            material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce);
         claims[OAuthRequestParameterNames.MaxAge] = 300L;
-        string compactJar = await BuildSignedJarAsync(
-            material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material, claims, TestContext.CancellationToken).ConfigureAwait(false);
 
         RequestFields fields = new()
         {
@@ -554,15 +556,18 @@ internal sealed class JarAuthorizeByValueTests
             ClientId, ClientBaseUri, JarDirectCapabilities, PolicyProfile.Rfc6749WithPkce);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
-        string compactJar = await BuildSignedJarAsync(
-            material, now, BuildBaseClaims(material, now), TestContext.CancellationToken)
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material,
+            OAuthJarFixtures.BuildBaseClaims(material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce),
+            TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchAuthorizeAsync(
             host, material, compactJar, ClientId, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(302, response.StatusCode, response.Body);
-        //BuildBaseClaims sets state = "state-jar-direct-01"; it must round-trip onto the redirect.
+        //OAuthJarFixtures.BuildBaseClaims was called with JarState ("state-jar-direct-01"); it
+        //must round-trip onto the redirect.
         Assert.Contains("state=state-jar-direct-01", response.Location!, StringComparison.Ordinal,
             $"The JAR-by-value success redirect must echo the request object's state. Location: {response.Location}");
     }
@@ -619,8 +624,10 @@ internal sealed class JarAuthorizeByValueTests
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
-        string compactJar = await BuildSignedJarAsync(
-            material, now, BuildBaseClaims(material, now), TestContext.CancellationToken)
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material,
+            OAuthJarFixtures.BuildBaseClaims(material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce),
+            TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         RequestFields fields = new()
@@ -662,11 +669,12 @@ internal sealed class JarAuthorizeByValueTests
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
-        Dictionary<string, object> claims = BuildBaseClaims(material, now);
+        Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
+            material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce);
         claims[WellKnownJwtClaimNames.Iss] = "https://impostor.example.com";
 
-        string compactJar = await BuildSignedJarAsync(
-            material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material, claims, TestContext.CancellationToken).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchAuthorizeAsync(
             host, material, compactJar, ClientId, TestContext.CancellationToken)
@@ -685,11 +693,12 @@ internal sealed class JarAuthorizeByValueTests
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
-        Dictionary<string, object> claims = BuildBaseClaims(material, now);
+        Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
+            material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce);
         claims.Remove(WellKnownJwtClaimNames.Aud);
 
-        string compactJar = await BuildSignedJarAsync(
-            material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material, claims, TestContext.CancellationToken).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchAuthorizeAsync(
             host, material, compactJar, ClientId, TestContext.CancellationToken)
@@ -708,11 +717,12 @@ internal sealed class JarAuthorizeByValueTests
             ClientId, ClientBaseUri, JarDirectCapabilities);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
-        Dictionary<string, object> claims = BuildBaseClaims(material, now);
+        Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
+            material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce);
         claims[WellKnownJwtClaimNames.Exp] = (now + TimeSpan.FromMinutes(5)).ToUnixTimeSeconds();
 
-        string compactJar = await BuildSignedJarAsync(
-            material, now, claims, TestContext.CancellationToken).ConfigureAwait(false);
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material, claims, TestContext.CancellationToken).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchAuthorizeAsync(
             host, material, compactJar, ClientId, TestContext.CancellationToken)
@@ -720,109 +730,6 @@ internal sealed class JarAuthorizeByValueTests
 
         Assert.AreEqual(400, response.StatusCode);
         AssertErrorCode(response, OAuthErrors.InvalidRequestObject);
-    }
-
-
-    //Helpers — JAR construction and dispatch.
-
-    private static Dictionary<string, object> BuildBaseClaims(
-        VerifierKeyMaterial material, DateTimeOffset now)
-    {
-        string expectedAud = material.Registration.IssuerUri!.ToString();
-
-        return new Dictionary<string, object>(StringComparer.Ordinal)
-        {
-            [WellKnownJwtClaimNames.Iss] = ClientId,
-            [WellKnownJwtClaimNames.Aud] = expectedAud,
-            [WellKnownJwtClaimNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
-            [OAuthRequestParameterNames.RedirectUri] = RegisteredRedirectUri.ToString(),
-            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
-            [OAuthRequestParameterNames.State] = "state-jar-direct-01",
-            [WellKnownJwtClaimNames.Nonce] = "nonce-jar-direct-01",
-            [OAuthRequestParameterNames.CodeChallenge] = "abcdEFGHijklMNOPqrstUVWXyz0123456789-_AAA",
-            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
-            [WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds(),
-            [WellKnownJwtClaimNames.Nbf] = now.ToUnixTimeSeconds(),
-            [WellKnownJwtClaimNames.Exp] = (now + TimeSpan.FromSeconds(30)).ToUnixTimeSeconds()
-        };
-    }
-
-
-    private static async Task<string> BuildSignedJarAsync(
-        VerifierKeyMaterial material,
-        DateTimeOffset now,
-        IReadOnlyDictionary<string, object> claims,
-        CancellationToken cancellationToken)
-    {
-        _ = now;
-        return await BuildSignedJarWithKeyAsync(
-            material.SigningPrivateKey, claims, cancellationToken).ConfigureAwait(false);
-    }
-
-
-    private static async Task<string> BuildSignedJarWithKeyAsync(
-        PrivateKeyMemory signingKey,
-        IReadOnlyDictionary<string, object> claims,
-        CancellationToken cancellationToken)
-    {
-        string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
-
-        JwtHeader header = new()
-        {
-            [WellKnownJwkMemberNames.Alg] = algorithm,
-            [WellKnownJoseHeaderNames.Typ] = WellKnownMediaTypes.Jwt.OauthAuthzReqJwt
-        };
-
-        JwtPayload payload = new();
-        foreach(KeyValuePair<string, object> entry in claims)
-        {
-            payload[entry.Key] = entry.Value;
-        }
-
-        UnsignedJwt unsigned = new(header, payload);
-        using JwsMessage signed = await unsigned.SignAsync(
-            signingKey,
-            JwtHeaderSerializerDelegate,
-            JwtPayloadSerializerDelegate,
-            Encoder,
-            Pool,
-            cancellationToken).ConfigureAwait(false);
-
-        return JwsSerialization.SerializeCompact(signed, Encoder);
-    }
-
-
-    private static async Task<string> BuildSignedJarWithCustomTypAsync(
-        PrivateKeyMemory signingKey,
-        string typValue,
-        IReadOnlyDictionary<string, object> claims,
-        CancellationToken cancellationToken)
-    {
-        string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
-
-        JwtHeader header = new()
-        {
-            [WellKnownJwkMemberNames.Alg] = algorithm,
-            [WellKnownJoseHeaderNames.Typ] = typValue
-        };
-
-        JwtPayload payload = new();
-        foreach(KeyValuePair<string, object> entry in claims)
-        {
-            payload[entry.Key] = entry.Value;
-        }
-
-        UnsignedJwt unsigned = new(header, payload);
-        using JwsMessage signed = await unsigned.SignAsync(
-            signingKey,
-            JwtHeaderSerializerDelegate,
-            JwtPayloadSerializerDelegate,
-            Encoder,
-            Pool,
-            cancellationToken).ConfigureAwait(false);
-
-        return JwsSerialization.SerializeCompact(signed, Encoder);
     }
 
 

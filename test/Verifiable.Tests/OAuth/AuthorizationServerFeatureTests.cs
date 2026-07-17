@@ -45,7 +45,7 @@ internal sealed class AuthorizationServerFeatureTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private const string VerifierClientId = "https://verifier.example.com";
 

@@ -37,9 +37,9 @@ namespace Verifiable.BouncyCastle;
 /// </remarks>
 public static class BouncyCastleEntropyFunctions
 {
-    private static readonly SecureRandom SecureRandom = new();
+    private static SecureRandom SecureRandom { get; } = new();
 
-    private static readonly ProviderLibrary ProviderLib = new(
+    private static ProviderLibrary ProviderLib { get; } = new(
         typeof(BouncyCastleEntropyFunctions).Assembly.GetName().Name
             ?? "Verifiable.BouncyCastle",
         typeof(BouncyCastleEntropyFunctions).Assembly.GetName().Version?.ToString()
@@ -47,11 +47,11 @@ public static class BouncyCastleEntropyFunctions
 
     //BouncyCastle is an independently versioned NuGet package — its assembly
     //version is the most meaningful CBOM identifier.
-    private static readonly CryptoLibraryInfo CryptoLib = new(
+    private static CryptoLibraryInfo CryptoLib { get; } = new(
         "Org.BouncyCastle.Cryptography",
         typeof(SecureRandom).Assembly.GetName().Version?.ToString() ?? "Unknown");
 
-    private static readonly ProviderClass ProviderCls =
+    private static ProviderClass ProviderCls { get; } =
         new(nameof(BouncyCastleEntropyFunctions));
 
 

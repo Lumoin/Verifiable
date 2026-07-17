@@ -98,7 +98,7 @@ internal sealed class DidCommEncryptedAnoncryptXc20pVectorTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             BouncyCastleKeyAgreementFunctions.XChaCha20Poly1305DecryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertRecoveredC1Message(result);
     }
@@ -125,7 +125,7 @@ internal sealed class DidCommEncryptedAnoncryptXc20pVectorTests
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertRecoveredC1Message(result);
     }
@@ -177,7 +177,7 @@ internal sealed class DidCommEncryptedAnoncryptXc20pVectorTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             BouncyCastleKeyAgreementFunctions.XChaCha20Poly1305DecryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsUnpacked, "A tampered Poly1305 tag MUST NOT unpack.");
         Assert.AreEqual(DidCommDecryptionError.DecryptionFailed, result.Error);
@@ -214,7 +214,7 @@ internal sealed class DidCommEncryptedAnoncryptXc20pVectorTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             BouncyCastleKeyAgreementFunctions.XChaCha20Poly1305DecryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsUnpacked, "An iv that is not the 24-byte XChaCha20 nonce MUST NOT unpack.");
         Assert.AreEqual(DidCommDecryptionError.MalformedEnvelope, result.Error);

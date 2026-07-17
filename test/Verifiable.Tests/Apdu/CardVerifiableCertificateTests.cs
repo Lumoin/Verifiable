@@ -5,6 +5,7 @@ using Verifiable.Apdu.Eac;
 using Verifiable.Apdu.Lds;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using static Verifiable.Tests.TestInfrastructure.ApduWireFixtures;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -130,7 +131,9 @@ internal sealed class CardVerifiableCertificateTests
         Assert.AreEqual(TerminalType.InspectionSystem, parsed.Chat.TerminalType, "The CHAT object identifier selects an Inspection System.");
         Assert.AreEqual(CertificateRole.Terminal, parsed.Chat.Role, "The role bits 00 denote an end-entity terminal.");
 
-        //The RSA key is re-encoded as a DER RSAPublicKey; an independent framework import recovers the modulus and exponent.
+        //Independent-oracle carve-out: the RSA key is re-encoded as a DER RSAPublicKey, and an independent
+        //framework import recovers the modulus and exponent, proving the library's encoding against an
+        //implementation outside the library rather than against itself.
         using RSA rsa = RSA.Create();
         rsa.ImportRSAPublicKey(parsed.PublicKey.RsaKey!.AsReadOnlySpan(), out int read);
         Assert.AreEqual(parsed.PublicKey.RsaKey!.Length, read, "The whole DER RSAPublicKey is consumed by the import.");
@@ -302,17 +305,6 @@ internal sealed class CardVerifiableCertificateTests
     }
 
 
-    /// <summary>Builds a 65-byte SEC1 uncompressed point: <c>0x04</c> then 64 filler bytes.</summary>
-    private static byte[] BuildUncompressedPoint(byte fill)
-    {
-        byte[] point = new byte[65];
-        point[0] = 0x04;
-        point.AsSpan(1).Fill(fill);
-
-        return point;
-    }
-
-
     /// <summary>Builds a byte array of <paramref name="length"/> filled with <paramref name="value"/>.</summary>
     private static byte[] Filled(int length, byte value)
     {
@@ -347,16 +339,6 @@ internal sealed class CardVerifiableCertificateTests
         byte[] length = EncodeLength(body.Length);
 
         return Concat(tagBytes, length, body);
-    }
-
-
-    /// <summary>Encodes a BER-TLV definite length (short form, or long form with 0x81 / 0x82).</summary>
-    private static byte[] EncodeLength(int length)
-    {
-        if(length <= 0x7F) { return [(byte)length]; }
-        if(length <= 0xFF) { return [0x81, (byte)length]; }
-
-        return [0x82, (byte)(length >> 8), (byte)length];
     }
 
 

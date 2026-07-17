@@ -25,7 +25,7 @@ internal sealed class CredentialProofValidatorTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly DateTimeOffset NowInstant = new(2026, 6, 1, 12, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset NowInstant = TestClock.CanonicalEpoch;
     private static readonly TimeSpan IatSkew = TimeSpan.FromMinutes(5);
     private const string Audience = "https://credential-issuer.example.com";
     private const string CredentialNonce = "c-nonce-LarRGSbmUPYtRYO6BQ4yn8";

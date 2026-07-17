@@ -115,7 +115,7 @@ public readonly struct PolicyProfile: IEquatable<PolicyProfile>
     public static PolicyProfile Oid4VpVerifier { get; } = new(3);
 
 
-    private static readonly List<PolicyProfile> profiles = [Fapi20, Haip10, Rfc6749WithPkce, Oid4VpVerifier];
+    private static List<PolicyProfile> profiles { get; } = [Fapi20, Haip10, Rfc6749WithPkce, Oid4VpVerifier];
 
     /// <summary>Gets all registered profile values including any custom ones.</summary>
     public static IReadOnlyList<PolicyProfile> Profiles => profiles.AsReadOnly();

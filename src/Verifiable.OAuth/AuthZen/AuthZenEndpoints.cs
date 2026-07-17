@@ -565,7 +565,7 @@ public static class AuthZenEndpoints
     /// <summary>
     /// The shared POST + path matcher for the three §7 Search endpoints.
     /// </summary>
-    private static readonly MatchRequestDelegate SearchMatcher = static (fields, context, endpoint, ct) =>
+    private static MatchRequestDelegate SearchMatcher { get; } = static (fields, context, endpoint, ct) =>
     {
         IncomingRequest? req = context.IncomingRequest;
         if(req is null) { return ValueTask.FromResult<MatchPayload?>(null); }

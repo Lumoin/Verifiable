@@ -44,7 +44,7 @@ namespace Verifiable.Core.StatusList;
 public sealed class StatusList: IDisposable, IEquatable<StatusList>
 {
     private IMemoryOwner<byte>? memoryOwner;
-    private readonly int byteCount;
+    private int ByteCount { get; }
     private bool disposed;
 
     /// <summary>
@@ -94,7 +94,7 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
     private StatusList(IMemoryOwner<byte> memoryOwner, StatusListBitSize bitSize, int capacity, int byteCount, BitOrder bitOrder)
     {
         this.memoryOwner = memoryOwner;
-        this.byteCount = byteCount;
+        this.ByteCount = byteCount;
         BitSize = bitSize;
         Capacity = capacity;
         BitOrder = bitOrder;
@@ -281,7 +281,7 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        ReadOnlySpan<byte> data = memoryOwner!.Memory.Span[..byteCount];
+        ReadOnlySpan<byte> data = memoryOwner!.Memory.Span[..ByteCount];
         using var output = new MemoryStream();
         using(var zlib = new ZLibStream(output, compressionLevel))
         {
@@ -314,7 +314,7 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
     public ReadOnlySpan<byte> AsSpan()
     {
         ObjectDisposedException.ThrowIf(disposed, this);
-        return memoryOwner!.Memory.Span[..byteCount];
+        return memoryOwner!.Memory.Span[..ByteCount];
     }
 
     /// <inheritdoc/>
@@ -340,7 +340,7 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
             return false;
         }
 
-        return memoryOwner!.Memory.Span[..byteCount].SequenceEqual(other.memoryOwner!.Memory.Span[..other.byteCount])
+        return memoryOwner!.Memory.Span[..ByteCount].SequenceEqual(other.memoryOwner!.Memory.Span[..other.ByteCount])
             && string.Equals(AggregationUri, other.AggregationUri, StringComparison.Ordinal);
     }
 
@@ -363,7 +363,7 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
         hash.Add(Capacity);
         hash.Add(BitOrder);
         hash.Add(AggregationUri);
-        hash.AddBytes(memoryOwner!.Memory.Span[..byteCount]);
+        hash.AddBytes(memoryOwner!.Memory.Span[..ByteCount]);
 
         return hash.ToHashCode();
     }

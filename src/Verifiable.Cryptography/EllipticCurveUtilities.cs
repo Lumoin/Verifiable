@@ -123,10 +123,15 @@ namespace Verifiable.Cryptography
         public static byte OddYCoordinate => 0x03;
 
         /// <summary>
-        /// Uncompressed format for elliptic curve points that are concatenated. Not supported.
+        /// The leading octet of a SEC1 uncompressed elliptic-curve point encoding
+        /// (<c>0x04 || X || Y</c>).
         /// </summary>
-        /// <remarks>Also see <see href="https://datatracker.ietf.org/doc/html/rfc5480">RFC 5480:
-        /// Elliptic Curve Cryptography Subject Public Key Information</see>.</remarks>
+        /// <remarks>
+        /// <see href="https://www.secg.org/sec1-v2.pdf">SEC 1: Elliptic Curve Cryptography, section
+        /// 2.3.3: Elliptic-Curve-Point-to-Octet-String Conversion</see>, step 3.2: "the uncompressed
+        /// form is used, ... assign 0x04 = PC". Also see <see href="https://datatracker.ietf.org/doc/html/rfc5480">
+        /// RFC 5480: Elliptic Curve Cryptography Subject Public Key Information</see>.
+        /// </remarks>
         public static byte UncompressedCoordinateFormat => 0x04;
 
 

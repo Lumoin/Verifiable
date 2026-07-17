@@ -38,7 +38,7 @@ namespace Verifiable.Core.OutboundFetch;
 /// </remarks>
 public static class OutboundFetch
 {
-    private static readonly HashSet<int> RedirectStatusCodes = [301, 302, 303, 307, 308];
+    private static HashSet<int> RedirectStatusCodes { get; } = [301, 302, 303, 307, 308];
 
 
     /// <summary>

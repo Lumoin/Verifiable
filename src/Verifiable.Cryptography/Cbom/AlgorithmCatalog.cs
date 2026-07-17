@@ -42,10 +42,10 @@ internal sealed record AlgorithmDescriptor(
 /// </remarks>
 internal static class AlgorithmCatalog
 {
-    private static readonly string[] SignatureKeyFunctions = ["keygen", "sign", "verify"];
-    private static readonly string[] KeyAgreementFunctions = ["keygen", "keyderive"];
-    private static readonly string[] KemFunctions = ["keygen", "encapsulate", "decapsulate"];
-    private static readonly string[] EncryptFunctions = ["encrypt", "decrypt"];
+    private static string[] SignatureKeyFunctions { get; } = ["keygen", "sign", "verify"];
+    private static string[] KeyAgreementFunctions { get; } = ["keygen", "keyderive"];
+    private static string[] KemFunctions { get; } = ["keygen", "encapsulate", "decapsulate"];
+    private static string[] EncryptFunctions { get; } = ["encrypt", "decrypt"];
 
 
     public static AlgorithmDescriptor Describe(CryptoAlgorithm algorithm) => algorithm switch

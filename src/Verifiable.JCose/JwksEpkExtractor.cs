@@ -101,7 +101,7 @@ public static class JwksEpkExtractor
         //Encode as uncompressed point: 0x04 || X || Y.
         int totalLength = 1 + xSpan.Length + ySpan.Length;
         IMemoryOwner<byte> owner = pool.Rent(totalLength);
-        owner.Memory.Span[0] = 0x04;
+        owner.Memory.Span[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
         xSpan.CopyTo(owner.Memory.Span[1..]);
         ySpan.CopyTo(owner.Memory.Span[(1 + xSpan.Length)..]);
 
@@ -207,7 +207,7 @@ public static class JwksEpkExtractor
 
         int totalLength = 1 + xSpan.Length + ySpan.Length;
         IMemoryOwner<byte> owner = pool.Rent(totalLength);
-        owner.Memory.Span[0] = 0x04;
+        owner.Memory.Span[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
         xSpan.CopyTo(owner.Memory.Span[1..]);
         ySpan.CopyTo(owner.Memory.Span[(1 + xSpan.Length)..]);
 

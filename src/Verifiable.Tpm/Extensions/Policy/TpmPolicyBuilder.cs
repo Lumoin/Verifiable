@@ -16,7 +16,7 @@ namespace Verifiable.Tpm.Extensions.Policy;
 /// </remarks>
 public sealed class TpmPolicyBuilder
 {
-    private readonly List<TpmPolicyAssertion> assertions = [];
+    private List<TpmPolicyAssertion> Assertions { get; } = [];
 
     /// <summary>
     /// Appends a TPM2_PolicyCommandCode assertion.
@@ -25,7 +25,7 @@ public sealed class TpmPolicyBuilder
     /// <returns>This builder.</returns>
     public TpmPolicyBuilder WithCommandCode(TpmCcConstants commandCode)
     {
-        assertions.Add(new CommandCodePolicyAssertion(commandCode));
+        Assertions.Add(new CommandCodePolicyAssertion(commandCode));
 
         return this;
     }
@@ -36,7 +36,7 @@ public sealed class TpmPolicyBuilder
     /// <returns>This builder.</returns>
     public TpmPolicyBuilder WithAuthValue()
     {
-        assertions.Add(new AuthValuePolicyAssertion());
+        Assertions.Add(new AuthValuePolicyAssertion());
 
         return this;
     }
@@ -48,7 +48,7 @@ public sealed class TpmPolicyBuilder
     /// <returns>This builder.</returns>
     public TpmPolicyBuilder WithSecret(uint authHandle)
     {
-        assertions.Add(new SecretPolicyAssertion(authHandle));
+        Assertions.Add(new SecretPolicyAssertion(authHandle));
 
         return this;
     }
@@ -62,7 +62,7 @@ public sealed class TpmPolicyBuilder
     /// <returns>This builder.</returns>
     public TpmPolicyBuilder WithPcr(TpmAlgIdConstants pcrBank, int[] pcrIndices, ReadOnlyMemory<byte> pcrDigest = default)
     {
-        assertions.Add(new PcrPolicyAssertion(pcrBank, pcrIndices, pcrDigest));
+        Assertions.Add(new PcrPolicyAssertion(pcrBank, pcrIndices, pcrDigest));
 
         return this;
     }
@@ -79,7 +79,7 @@ public sealed class TpmPolicyBuilder
     /// <returns>This builder.</returns>
     public TpmPolicyBuilder WithNv(uint authHandle, uint nvIndex, ReadOnlyMemory<byte> operandB, ushort offset, TpmEoConstants operation, ReadOnlyMemory<byte> nvName)
     {
-        assertions.Add(new NvPolicyAssertion(authHandle, nvIndex, operandB, offset, operation, nvName));
+        Assertions.Add(new NvPolicyAssertion(authHandle, nvIndex, operandB, offset, operation, nvName));
 
         return this;
     }
@@ -91,7 +91,7 @@ public sealed class TpmPolicyBuilder
     /// <returns>This builder.</returns>
     public TpmPolicyBuilder WithOr(IReadOnlyList<ReadOnlyMemory<byte>> branchDigests)
     {
-        assertions.Add(new OrPolicyAssertion(branchDigests));
+        Assertions.Add(new OrPolicyAssertion(branchDigests));
 
         return this;
     }
@@ -100,5 +100,5 @@ public sealed class TpmPolicyBuilder
     /// Builds the immutable policy from the accumulated assertions.
     /// </summary>
     /// <returns>The built policy.</returns>
-    public TpmPolicy Build() => new(assertions.ToArray());
+    public TpmPolicy Build() => new(Assertions.ToArray());
 }

@@ -427,7 +427,7 @@ internal sealed class DidCommEncryptedAuthcryptAdversarialTests
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512EncryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false))
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false))
         {
             wireJson = Encoding.UTF8.GetString(encrypted.AsReadOnlySpan());
         }
@@ -455,7 +455,7 @@ internal sealed class DidCommEncryptedAuthcryptAdversarialTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512DecryptAsync,
             Pool,
-            TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken);
     }
 
 

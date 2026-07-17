@@ -28,8 +28,8 @@ namespace Verifiable.Tpm.Infrastructure.Spec.Structures;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class Tpm2bCreationData: IDisposable, ITpmWireType
 {
-    private readonly IMemoryOwner<byte> rawStorage;
-    private readonly int rawLength;
+    private IMemoryOwner<byte> RawStorage { get; }
+    private int RawLength { get; }
     private bool disposed;
 
     /// <summary>
@@ -43,8 +43,8 @@ public sealed class Tpm2bCreationData: IDisposable, ITpmWireType
     private Tpm2bCreationData(TpmsCreationData creationData, IMemoryOwner<byte> rawStorage, int rawLength)
     {
         CreationData = creationData;
-        this.rawStorage = rawStorage;
-        this.rawLength = rawLength;
+        this.RawStorage = rawStorage;
+        this.RawLength = rawLength;
     }
 
     /// <summary>
@@ -54,7 +54,7 @@ public sealed class Tpm2bCreationData: IDisposable, ITpmWireType
     public ReadOnlySpan<byte> GetRawBytes()
     {
         ObjectDisposedException.ThrowIf(disposed, this);
-        return rawStorage.Memory.Span.Slice(0, rawLength);
+        return RawStorage.Memory.Span.Slice(0, RawLength);
     }
 
     /// <summary>
@@ -93,10 +93,10 @@ public sealed class Tpm2bCreationData: IDisposable, ITpmWireType
         if(!disposed)
         {
             CreationData.Dispose();
-            rawStorage.Dispose();
+            RawStorage.Dispose();
             disposed = true;
         }
     }
 
-    private string DebuggerDisplay => $"TPM2B_CREATION_DATA({rawLength} bytes)";
+    private string DebuggerDisplay => $"TPM2B_CREATION_DATA({RawLength} bytes)";
 }

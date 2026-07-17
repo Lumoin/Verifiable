@@ -37,8 +37,8 @@ public static class SsfFrameworkSetIssuance
     /// <param name="headerSerializer">Serializes the protected header to UTF-8 JSON bytes.</param>
     /// <param name="payloadSerializer">Serializes the payload claims to UTF-8 JSON bytes.</param>
     /// <param name="memoryPool">Memory pool for transient signing buffers.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <param name="signingKeyId">Optional <c>kid</c> header naming the signing key.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The compact-serialized verification SET.</returns>
     public static ValueTask<string> IssueVerificationSetAsync(
         string streamId,
@@ -52,8 +52,8 @@ public static class SsfFrameworkSetIssuance
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
         MemoryPool<byte> memoryPool,
-        CancellationToken cancellationToken,
-        string? signingKeyId = null)
+        string? signingKeyId = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(streamId);
 
@@ -74,9 +74,9 @@ public static class SsfFrameworkSetIssuance
             headerSerializer,
             payloadSerializer,
             memoryPool,
-            cancellationToken,
             signingKeyId,
-            subjectId: SubjectIdentifier.Opaque(streamId));
+            subjectId: SubjectIdentifier.Opaque(streamId),
+            cancellationToken: cancellationToken);
     }
 
 
@@ -99,8 +99,8 @@ public static class SsfFrameworkSetIssuance
     /// <param name="headerSerializer">Serializes the protected header to UTF-8 JSON bytes.</param>
     /// <param name="payloadSerializer">Serializes the payload claims to UTF-8 JSON bytes.</param>
     /// <param name="memoryPool">Memory pool for transient signing buffers.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     /// <param name="signingKeyId">Optional <c>kid</c> header naming the signing key.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The compact-serialized stream-updated SET.</returns>
     public static ValueTask<string> IssueStreamUpdatedSetAsync(
         string streamId,
@@ -115,8 +115,8 @@ public static class SsfFrameworkSetIssuance
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
         MemoryPool<byte> memoryPool,
-        CancellationToken cancellationToken,
-        string? signingKeyId = null)
+        string? signingKeyId = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(streamId);
         ArgumentException.ThrowIfNullOrWhiteSpace(status);
@@ -141,8 +141,8 @@ public static class SsfFrameworkSetIssuance
             headerSerializer,
             payloadSerializer,
             memoryPool,
-            cancellationToken,
             signingKeyId,
-            subjectId: SubjectIdentifier.Opaque(streamId));
+            subjectId: SubjectIdentifier.Opaque(streamId),
+            cancellationToken: cancellationToken);
     }
 }

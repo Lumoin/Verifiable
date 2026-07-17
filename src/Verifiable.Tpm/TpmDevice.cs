@@ -145,8 +145,8 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     private const int StModeOffset = 24;
 
     private readonly Lock observerLock = new();
-    private readonly TpmSubmitHandler? customHandler;
-    private readonly Action? customDispose;
+    private TpmSubmitHandler? CustomHandler { get; }
+    private Action? CustomDispose { get; }
     private IObserver<TpmExchange>[] observers = [];
     private bool disposed;
 
@@ -230,7 +230,7 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
         }
 
         //Invoke custom dispose action if provided.
-        customDispose?.Invoke();
+        CustomDispose?.Invoke();
 
         //Close platform-specific resources.
         linuxStream?.Dispose();
@@ -363,8 +363,8 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     {
         Platform = TpmPlatform.Virtual;
         Endpoint = "Virtual";
-        customHandler = handler;
-        customDispose = disposeAction;
+        CustomHandler = handler;
+        CustomDispose = disposeAction;
     }
 
 
@@ -554,9 +554,9 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
         MemoryPool<byte> pool,
         CancellationToken cancellationToken)
     {
-        if(customHandler is not null)
+        if(CustomHandler is not null)
         {
-            return customHandler(command, pool, cancellationToken);
+            return CustomHandler(command, pool, cancellationToken);
         }
 
         if(Platform is TpmPlatform.Linux)

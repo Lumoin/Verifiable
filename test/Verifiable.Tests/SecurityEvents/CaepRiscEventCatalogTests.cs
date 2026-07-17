@@ -300,15 +300,15 @@ internal sealed class CaepRiscEventCatalogTests
             SecurityEventTestJson.HeaderSerializer,
             SecurityEventTestJson.PayloadSerializer,
             Pool,
-            TestContext.CancellationToken,
             signingKeyId: "key-1",
-            subjectId: subject ?? SubjectIdentifier.IssuerSubject(Issuer, "user-1234")).ConfigureAwait(false);
+            subjectId: subject ?? SubjectIdentifier.IssuerSubject(Issuer, "user-1234"),
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         SsfDeliveryDecision decision = await SecurityEventTokenReception.ReceiveAsync(
             compact, transmitterPublic, Issuer, Audience,
             SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
             TestSetup.Base64UrlDecoder, NeverSeen, new ExchangeContext(), Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(SsfDeliveryOutcome.Accepted, decision.Outcome);
 

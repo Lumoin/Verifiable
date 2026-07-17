@@ -31,6 +31,13 @@ public static class ActiveAuthenticationCardResponder
     /// <param name="curve">A tag carrying the curve <see cref="CryptoAlgorithm"/>, from the chip's EF.DG15 public key.</param>
     /// <param name="challenge">The terminal's challenge RND.IFD to sign.</param>
     /// <param name="pool">The memory pool for the signature buffer.</param>
+    /// <param name="eventSink">
+    /// Receives the <see cref="SignatureProducedEvent"/> the resolved <see cref="SigningDelegate"/>
+    /// constructs, or <see langword="null"/> to route it to <see cref="CryptographicKeyEvents.DefaultSink"/>.
+    /// This responder resolves and invokes the registry delegate directly rather than through a bound
+    /// <see cref="PrivateKey"/> (there is no key object here, only raw key bytes), so a
+    /// <see cref="CryptoEventSink"/> is this call site's route — see <see cref="CryptoEventSink"/>.
+    /// </param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The chip's signature over the challenge. The caller owns and disposes it.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the curve tag carries no algorithm, or no signing function is registered for it.</exception>
@@ -39,6 +46,7 @@ public static class ActiveAuthenticationCardResponder
         Tag curve,
         ReadOnlyMemory<byte> challenge,
         BaseMemoryPool pool,
+        CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(curve);
@@ -51,6 +59,13 @@ public static class ActiveAuthenticationCardResponder
 
         SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(algorithm, Purpose.Signing);
 
-        return await sign(activeAuthenticationPrivateKey, challenge, pool, null, cancellationToken).ConfigureAwait(false);
+        (Signature signature, CryptoEvent? evt) = await sign(activeAuthenticationPrivateKey, challenge, pool, null, cancellationToken).ConfigureAwait(false);
+
+        if(evt is not null)
+        {
+            (eventSink ?? CryptographicKeyEvents.DefaultSink)(evt);
+        }
+
+        return signature;
     }
 }

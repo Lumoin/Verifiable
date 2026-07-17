@@ -36,10 +36,9 @@ namespace Verifiable.Tpm.Infrastructure.Spec.Structures;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class Tpm2bPrivate: IDisposable, ITpmWireType
 {
-    private static readonly Tpm2bPrivate EmptyInstance = new();
+    private static Tpm2bPrivate EmptyInstance { get; } = new();
 
-    private readonly IMemoryOwner<byte>? storage;
-    private readonly int length;
+    private IMemoryOwner<byte>? Storage { get; }
     private bool disposed;
 
     /// <summary>
@@ -47,8 +46,8 @@ public sealed class Tpm2bPrivate: IDisposable, ITpmWireType
     /// </summary>
     private Tpm2bPrivate()
     {
-        storage = null;
-        length = 0;
+        Storage = null;
+        Length = 0;
     }
 
     /// <summary>
@@ -58,8 +57,8 @@ public sealed class Tpm2bPrivate: IDisposable, ITpmWireType
     /// <param name="length">The actual length of the blob.</param>
     private Tpm2bPrivate(IMemoryOwner<byte> storage, int length)
     {
-        this.storage = storage;
-        this.length = length;
+        this.Storage = storage;
+        this.Length = length;
     }
 
     /// <summary>
@@ -70,12 +69,12 @@ public sealed class Tpm2bPrivate: IDisposable, ITpmWireType
     /// <summary>
     /// Gets a value indicating whether this blob is empty.
     /// </summary>
-    public bool IsEmpty => length == 0;
+    public bool IsEmpty => Length == 0;
 
     /// <summary>
     /// Gets the length of the blob in octets.
     /// </summary>
-    public int Length => length;
+    public int Length { get; }
 
     /// <summary>
     /// Gets the blob as a read-only span.
@@ -86,19 +85,19 @@ public sealed class Tpm2bPrivate: IDisposable, ITpmWireType
         {
             ObjectDisposedException.ThrowIf(disposed, this);
 
-            if(storage is null)
+            if(Storage is null)
             {
                 return ReadOnlySpan<byte>.Empty;
             }
 
-            return storage.Memory.Span.Slice(0, length);
+            return Storage.Memory.Span.Slice(0, Length);
         }
     }
 
     /// <summary>
     /// Gets the serialized size (2-byte size prefix + blob).
     /// </summary>
-    public int SerializedSize => sizeof(ushort) + length;
+    public int SerializedSize => sizeof(ushort) + Length;
 
     /// <summary>
     /// Writes this structure to a TPM writer.
@@ -108,9 +107,9 @@ public sealed class Tpm2bPrivate: IDisposable, ITpmWireType
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        writer.WriteUInt16((ushort)length);
+        writer.WriteUInt16((ushort)Length);
 
-        if(length > 0)
+        if(Length > 0)
         {
             writer.WriteBytes(Span);
         }
@@ -182,10 +181,10 @@ public sealed class Tpm2bPrivate: IDisposable, ITpmWireType
     {
         if(!disposed && this != EmptyInstance)
         {
-            storage?.Dispose();
+            Storage?.Dispose();
             disposed = true;
         }
     }
 
-    private string DebuggerDisplay => $"TPM2B_PRIVATE({length} bytes)";
+    private string DebuggerDisplay => $"TPM2B_PRIVATE({Length} bytes)";
 }

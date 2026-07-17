@@ -2,7 +2,7 @@
 
 # Verifiable
 
-**An integrated .NET stack for decentralized identity: DIDs, verifiable credentials, selective disclosure, secure messaging, and hardware-backed cryptography.**
+**An integrated .NET stack for decentralized identity: DIDs, verifiable credentials, selective disclosure, secure messaging, passkeys, and hardware-backed cryptography.**
 
 ![Main build workflow](https://github.com/lumoin/Verifiable/actions/workflows/main.yml/badge.svg)
 [![Mutation testing badge](https://img.shields.io/endpoint?style=for-the-badge&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2Flumoin%2FVerifiable%2Fmain)](https://dashboard.stryker-mutator.io/reports/github.com/lumoin/Verifiable/main)
@@ -24,6 +24,7 @@ The core value proposition is documents that can be distinctly identified, crypt
 | **Verifiable.Foundation** | Domain-neutral primitives: pushdown automata and the `SensitiveMemory` abstraction | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Foundation.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Foundation/) |
 | **Verifiable.Cryptography** | Cryptographic primitives: salt generation, memory-safe key handling, hash functions | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Cryptography.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Cryptography/) |
 | **Verifiable.JCose** | JOSE and COSE structures including SD-JWT and selective disclosure | [![NuGet](https://img.shields.io/nuget/v/Verifiable.JCose.svg?style=flat)](https://www.nuget.org/packages/Verifiable.JCose/) |
+| **Verifiable.Fido2** | W3C WebAuthn relying-party and passkey verification, and a CTAP 2.3 authenticator and client | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Fido2.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Fido2/) |
 | **Verifiable.OAuth** | OAuth 2.0 / OpenID protocol flows: OpenID4VCI, OpenID4VP, HAIP, SIOPv2, OpenID Federation, Shared Signals, AuthZEN | [![NuGet](https://img.shields.io/nuget/v/Verifiable.OAuth.svg?style=flat)](https://www.nuget.org/packages/Verifiable.OAuth/) |
 | **Verifiable.Server** | Transport-neutral endpoint host for credential service HTTP APIs | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Server.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Server/) |
 | **Verifiable.WebFinger** | WebFinger (RFC 7033) handle discovery: a client and a capability-gated `/.well-known/webfinger` endpoint over the multi-tenant host | [![NuGet](https://img.shields.io/nuget/v/Verifiable.WebFinger.svg?style=flat)](https://www.nuget.org/packages/Verifiable.WebFinger/) |
@@ -31,14 +32,16 @@ The core value proposition is documents that can be distinctly identified, crypt
 | **Verifiable.DidComm** | DIDComm Messaging v2.1: signed/encrypted messages, routing, out-of-band, discover features, pluggable transport | [![NuGet](https://img.shields.io/nuget/v/Verifiable.DidComm.svg?style=flat)](https://www.nuget.org/packages/Verifiable.DidComm/) |
 | **Verifiable.Json** | JSON serialization converters | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Json.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Json/) |
 | **Verifiable.Cbor** | CBOR serialization for COSE envelopes | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Cbor.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Cbor/) |
+| **Verifiable.JsonPointer** | JSON Pointer (RFC 6901) and a first-party JSONata expression engine | [![NuGet](https://img.shields.io/nuget/v/Verifiable.JsonPointer.svg?style=flat)](https://www.nuget.org/packages/Verifiable.JsonPointer/) |
 | **Verifiable.BouncyCastle** | Cross-platform cryptography via BouncyCastle | [![NuGet](https://img.shields.io/nuget/v/Verifiable.BouncyCastle.svg?style=flat)](https://www.nuget.org/packages/Verifiable.BouncyCastle/) |
 | **Verifiable.NSec** | High-performance cryptography via NSec | [![NuGet](https://img.shields.io/nuget/v/Verifiable.NSec.svg?style=flat)](https://www.nuget.org/packages/Verifiable.NSec/) |
 | **Verifiable.Microsoft** | .NET standard cryptographic functions | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Microsoft.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Microsoft/) |
 | **Verifiable.Tpm** | Trusted Platform Module integration | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Tpm.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Tpm/) |
 | **Verifiable.Apdu** | ISO/IEC 7816-4 APDUs and ICAO 9303 eMRTD reading | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Apdu.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Apdu/) |
 | **Verifiable.DidWebs** | KERI-backed did:webs DID method: identifier resolution and key-state verification | [![NuGet](https://img.shields.io/nuget/v/Verifiable.DidWebs.svg?style=flat)](https://www.nuget.org/packages/Verifiable.DidWebs/) |
-| **Verifiable.Jwt** | JWT integration | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Jwt.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Jwt/) |
-| **Verifiable.Security.DataStorage** | Secure storage utilities | [![NuGet](https://img.shields.io/nuget/v/Verifiable.DataStorage.svg?style=flat)](https://www.nuget.org/packages/Verifiable.DataStorage/) |
+| **Verifiable.Cesr** | Composable Event Streaming Representation (CESR) text and binary codec | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Cesr.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Cesr/) |
+| **Verifiable.Keri** | KERI protocol layer over CESR: key event log and group framing | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Keri.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Keri/) |
+| **Verifiable.Acdc** | Authentic Chained Data Container (ACDC) credential layer | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Acdc.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Acdc/) |
 
 ## Key capabilities
 
@@ -49,6 +52,8 @@ The core value proposition is documents that can be distinctly identified, crypt
 **Selective disclosure.** Support for privacy-preserving credential presentation through SD-JWT (RFC 9901), ECDSA-SD-2023 and unlinkable BBS-2023 for JSON-LD credentials, and SD-CWT. Wallet operations include minimum disclosure computation, maximum disclosure bounds, and optimal selection algorithms.
 
 **Protocol flows.** Issuer, verifier, and wallet implementations of OpenID for Verifiable Credential Issuance, OpenID for Verifiable Presentations and the high-assurance interoperability profile, Self-Issued OpenID Provider v2, OAuth 2.0 / OpenID Connect, OpenID Federation, and Shared Signals. See [Implemented flows](#implemented-flows).
+
+**Passkeys and authenticators.** W3C WebAuthn Level 3 relying-party verification of registration and authentication ceremonies with packed, tpm, android-key, fido-u2f, and none attestation formats and FIDO Metadata Service BLOB validation, plus a CTAP 2.3 authenticator and client pair — clientPIN with PIN/UV auth protocols, credential management, bioEnrollment, largeBlobs, enterprise attestation, and the hmac-secret extension family — testable fully in-process or over a real NFC/APDU wire. Credential keys surface as first-class signing keys.
 
 **Multiple cryptographic backends.** Delegate-based architecture allows plugging in BouncyCastle for cross-platform support, NSec for high performance, .NET cryptographic functions, or hardware security modules.
 
@@ -82,6 +87,7 @@ The library includes the following protocol flows, each with tests. The test sui
 - **DIDComm Messaging ([v2.1](https://identity.foundation/didcomm-messaging/spec/v2.1/))** — the full message layer (plaintext, signed, anoncrypt, authcrypt, and nested sign-then-encrypt over ECDH-ES / ECDH-1PU JWE), DID rotation via `from_prior`, routing/forward and mediation, out-of-band invitations, ACKs and problem reports, attachment resolution, the Discover Features 2.0 protocol, and a channel-pluggable transport (an HTTPS binding plus the seam any non-HTTP channel plugs into).
 - **DID resolution** — a multi-method resolver for did:key, did:web, did:peer, [did:webvh](https://identity.foundation/didwebvh/) (DID Log replay, SCID and key pre-rotation, witness verification, portability, version queries, and DID-URL dereferencing), and [did:webs](https://trustoverip.github.io/kswg-did-method-webs-specification/) (KERI-backed: resolution to the `did.json` and `keri.cesr` URLs, with the CESR event stream replayed to a verified KERI key state), with a [DID Resolution](https://w3c-ccg.github.io/did-resolution/) HTTP binding.
 - **WebFinger ([RFC 7033](https://www.rfc-editor.org/rfc/rfc7033))** — handle-to-resource discovery: a client that resolves a query target to a JSON Resource Descriptor over the guarded outbound path, and a capability-gated `/.well-known/webfinger` endpoint on the multi-tenant host, used to discover a subject's DID from an `acct:` handle.
+- **Passkeys ([WebAuthn Level 3](https://www.w3.org/TR/webauthn-3/) and CTAP 2.3)** — relying-party registration and authentication ceremonies over the Level 3 JSON wire, attestation statement verification (packed, tpm, android-key, fido-u2f, none) with FIDO Metadata Service BLOB validation, and a CTAP 2.3 authenticator and client covering clientPIN (PIN/UV auth protocols 1 and 2), credentialManagement, authenticatorConfig, reset, bioEnrollment, largeBlobs, enterprise attestation, and the credProtect, minPinLength, largeBlobKey, hmac-secret, and hmac-secret-mc extensions — exercised over an NFC/APDU transport and a Kestrel-hosted HTTP relying party.
 - **OAuth 2.0 / OpenID Connect** — authorization code with [PKCE](https://www.rfc-editor.org/rfc/rfc7636), [pushed authorization requests](https://www.rfc-editor.org/rfc/rfc9126), [signed request objects](https://www.rfc-editor.org/rfc/rfc9101), [DPoP](https://www.rfc-editor.org/rfc/rfc9449), [rich authorization requests](https://www.rfc-editor.org/rfc/rfc9396) with a per-type handler registry, [JWT-secured authorization responses](https://openid.net/specs/oauth-v2-jarm.html), [token introspection](https://www.rfc-editor.org/rfc/rfc7662) with [JWT responses](https://www.rfc-editor.org/rfc/rfc9701), token refresh and revocation, [dynamic client registration](https://www.rfc-editor.org/rfc/rfc7591), and [server](https://www.rfc-editor.org/rfc/rfc8414) and [protected-resource](https://www.rfc-editor.org/rfc/rfc9728) metadata, including the [FAPI 2.0](https://openid.net/specs/fapi-2_0-security-profile.html) security profile and [message signing](https://openid.net/specs/fapi-2_0-message-signing.html) constraints.
 - **[OpenID Federation 1.0](https://openid.net/specs/openid-federation-1_0.html)** — entity configurations, trust chain resolution, metadata policy, trust marks, and client registration.
 - **Shared Signals ([SSF](https://openid.net/specs/openid-sharedsignals-framework-1_0.html), [CAEP](https://openid.net/specs/openid-caep-1_0.html), RISC)** — transmitter and receiver, with push and poll delivery and stream management.
@@ -100,6 +106,9 @@ dotnet add package Verifiable.Json
 
 # For OAuth / OpenID protocol flows (OpenID4VP, Federation, and others)
 dotnet add package Verifiable.OAuth
+
+# For WebAuthn / FIDO2 passkeys
+dotnet add package Verifiable.Fido2
 
 # For the W3C VCALM 1.0 credential lifecycle HTTP API (issuer, verifier, holder)
 dotnet add package Verifiable.Vcalm

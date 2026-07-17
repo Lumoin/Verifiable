@@ -55,7 +55,7 @@ public sealed record TokenExchangeAuthorization
     /// <see cref="TokenType.AccessToken"/> mints an RFC 9068 access-token JWT (response
     /// <c>token_type</c> Bearer). <see cref="TokenType.IdJag"/> mints an Identity Assertion JWT
     /// Authorization Grant (<c>typ</c> <c>oauth-id-jag+jwt</c>, response <c>token_type</c>
-    /// <c>N_A</c>) per draft-ietf-oauth-identity-assertion-authz-grant §4.3. Any other value is
+    /// <c>N_A</c>) per draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §4.3. Any other value is
     /// rejected as a <c>server_error</c> (an AS misconfiguration), keeping <c>issued_token_type</c>
     /// consistent with the returned token per RFC 8693 §2.2.1.
     /// </remarks>
@@ -64,7 +64,7 @@ public sealed record TokenExchangeAuthorization
     /// <summary>
     /// The <c>client_id</c> claim of an issued ID-JAG — the identifier of the OAuth client at the
     /// Resource Authorization Server that will act on behalf of the <see cref="Subject"/>, per
-    /// draft-ietf-oauth-identity-assertion-authz-grant §3.1. MAY differ from the client requesting
+    /// draft-ietf-oauth-identity-assertion-authz-grant-04 §3.1. MAY differ from the client requesting
     /// the exchange (it represents an independent client relationship in the resource trust domain).
     /// When <see langword="null"/>, the requesting client's identifier is used. Applies only when
     /// <see cref="IssuedTokenType"/> is <see cref="TokenType.IdJag"/>.
@@ -73,7 +73,7 @@ public sealed record TokenExchangeAuthorization
 
     /// <summary>
     /// The <c>tenant</c> claim of an issued ID-JAG — the tenant identifier for a multi-tenant IdP
-    /// (issuer), per draft-ietf-oauth-identity-assertion-authz-grant §3.1 / §6.1. The IdP MUST include
+    /// (issuer), per draft-ietf-oauth-identity-assertion-authz-grant-04 §3.1 / §6.1. The IdP MUST include
     /// it when the issuer is multi-tenant and the tenant context is relevant, so the subject identifier
     /// scopes as <c>iss + tenant + sub</c> (§6.3). <see langword="null"/> omits the claim (single-tenant
     /// issuer). Applies only when <see cref="IssuedTokenType"/> is <see cref="TokenType.IdJag"/>.
@@ -83,7 +83,7 @@ public sealed record TokenExchangeAuthorization
     /// <summary>
     /// The <c>aud_tenant</c> claim of an issued ID-JAG — a Resource Authorization Server tenant
     /// identifier, included only when that server is multi-tenant and the IdP knows the tenant, per
-    /// draft-ietf-oauth-identity-assertion-authz-grant §3.1. When present, <see cref="AudienceSubject"/>
+    /// draft-ietf-oauth-identity-assertion-authz-grant-04 §3.1. When present, <see cref="AudienceSubject"/>
     /// is the account identifier within that tenant and the combination <c>aud + aud_tenant + aud_sub</c>
     /// MUST be unique within the Resource Authorization Server. <see langword="null"/> omits the claim.
     /// Applies only when <see cref="IssuedTokenType"/> is <see cref="TokenType.IdJag"/>.
@@ -93,7 +93,7 @@ public sealed record TokenExchangeAuthorization
     /// <summary>
     /// The <c>aud_sub</c> claim of an issued ID-JAG — the Resource Authorization Server's own identifier
     /// for the End-User (scoped to <see cref="AudienceTenant"/> when present), per
-    /// draft-ietf-oauth-identity-assertion-authz-grant §3.1. The Resource Authorization Server MAY use it
+    /// draft-ietf-oauth-identity-assertion-authz-grant-04 §3.1. The Resource Authorization Server MAY use it
     /// for subject resolution (including JIT provisioning). <see langword="null"/> omits the claim.
     /// Applies only when <see cref="IssuedTokenType"/> is <see cref="TokenType.IdJag"/>.
     /// </summary>
@@ -125,7 +125,7 @@ public sealed record TokenExchangeAuthorization
     /// The granted Resource Identifier(s) (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>)
     /// an issued ID-JAG carries as its <c>resource</c> claim — the protected resource(s) the access
     /// token ultimately obtained at the Resource Authorization Server is for
-    /// (draft-ietf-oauth-identity-assertion-authz-grant §3.1 / §4.3.3). A single identifier
+    /// (draft-ietf-oauth-identity-assertion-authz-grant-04 §3.1 / §4.3.3). A single identifier
     /// serialises as a JSON string and multiple as a JSON array; an empty list omits the claim. MAY
     /// narrow the <see cref="TokenExchangeRequest.Resource"/> the client requested. Read back from the
     /// grant on the redeem leg via <see cref="IdJag.IdJagAssertionValidationResult.Resource"/>.
@@ -137,7 +137,7 @@ public sealed record TokenExchangeAuthorization
     /// The granted RFC 9396 authorization details an issued ID-JAG carries as its
     /// <c>authorization_details</c> claim — the structured authorization the access token ultimately
     /// obtained at the Resource Authorization Server is scoped by
-    /// (draft-ietf-oauth-identity-assertion-authz-grant §3.1 / §4.3.3). Each element is the object
+    /// (draft-ietf-oauth-identity-assertion-authz-grant-04 §3.1 / §4.3.3). Each element is the object
     /// form of one authorization detail (a dictionary of <c>type</c> and its fields) the JWT payload
     /// serialiser emits as a JSON object. MAY narrow the
     /// <see cref="TokenExchangeRequest.AuthorizationDetails"/> the client requested;

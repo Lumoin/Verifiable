@@ -36,10 +36,8 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
     /// </summary>
     public const int MaxSelections = 16; // PCR_SELECT_MAX per spec.
 
-    private static readonly TpmlPcrSelection EmptyInstance = new([], []);
-
-    private readonly TpmsPcrSelection[] selections;
-    private readonly IMemoryOwner<byte>[] storageOwners;
+    private static TpmlPcrSelection EmptyInstance { get; } = new([], []);
+    private IMemoryOwner<byte>[] StorageOwners { get; }
     private bool disposed;
 
     /// <summary>
@@ -47,8 +45,8 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
     /// </summary>
     private TpmlPcrSelection(TpmsPcrSelection[] selections, IMemoryOwner<byte>[] storageOwners)
     {
-        this.selections = selections;
-        this.storageOwners = storageOwners;
+        this.Selections = selections;
+        this.StorageOwners = storageOwners;
     }
 
     /// <summary>
@@ -59,24 +57,24 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
     /// <summary>
     /// Gets the PCR selections.
     /// </summary>
-    public IReadOnlyList<TpmsPcrSelection> Selections => selections;
+    public TpmsPcrSelection[] Selections { get; }
 
     /// <summary>
     /// Gets the number of selections.
     /// </summary>
-    public int Count => selections.Length;
+    public int Count => Selections.Length;
 
     /// <summary>
     /// Gets whether this list is empty.
     /// </summary>
-    public bool IsEmpty => selections.Length == 0;
+    public bool IsEmpty => Selections.Length == 0;
 
     /// <summary>
     /// Gets the selection at the specified index.
     /// </summary>
     /// <param name="index">The index.</param>
     /// <returns>The selection.</returns>
-    public TpmsPcrSelection this[int index] => selections[index];
+    public TpmsPcrSelection this[int index] => Selections[index];
 
     /// <summary>
     /// Gets the serialized size of this structure.
@@ -86,7 +84,7 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
         ObjectDisposedException.ThrowIf(disposed, this);
 
         int size = sizeof(uint); //Count.
-        foreach(var selection in selections)
+        foreach(var selection in Selections)
         {
             //Hash (2) + sizeofSelect (1) + pcrSelect (variable).
             size += sizeof(ushort) + sizeof(byte) + selection.PcrSelect.Length;
@@ -103,9 +101,9 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        writer.WriteUInt32((uint)selections.Length);
+        writer.WriteUInt32((uint)Selections.Length);
 
-        foreach(var selection in selections)
+        foreach(var selection in Selections)
         {
             writer.WriteUInt16((ushort)selection.HashAlgorithm);
             writer.WriteByte((byte)selection.PcrSelect.Length);
@@ -218,7 +216,7 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
     {
         if(!disposed && this != EmptyInstance)
         {
-            foreach(var owner in storageOwners)
+            foreach(var owner in StorageOwners)
             {
                 owner?.Dispose();
             }
@@ -227,5 +225,5 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
         }
     }
 
-    private string DebuggerDisplay => $"TPML_PCR_SELECTION({selections.Length} selections)";
+    private string DebuggerDisplay => $"TPML_PCR_SELECTION({Selections.Length} selections)";
 }

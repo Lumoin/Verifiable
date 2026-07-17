@@ -38,7 +38,7 @@ namespace Verifiable.DidComm;
 public static class DidCommFromPriorExtensions
 {
     //The Unix epoch, used to convert the injected rotation DateTimeOffset to the iat claim's seconds.
-    private static readonly DateTimeOffset UnixEpoch = DateTimeOffset.UnixEpoch;
+    private static DateTimeOffset UnixEpoch { get; } = DateTimeOffset.UnixEpoch;
 
     //An upper bound on the from_prior compact JWS length. A rotation JWT carries a handful of claims, so this
     //is generous; it bounds the compact-JWS parse + base64url decode on the signed path, where (unlike the
@@ -179,7 +179,7 @@ public static class DidCommFromPriorExtensions
             base64UrlEncoder,
             signingDelegate,
             memoryPool,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         message.FromPrior = JwsSerialization.SerializeCompact(jws, base64UrlEncoder);
     }
@@ -361,12 +361,16 @@ public static class DidCommFromPriorExtensions
                     VerificationDelegate verificationDelegate =
                         CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(keyMaterial.Algorithm, keyMaterial.Purpose);
 
-                    isValid = await verificationDelegate(
+                    (bool isVerified, CryptoEvent? evt) = await verificationDelegate(
                         signingInputOwner.Memory[..signingInputLength],
                         jwsSignature.SignatureBytes.Memory,
                         keyMaterial.KeyMaterial.Memory,
                         context: null,
                         cancellationToken: cancellationToken).ConfigureAwait(false);
+
+                    CryptographicKeyEvents.Emit(evt);
+
+                    isValid = isVerified;
                 }
             }
             catch(Exception ex) when(ex is ArgumentException or FormatException or NotSupportedException or CryptographicException)

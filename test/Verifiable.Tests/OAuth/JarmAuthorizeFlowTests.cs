@@ -27,8 +27,7 @@ internal sealed class JarmAuthorizeFlowTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new(
-        new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
+    private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     private const string ClientId = "https://jarm.client.test";
 
@@ -93,7 +92,7 @@ internal sealed class JarmAuthorizeFlowTests
         ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value, WellKnownEndpointNames.AuthCodeToken, "POST",
             tokenFields, new ExchangeContext(),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
     }
@@ -191,7 +190,7 @@ internal sealed class JarmAuthorizeFlowTests
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value, WellKnownEndpointNames.AuthCodePar, "POST",
             parFields, new ExchangeContext(),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, parResponse.StatusCode, parResponse.Body);
         Assert.Contains(OAuthErrors.InvalidRequest, parResponse.Body);
@@ -280,7 +279,7 @@ internal sealed class JarmAuthorizeFlowTests
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             segment, WellKnownEndpointNames.AuthCodePar, "POST",
             BuildParFields(pkce, parResponseMode), new ExchangeContext(),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
 
         string marker = "\"request_uri\":\"";
@@ -305,7 +304,7 @@ internal sealed class JarmAuthorizeFlowTests
         return await host.DispatchAtEndpointAsync(
             segment, WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
             authorizeFields, authorizeContext,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 
@@ -325,7 +324,7 @@ internal sealed class JarmAuthorizeFlowTests
             PayloadDeserializer,
             TestSetup.Base64UrlDecoder,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 
@@ -338,7 +337,7 @@ internal sealed class JarmAuthorizeFlowTests
             WellKnownHttpMethods.Get,
             new RequestFields(),
             new ExchangeContext(),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 

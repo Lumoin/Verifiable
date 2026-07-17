@@ -56,7 +56,7 @@ public static class DpopProofConstruction
             key.Material.PrivateKey,
             signingDelegate,
             memoryPool,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return JwsSerialization.SerializeCompact(message, base64UrlEncoder);
     }

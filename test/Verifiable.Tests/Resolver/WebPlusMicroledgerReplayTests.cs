@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Core.Did.Methods.WebPlus;
 using Verifiable.Cryptography.EventLogs;
@@ -268,7 +269,7 @@ internal sealed class WebPlusMicroledgerReplayTests
             HashedKeyMatcher = WebPlusHashedKey.CreateMatcher(
                 MultihashHeaders.Blake3.ToArray(), Blake3DigestLength, BouncyCastleEntropyFunctions.ComputeBlake3DigestAsync, CryptoTags.Blake3Digest, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared),
             MemoryPool = BaseMemoryPool.Shared,
-            TimeProvider = TimeProvider.System
+            TimeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch)
         };
     }
 
@@ -308,7 +309,7 @@ internal sealed class WebPlusMicroledgerReplayTests
             ValidateProof = WebPlusMicroledger.ValidateProofAsync,
             ValidationContext = context,
             Apply = WebPlusMicroledger.ApplyEntry,
-            TimeProvider = TimeProvider.System
+            TimeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch)
         };
 
         var replayer = new LogReplayer<WebPlusState, WebPlusRawEntry, string, WebPlusValidationContext>();

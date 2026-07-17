@@ -36,7 +36,7 @@ namespace Verifiable.Tpm.Infrastructure;
 /// </remarks>
 public sealed class TpmResponseRegistry
 {
-    private readonly Dictionary<TpmCcConstants, TpmResponseCodec> codecs = [];
+    private Dictionary<TpmCcConstants, TpmResponseCodec> Codecs { get; } = [];
 
     /// <summary>
     /// Registers a codec for the specified command.
@@ -46,7 +46,7 @@ public sealed class TpmResponseRegistry
     /// <returns>This registry for method chaining.</returns>
     public TpmResponseRegistry Register(TpmCcConstants commandCode, TpmResponseCodec codec)
     {
-        codecs[commandCode] = codec;
+        Codecs[commandCode] = codec;
         return this;
     }
 
@@ -58,7 +58,7 @@ public sealed class TpmResponseRegistry
     /// <returns><c>true</c> if the codec was found; otherwise, <c>false</c>.</returns>
     public bool TryGet(TpmCcConstants commandCode, [NotNullWhen(true)] out TpmResponseCodec? codec)
     {
-        return codecs.TryGetValue(commandCode, out codec);
+        return Codecs.TryGetValue(commandCode, out codec);
     }
 
     /// <summary>
@@ -68,11 +68,11 @@ public sealed class TpmResponseRegistry
     /// <returns><c>true</c> if a codec is registered; otherwise, <c>false</c>.</returns>
     public bool Contains(TpmCcConstants commandCode)
     {
-        return codecs.ContainsKey(commandCode);
+        return Codecs.ContainsKey(commandCode);
     }
 
     /// <summary>
     /// Gets the number of registered codecs.
     /// </summary>
-    public int Count => codecs.Count;
+    public int Count => Codecs.Count;
 }

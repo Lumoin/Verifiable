@@ -2,6 +2,7 @@ using System;
 using System.Buffers;
 using System.Threading.Tasks;
 using Verifiable.Apdu;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -91,7 +92,7 @@ internal sealed class VirtualCardTests
                 new byte[] { 0x53, 0x3B, 0x90, 0x00 })
         };
 
-        var info = new CardSessionInfo(null, null, ApduPlatform.Virtual, TimeProvider.System.GetUtcNow());
+        var info = new CardSessionInfo(null, null, ApduPlatform.Virtual, TestClock.CanonicalEpoch);
         var recording = new ApduRecording(info, exchanges);
 
         var virtualCard = new VirtualCard();

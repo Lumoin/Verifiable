@@ -51,8 +51,8 @@ internal sealed class SsfFrameworkSetIssuanceTests
             SecurityEventTestJson.HeaderSerializer,
             SecurityEventTestJson.PayloadSerializer,
             Pool,
-            TestContext.CancellationToken,
-            signingKeyId: "key-1").ConfigureAwait(false);
+            signingKeyId: "key-1",
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //The receiver's reception pipeline accepts it when the state echoes the
         //outstanding verification request.
@@ -90,7 +90,7 @@ internal sealed class SsfFrameworkSetIssuanceTests
             SecurityEventTestJson.HeaderSerializer,
             SecurityEventTestJson.PayloadSerializer,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         SsfDeliveryDecision decision = await ReceiveAsync(
             compact, transmitterPublic, expectedVerificationState: "requested-state-1").ConfigureAwait(false);
@@ -121,7 +121,7 @@ internal sealed class SsfFrameworkSetIssuanceTests
             SecurityEventTestJson.HeaderSerializer,
             SecurityEventTestJson.PayloadSerializer,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         SsfDeliveryDecision decision = await ReceiveAsync(compact, transmitterPublic).ConfigureAwait(false);
 
@@ -144,5 +144,5 @@ internal sealed class SsfFrameworkSetIssuanceTests
             compact, publicKey, Issuer, Audience,
             SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
             TestSetup.Base64UrlDecoder, NeverSeen, new ExchangeContext(), Pool,
-            TestContext.CancellationToken, expectedVerificationState).ConfigureAwait(false);
+            expectedVerificationState, TestContext.CancellationToken).ConfigureAwait(false);
 }

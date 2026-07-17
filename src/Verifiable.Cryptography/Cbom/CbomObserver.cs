@@ -25,8 +25,8 @@ namespace Verifiable.Cryptography.Cbom;
 /// </remarks>
 public sealed class CbomObserver: IDisposable
 {
-    private readonly ActivityListener listener;
-    private readonly ConcurrentQueue<Activity> captured = new();
+    private ActivityListener Listener { get; }
+    private ConcurrentQueue<Activity> Captured { get; } = new();
     private bool isDisposed;
 
 
@@ -36,16 +36,16 @@ public sealed class CbomObserver: IDisposable
     /// </summary>
     public CbomObserver()
     {
-        listener = new ActivityListener
+        Listener = new ActivityListener
         {
             ShouldListenTo = source =>
                 string.Equals(source.Name, CryptoActivitySource.Name, StringComparison.Ordinal),
             Sample = static (ref ActivityCreationOptions<ActivityContext> _) =>
                 ActivitySamplingResult.AllDataAndRecorded,
-            ActivityStopped = activity => captured.Enqueue(activity)
+            ActivityStopped = activity => Captured.Enqueue(activity)
         };
 
-        ActivitySource.AddActivityListener(listener);
+        ActivitySource.AddActivityListener(Listener);
     }
 
 
@@ -86,7 +86,7 @@ public sealed class CbomObserver: IDisposable
         }
 
         List<Activity> runActivities = [];
-        foreach(Activity activity in captured)
+        foreach(Activity activity in Captured)
         {
             if(activity.TraceId == runTraceId)
             {
@@ -106,7 +106,7 @@ public sealed class CbomObserver: IDisposable
             return;
         }
 
-        listener.Dispose();
+        Listener.Dispose();
         isDisposed = true;
     }
 }

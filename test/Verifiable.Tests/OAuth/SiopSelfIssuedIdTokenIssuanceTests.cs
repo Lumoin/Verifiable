@@ -22,7 +22,7 @@ internal sealed class SiopSelfIssuedIdTokenIssuanceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
@@ -54,13 +54,13 @@ internal sealed class SiopSelfIssuedIdTokenIssuanceTests
             subjectPrivate, subjectPublic, ClientId, RequestNonce,
             issuedAt: TimeProvider.GetUtcNow(), lifetime: TimeSpan.FromMinutes(5),
             TestSetup.Base64UrlEncoder, HeaderSerializer, PayloadSerializer, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         SelfIssuedIdTokenValidationResult result = await SelfIssuedIdTokenValidation.ValidateAsync(
             idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
             resolveDidVerificationKey: null,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsValid);
         Assert.AreEqual(SiopSubjectSyntaxType.JwkThumbprint, result.SubjectSyntaxType);
@@ -82,7 +82,7 @@ internal sealed class SiopSelfIssuedIdTokenIssuanceTests
             subjectPrivate, Did, KeyId, ClientId, RequestNonce,
             issuedAt: TimeProvider.GetUtcNow(), lifetime: TimeSpan.FromMinutes(5),
             TestSetup.Base64UrlEncoder, HeaderSerializer, PayloadSerializer, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string? resolvedKid = null;
         ResolveDidVerificationKeyDelegate resolver = (_, kid, _) =>
@@ -96,7 +96,7 @@ internal sealed class SiopSelfIssuedIdTokenIssuanceTests
             idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
             resolver,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsValid);
         Assert.AreEqual(SiopSubjectSyntaxType.DecentralizedIdentifier, result.SubjectSyntaxType);
@@ -119,7 +119,7 @@ internal sealed class SiopSelfIssuedIdTokenIssuanceTests
             subjectPrivate, subjectPublic, ClientId, RequestNonce,
             issuedAt, lifetime,
             TestSetup.Base64UrlEncoder, HeaderSerializer, PayloadSerializer, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string[] parts = idToken.Split('.');
         Assert.HasCount(3, parts);
@@ -154,7 +154,7 @@ internal sealed class SiopSelfIssuedIdTokenIssuanceTests
                 subjectPrivate, "https://not-a-did.example.com", "key-1", ClientId, RequestNonce,
                 issuedAt: TimeProvider.GetUtcNow(), lifetime: TimeSpan.FromMinutes(5),
                 TestSetup.Base64UrlEncoder, HeaderSerializer, PayloadSerializer, Pool,
-                TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         }).ConfigureAwait(false);
     }
 

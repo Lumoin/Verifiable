@@ -142,7 +142,7 @@ namespace Verifiable.Json;
 /// </remarks>
 public static class Jcs
 {
-    private static readonly JsonWriterOptions CanonicalWriterOptions = new()
+    private static JsonWriterOptions CanonicalWriterOptions { get; } = new()
     {
         Indented = false,
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
@@ -260,46 +260,75 @@ public static class Jcs
     /// </summary>
     private static void WriteCanonical(Utf8JsonWriter writer, JsonElement element)
     {
-        switch(element.ValueKind)
+        _ = element.ValueKind switch
         {
-            case JsonValueKind.Object:
-            {
-                WriteCanonicalObject(writer, element);
-                return;
-            }
-            case JsonValueKind.Array:
-            {
-                WriteCanonicalArray(writer, element);
-                return;
-            }
-            case JsonValueKind.String:
-            {
-                writer.WriteStringValue(element.GetString());
-                return;
-            }
-            case JsonValueKind.Number:
-            {
-                WriteCanonicalNumber(writer, element);
-                return;
-            }
-            case JsonValueKind.True:
-            {
-                writer.WriteBooleanValue(true);
-                return;
-            }
-            case JsonValueKind.False:
-            {
-                writer.WriteBooleanValue(false);
-                return;
-            }
-            case JsonValueKind.Null:
-            {
-                writer.WriteNullValue();
-                return;
-            }
+            JsonValueKind.Object => WriteObjectArm(writer, element),
+            JsonValueKind.Array => WriteArrayArm(writer, element),
+            JsonValueKind.String => WriteStringArm(writer, element),
+            JsonValueKind.Number => WriteNumberArm(writer, element),
+            JsonValueKind.True => WriteTrueArm(writer),
+            JsonValueKind.False => WriteFalseArm(writer),
+            JsonValueKind.Null => WriteNullArm(writer),
+            _ => ThrowUnexpectedValueKind(element)
+        };
+
+        return;
+
+        static int WriteObjectArm(Utf8JsonWriter writer, JsonElement element)
+        {
+            WriteCanonicalObject(writer, element);
+
+            return 0;
         }
 
-        JsonThrowHelper.ThrowJsonException($"Unexpected JSON value kind: {element.ValueKind}.");
+        static int WriteArrayArm(Utf8JsonWriter writer, JsonElement element)
+        {
+            WriteCanonicalArray(writer, element);
+
+            return 0;
+        }
+
+        static int WriteStringArm(Utf8JsonWriter writer, JsonElement element)
+        {
+            writer.WriteStringValue(element.GetString());
+
+            return 0;
+        }
+
+        static int WriteNumberArm(Utf8JsonWriter writer, JsonElement element)
+        {
+            WriteCanonicalNumber(writer, element);
+
+            return 0;
+        }
+
+        static int WriteTrueArm(Utf8JsonWriter writer)
+        {
+            writer.WriteBooleanValue(true);
+
+            return 0;
+        }
+
+        static int WriteFalseArm(Utf8JsonWriter writer)
+        {
+            writer.WriteBooleanValue(false);
+
+            return 0;
+        }
+
+        static int WriteNullArm(Utf8JsonWriter writer)
+        {
+            writer.WriteNullValue();
+
+            return 0;
+        }
+
+        static int ThrowUnexpectedValueKind(JsonElement element)
+        {
+            JsonThrowHelper.ThrowJsonException($"Unexpected JSON value kind: {element.ValueKind}.");
+
+            return 0;
+        }
     }
 
 

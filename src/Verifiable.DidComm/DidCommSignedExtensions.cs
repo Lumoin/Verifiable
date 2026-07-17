@@ -198,7 +198,7 @@ public static class DidCommSignedExtensions
             signingDelegate,
             memoryPool,
             unprotectedHeader,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         //The leaf serializer copies the wire bytes into the returned pooled artifact, so it is
         //independent of the JwsMessage and plaintext disposed when this method returns.
@@ -229,8 +229,6 @@ public static class DidCommSignedExtensions
     /// <param name="fromPriorPayloadDeserializer">Deserializer for a <c>from_prior</c> JWT payload, supplied to verify a DID Rotation header; when <see langword="null"/> a present <c>from_prior</c> is rejected (fail closed).</param>
     /// <param name="fromPriorHeaderDeserializer">Deserializer for a <c>from_prior</c> JWT protected header, supplied to verify a DID Rotation header.</param>
     /// <returns>A fail-closed verification result.</returns>
-    [SuppressMessage("Design", "CA1068:CancellationToken parameters must come last",
-        Justification = "The from_prior rotation-verifier delegates are additive trailing optional parameters kept after the existing cancellationToken so every existing positional caller stays source-compatible (DID Rotation is an opt-in seam threaded only by the leaf serializer).")]
     public static async ValueTask<DidCommSignedVerificationResult> UnpackSignedAsync(
         this DidCommSignedMessage signedMessage,
         DidResolver didResolver,
@@ -240,9 +238,9 @@ public static class DidCommSignedExtensions
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
         MemoryPool<byte> memoryPool,
-        CancellationToken cancellationToken = default,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer = null,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null)
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signedMessage);
         ArgumentNullException.ThrowIfNull(didResolver);

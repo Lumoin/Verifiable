@@ -15,8 +15,8 @@ namespace Verifiable.Tests.Cryptography;
 [TestClass]
 internal sealed class CmsSignedDataVerificationTests
 {
-    private static readonly DateTimeOffset NotBefore = new(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
-    private static readonly DateTimeOffset NotAfter = new(2034, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset NotBefore = SyntheticPassportFactory.NotBefore;
+    private static readonly DateTimeOffset NotAfter = SyntheticPassportFactory.NotAfter;
     private static readonly DateTimeOffset SigningTime = new(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
 
@@ -26,6 +26,9 @@ internal sealed class CmsSignedDataVerificationTests
     [TestMethod]
     public async Task VerifiesCmsSignedDataAndSurfacesContentAndSigner()
     {
+        //Cert-factory carve-out: CertificateRequest requires a framework AsymmetricAlgorithm to sign the
+        //self-signed certificate; this key is never converted to library PrivateKeyMemory, so it stays
+        //framework-native for its whole lifetime.
         using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using var signerCertificate = CmsSignedDataTestFactory.MintSelfSignedCertificate(signingKey, NotBefore, NotAfter);
         using CmsSignedData carrier = CmsSignedDataTestFactory.SignAsCms("the signed content"u8, signerCertificate);
@@ -46,6 +49,9 @@ internal sealed class CmsSignedDataVerificationTests
     [TestMethod]
     public async Task RejectsCmsSignedDataWithTamperedContent()
     {
+        //Cert-factory carve-out: CertificateRequest requires a framework AsymmetricAlgorithm to sign the
+        //self-signed certificate; this key is never converted to library PrivateKeyMemory, so it stays
+        //framework-native for its whole lifetime.
         using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using var signerCertificate = CmsSignedDataTestFactory.MintSelfSignedCertificate(signingKey, NotBefore, NotAfter);
         using CmsSignedData carrier = CmsSignedDataTestFactory.SignAsCms("the signed content"u8, signerCertificate);
@@ -70,6 +76,9 @@ internal sealed class CmsSignedDataVerificationTests
     [TestMethod]
     public async Task SurfacesTheSignersSignedAttributes()
     {
+        //Cert-factory carve-out: CertificateRequest requires a framework AsymmetricAlgorithm to sign the
+        //self-signed certificate; this key is never converted to library PrivateKeyMemory, so it stays
+        //framework-native for its whole lifetime.
         using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using var signerCertificate = CmsSignedDataTestFactory.MintSelfSignedCertificate(signingKey, NotBefore, NotAfter);
         using CmsSignedData carrier = CmsSignedDataTestFactory.SignAsCms("the signed content"u8, signerCertificate, withSigningTime: true, SigningTime);

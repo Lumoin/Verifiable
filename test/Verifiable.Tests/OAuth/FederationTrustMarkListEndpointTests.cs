@@ -32,7 +32,7 @@ internal sealed class FederationTrustMarkListEndpointTests
     /// <summary>
     /// Deterministic clock the host reads from.
     /// </summary>
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
 
     /// <summary>

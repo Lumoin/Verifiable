@@ -53,8 +53,7 @@ internal sealed class GlobalLogoutCaepEmitHttpTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>A fixed clock so issued artefacts are reproducible.</summary>
-    private FakeTimeProvider TimeProvider { get; } = new(
-        new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero));
+    private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     /// <summary>The memory pool used for all transient signing/verification buffers.</summary>
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
@@ -118,7 +117,7 @@ internal sealed class GlobalLogoutCaepEmitHttpTests
             SsfDeliveryDecision decision = await SecurityEventTokenReception.ReceiveAsync(
                 request.Body, opPublic, OpIssuer, ReceiverAudience,
                 SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
-                TestSetup.Base64UrlDecoder, isSeen, new ExchangeContext(), Pool, ct).ConfigureAwait(false);
+                TestSetup.Base64UrlDecoder, isSeen, new ExchangeContext(), Pool, cancellationToken: ct).ConfigureAwait(false);
 
             if(decision.Outcome is SsfDeliveryOutcome.Accepted or SsfDeliveryOutcome.AcceptedDuplicate)
             {
@@ -171,9 +170,9 @@ internal sealed class GlobalLogoutCaepEmitHttpTests
                 SecurityEventTestJson.HeaderSerializer,
                 SecurityEventTestJson.PayloadSerializer,
                 Pool,
-                ct,
                 signingKeyId: "op-key-1",
-                subjectId: subId).ConfigureAwait(false);
+                subjectId: subId,
+                cancellationToken: ct).ConfigureAwait(false);
 
             using StringContent content = new(set, Encoding.UTF8, WellKnownMediaTypes.Application.SecEventJwt);
             using HttpResponseMessage push = await transmitterClient.PostAsync(

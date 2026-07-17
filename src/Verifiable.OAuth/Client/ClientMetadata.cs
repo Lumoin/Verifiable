@@ -96,8 +96,8 @@ public sealed record ClientMetadata
 
     /// <summary>
     /// The authorization grant profiles this client implements — the client metadata parameter
-    /// <c>authorization_grant_profiles_supported</c> per draft-ietf-oauth-identity-assertion-authz-grant
-    /// §8 (a JSON array of profile identifier strings). A client that includes
+    /// <c>authorization_grant_profiles_supported</c> per draft-ietf-oauth-identity-assertion-authz-grant-04
+    /// (21 May 2026) §8 (a JSON array of profile identifier strings). A client that includes
     /// <c>urn:ietf:params:oauth:grant-profile:id-jag</c> MUST also include both
     /// <c>urn:ietf:params:oauth:grant-type:token-exchange</c> and
     /// <c>urn:ietf:params:oauth:grant-type:jwt-bearer</c> in <see cref="GrantTypes"/>, since the client

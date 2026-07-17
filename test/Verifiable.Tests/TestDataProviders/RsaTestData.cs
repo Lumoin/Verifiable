@@ -1,5 +1,5 @@
-using System.Security.Cryptography;
 using Verifiable.Cryptography;
+using Verifiable.Tests.TestDataProviders;
 
 namespace Verifiable.Tests.DataProviders
 {
@@ -73,11 +73,19 @@ namespace Verifiable.Tests.DataProviders
         /// <returns>An <see cref="RsaTestData"/> instance.</returns>
         private static RsaTestData GenerateRsaTestKeyMaterial(int keyLength)
         {
-            using(var key = RSA.Create(keyLength))
+            //Fixture material: the modulus only round-trips through multibase encoding in the
+            //consuming test, never through an RSA operation, so the project's cached key material
+            //serves as well as a freshly minted key.
+            var keyMaterial = keyLength switch
             {
-                var parameters = key.ExportParameters(includePrivateParameters: true);
-                var modulus = parameters.Modulus!;
-                var encodedModulus = RsaUtilities.Encode(modulus);
+                Rsa2048KeyLength => TestKeyMaterialProvider.CreateRsa2048KeyMaterial(),
+                Rsa4096KeyLength => TestKeyMaterialProvider.CreateRsa4096KeyMaterial(),
+                _ => throw new NotSupportedException()
+            };
+
+            try
+            {
+                var modulus = RsaUtilities.Decode(keyMaterial.PublicKey.AsReadOnlySpan());
 
                 var btc58Headers = FromKeyLengthToBtc58EncodedHeader(keyLength);
                 var multiCodecHeaders = FromKeyLengthToMultiCodecHeader(keyLength);
@@ -89,6 +97,11 @@ namespace Verifiable.Tests.DataProviders
                     btc58Headers.PublicKey,
                     btc58Headers.PrivateKey,
                     modulus);
+            }
+            finally
+            {
+                keyMaterial.PublicKey.Dispose();
+                keyMaterial.PrivateKey.Dispose();
             }
         }
     }

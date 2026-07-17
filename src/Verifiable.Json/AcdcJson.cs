@@ -33,14 +33,14 @@ public static class AcdcJson
     /// The parse options bound the JSON nesting depth, defending against adversarial input independently of the
     /// iterative materialization, matching the depth bound the other readers in this leaf apply.
     /// </summary>
-    private static readonly JsonDocumentOptions ParseOptions = new() { MaxDepth = 32 };
+    private static JsonDocumentOptions ParseOptions { get; } = new() { MaxDepth = 32 };
 
     /// <summary>
     /// The writer options that produce the ACDC canonical serialization: compact (no inter-token whitespace) and
     /// the relaxed escaping that escapes only the JSON-required characters, leaving the rest as UTF-8, so the
     /// output matches the specification's serialization (which is produced without ASCII-escaping).
     /// </summary>
-    private static readonly JsonWriterOptions WriterOptions = new() { Indented = false, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+    private static JsonWriterOptions WriterOptions { get; } = new() { Indented = false, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
 
     /// <summary>
@@ -241,16 +241,16 @@ public static class AcdcJson
     //lose enumerator progress.
     private sealed class Frame
     {
-        private readonly object container;
-        private readonly bool isObject;
+        private object Container { get; }
+        private bool IsObject { get; }
         private JsonElement.ObjectEnumerator objectEnumerator;
         private JsonElement.ArrayEnumerator arrayEnumerator;
 
         public Frame(JsonElement element, object container)
         {
-            this.container = container;
-            isObject = element.ValueKind == JsonValueKind.Object;
-            if(isObject)
+            this.Container = container;
+            IsObject = element.ValueKind == JsonValueKind.Object;
+            if(IsObject)
             {
                 objectEnumerator = element.EnumerateObject();
             }
@@ -263,7 +263,7 @@ public static class AcdcJson
 
         public bool TryGetNext(out string? name, out JsonElement value)
         {
-            if(isObject)
+            if(IsObject)
             {
                 if(objectEnumerator.MoveNext())
                 {
@@ -291,13 +291,13 @@ public static class AcdcJson
 
         public void Add(string? name, object? value)
         {
-            if(isObject)
+            if(IsObject)
             {
-                ((MessageFieldMap)container)[name!] = value;
+                ((MessageFieldMap)Container)[name!] = value;
             }
             else
             {
-                ((List<object?>)container).Add(value);
+                ((List<object?>)Container).Add(value);
             }
         }
     }
@@ -307,25 +307,24 @@ public static class AcdcJson
     //elements. Held as a class so the enumerator mutates in place across Stack.Peek() calls.
     private sealed class EncodeFrame
     {
-        private readonly bool isObject;
         private OrderedDictionary<string, object?>.Enumerator objectEnumerator;
         private List<object?>.Enumerator arrayEnumerator;
 
         private EncodeFrame(MessageFieldMap map)
         {
-            isObject = true;
+            IsObject = true;
             objectEnumerator = map.GetEnumerator();
         }
 
 
         private EncodeFrame(List<object?> list)
         {
-            isObject = false;
+            IsObject = false;
             arrayEnumerator = list.GetEnumerator();
         }
 
 
-        public bool IsObject => isObject;
+        public bool IsObject { get; }
 
 
         public static EncodeFrame ForObject(MessageFieldMap map) => new(map);
@@ -336,7 +335,7 @@ public static class AcdcJson
 
         public bool TryGetNext(out string? name, out object? value)
         {
-            if(isObject)
+            if(IsObject)
             {
                 if(objectEnumerator.MoveNext())
                 {

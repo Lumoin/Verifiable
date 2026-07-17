@@ -31,7 +31,7 @@ namespace Verifiable.DidComm.BasicMessage;
 public static class BasicMessageExtensions
 {
     //The basic-message Message Type URI, parsed once for semver-compatible handler dispatch.
-    private static readonly MessageTypeUri BasicMessageMessageType = MessageTypeUri.Parse(WellKnownBasicMessageNames.MessageType);
+    private static MessageTypeUri BasicMessageMessageType { get; } = MessageTypeUri.Parse(WellKnownBasicMessageNames.MessageType);
 
 
     /// <summary>

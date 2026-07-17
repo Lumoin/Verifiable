@@ -221,15 +221,15 @@ internal sealed class CaepInteropEventTests
             SecurityEventTestJson.HeaderSerializer,
             SecurityEventTestJson.PayloadSerializer,
             Pool,
-            TestContext.CancellationToken,
             signingKeyId: "key-1",
-            subjectId: subject).ConfigureAwait(false);
+            subjectId: subject,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         SsfDeliveryDecision decision = await SecurityEventTokenReception.ReceiveAsync(
             compact, transmitterPublic, Issuer, Audience,
             SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
             TestSetup.Base64UrlDecoder, NeverSeen, new ExchangeContext(), Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(SsfDeliveryOutcome.Accepted, decision.Outcome);
 

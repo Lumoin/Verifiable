@@ -83,7 +83,7 @@ public sealed class ContentEncryptionKey: IDisposable
     private SymmetricKeyMemory? inner;
     private int useCount;
     private bool disposed;
-    private readonly System.Diagnostics.Activity? lifetime;
+    private System.Diagnostics.Activity? Lifetime { get; }
 
 
     /// <summary>
@@ -122,7 +122,7 @@ public sealed class ContentEncryptionKey: IDisposable
     {
         ArgumentNullException.ThrowIfNull(inner);
         this.inner = inner;
-        this.lifetime = lifetime;
+        this.Lifetime = lifetime;
     }
 
 
@@ -135,7 +135,7 @@ public sealed class ContentEncryptionKey: IDisposable
     public SymmetricKeyMemory UseKey()
     {
         int count = Interlocked.Increment(ref useCount);
-        lifetime?.SetTag(CryptoTelemetry.ContentEncryptionKey.UseCount, count);
+        Lifetime?.SetTag(CryptoTelemetry.ContentEncryptionKey.UseCount, count);
 
         SymmetricKeyMemory? local = Interlocked.Exchange(ref inner, null);
         if(local is null)
@@ -163,10 +163,10 @@ public sealed class ContentEncryptionKey: IDisposable
         SymmetricKeyMemory? local = Interlocked.Exchange(ref inner, null);
         local?.Dispose();
 
-        if(lifetime is not null)
+        if(Lifetime is not null)
         {
-            lifetime.SetTag(CryptoTelemetry.ContentEncryptionKey.FinalUseCount, useCount);
-            lifetime.Stop();
+            Lifetime.SetTag(CryptoTelemetry.ContentEncryptionKey.FinalUseCount, useCount);
+            Lifetime.Stop();
         }
 
         disposed = true;

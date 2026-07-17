@@ -40,7 +40,7 @@ internal sealed class TrustChainResolverTests
     [TestMethod]
     public async Task BuildsAndValidatesAChainThroughAnIntermediate()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
 
         using FederationTestRingNode leaf = FederationTestRing.CreateNode(new EntityIdentifier(LeafId));
         using FederationTestRingNode intermediate = FederationTestRing.CreateNode(new EntityIdentifier(IntermediateId));
@@ -149,7 +149,7 @@ internal sealed class TrustChainResolverTests
     [TestMethod]
     public async Task CyclicAuthorityGraphTerminatesWithoutAnchor()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
 
         using FederationTestRingNode a = FederationTestRing.CreateNode(new EntityIdentifier("https://a.example.com"));
         using FederationTestRingNode b = FederationTestRing.CreateNode(new EntityIdentifier("https://b.example.com"));

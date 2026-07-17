@@ -102,7 +102,7 @@ internal sealed class DidCommEncryptedNestedAdversarialTests
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512EncryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //alice -> authentication(key-1) for the inner verify; mallory -> keyAgreement(skid) for the authcrypt sender.
         DidResolver resolver = CreateMultiResolver(malloryPublic);
@@ -121,7 +121,7 @@ internal sealed class DidCommEncryptedNestedAdversarialTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512DecryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsUnpacked, "authcrypt(sign) with inner signer != authcrypt sender MUST NOT unpack.");
         Assert.AreEqual(DidCommDecryptionError.SignerSenderMismatch, result.Error);
@@ -167,7 +167,7 @@ internal sealed class DidCommEncryptedNestedAdversarialTests
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512EncryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolver resolver = CreateAliceResolver();
 
@@ -185,7 +185,7 @@ internal sealed class DidCommEncryptedNestedAdversarialTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512DecryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsUnpacked, "A nested message whose inner signed JWM lacks a 'to' header MUST NOT unpack.");
         Assert.AreEqual(DidCommDecryptionError.NestedSignedMessageMissingTo, result.Error);
@@ -236,7 +236,7 @@ internal sealed class DidCommEncryptedNestedAdversarialTests
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512EncryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolver resolver = CreateAliceWithKeyAgreementResolver(senderPublic);
 
@@ -254,7 +254,7 @@ internal sealed class DidCommEncryptedNestedAdversarialTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512DecryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsUnpacked, "authcrypt(sign) whose inner signed JWM lacks a 'to' header MUST NOT unpack.");
         Assert.AreEqual(DidCommDecryptionError.NestedSignedMessageMissingTo, result.Error);
@@ -310,7 +310,7 @@ internal sealed class DidCommEncryptedNestedAdversarialTests
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512EncryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolver resolver = CreateAliceResolver();
 
@@ -328,7 +328,7 @@ internal sealed class DidCommEncryptedNestedAdversarialTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512DecryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsUnpacked, "A nested inner JWM with a wire-type-invalid plaintext MUST fail closed, not throw.");
         Assert.AreEqual(DidCommDecryptionError.NestedSignatureInvalid, result.Error);

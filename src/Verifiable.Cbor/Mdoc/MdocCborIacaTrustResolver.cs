@@ -93,7 +93,7 @@ public static class MdocCborIacaTrustResolver
                 try
                 {
                     leafKey = await validateChain(
-                        chain, trustAnchors, validationTime, pool, cancellationToken).ConfigureAwait(false);
+                        chain, trustAnchors, validationTime, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
                 }
                 catch(System.Security.SecurityException ex)
                 {

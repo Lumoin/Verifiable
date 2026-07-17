@@ -93,7 +93,7 @@ internal sealed class DidCommEncryptedNestedRoundTripTests
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512EncryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Only the inner signer must be resolvable for anoncrypt; the recipient key is supplied directly.
         DidResolver resolver = CreateResolver(senderKeyAgreement: null, signerPublicX: AliceEd25519PublicX);
@@ -112,7 +112,7 @@ internal sealed class DidCommEncryptedNestedRoundTripTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512DecryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertNestedSuccess(result, DidCommEncryptionMode.Anoncrypt);
     }
@@ -179,7 +179,7 @@ internal sealed class DidCommEncryptedNestedRoundTripTests
                 CryptoFormatConversions.DefaultTagToEpkCrvConverter,
                 MicrosoftEntropyFunctions.GenerateNonce,
                 Pool,
-                TestContext.CancellationToken).ConfigureAwait(false)
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)
             : await signed.PackAuthcryptAsync(
                 recipients,
                 AliceKeyAgreementSkid,
@@ -196,7 +196,7 @@ internal sealed class DidCommEncryptedNestedRoundTripTests
                 MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
                 MicrosoftKeyAgreementFunctions.AesCbcHmacSha512EncryptAsync,
                 Pool,
-                TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //Both the authcrypt sender (skid, keyAgreement) and the inner signer (authentication) resolve to Alice.
         DidResolver resolver = CreateResolver(senderKeyAgreement: senderPublic, signerPublicX: AliceEd25519PublicX);
@@ -212,7 +212,7 @@ internal sealed class DidCommEncryptedNestedRoundTripTests
                 TestSetup.Base64UrlDecoder,
                 TestSetup.Base64UrlEncoder,
                 Pool,
-                TestContext.CancellationToken).ConfigureAwait(false)
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)
             : await encrypted.UnpackAuthcryptAsync(
                 BobKid,
                 recipientPrivate,
@@ -227,7 +227,7 @@ internal sealed class DidCommEncryptedNestedRoundTripTests
                 MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
                 MicrosoftKeyAgreementFunctions.AesCbcHmacSha512DecryptAsync,
                 Pool,
-                TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 
@@ -243,7 +243,7 @@ internal sealed class DidCommEncryptedNestedRoundTripTests
             TestSetup.Base64UrlEncoder,
             Pool,
             JoseSerializationFormat.GeneralJson,
-            TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken);
     }
 
 

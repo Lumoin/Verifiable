@@ -42,7 +42,13 @@ internal static class SdCwtPipeline
     /// Signs a redacted CBOR payload as a COSE_Sign1 message using an explicit
     /// <see cref="SigningDelegate"/>. Registry resolution is the caller's concern
     /// (<see cref="SdCwtIssuance"/> resolves the function from the key's tag and
-    /// forwards here); this keeps the pipeline a pure parameter-taking body.
+    /// forwards here); this keeps the pipeline a pure parameter-taking body. Matches
+    /// <see cref="SignPayloadDelegate"/> exactly — that delegate type (and its method-group
+    /// wiring throughout <c>Verifiable.Core</c>'s <c>SdCwtIssuanceExtensions</c> and every
+    /// caller of <see cref="SdCwtIssuance.IssueVerboseAsync"/>) has no <c>CryptoEventSink</c>
+    /// slot, so unlike the sink-threaded JOSE/COSE sites this one routes unconditionally to
+    /// <see cref="CryptographicKeyEvents.DefaultSink"/> rather than accepting a per-call
+    /// override — see <see cref="CryptoEventSink"/> for the two-route rationale.
     /// </summary>
     internal static async ValueTask<ReadOnlyMemory<byte>> Sign(
         SigningDelegate signingDelegate,
@@ -67,12 +73,17 @@ internal static class SdCwtPipeline
         //Build Sig_structure per RFC 9052 Section 4.4.
         byte[] sigStructure = BuildSigStructure(protectedHeaderBytes, redactedPayload.Span);
 
-        Signature signature = await signingDelegate(
+        (Signature signature, CryptoEvent? evt) = await signingDelegate(
             privateKey.AsReadOnlyMemory(),
             sigStructure,
             memoryPool,
             context: null,
             cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        if(evt is not null)
+        {
+            CryptographicKeyEvents.DefaultSink(evt);
+        }
 
         //Serialize COSE_Sign1 = #6.18([protected, unprotected, payload, signature]).
         byte[] coseSign1 = SerializeCoseSign1(

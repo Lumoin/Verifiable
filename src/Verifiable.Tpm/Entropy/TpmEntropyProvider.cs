@@ -56,11 +56,11 @@ namespace Verifiable.Tpm;
 /// <seealso cref="EntropyConsumedEvent"/>
 public sealed class TpmEntropyProvider
 {
-    private readonly TpmDevice device;
-    private readonly TpmResponseRegistry registry;
-    private readonly MemoryPool<byte> pool;
-    private readonly TimeProvider timeProvider;
-    private readonly string emittedBy;
+    private TpmDevice Device { get; }
+    private TpmResponseRegistry Registry { get; }
+    private MemoryPool<byte> Pool { get; }
+    private TimeProvider TimeProvider { get; }
+    private string EmittedBy { get; }
     private EntropyHealthObservation currentHealth = EntropyHealthObservation.Unknown;
 
     /// <summary>
@@ -82,11 +82,11 @@ public sealed class TpmEntropyProvider
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(pool);
 
-        this.device = device;
-        this.pool = pool;
-        this.timeProvider = timeProvider ?? TimeProvider.System;
-        this.emittedBy = string.IsNullOrWhiteSpace(emittedBy) ? nameof(TpmEntropyProvider) : emittedBy;
-        registry = new TpmResponseRegistry().Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
+        this.Device = device;
+        this.Pool = pool;
+        this.TimeProvider = timeProvider ?? TimeProvider.System;
+        this.EmittedBy = string.IsNullOrWhiteSpace(emittedBy) ? nameof(TpmEntropyProvider) : emittedBy;
+        Registry = new TpmResponseRegistry().Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
     }
 
     /// <summary>
@@ -111,7 +111,7 @@ public sealed class TpmEntropyProvider
         EntropyHealthObservation health = currentHealth;
         Nonce result = Nonce.Generate(byteLength, tag, Fill, health, pool);
         Purpose purpose = tag.TryGet<Purpose>(out Purpose carried) ? carried : Purpose.Nonce;
-        CryptoEvent consumed = EntropyConsumedEvent.Create(EntropySource.Tpm, byteLength, purpose, health, emittedBy, timeProvider);
+        CryptoEvent consumed = EntropyConsumedEvent.Create(EntropySource.Tpm, byteLength, purpose, health, EmittedBy, TimeProvider);
 
         return (result, consumed);
     }
@@ -132,7 +132,7 @@ public sealed class TpmEntropyProvider
         EntropyHealthObservation health = currentHealth;
         Salt result = Salt.Generate(byteLength, tag, Fill, health, pool);
         Purpose purpose = tag.TryGet<Purpose>(out Purpose carried) ? carried : Purpose.Salt;
-        CryptoEvent consumed = EntropyConsumedEvent.Create(EntropySource.Tpm, byteLength, purpose, health, emittedBy, timeProvider);
+        CryptoEvent consumed = EntropyConsumedEvent.Create(EntropySource.Tpm, byteLength, purpose, health, EmittedBy, TimeProvider);
 
         return (result, consumed);
     }
@@ -176,12 +176,12 @@ public sealed class TpmEntropyProvider
             Assessor = EntropyAssessor.Source,
             Method = EntropyAssessmentMethod.SelfTest,
             Outcome = outcome,
-            ObservedAt = timeProvider.GetUtcNow(),
+            ObservedAt = TimeProvider.GetUtcNow(),
             EvidenceReference = evidenceReference
         };
 
         currentHealth = observation;
-        EntropyHealthAssessedEvent assessed = EntropyHealthAssessedEvent.Create(EntropySource.Tpm, observation, emittedBy, timeProvider);
+        EntropyHealthAssessedEvent assessed = EntropyHealthAssessedEvent.Create(EntropySource.Tpm, observation, EmittedBy, TimeProvider);
 
         return (observation, assessed);
     }
@@ -207,7 +207,7 @@ public sealed class TpmEntropyProvider
             int chunk = Math.Min(destination.Length - offset, TpmLifecycleTransitions.MaxRandomBytes);
 
             ValueTask<TpmResult<GetRandomResponse>> task = TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
-                device, new GetRandomInput((ushort)chunk), [], null, pool, registry);
+                Device, new GetRandomInput((ushort)chunk), [], null, Pool, Registry);
 
             if(!task.IsCompleted)
             {
@@ -252,11 +252,11 @@ public sealed class TpmEntropyProvider
         var input = new SelfTestInput(IsFullTest: true);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
 
-        using IMemoryOwner<byte> commandOwner = pool.Rent(length);
+        using IMemoryOwner<byte> commandOwner = Pool.Rent(length);
         Memory<byte> command = commandOwner.Memory[..length];
         WriteSessionlessCommand(command.Span, input, length);
 
-        TpmResult<TpmResponse> result = await device.SubmitAsync(command, pool, cancellationToken).ConfigureAwait(false);
+        TpmResult<TpmResponse> result = await Device.SubmitAsync(command, Pool, cancellationToken).ConfigureAwait(false);
         if(result.IsTransportError)
         {
             return new SelfTestResult(IsTransportError: true, result.TransportErrorCode, TpmRcConstants.TPM_RC_FAILURE);

@@ -115,7 +115,7 @@ internal sealed class DidCommEncryptedNestedVectorTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512DecryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertRecoveredNestedC1Message(result);
     }
@@ -144,7 +144,7 @@ internal sealed class DidCommEncryptedNestedVectorTests
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertRecoveredNestedC1Message(result);
     }
@@ -180,7 +180,7 @@ internal sealed class DidCommEncryptedNestedVectorTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512DecryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsUnpacked, "A nested message whose inner signer is not authenticated MUST NOT unpack.");
         Assert.AreEqual(DidCommDecryptionError.NestedSignatureInvalid, result.Error);

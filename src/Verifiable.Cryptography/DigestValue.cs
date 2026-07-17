@@ -62,7 +62,7 @@ namespace Verifiable.Cryptography;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class DigestValue: SensitiveMemory, IEquatable<DigestValue>
 {
-    private readonly Activity? digestLifetime;
+    private Activity? DigestLifetime { get; }
 
     /// <summary>
     /// Gets the length of the digest in bytes. SHA-256 produces 32 bytes,
@@ -83,7 +83,7 @@ public sealed class DigestValue: SensitiveMemory, IEquatable<DigestValue>
     /// </param>
     public DigestValue(IMemoryOwner<byte> sensitiveMemory, Tag tag, Activity? lifetime = null): base(sensitiveMemory, tag, lifetime)
     {
-        digestLifetime = lifetime;
+        DigestLifetime = lifetime;
     }
 
 
@@ -135,11 +135,11 @@ public sealed class DigestValue: SensitiveMemory, IEquatable<DigestValue>
     protected override void Dispose(bool disposing)
     {
         if(disposing
-            && digestLifetime is not null
+            && DigestLifetime is not null
             && Tag.TryGet(out System.Security.Cryptography.HashAlgorithmName algorithmName))
         {
-            digestLifetime.SetTag(CryptoTelemetry.Digest.Algorithm, algorithmName.Name);
-            digestLifetime.SetTag(CryptoTelemetry.Digest.OutputLength, Length);
+            DigestLifetime.SetTag(CryptoTelemetry.Digest.Algorithm, algorithmName.Name);
+            DigestLifetime.SetTag(CryptoTelemetry.Digest.OutputLength, Length);
         }
 
         base.Dispose(disposing);

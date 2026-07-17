@@ -32,7 +32,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly DateTimeOffset NowInstant = new(2026, 6, 1, 12, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset NowInstant = TestClock.CanonicalEpoch;
     private FakeTimeProvider TimeProvider { get; } = new(NowInstant);
 
     private const string ClientId = "https://wallet.client.test";

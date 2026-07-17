@@ -201,7 +201,7 @@ internal sealed class DidCommEncryptedAnoncryptVectorTests
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertRecoveredC1Message(result);
     }
@@ -226,7 +226,7 @@ internal sealed class DidCommEncryptedAnoncryptVectorTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             MicrosoftKeyAgreementFunctions.AesCbcHmacSha512DecryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 
@@ -249,7 +249,7 @@ internal sealed class DidCommEncryptedAnoncryptVectorTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             BouncyCastleKeyAgreementFunctions.AesGcmDecryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 

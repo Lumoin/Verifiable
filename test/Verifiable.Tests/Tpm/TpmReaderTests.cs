@@ -22,6 +22,25 @@ internal class TpmReaderTests
     }
 
     [TestMethod]
+    public void ReadByteOnExhaustedBufferThrowsArgumentOutOfRangeException()
+    {
+        //TpmReader is a ref struct, so it cannot be captured by a lambda; the throw is asserted with a
+        //plain try/catch instead of Assert.ThrowsExactly, mirroring ReadBytes/ReadUInt16/32/64's own
+        //span-slicing bounds check (BinaryPrimitives/range-indexer) rather than an unwhitelisted
+        //IndexOutOfRangeException from the raw indexer.
+        var reader = new TpmReader(ReadOnlySpan<byte>.Empty);
+
+        try
+        {
+            _ = reader.ReadByte();
+            Assert.Fail("Expected ArgumentOutOfRangeException.");
+        }
+        catch(ArgumentOutOfRangeException)
+        {
+        }
+    }
+
+    [TestMethod]
     public void ReadUInt16ReadsBigEndian()
     {
         byte[] buffer = [0x12, 0x34];

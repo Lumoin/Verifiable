@@ -765,8 +765,6 @@ public static class DidCommEncryptedExtensions
     /// <param name="memoryPool">Memory pool for transient buffers.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A fail-closed unpack result.</returns>
-    [SuppressMessage("Design", "CA1068:CancellationToken parameters must come last",
-        Justification = "The from_prior rotation-verifier delegates are additive trailing optional parameters kept after the existing cancellationToken so every existing positional caller stays source-compatible (DID Rotation is an opt-in seam threaded only by the leaf serializer).")]
     public static async ValueTask<DidCommEncryptedUnpackResult> UnpackAnoncryptAsync(
         this DidCommEncryptedMessage encryptedMessage,
         string recipientKeyId,
@@ -782,10 +780,10 @@ public static class DidCommEncryptedExtensions
         KeyUnwrapDelegate keyUnwrapDelegate,
         AeadDecryptDelegate aeadDecryptDelegate,
         MemoryPool<byte> memoryPool,
-        CancellationToken cancellationToken = default,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer = null,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null,
-        DidCommEncryptedHeaderPolicy headerPolicy = DidCommEncryptedHeaderPolicy.Strict)
+        DidCommEncryptedHeaderPolicy headerPolicy = DidCommEncryptedHeaderPolicy.Strict,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(encryptedMessage);
         ArgumentException.ThrowIfNullOrWhiteSpace(recipientKeyId);
@@ -964,8 +962,6 @@ public static class DidCommEncryptedExtensions
     /// <see cref="DidCommDecryptionError.MalformedEnvelope"/>.
     /// </remarks>
     /// <inheritdoc cref="UnpackAnoncryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, KeyAgreementDecryptDelegate, KeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, MemoryPool{byte}, CancellationToken)"/>
-    [SuppressMessage("Design", "CA1068:CancellationToken parameters must come last",
-        Justification = "The from_prior rotation-verifier delegates are additive trailing optional parameters kept after the existing cancellationToken so every existing positional caller stays source-compatible (DID Rotation is an opt-in seam threaded only by the leaf serializer).")]
     public static ValueTask<DidCommEncryptedUnpackResult> UnpackAnoncryptAsync(
         this DidCommEncryptedMessage encryptedMessage,
         string recipientKeyId,
@@ -977,10 +973,10 @@ public static class DidCommEncryptedExtensions
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
         MemoryPool<byte> memoryPool,
-        CancellationToken cancellationToken = default,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer = null,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null,
-        DidCommEncryptedHeaderPolicy headerPolicy = DidCommEncryptedHeaderPolicy.Strict)
+        DidCommEncryptedHeaderPolicy headerPolicy = DidCommEncryptedHeaderPolicy.Strict,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(encryptedMessage);
         ArgumentNullException.ThrowIfNull(recipientPrivateKey);
@@ -1024,10 +1020,10 @@ public static class DidCommEncryptedExtensions
             keyUnwrapDelegate,
             aeadDecryptDelegate,
             memoryPool,
-            cancellationToken,
             fromPriorPayloadDeserializer,
             fromPriorHeaderDeserializer,
-            headerPolicy);
+            headerPolicy,
+            cancellationToken);
     }
 
 
@@ -1073,8 +1069,6 @@ public static class DidCommEncryptedExtensions
     /// <param name="memoryPool">Memory pool for transient buffers.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A fail-closed unpack result.</returns>
-    [SuppressMessage("Design", "CA1068:CancellationToken parameters must come last",
-        Justification = "The from_prior rotation-verifier delegates are additive trailing optional parameters kept after the existing cancellationToken so every existing positional caller stays source-compatible (DID Rotation is an opt-in seam threaded only by the leaf serializer).")]
     public static async ValueTask<DidCommEncryptedUnpackResult> UnpackAuthcryptAsync(
         this DidCommEncryptedMessage encryptedMessage,
         string recipientKeyId,
@@ -1090,10 +1084,10 @@ public static class DidCommEncryptedExtensions
         KeyUnwrapDelegate keyUnwrapDelegate,
         AeadDecryptDelegate aeadDecryptDelegate,
         MemoryPool<byte> memoryPool,
-        CancellationToken cancellationToken = default,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer = null,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null,
-        DidCommEncryptedHeaderPolicy headerPolicy = DidCommEncryptedHeaderPolicy.Strict)
+        DidCommEncryptedHeaderPolicy headerPolicy = DidCommEncryptedHeaderPolicy.Strict,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(encryptedMessage);
         ArgumentException.ThrowIfNullOrWhiteSpace(recipientKeyId);
@@ -1270,9 +1264,9 @@ public static class DidCommEncryptedExtensions
                 keyUnwrapDelegate,
                 aeadDecryptDelegate,
                 memoryPool,
-                cancellationToken,
                 fromPriorPayloadDeserializer,
-                fromPriorHeaderDeserializer).ConfigureAwait(false);
+                fromPriorHeaderDeserializer,
+                cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -1290,8 +1284,6 @@ public static class DidCommEncryptedExtensions
     /// cannot select by curve alone.
     /// </remarks>
     /// <inheritdoc cref="UnpackAuthcryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, AuthenticatedKeyAgreementDecryptDelegate, AuthenticatedKeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, MemoryPool{byte}, CancellationToken)"/>
-    [SuppressMessage("Design", "CA1068:CancellationToken parameters must come last",
-        Justification = "The from_prior rotation-verifier delegates are additive trailing optional parameters kept after the existing cancellationToken so every existing positional caller stays source-compatible (DID Rotation is an opt-in seam threaded only by the leaf serializer).")]
     public static ValueTask<DidCommEncryptedUnpackResult> UnpackAuthcryptAsync(
         this DidCommEncryptedMessage encryptedMessage,
         string recipientKeyId,
@@ -1303,10 +1295,10 @@ public static class DidCommEncryptedExtensions
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
         MemoryPool<byte> memoryPool,
-        CancellationToken cancellationToken = default,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer = null,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null,
-        DidCommEncryptedHeaderPolicy headerPolicy = DidCommEncryptedHeaderPolicy.Strict)
+        DidCommEncryptedHeaderPolicy headerPolicy = DidCommEncryptedHeaderPolicy.Strict,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(encryptedMessage);
         ArgumentNullException.ThrowIfNull(recipientPrivateKey);
@@ -1349,18 +1341,16 @@ public static class DidCommEncryptedExtensions
             keyUnwrapDelegate,
             aeadDecryptDelegate,
             memoryPool,
-            cancellationToken,
             fromPriorPayloadDeserializer,
             fromPriorHeaderDeserializer,
-            headerPolicy);
+            headerPolicy,
+            cancellationToken);
     }
 
 
     //Decrypts the selected authcrypt recipient with the resolved sender public key, validates the
     //recovered plaintext, and enforces the from↔skid addressing-consistency MUST. Split out so the
     //sender-key material owner and the parsed message are disposed deterministically by the caller.
-    [SuppressMessage("Design", "CA1068:CancellationToken parameters must come last",
-        Justification = "The from_prior rotation-verifier delegates trail cancellationToken to match the public unpack overloads this private helper is called from.")]
     private static async ValueTask<DidCommEncryptedUnpackResult> DecryptAuthcryptAndBindAsync(
         AeadGeneralMessage parsed,
         string recipientKeyId,
@@ -1379,9 +1369,9 @@ public static class DidCommEncryptedExtensions
         KeyUnwrapDelegate keyUnwrapDelegate,
         AeadDecryptDelegate aeadDecryptDelegate,
         MemoryPool<byte> memoryPool,
-        CancellationToken cancellationToken,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer,
-        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer)
+        Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer,
+        CancellationToken cancellationToken)
     {
         DecryptedContent decrypted;
         try
@@ -1969,9 +1959,9 @@ public static class DidCommEncryptedExtensions
             base64UrlDecoder,
             base64UrlEncoder,
             memoryPool,
-            cancellationToken,
             fromPriorPayloadDeserializer,
-            fromPriorHeaderDeserializer).ConfigureAwait(false);
+            fromPriorHeaderDeserializer,
+            cancellationToken).ConfigureAwait(false);
 
         if(!inner.IsVerified || inner.Message is null || string.IsNullOrEmpty(inner.SignerKid))
         {

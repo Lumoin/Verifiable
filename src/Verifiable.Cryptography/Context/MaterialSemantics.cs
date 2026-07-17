@@ -208,7 +208,7 @@ public readonly struct MaterialSemantics: IEquatable<MaterialSemantics>
     /// <summary>
     /// All registered material semantics values, including any added via <see cref="Create"/>.
     /// </summary>
-    private static readonly List<MaterialSemantics> semantics = [Direct, TpmHandle];
+    private static List<MaterialSemantics> semantics { get; } = [Direct, TpmHandle];
 
 
     /// <summary>

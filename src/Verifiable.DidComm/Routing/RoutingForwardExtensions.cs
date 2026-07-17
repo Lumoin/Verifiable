@@ -113,7 +113,7 @@ public static class RoutingForwardExtensions
 
 
     //The forward Message Type URI, parsed once for semver-compatible handler dispatch.
-    private static readonly MessageTypeUri ForwardMessageType = MessageTypeUri.Parse(WellKnownRoutingNames.ForwardType);
+    private static MessageTypeUri ForwardMessageType { get; } = MessageTypeUri.Parse(WellKnownRoutingNames.ForwardType);
 
 
     /// <summary>
@@ -391,7 +391,7 @@ public static class RoutingForwardExtensions
             base64UrlDecoder,
             base64UrlEncoder,
             memoryPool,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return await InterpretAsync(
             unpacked, exchangeContext, base64UrlDecoder, transport, hashFunctionSelector, jsonValueSerializer,
@@ -475,7 +475,7 @@ public static class RoutingForwardExtensions
             keyUnwrapDelegate,
             aeadDecryptDelegate,
             memoryPool,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return await InterpretAsync(
             unpacked, exchangeContext, base64UrlDecoder, transport, hashFunctionSelector, jsonValueSerializer,
@@ -540,7 +540,7 @@ public static class RoutingForwardExtensions
             tagToCrvConverter,
             generateContentEncryptionKey,
             memoryPool,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -740,7 +740,7 @@ public static class RoutingForwardExtensions
             hashFunctionSelector,
             jsonSerializer,
             memoryPool,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if(resolution.IsResolved)
         {

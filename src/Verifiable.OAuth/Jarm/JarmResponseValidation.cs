@@ -58,8 +58,8 @@ public static class JarmResponseValidation
         JwtPayloadDeserializer payloadDeserializer,
         DecodeDelegate base64UrlDecoder,
         MemoryPool<byte> memoryPool,
-        CancellationToken cancellationToken,
-        TimeSpan? expirationLeeway = null)
+        TimeSpan? expirationLeeway = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(responseJwt);
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedIssuer);

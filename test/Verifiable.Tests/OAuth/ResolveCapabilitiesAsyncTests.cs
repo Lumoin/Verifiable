@@ -5,6 +5,7 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.Server.Pipeline;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -28,7 +29,7 @@ internal sealed class ResolveCapabilitiesAsyncTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private static Uri VerifierBaseUri { get; } = new("https://verifier.example.com");
 

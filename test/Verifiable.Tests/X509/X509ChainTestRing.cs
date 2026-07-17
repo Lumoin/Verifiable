@@ -53,6 +53,8 @@ internal static class X509ChainTestRing
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         DateTimeOffset now = timeProvider.GetUtcNow();
+
+        //X.509 cert-factory carve-out: CertificateRequest.CreateSelfSigned needs a live framework signing key.
         ECDsa key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
         CertificateRequest request = new(
@@ -114,6 +116,8 @@ internal static class X509ChainTestRing
         }
 
         DateTimeOffset now = timeProvider.GetUtcNow();
+
+        //X.509 cert-factory carve-out: CertificateRequest.Create needs a live framework signing key.
         ECDsa key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
         try
@@ -147,6 +151,7 @@ internal static class X509ChainTestRing
                     X509AuthorityKeyIdentifierExtension.CreateFromSubjectKeyIdentifier(issuerSubjectKeyId));
             }
 
+            //X.509 cert-factory carve-out: serial number handed straight to CertificateRequest.Create.
             byte[] serial = RandomNumberGenerator.GetBytes(8);
 
             //CertificateRequest.Create(issuer, ...) requires the issuer cert
@@ -201,6 +206,8 @@ internal static class X509ChainTestRing
         }
 
         DateTimeOffset now = timeProvider.GetUtcNow();
+
+        //X.509 cert-factory carve-out: CertificateRequest.Create needs a live framework signing key.
         ECDsa key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
         try
@@ -238,6 +245,7 @@ internal static class X509ChainTestRing
                     X509AuthorityKeyIdentifierExtension.CreateFromSubjectKeyIdentifier(issuerSubjectKeyId));
             }
 
+            //X.509 cert-factory carve-out: serial number handed straight to CertificateRequest.Create.
             byte[] serial = RandomNumberGenerator.GetBytes(8);
 
             using X509Certificate2 issuerWithKey =

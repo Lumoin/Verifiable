@@ -191,7 +191,7 @@ internal sealed class DidCommEncryptedHeaderPolicyTests
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
             MicrosoftEntropyFunctions.GenerateNonce,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 
@@ -220,7 +220,7 @@ internal sealed class DidCommEncryptedHeaderPolicyTests
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
             MicrosoftEntropyFunctions.GenerateNonce,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 
@@ -238,7 +238,7 @@ internal sealed class DidCommEncryptedHeaderPolicyTests
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             Pool,
-            TestContext.CancellationToken,
+            cancellationToken: TestContext.CancellationToken,
             headerPolicy: headerPolicy).ConfigureAwait(false);
     }
 
@@ -257,7 +257,7 @@ internal sealed class DidCommEncryptedHeaderPolicyTests
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             Pool,
-            TestContext.CancellationToken,
+            cancellationToken: TestContext.CancellationToken,
             headerPolicy: headerPolicy).ConfigureAwait(false);
     }
 

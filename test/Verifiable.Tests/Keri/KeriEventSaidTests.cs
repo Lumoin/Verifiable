@@ -9,6 +9,7 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Keri;
 using Verifiable.Microsoft;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Keri;
 
@@ -160,19 +161,19 @@ internal sealed class KeriEventSaidTests
     {
         var writer = new CborWriter();
         writer.WriteStartMap(13);
-        WriteScalar(writer, "v", "KERICAACAACBOR0000ff.");
-        WriteScalar(writer, "t", "icp");
-        WriteScalar(writer, "d", identifierAndSaid);
-        WriteScalar(writer, "i", identifierAndSaid);
-        WriteScalar(writer, "s", "0");
-        WriteScalar(writer, "kt", "1");
-        WriteList(writer, "k", [SigningKey]);
-        WriteScalar(writer, "nt", "0");
-        WriteList(writer, "n", []);
-        WriteScalar(writer, "bt", "0");
-        WriteList(writer, "b", []);
-        WriteList(writer, "c", []);
-        WriteList(writer, "a", []);
+        KeriEventWireFixtures.WriteScalar(writer, "v", "KERICAACAACBOR0000ff.");
+        KeriEventWireFixtures.WriteScalar(writer, "t", "icp");
+        KeriEventWireFixtures.WriteScalar(writer, "d", identifierAndSaid);
+        KeriEventWireFixtures.WriteScalar(writer, "i", identifierAndSaid);
+        KeriEventWireFixtures.WriteScalar(writer, "s", "0");
+        KeriEventWireFixtures.WriteScalar(writer, "kt", "1");
+        KeriEventWireFixtures.WriteList(writer, "k", [SigningKey]);
+        KeriEventWireFixtures.WriteScalar(writer, "nt", "0");
+        KeriEventWireFixtures.WriteList(writer, "n", []);
+        KeriEventWireFixtures.WriteScalar(writer, "bt", "0");
+        KeriEventWireFixtures.WriteList(writer, "b", []);
+        KeriEventWireFixtures.WriteList(writer, "c", []);
+        KeriEventWireFixtures.WriteList(writer, "a", []);
         writer.WriteEndMap();
 
         length = writer.BytesWritten;
@@ -226,25 +227,5 @@ internal sealed class KeriEventSaidTests
         public ReadOnlyMemory<byte> Memory => owner.Memory[..length];
 
         public void Dispose() => owner.Dispose();
-    }
-
-
-    private static void WriteScalar(CborWriter writer, string label, string value)
-    {
-        writer.WriteTextString(label);
-        writer.WriteTextString(value);
-    }
-
-
-    private static void WriteList(CborWriter writer, string label, string[] values)
-    {
-        writer.WriteTextString(label);
-        writer.WriteStartArray(values.Length);
-        foreach(string value in values)
-        {
-            writer.WriteTextString(value);
-        }
-
-        writer.WriteEndArray();
     }
 }

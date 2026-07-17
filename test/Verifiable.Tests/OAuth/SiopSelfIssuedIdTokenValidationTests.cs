@@ -23,7 +23,7 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
@@ -61,7 +61,7 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
             idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
             resolveDidVerificationKey: null,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsStructurallyValid);
         Assert.IsTrue(result.IsSelfIssued);
@@ -97,7 +97,7 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
             idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
             resolveDidVerificationKey: null,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsStructurallyValid);
         Assert.IsFalse(result.IsSelfIssued);
@@ -125,7 +125,7 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
             idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
             resolveDidVerificationKey: null,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSubJwkShapeValid);
         Assert.IsFalse(result.IsSignatureValid);
@@ -161,7 +161,7 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
             idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
             resolveDidVerificationKey: null,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSignatureValid);
         Assert.IsFalse(result.IsSubjectConfirmed);
@@ -201,7 +201,7 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
             tamperedToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
             resolveDidVerificationKey: null,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsNonceValid);
         Assert.IsFalse(result.IsSignatureValid);
@@ -228,7 +228,7 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
             idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
             resolveDidVerificationKey: null,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsAudienceValid);
         Assert.IsFalse(result.IsValid);
@@ -255,7 +255,7 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
             idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
             resolveDidVerificationKey: null,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsAudienceValid);
         Assert.IsTrue(result.IsValid);
@@ -284,12 +284,12 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
             mismatched, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
             resolveDidVerificationKey: null,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         SelfIssuedIdTokenValidationResult absentResult = await SelfIssuedIdTokenValidation.ValidateAsync(
             absent, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
             resolveDidVerificationKey: null,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(mismatchedResult.IsNonceValid);
         Assert.IsFalse(mismatchedResult.IsValid);
@@ -317,7 +317,7 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
             idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
             resolveDidVerificationKey: null,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsUnexpired);
         Assert.IsFalse(result.IsValid);
@@ -343,7 +343,7 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
             idToken, ClientId, RequestNonce, edDsaOnly, TimeProvider.GetUtcNow(),
             resolveDidVerificationKey: null,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsAlgorithmAllowed);
         Assert.IsFalse(result.IsSignatureValid);
@@ -378,7 +378,7 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
             unsignedToken, ClientId, RequestNonce, misconfiguredAllowList, TimeProvider.GetUtcNow(),
             resolveDidVerificationKey: null,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsAlgorithmAllowed);
         Assert.IsFalse(result.IsSignatureValid);
@@ -405,7 +405,7 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
             idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
             resolveDidVerificationKey: null,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSubJwkShapeValid);
         Assert.IsFalse(result.IsValid);
@@ -441,7 +441,7 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
             idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
             resolver,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(SiopSubjectSyntaxType.DecentralizedIdentifier, result.SubjectSyntaxType);
         Assert.IsTrue(result.IsSubJwkShapeValid);
@@ -478,7 +478,7 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
             idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
             resolver,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(SiopSubjectSyntaxType.DecentralizedIdentifier, result.SubjectSyntaxType);
         Assert.IsFalse(result.IsSubJwkShapeValid);
@@ -505,7 +505,7 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
             idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
             resolveDidVerificationKey: null,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         ResolveDidVerificationKeyDelegate unresolvable = (_, _, _) =>
             ValueTask.FromResult<PublicKeyMemory?>(null);
@@ -513,7 +513,7 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
             idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
             unresolvable,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(unwiredResult.IsSubjectConfirmed);
         Assert.IsFalse(unwiredResult.IsSignatureValid);
@@ -543,7 +543,7 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
             idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
             resolveDidVerificationKey: null,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSelfIssued);
         Assert.AreEqual(SiopSubjectSyntaxType.Unknown, result.SubjectSyntaxType);
@@ -558,7 +558,7 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
             "not-a-jwt", ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
             resolveDidVerificationKey: null,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsStructurallyValid);
         Assert.IsFalse(result.IsValid);
@@ -660,7 +660,7 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
             PayloadSerializer,
             TestSetup.Base64UrlEncoder,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         return JwsSerialization.SerializeCompact(jws, TestSetup.Base64UrlEncoder);
     }

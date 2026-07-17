@@ -2,7 +2,6 @@ using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
-using Verifiable.Core.Model.Common;
 
 namespace Verifiable.Core.Model.Dcql;
 

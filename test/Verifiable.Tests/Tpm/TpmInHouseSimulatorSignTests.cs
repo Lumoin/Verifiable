@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
@@ -102,6 +103,8 @@ internal sealed class TpmInHouseSimulatorSignTests
         ToFixed(signature.Signature.SignatureR!.AsReadOnlySpan(), P256ComponentSize).CopyTo(p1363Signature.AsSpan(0));
         ToFixed(signature.Signature.SignatureS!.AsReadOnlySpan(), P256ComponentSize).CopyTo(p1363Signature.AsSpan(P256ComponentSize));
 
+        //Independent-oracle carve-out: framework ECDsa verifies against wire-exported simulator output, sharing
+        //no code path with the signer, so a divergence in either implementation fails here.
         using ECDsa ecdsa = ECDsa.Create(ecParameters);
         Assert.IsTrue(
             ecdsa.VerifyHash(digest, p1363Signature),
@@ -175,12 +178,12 @@ internal sealed class TpmInHouseSimulatorSignTests
 
         //Verify with the library's registered software P-256 verifier, from a public key reconstructed solely from
         //the TPM's exported public area (compressed SEC1 point, as the verifier requires).
-        byte[] compressedPublicKey = BuildCompressedPublicKey(primary.OutPublic.PublicArea.Unique.Ecc!, P256ComponentSize);
+        byte[] compressedPublicKey = TpmEccWireFixtures.BuildCompressedPublicKey(primary.OutPublic.PublicArea.Unique.Ecc!, P256ComponentSize);
 
         VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(
             CryptoAlgorithm.P256, Purpose.Verification);
 
-        bool verified = await verify(MessageBytes, signature.AsReadOnlyMemory(), compressedPublicKey, null, TestContext.CancellationToken).ConfigureAwait(false);
+        (bool verified, CryptoEvent? _) = await verify(MessageBytes, signature.AsReadOnlyMemory(), compressedPublicKey, null, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(verified, "A signature produced by a TPM-backed PrivateKey must verify through the library's P-256 verifier.");
     }
 
@@ -257,8 +260,8 @@ internal sealed class TpmInHouseSimulatorSignTests
         //Recompute the ticket exactly as TPM2_CertifyCreation would: the proof is H(seed || hierarchy), and the
         //ticket digest is HMAC(proof, TPM_ST_CREATION || name || creationHash). A match proves the ticket is a
         //real, verifiable HMAC bound to the injected seed — not an opaque or stubbed value.
-        byte[] proof = await ComputeSha256Async(BuildProofInput(seed, (uint)TpmRh.TPM_RH_OWNER), pool, TestContext.CancellationToken).ConfigureAwait(false);
-        byte[] ticketMessage = BuildTicketMessage(primary.Name.Span, primary.CreationHash.AsReadOnlySpan());
+        byte[] proof = await ComputeSha256Async(BuildProofInput(seed, (uint)TpmRh.TPM_RH_OWNER, pool), pool, TestContext.CancellationToken).ConfigureAwait(false);
+        byte[] ticketMessage = BuildTicketMessage(primary.Name.Span, primary.CreationHash.AsReadOnlySpan(), pool);
         byte[] expectedTicket = await ComputeHmacSha256Async(ticketMessage, proof, pool, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(
@@ -341,39 +344,13 @@ internal sealed class TpmInHouseSimulatorSignTests
         Assert.IsFalse(signature.Signature.RsaSignature.IsEmpty, $"The {schemeName} signature buffer must not be empty.");
 
         RSASignaturePadding padding = usePss ? RSASignaturePadding.Pss : RSASignaturePadding.Pkcs1;
+
+        //Independent-oracle carve-out: framework RSA verifies against wire-exported simulator output, sharing
+        //no code path with the signer, so a divergence in either implementation fails here.
         using RSA rsa = RSA.Create(rsaParameters);
         Assert.IsTrue(
             rsa.VerifyHash(digest, signature.Signature.RsaSignature.Buffer.ToArray(), HashAlgorithmName.SHA256, padding),
             $"An {schemeName} signature produced by the in-house simulator must verify against its exported modulus.");
-    }
-
-    /// <summary>
-    /// Builds the compressed SEC1 public-key encoding the library's ECDSA verifier expects, from a TPM ECC point,
-    /// via <see cref="EllipticCurveUtilities.Compress"/>. Synchronous so the stack coordinate buffers never span
-    /// an await.
-    /// </summary>
-    /// <param name="point">The TPM-exported public point.</param>
-    /// <param name="componentSize">The curve coordinate size in bytes.</param>
-    /// <returns>The compressed point.</returns>
-    private static byte[] BuildCompressedPublicKey(TpmsEccPoint point, int componentSize)
-    {
-        Span<byte> x = stackalloc byte[componentSize];
-        Span<byte> y = stackalloc byte[componentSize];
-        LeftPadInto(point.X.AsReadOnlySpan(), x);
-        LeftPadInto(point.Y.AsReadOnlySpan(), y);
-
-        return EllipticCurveUtilities.Compress(x, y);
-    }
-
-    /// <summary>
-    /// Left-pads a big-endian value into a fixed-width destination, zero-filling the leading bytes.
-    /// </summary>
-    /// <param name="value">The big-endian value (the TPM may omit leading zero bytes).</param>
-    /// <param name="destination">The fixed-width destination span.</param>
-    private static void LeftPadInto(ReadOnlySpan<byte> value, Span<byte> destination)
-    {
-        destination.Clear();
-        value.CopyTo(destination[(destination.Length - value.Length)..]);
     }
 
     /// <summary>
@@ -490,30 +467,34 @@ internal sealed class TpmInHouseSimulatorSignTests
     /// <summary>Builds the creation-ticket proof-derivation input: the seed followed by the hierarchy handle.</summary>
     /// <param name="seed">The TPM seed.</param>
     /// <param name="hierarchy">The hierarchy handle.</param>
+    /// <param name="pool">The memory pool.</param>
     /// <returns>The proof-derivation input bytes.</returns>
-    private static byte[] BuildProofInput(byte[] seed, uint hierarchy)
+    private static byte[] BuildProofInput(byte[] seed, uint hierarchy, MemoryPool<byte> pool)
     {
-        byte[] input = new byte[seed.Length + sizeof(uint)];
-        var writer = new TpmWriter(input);
+        int length = seed.Length + sizeof(uint);
+        using IMemoryOwner<byte> owner = pool.Rent(length);
+        var writer = new TpmWriter(owner.Memory.Span);
         writer.WriteBytes(seed);
         writer.WriteUInt32(hierarchy);
 
-        return input;
+        return owner.Memory.Span[..length].ToArray();
     }
 
     /// <summary>Builds the creation-ticket HMAC message: TPM_ST_CREATION (UINT16) followed by the Name and creation hash.</summary>
     /// <param name="name">The object Name bytes.</param>
     /// <param name="creationHash">The creation hash bytes.</param>
+    /// <param name="pool">The memory pool.</param>
     /// <returns>The ticket message bytes.</returns>
-    private static byte[] BuildTicketMessage(ReadOnlySpan<byte> name, ReadOnlySpan<byte> creationHash)
+    private static byte[] BuildTicketMessage(ReadOnlySpan<byte> name, ReadOnlySpan<byte> creationHash, MemoryPool<byte> pool)
     {
-        byte[] message = new byte[sizeof(ushort) + name.Length + creationHash.Length];
-        var writer = new TpmWriter(message);
+        int length = sizeof(ushort) + name.Length + creationHash.Length;
+        using IMemoryOwner<byte> owner = pool.Rent(length);
+        var writer = new TpmWriter(owner.Memory.Span);
         writer.WriteUInt16((ushort)TpmStConstants.TPM_ST_CREATION);
         writer.WriteBytes(name);
         writer.WriteBytes(creationHash);
 
-        return message;
+        return owner.Memory.Span[..length].ToArray();
     }
 
     /// <summary>

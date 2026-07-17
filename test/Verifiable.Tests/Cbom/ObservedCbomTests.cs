@@ -269,10 +269,11 @@ internal sealed class ObservedCbomTests
         using PublicKeyMemory publicKey = signingKeys.PublicKey;
         using PrivateKeyMemory privateKey = signingKeys.PrivateKey;
 
-        using Signature signature = await MicrosoftCryptographicFunctions.SignP256Async(
+        (Signature signature, CryptoEvent? _) = await MicrosoftCryptographicFunctions.SignP256Async(
             privateKey.AsReadOnlyMemory(), payload, pool).ConfigureAwait(false);
+        using var disposableSignature = signature;
 
-        bool isValid = await MicrosoftCryptographicFunctions.VerifyP256Async(
+        (bool isValid, CryptoEvent? _) = await MicrosoftCryptographicFunctions.VerifyP256Async(
             payload, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
         Assert.IsTrue(isValid, "The observed signing-workload signature must verify.");
 
@@ -323,10 +324,11 @@ internal sealed class ObservedCbomTests
         using PublicKeyMemory publicKey = keys.PublicKey;
         using PrivateKeyMemory privateKey = keys.PrivateKey;
 
-        using Signature signature = await MicrosoftCryptographicFunctions.SignP256Async(
+        (Signature signature, CryptoEvent? _) = await MicrosoftCryptographicFunctions.SignP256Async(
             privateKey.AsReadOnlyMemory(), payload, pool).ConfigureAwait(false);
+        using var disposableSignature = signature;
 
-        bool isValid = await MicrosoftCryptographicFunctions.VerifyP256Async(
+        (bool isValid, CryptoEvent? _) = await MicrosoftCryptographicFunctions.VerifyP256Async(
             payload, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory()).ConfigureAwait(false);
         Assert.IsTrue(isValid, "The observed-workload signature must verify.");
 

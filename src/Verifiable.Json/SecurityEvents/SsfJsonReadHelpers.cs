@@ -21,7 +21,7 @@ internal static class SsfJsonReadHelpers
     /// relying on the global STJ default of 64) caps nesting at parse time and keeps the
     /// downstream recursive materialization safely bounded for untrusted input.
     /// </summary>
-    internal static readonly JsonDocumentOptions DocumentOptions = new() { MaxDepth = 32 };
+    internal static JsonDocumentOptions DocumentOptions { get; } = new() { MaxDepth = 32 };
 
 
     internal static string? ReadOptionalString(JsonElement parent, string name)

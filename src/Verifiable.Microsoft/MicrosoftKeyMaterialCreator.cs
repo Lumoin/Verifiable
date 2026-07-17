@@ -18,18 +18,18 @@ namespace Verifiable.Microsoft;
     Justification = "The caller is responsible for disposing the returned key material instances.")]
 public static class MicrosoftKeyMaterialCreator
 {
-    private static readonly ProviderLibrary ProviderLib = new(
+    private static ProviderLibrary ProviderLib { get; } = new(
         typeof(MicrosoftKeyMaterialCreator).Assembly.GetName().Name
             ?? "Verifiable.Microsoft",
         typeof(MicrosoftKeyMaterialCreator).Assembly.GetName().Version?.ToString()
             ?? "Unknown");
 
-    private static readonly CryptoLibraryInfo CryptoLib = new(
+    private static CryptoLibraryInfo CryptoLib { get; } = new(
         "System.Security.Cryptography",
         typeof(RandomNumberGenerator).Assembly.GetName().Version?.ToString()
             ?? System.Environment.Version.ToString());
 
-    private static readonly ProviderClass ProviderCls =
+    private static ProviderClass ProviderCls { get; } =
         new(nameof(MicrosoftKeyMaterialCreator));
 
 
@@ -130,7 +130,7 @@ public static class MicrosoftKeyMaterialCreator
             //Store the full uncompressed point so callers can slice coordinates via
             //EllipticCurveUtilities when building the JWK for the JAR header.
             byte[] uncompressed = new byte[65];
-            uncompressed[0] = 0x04;
+            uncompressed[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
             parameters.Q.X!.CopyTo(uncompressed, 1);
             parameters.Q.Y!.CopyTo(uncompressed, 33);
 
@@ -227,7 +227,7 @@ public static class MicrosoftKeyMaterialCreator
             //EllipticCurveUtilities when building the JWK for the JAR header.
             int coordinateLength = parameters.Q.X!.Length;
             byte[] uncompressed = new byte[1 + (2 * coordinateLength)];
-            uncompressed[0] = 0x04;
+            uncompressed[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
             parameters.Q.X!.CopyTo(uncompressed, 1);
             parameters.Q.Y!.CopyTo(uncompressed, 1 + coordinateLength);
 
@@ -342,6 +342,38 @@ public static class MicrosoftKeyMaterialCreator
 
         return new PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>(
             publicKeyMemory, privateKeyMemory);
+    }
+
+
+    /// <summary>
+    /// Wraps one of this class's own <c>Create*Keys</c> methods into the
+    /// <see cref="KeyCreationDelegate"/> tuple shape <see cref="KeyCreationFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
+    /// resolves, without changing that method's own signature — every existing call site that invokes
+    /// <c>Create*Keys</c> directly keeps compiling and keeps forfeiting the event, exactly as a direct
+    /// <see cref="SigningDelegate"/> call forfeits <see cref="SignatureProducedEvent"/>. Constructs the
+    /// <see cref="KeyMaterialGeneratedEvent"/> from this class's own already-visible <see cref="CryptoLib"/>
+    /// identity, mirroring how <c>MicrosoftCryptographicFunctions</c> constructs
+    /// <see cref="SignatureProducedEvent"/>/<see cref="VerificationCompletedEvent"/> from the same kind of
+    /// field for the sign/verify tuple route.
+    /// </summary>
+    /// <param name="creator">One of this class's own <c>Create*Keys</c> methods, passed by method group.</param>
+    /// <param name="algorithm">The algorithm the created key pair represents.</param>
+    /// <param name="purpose">The purpose (signing, exchange) the created key pair is registered for.</param>
+    /// <param name="memoryPool">The memory pool to allocate key material from.</param>
+    /// <returns>The created key pair, paired with the <see cref="KeyMaterialGeneratedEvent"/> describing it.</returns>
+    public static (PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> Keys, CryptoEvent? Event) CreateKeysWithEvent(
+        PublicPrivateKeyCreationDelegate<PublicKeyMemory, PrivateKeyMemory> creator,
+        CryptoAlgorithm algorithm,
+        Purpose purpose,
+        MemoryPool<byte> memoryPool)
+    {
+        ArgumentNullException.ThrowIfNull(creator);
+        ArgumentNullException.ThrowIfNull(memoryPool);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys = creator(memoryPool);
+        CryptoEvent evt = KeyMaterialGeneratedEvent.Create(algorithm, purpose, MaterialSemantics.Direct, CryptoLib.Name);
+
+        return (keys, evt);
     }
 
 

@@ -36,7 +36,7 @@ internal sealed class BitstringStatusListCredentialDataIntegrityTests
     private const string IssuerDomain = "issuer.example";
     private const string IssuerDidWeb = "did:web:issuer.example";
 
-    private static readonly DateTimeOffset Now = new(2024, 6, 15, 12, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset Now = StatusListTestConstants.BitstringDataIntegrityReferenceTime;
     private static readonly ExchangeContext EmptyContext = new();
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;

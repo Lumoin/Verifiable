@@ -127,7 +127,7 @@ public readonly struct BufferKind: IEquatable<BufferKind>
     //security-envelope or credential roles. Domain-specific kinds (JWT/CWT headers and payloads,
     //Verifiable Credential / Presentation, ...) are added by the layer that owns those formats through
     //the Create(>=1000) seam — that extensibility is the whole point of the discriminator pattern.
-    private static readonly List<BufferKind> s_kinds =
+    private static List<BufferKind> s_kinds { get; } =
     [
         Unknown, Json, Cbor
     ];

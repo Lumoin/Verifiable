@@ -1,4 +1,5 @@
 using Verifiable.OAuth.Federation;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Federation;
 
@@ -20,7 +21,7 @@ internal sealed class FederationEffectiveMetadataResolverTests
     [TestMethod]
     public async Task ReturnsNullWhenSubjectDoesNotDeclareEntityType()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://subject.example.com"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
@@ -45,7 +46,7 @@ internal sealed class FederationEffectiveMetadataResolverTests
     [TestMethod]
     public async Task ReturnsDeclaredMetadataWhenNoPolicyInChain()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://subject.example.com"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
@@ -96,7 +97,7 @@ internal sealed class FederationEffectiveMetadataResolverTests
     [TestMethod]
     public async Task AnchorPolicyConstrainsDeclaredMetadataCleanly()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://subject.example.com"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
@@ -161,7 +162,7 @@ internal sealed class FederationEffectiveMetadataResolverTests
     [TestMethod]
     public async Task ConstraintViolationReturnsFailure()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://subject.example.com"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
@@ -227,7 +228,7 @@ internal sealed class FederationEffectiveMetadataResolverTests
     [TestMethod]
     public async Task RemovesEntityTypeNotInAllowedEntityTypesConstraint()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         //Subject declares openid_relying_party, but the anchor's allowed_entity_types
         //permits only openid_provider — the RP type must be removed (§6.2.3).
         TrustChain chain = await BuildChainAsync(
@@ -245,7 +246,7 @@ internal sealed class FederationEffectiveMetadataResolverTests
     [TestMethod]
     public async Task KeepsEntityTypeListedInAllowedEntityTypesConstraint()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         TrustChain chain = await BuildChainAsync(
             DeclareMetadata(RpType.Value),
             AllowedEntityTypesConstraint("openid_relying_party"),
@@ -261,7 +262,7 @@ internal sealed class FederationEffectiveMetadataResolverTests
     [TestMethod]
     public async Task NeverRemovesFederationEntityEvenWhenNotListed()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         //allowed_entity_types lists only openid_provider, yet federation_entity is always
         //allowed and MUST NOT be removed (§6.2.3).
         TrustChain chain = await BuildChainAsync(
@@ -280,7 +281,7 @@ internal sealed class FederationEffectiveMetadataResolverTests
     [TestMethod]
     public async Task EmptyAllowedEntityTypesRemovesEveryNonFederationType()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         //An empty array means only federation_entity is allowed (§6.2.3).
         TrustChain chain = await BuildChainAsync(
             DeclareMetadata(RpType.Value),
@@ -297,7 +298,7 @@ internal sealed class FederationEffectiveMetadataResolverTests
     [TestMethod]
     public async Task ImmediateSuperiorMetadataOverridesSubjectDeclaration()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
 
         //Subject declares grant_types=[authorization_code]; the immediate superior's
         //Subordinate Statement supplies grant_types=[authorization_code, refresh_token],
@@ -333,7 +334,7 @@ internal sealed class FederationEffectiveMetadataResolverTests
     [TestMethod]
     public async Task ImmediateSuperiorMetadataIsAppliedBeforePolicy()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
 
         //Subject declares grant_types=[implicit] which subset_of alone would trim to the
         //empty array. The immediate superior overrides it with [authorization_code]; the

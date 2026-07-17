@@ -101,7 +101,7 @@ public readonly struct StatusWord : IEquatable<StatusWord>
     public static StatusWord AuthenticationFailed { get; } = new(0x6300);
 
 
-    private static readonly List<StatusWord> words =
+    private static List<StatusWord> words { get; } =
     [
         Success, WrongData, FileNotFound, IncorrectP1P2, ReferencedDataNotFound,
         SecurityNotSatisfied, AuthenticationBlocked, InstructionNotSupported,
@@ -289,7 +289,7 @@ public readonly struct StatusWord : IEquatable<StatusWord>
 /// <summary>Provides human-readable names for <see cref="StatusWord"/> values.</summary>
 public static class StatusWordNames
 {
-    private static readonly Dictionary<ushort, string> customNames = [];
+    private static Dictionary<ushort, string> customNames { get; } = [];
 
     /// <summary>Gets the name for the specified status word.</summary>
     public static string GetName(StatusWord statusWord) => GetName(statusWord.Value);

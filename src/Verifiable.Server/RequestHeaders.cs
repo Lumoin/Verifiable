@@ -25,7 +25,7 @@ namespace Verifiable.Server;
 [DebuggerDisplay("RequestHeaders({Count} headers)")]
 public sealed class RequestHeaders
 {
-    private readonly Dictionary<string, string[]> headers;
+    private Dictionary<string, string[]> Headers { get; }
 
 
     /// <summary>
@@ -40,10 +40,10 @@ public sealed class RequestHeaders
     {
         ArgumentNullException.ThrowIfNull(source);
 
-        headers = new Dictionary<string, string[]>(source.Count, StringComparer.OrdinalIgnoreCase);
+        Headers = new Dictionary<string, string[]>(source.Count, StringComparer.OrdinalIgnoreCase);
         foreach(KeyValuePair<string, string[]> entry in source)
         {
-            headers[entry.Key] = entry.Value;
+            Headers[entry.Key] = entry.Value;
         }
     }
 
@@ -59,7 +59,7 @@ public sealed class RequestHeaders
     /// <summary>
     /// The number of distinct header names present.
     /// </summary>
-    public int Count => headers.Count;
+    public int Count => Headers.Count;
 
 
     /// <summary>
@@ -77,7 +77,7 @@ public sealed class RequestHeaders
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        if(headers.TryGetValue(name, out string[]? values) && values.Length == 1)
+        if(Headers.TryGetValue(name, out string[]? values) && values.Length == 1)
         {
             value = values[0];
             return true;
@@ -101,7 +101,7 @@ public sealed class RequestHeaders
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        if(headers.TryGetValue(name, out string[]? raw))
+        if(Headers.TryGetValue(name, out string[]? raw))
         {
             values = raw;
             return true;
@@ -119,6 +119,6 @@ public sealed class RequestHeaders
     public bool Contains(string name)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        return headers.ContainsKey(name);
+        return Headers.ContainsKey(name);
     }
 }

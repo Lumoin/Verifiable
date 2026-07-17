@@ -65,7 +65,7 @@ internal sealed class Oid4VpFlowIntegrationTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private const string VerifierClientId = "https://verifier.example.com";
     private static readonly Uri VerifierBaseUri = new("https://verifier.example.com");
@@ -2769,7 +2769,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         //the queried subject matches; null otherwise (the endpoint then
         //returns 404).
         Dictionary<string, object> verifierSubjectJwks =
-            BuildSingleEcKeyJwks(verifierFederationKeys.PublicKey);
+            OAuthJwksFixtures.BuildSingleEcKeyJwks(verifierFederationKeys.PublicKey);
         anchorHost.Server.OAuth().ResolveSubordinateStatementAsync = (subject, _, _, _) =>
         {
             if(!string.Equals(subject.Value, verifierEntityId.ToString(), StringComparison.Ordinal))
@@ -2937,22 +2937,6 @@ internal sealed class Oid4VpFlowIntegrationTests
             app.Host("default").HttpBaseAddress!.Port,
             anchorHost.HttpBaseAddress!.Port,
             "Verifier and anchor must bind to different ephemeral ports.");
-    }
-
-
-    private static Dictionary<string, object> BuildSingleEcKeyJwks(PublicKeyMemory publicKey)
-    {
-        JsonWebKey jwk = CryptoFormatConversions.DefaultAlgorithmToJwkConverter(
-            publicKey.Tag.Get<CryptoAlgorithm>(),
-            publicKey.Tag.Get<Verifiable.Cryptography.Context.Purpose>(),
-            publicKey.AsReadOnlySpan(),
-            TestSetup.Base64UrlEncoder);
-        jwk.Use = WellKnownJwkValues.UseSig;
-
-        return new Dictionary<string, object>(StringComparer.Ordinal)
-        {
-            ["keys"] = new List<object> { jwk }
-        };
     }
 
 

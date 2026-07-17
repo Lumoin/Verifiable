@@ -52,7 +52,7 @@ namespace Verifiable.Cryptography;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class HmacValue: SensitiveMemory, IEquatable<HmacValue>
 {
-    private readonly Activity? hmacLifetime;
+    private Activity? HmacLifetime { get; }
 
     /// <summary>
     /// The length of the HMAC tag in bytes. SHA-256 produces 32 bytes,
@@ -74,7 +74,7 @@ public sealed class HmacValue: SensitiveMemory, IEquatable<HmacValue>
     public HmacValue(IMemoryOwner<byte> sensitiveMemory, Tag tag, Activity? lifetime = null)
         : base(sensitiveMemory, tag, lifetime)
     {
-        hmacLifetime = lifetime;
+        HmacLifetime = lifetime;
     }
 
 
@@ -85,11 +85,11 @@ public sealed class HmacValue: SensitiveMemory, IEquatable<HmacValue>
     protected override void Dispose(bool disposing)
     {
         if(disposing
-            && hmacLifetime is not null
+            && HmacLifetime is not null
             && Tag.TryGet(out HashAlgorithmName algorithmName))
         {
-            hmacLifetime.SetTag(CryptoTelemetry.Hmac.Algorithm, algorithmName.Name);
-            hmacLifetime.SetTag(CryptoTelemetry.Hmac.OutputLength, Length);
+            HmacLifetime.SetTag(CryptoTelemetry.Hmac.Algorithm, algorithmName.Name);
+            HmacLifetime.SetTag(CryptoTelemetry.Hmac.OutputLength, Length);
         }
 
         base.Dispose(disposing);

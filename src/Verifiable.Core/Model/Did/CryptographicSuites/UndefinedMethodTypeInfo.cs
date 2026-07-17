@@ -4,7 +4,7 @@ namespace Verifiable.Core.Model.Did.CryptographicSuites
 {
     public sealed class UndefinedMethodTypeInfo: VerificationMethodTypeInfo
     {
-        private static readonly string[] ContextsArray = ["Undefined"];
+        private static string[] ContextsArray { get; } = ["Undefined"];
 
 
         public static UndefinedMethodTypeInfo Instance { get; } = new()

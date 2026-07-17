@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Cesr;
 using Verifiable.Cryptography;
@@ -15,6 +16,7 @@ using Verifiable.Json;
 using Verifiable.Keri;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Keri;
 
@@ -612,7 +614,7 @@ internal sealed class KeriKeyEventLogReplayTests
         DelegationSealResolver? resolveDelegationSeal = null)
     {
         LogReplayContext<KeriKeyState, KeriKeyEvent, CryptoProof, KeriReplayValidationContext> context =
-            KeriKeyEventLog.CreateReplayContext(AgileDigest, BaseMemoryPool.Shared, TimeProvider.System, resolveDelegationSeal);
+            KeriKeyEventLog.CreateReplayContext(AgileDigest, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), resolveDelegationSeal);
 
         var replayer = new LogReplayer<KeriKeyState, KeriKeyEvent, CryptoProof, KeriReplayValidationContext>();
         var results = new List<LogReplayResult<KeriKeyState, KeriKeyEvent, CryptoProof>>();
@@ -630,7 +632,9 @@ internal sealed class KeriKeyEventLogReplayTests
     {
         var sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.Ed25519, Purpose.Signing);
 
-        return await sign(privateKey.AsReadOnlyMemory(), serialization, BaseMemoryPool.Shared, context: null, cancellationToken: cancellationToken).ConfigureAwait(false);
+        (Signature signature, CryptoEvent? _) = await sign(privateKey.AsReadOnlyMemory(), serialization, BaseMemoryPool.Shared, context: null, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        return signature;
     }
 
 

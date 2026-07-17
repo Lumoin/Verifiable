@@ -38,6 +38,15 @@
     <ProjectReference Include="..\Verifiable.Tpm\Verifiable.Tpm.csproj" />
     <ProjectReference Include="..\Verifiable.Core\Verifiable.Core.csproj" />
     <ProjectReference Include="..\Verifiable.Microsoft\Verifiable.Microsoft.csproj" />
+    <!--
+      This is the composition root: the "consumer that chooses its serialization layer" the
+      ValidateProjectReferences target's own restriction is written for (Directory.Packages.props).
+      Verifiable.Fido2 stays serialization-agnostic; this CLI/MCP application is where it is paired
+      with the CBOR/JSON codec defaults for FIDO2 attestation/assertion verification.
+    -->
+    <ProjectReference Include="..\Verifiable.Fido2\Verifiable.Fido2.csproj" />
+    <ProjectReference Include="..\Verifiable.Cbor\Verifiable.Cbor.csproj" />
+    <ProjectReference Include="..\Verifiable.Json\Verifiable.Json.csproj" />
   </ItemGroup>
 
 </Project>

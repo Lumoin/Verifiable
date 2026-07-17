@@ -32,7 +32,7 @@ public static class KeriEventJson
     /// The parse options bound the JSON nesting depth, defending against adversarial input independently of the
     /// iterative conversion, matching the depth bound the other readers in this leaf apply.
     /// </summary>
-    private static readonly JsonDocumentOptions ParseOptions = new() { MaxDepth = 32 };
+    private static JsonDocumentOptions ParseOptions { get; } = new() { MaxDepth = 32 };
 
 
     /// <summary>

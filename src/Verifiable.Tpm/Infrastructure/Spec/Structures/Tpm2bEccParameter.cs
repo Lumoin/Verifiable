@@ -36,7 +36,7 @@ public sealed class Tpm2bEccParameter: SensitiveMemory, ITpmWireType
     /// <summary>
     /// Shared empty instance backed by <see cref="EmptyMemoryOwner"/>.
     /// </summary>
-    private static readonly Tpm2bEccParameter EmptyInstance = new(EmptyMemoryOwner.Instance);
+    private static Tpm2bEccParameter EmptyInstance { get; } = new(EmptyMemoryOwner.Instance);
 
     /// <summary>
     /// Gets an empty ECC parameter.

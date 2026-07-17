@@ -43,7 +43,7 @@ public static class DefaultJwtValidationClaims
 
 public static class JwtKeyTypeHeaderValidationUtilities
 {
-    private static readonly List<(Func<string, bool> IsAlg, Func<string, bool> IsCrv)> AlgCrvPairs = new()
+    private static List<(Func<string, bool> IsAlg, Func<string, bool> IsCrv)> AlgCrvPairs { get; } = new()
     {
         (WellKnownJwaValues.IsEs256, WellKnownCurveValues.IsP256),
         (WellKnownJwaValues.IsEs384, WellKnownCurveValues.IsP384),
@@ -67,35 +67,55 @@ public static class JwtKeyTypeHeaderValidationUtilities
             return claims;
         }
 
-        switch(kty)
+        List<Claim> ktyClaims = kty switch
         {
-            case string k when WellKnownKeyTypeValues.IsEc(k):
-                claims.AddRange(ValidateEc(jwtHeaders, AlgCrvPairs, true, true));
-                claims.Add(new Claim(ClaimId.EcKeyType, ClaimOutcome.Success));
-                break;
-            case string k when WellKnownKeyTypeValues.IsRsa(k):
-                claims.AddRange(ValidateRsa(jwtHeaders));
-                claims.Add(new Claim(ClaimId.RsaKeyType, ClaimOutcome.Success));
-                break;
-            case string k when WellKnownKeyTypeValues.IsOct(k):
-                //TODO:Additional validation logic for 'oct' can go here...
-                claims.Add(new Claim(ClaimId.OctKeyType, ClaimOutcome.Success)); //TODO: Placeholder...
-                break;
-            case string k when WellKnownKeyTypeValues.IsOkp(k):
-                List<(Func<string, bool> IsAlg, Func<string, bool> IsCrv)> algCrvPairsForOkp = new()
-                {
-                    (WellKnownJwaValues.IsEdDsa, WellKnownCurveValues.IsEd25519),
-                    (str => true, WellKnownCurveValues.IsX25519)
-                };
-                claims.AddRange(ValidateOkp(jwtHeaders, algCrvPairsForOkp));
-                claims.Add(new Claim(ClaimId.OkpKeyType, ClaimOutcome.Success));
-                break;
-            default:
-                claims.Add(new Claim(ClaimId.UnsupportedKeyType, ClaimOutcome.Failure));
-                break;
-        }
+            var k when WellKnownKeyTypeValues.IsEc(k) => BuildEcClaims(jwtHeaders),
+            var k when WellKnownKeyTypeValues.IsRsa(k) => BuildRsaClaims(jwtHeaders),
+            var k when WellKnownKeyTypeValues.IsOct(k) => BuildOctClaims(),
+            var k when WellKnownKeyTypeValues.IsOkp(k) => BuildOkpClaims(jwtHeaders),
+            _ => [new Claim(ClaimId.UnsupportedKeyType, ClaimOutcome.Failure)]
+        };
+
+        claims.AddRange(ktyClaims);
 
         return claims;
+
+        static List<Claim> BuildEcClaims(Dictionary<string, object> headers)
+        {
+            List<Claim> result = ValidateEc(headers, AlgCrvPairs, true, true);
+            result.Add(new Claim(ClaimId.EcKeyType, ClaimOutcome.Success));
+
+            return result;
+        }
+
+        static List<Claim> BuildRsaClaims(Dictionary<string, object> headers)
+        {
+            List<Claim> result = ValidateRsa(headers);
+            result.Add(new Claim(ClaimId.RsaKeyType, ClaimOutcome.Success));
+
+            return result;
+        }
+
+        static List<Claim> BuildOctClaims()
+        {
+            //TODO:Additional validation logic for 'oct' can go here...
+
+            return [new Claim(ClaimId.OctKeyType, ClaimOutcome.Success)]; //TODO: Placeholder...
+        }
+
+        static List<Claim> BuildOkpClaims(Dictionary<string, object> headers)
+        {
+            List<(Func<string, bool> IsAlg, Func<string, bool> IsCrv)> algCrvPairsForOkp = new()
+            {
+                (WellKnownJwaValues.IsEdDsa, WellKnownCurveValues.IsEd25519),
+                (str => true, WellKnownCurveValues.IsX25519)
+            };
+
+            List<Claim> result = ValidateOkp(headers, algCrvPairsForOkp);
+            result.Add(new Claim(ClaimId.OkpKeyType, ClaimOutcome.Success));
+
+            return result;
+        }
     }
 
 

@@ -361,7 +361,7 @@ internal sealed class SdJwtClaimRedactionTests
 
         SdJwtClaimRedaction.Redact(
             json, disclosablePaths, TestSalts.DefaultGenerator(),
-            SerializeDisclosure, ComputeDigest, TestSetup.Base64UrlEncoder,
+            SdJwtWireFixtures.SerializeDisclosure, ComputeDigest, TestSetup.Base64UrlEncoder,
             WellKnownHashAlgorithms.Sha256Iana,
             new DecoyDigestOptions(countReadingState, sentinel));
 
@@ -417,7 +417,7 @@ internal sealed class SdJwtClaimRedactionTests
 
         //The real disclosures' digests must all be present in the _sd array.
         var realDigests = disclosures
-            .Select(d => ComputeDigest(SerializeDisclosure(d, TestSetup.Base64UrlEncoder), WellKnownHashAlgorithms.Sha256Iana, TestSetup.Base64UrlEncoder))
+            .Select(d => ComputeDigest(SdJwtWireFixtures.SerializeDisclosure(d, TestSetup.Base64UrlEncoder), WellKnownHashAlgorithms.Sha256Iana, TestSetup.Base64UrlEncoder))
             .ToHashSet();
 
         foreach(string realDigest in realDigests)
@@ -450,7 +450,7 @@ internal sealed class SdJwtClaimRedactionTests
     {
         return SdJwtClaimRedaction.Redact(
             json, disclosablePaths, TestSalts.DefaultGenerator(),
-            SerializeDisclosure, ComputeDigest,
+            SdJwtWireFixtures.SerializeDisclosure, ComputeDigest,
             TestSetup.Base64UrlEncoder, WellKnownHashAlgorithms.Sha256Iana);
     }
 
@@ -462,13 +462,8 @@ internal sealed class SdJwtClaimRedactionTests
     {
         return SdJwtClaimRedaction.Redact(
             json, disclosablePaths, TestSalts.DefaultGenerator(),
-            SerializeDisclosure, ComputeDigest,
+            SdJwtWireFixtures.SerializeDisclosure, ComputeDigest,
             TestSetup.Base64UrlEncoder, WellKnownHashAlgorithms.Sha256Iana, decoyCount);
-    }
-
-    private static string SerializeDisclosure(SdDisclosure disclosure, EncodeDelegate encoder)
-    {
-        return SdJwtSerializer.SerializeDisclosure(disclosure, encoder);
     }
 
     private static string ComputeDigest(string encodedDisclosure, string algorithmName, EncodeDelegate encoder)

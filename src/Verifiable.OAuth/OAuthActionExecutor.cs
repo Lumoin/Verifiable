@@ -35,7 +35,7 @@ public sealed class OAuthActionExecutor
 {
     //Keyed by the concrete OAuthAction subtype. Each value is a delegate
     //that accepts the action as OAuthAction and downcasts internally.
-    private readonly Dictionary<Type, Func<OAuthAction, ExchangeContext, CancellationToken, ValueTask<FlowInput>>> handlers = new();
+    private Dictionary<Type, Func<OAuthAction, ExchangeContext, CancellationToken, ValueTask<FlowInput>>> Handlers { get; } = new();
 
 
     /// <summary>
@@ -56,7 +56,7 @@ public sealed class OAuthActionExecutor
 
         //Wrap the typed delegate so the dictionary stores a uniform signature.
         //The downcast is safe because ExecuteAsync dispatches by typeof(action).
-        if(!handlers.TryAdd(
+        if(!Handlers.TryAdd(
             typeof(TAction),
             (action, context, ct) => handler((TAction)action, context, ct)))
         {
@@ -91,7 +91,7 @@ public sealed class OAuthActionExecutor
 
         Type actionType = action.GetType();
 
-        if(!handlers.TryGetValue(actionType, out var handler))
+        if(!Handlers.TryGetValue(actionType, out var handler))
         {
             throw new InvalidOperationException(
                 $"No handler registered for action type '{actionType.Name}'. " +

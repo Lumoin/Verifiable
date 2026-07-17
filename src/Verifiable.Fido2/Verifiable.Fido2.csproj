@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Implements W3C WebAuthn and FIDO2 relying-party and passkey functionality</Title>
+    <Description>Includes and implements functionality to verify WebAuthn registration and authentication ceremonies, attestation statement formats and passkeys, and to surface credential keys as first-class signing keys.</Description>
+    <PackageTags>WebAuthn FIDO2 passkey attestation COSE CTAP</PackageTags>
+  </PropertyGroup>
+
+  <!--
+    FIDO2 stays serialization-agnostic, mirroring Verifiable.JCose: the WebAuthn
+    data types and verification operations are defined here, while the concrete
+    CBOR and JSON codecs for authenticatorData, attestationObject and
+    clientDataJSON are supplied through a codec seam. Verifiable.Cbor and
+    Verifiable.Json are referenced only by Tests and Benchmarks (enforced by the
+    ValidateProjectReferences build target), so the serialization layer is wired
+    at the edge rather than baked into the library.
+
+    Verifiable.Core is referenced for the ClaimIssuer/Claim/ClaimId ceremony
+    rules engine (Fido2ClaimIds, Fido2RegistrationChecks, Fido2AssertionChecks,
+    Fido2ValidationProfiles) — the same claim-issuance pipeline
+    Verifiable.OAuth's validators use. The reference is acyclic: Verifiable.Core
+    does not reference Verifiable.Fido2.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Verifiable.Foundation\Verifiable.Foundation.csproj" />
+    <ProjectReference Include="..\Verifiable.Cryptography\Verifiable.Cryptography.csproj" />
+    <ProjectReference Include="..\Verifiable.JCose\Verifiable.JCose.csproj" />
+    <ProjectReference Include="..\Verifiable.Core\Verifiable.Core.csproj" />
+    <ProjectReference Include="..\Verifiable.Tpm\Verifiable.Tpm.csproj" />
+  </ItemGroup>
+
+</Project>

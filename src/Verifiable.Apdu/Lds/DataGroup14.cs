@@ -40,12 +40,9 @@ public sealed class DataGroup14: IDisposable
     //0.4.0.127.0.7.2.2 encodes to 04 00 7F 00 07 02 02; id-CA and id-PK extend it. The two
     //id-CA prefixes are nine bytes; the full OID appends a one-byte cipher arc (1=3DES,
     //2=AES-128, 3=AES-192, 4=AES-256).
-    private static readonly byte[] IdPkEcdh = [0x04, 0x00, 0x7F, 0x00, 0x07, 0x02, 0x02, 0x01, 0x02];
-    private static readonly byte[] IdCaEcdhPrefix = [0x04, 0x00, 0x7F, 0x00, 0x07, 0x02, 0x02, 0x03, 0x02];
-    private static readonly byte[] IdCaDhPrefix = [0x04, 0x00, 0x7F, 0x00, 0x07, 0x02, 0x02, 0x03, 0x01];
-
-    private readonly IReadOnlyList<ChipAuthenticationInfo> chipAuthenticationInfos;
-    private readonly IReadOnlyList<ChipAuthenticationPublicKeyInfo> chipAuthenticationPublicKeyInfos;
+    private static byte[] IdPkEcdh { get; } = [0x04, 0x00, 0x7F, 0x00, 0x07, 0x02, 0x02, 0x01, 0x02];
+    private static byte[] IdCaEcdhPrefix { get; } = [0x04, 0x00, 0x7F, 0x00, 0x07, 0x02, 0x02, 0x03, 0x02];
+    private static byte[] IdCaDhPrefix { get; } = [0x04, 0x00, 0x7F, 0x00, 0x07, 0x02, 0x02, 0x03, 0x01];
     private bool disposed;
 
 
@@ -53,16 +50,16 @@ public sealed class DataGroup14: IDisposable
         IReadOnlyList<ChipAuthenticationInfo> chipAuthenticationInfos,
         IReadOnlyList<ChipAuthenticationPublicKeyInfo> chipAuthenticationPublicKeyInfos)
     {
-        this.chipAuthenticationInfos = chipAuthenticationInfos;
-        this.chipAuthenticationPublicKeyInfos = chipAuthenticationPublicKeyInfos;
+        this.ChipAuthenticationInfos = chipAuthenticationInfos;
+        this.ChipAuthenticationPublicKeyInfos = chipAuthenticationPublicKeyInfos;
     }
 
 
     /// <summary>Gets the chip's announced Chip Authentication protocols.</summary>
-    public IReadOnlyList<ChipAuthenticationInfo> ChipAuthenticationInfos => chipAuthenticationInfos;
+    public IReadOnlyList<ChipAuthenticationInfo> ChipAuthenticationInfos { get; }
 
     /// <summary>Gets the chip's static Chip Authentication public keys. Owned by this data group.</summary>
-    public IReadOnlyList<ChipAuthenticationPublicKeyInfo> ChipAuthenticationPublicKeyInfos => chipAuthenticationPublicKeyInfos;
+    public IReadOnlyList<ChipAuthenticationPublicKeyInfo> ChipAuthenticationPublicKeyInfos { get; }
 
 
     /// <summary>
@@ -221,7 +218,7 @@ public sealed class DataGroup14: IDisposable
     {
         if(!disposed)
         {
-            foreach(ChipAuthenticationPublicKeyInfo info in chipAuthenticationPublicKeyInfos)
+            foreach(ChipAuthenticationPublicKeyInfo info in ChipAuthenticationPublicKeyInfos)
             {
                 info.Dispose();
             }

@@ -63,7 +63,7 @@ public static class WellKnownTokenTypes
 
     /// <summary>
     /// The per-token-type lifetime-map key for an Identity Assertion JWT Authorization Grant per
-    /// draft-ietf-oauth-identity-assertion-authz-grant. Used only as a
+    /// draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026). Used only as a
     /// <see cref="ClientRecord.TokenLifetimes"/> key so a deployment can set the grant's lifetime;
     /// the grant is returned in the <see cref="AccessToken"/> response field (§4.3.4), not under this
     /// name. Distinct from <see cref="AccessToken"/> because an ID-JAG is short-lived and is not an

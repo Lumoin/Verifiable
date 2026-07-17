@@ -551,7 +551,7 @@ internal sealed class DcqlPresentationFlowTests
         //is reused independently of issuance — the verifier only needs the encoded string.
         foreach(SdDisclosure disclosure in issuedToken.Disclosures)
         {
-            string encoded = SerializeDisclosure(disclosure, Encoder);
+            string encoded = SdJwtWireFixtures.SerializeDisclosure(disclosure, Encoder);
             string recomputedDigest = ComputeDigest(encoded, Encoder);
             Assert.Contains(recomputedDigest, payloadDigests,
                 $"Recomputed digest for '{disclosure.ClaimName}' must appear in the payload _sd array.");
@@ -675,17 +675,6 @@ internal sealed class DcqlPresentationFlowTests
             privateKey, IssuerKeyId, Pool,
             mediaType: WellKnownMediaTypes.Jwt.VcSdJwt,
             cancellationToken: cancellationToken).ConfigureAwait(false);
-    }
-
-
-    /// <summary>
-    /// Serializes a disclosure to its Base64Url-encoded JSON form.
-    /// Wires <see cref="SdJwtSerializer.SerializeDisclosure"/> to the
-    /// <see cref="SerializeDisclosureDelegate{TDisclosure}"/> signature.
-    /// </summary>
-    private static string SerializeDisclosure(SdDisclosure disclosure, EncodeDelegate encoder)
-    {
-        return SdJwtSerializer.SerializeDisclosure(disclosure, encoder);
     }
 
 

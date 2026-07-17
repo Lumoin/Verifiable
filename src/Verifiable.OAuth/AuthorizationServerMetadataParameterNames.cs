@@ -93,7 +93,7 @@ public static class AuthorizationServerMetadataParameterNames
     /// <summary>
     /// JSON array of the <c>requested_token_type</c> values an IdP Authorization Server can issue for
     /// identity chaining, per draft-ietf-oauth-identity-chaining /
-    /// draft-ietf-oauth-identity-assertion-authz-grant §7.1. An IdP that can mint an Identity
+    /// draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §7.1. An IdP that can mint an Identity
     /// Assertion JWT Authorization Grant advertises <c>urn:ietf:params:oauth:token-type:id-jag</c>.
     /// </summary>
     public static readonly string IdentityChainingRequestedTokenTypesSupported = Utf8Constants.ToInternedString(IdentityChainingRequestedTokenTypesSupportedUtf8);
@@ -103,7 +103,7 @@ public static class AuthorizationServerMetadataParameterNames
 
     /// <summary>
     /// JSON array of the authorization grant profiles a Resource Authorization Server can process, per
-    /// draft-ietf-oauth-identity-assertion-authz-grant §7.2. A Resource Authorization Server that
+    /// draft-ietf-oauth-identity-assertion-authz-grant-04 §7.2. A Resource Authorization Server that
     /// implements the Identity Assertion JWT Authorization Grant advertises
     /// <c>urn:ietf:params:oauth:grant-profile:id-jag</c> and MUST also include
     /// <c>urn:ietf:params:oauth:grant-type:jwt-bearer</c> in <see cref="GrantTypesSupported"/>.

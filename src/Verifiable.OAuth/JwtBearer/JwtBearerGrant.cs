@@ -54,7 +54,7 @@ public sealed record JwtBearerGrant
     /// the object form of one authorization detail (a dictionary of <c>type</c> and its fields). For
     /// an ID-JAG redemption these are the details the Resource Authorization Server granted after
     /// processing the grant's <c>authorization_details</c> per
-    /// draft-ietf-oauth-identity-assertion-authz-grant §4.4.1; the same structured value the RFC 9068
+    /// draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §4.4.1; the same structured value the RFC 9068
     /// access-token producer reads from <see cref="Server.ExchangeContextServerExtensions.GrantedAuthorizationDetailsClaim"/>.
     /// </summary>
     public IReadOnlyList<object>? AuthorizationDetailsClaim { get; init; }
@@ -70,7 +70,7 @@ public sealed record JwtBearerGrant
     /// The JWK SHA-256 thumbprint the grant is bound to — the redeemed ID-JAG's <c>cnf.jkt</c> claim —
     /// or <see langword="null"/> when the grant is not key-bound. When non-null the redeem MUST be
     /// accompanied by a DPoP proof whose key thumbprint equals this value, and the issued access token
-    /// is bound to it (draft-ietf-oauth-identity-assertion-authz-grant §9.8.1.2.1/§9.8.1.2.2); the
+    /// is bound to it (draft-ietf-oauth-identity-assertion-authz-grant-04 §9.8.1.2.1/§9.8.1.2.2); the
     /// jwt-bearer endpoint runs the §9.8.1.2 matrix over this and the presented proof. Sourced from
     /// <see cref="IdJag.IdJagAssertionValidationResult.ConfirmationKeyThumbprint"/>.
     /// </summary>

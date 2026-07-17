@@ -50,9 +50,11 @@ public static class ApduCommandExtensions
             ArgumentNullException.ThrowIfNull(device);
             ArgumentNullException.ThrowIfNull(pool);
 
-            //SELECT by DF name (P1=04), return FCI / first or only occurrence (P2=00), Le=0 (max).
+            //SELECT by DF name, return FCI / first or only occurrence, Le=0 (max).
             CommandApdu command = CommandApdu.BuildCase4(
-                0x00, InstructionCode.Select.Code, 0x04, 0x00, aid, 0, pool);
+                WellKnownCommandParameters.InterIndustryClassByte, InstructionCode.Select.Code,
+                WellKnownCommandParameters.SelectByDfNameP1, WellKnownCommandParameters.SelectFirstOrOnlyOccurrenceFciP2,
+                aid, 0, pool);
 
             return ExecuteAndParseAsync(device, command, SelectResponse.Parse, pool, cancellationToken);
         }
@@ -82,7 +84,7 @@ public static class ApduCommandExtensions
             byte p1 = (byte)((offset >> 8) & 0x7F);
             byte p2 = (byte)(offset & 0xFF);
             CommandApdu command = CommandApdu.BuildCase2(
-                0x00, InstructionCode.ReadBinary.Code, p1, p2, length, useExtended: false, pool);
+                WellKnownCommandParameters.InterIndustryClassByte, InstructionCode.ReadBinary.Code, p1, p2, length, useExtended: false, pool);
 
             return ExecuteAndParseAsync(device, command, ReadBinaryResponse.Parse, pool, cancellationToken);
         }
@@ -104,9 +106,9 @@ public static class ApduCommandExtensions
             ArgumentOutOfRangeException.ThrowIfLessThan(length, 1);
             ArgumentOutOfRangeException.ThrowIfGreaterThan(length, ApduConstants.MaxShortResponseData);
 
-            //GET CHALLENGE: P1=P2=00, Case 2 short asking the card for Le challenge bytes.
+            //GET CHALLENGE: P1=P2=00 ("no information given"), Case 2 short asking the card for Le challenge bytes.
             CommandApdu command = CommandApdu.BuildCase2(
-                0x00, InstructionCode.GetChallenge.Code, 0x00, 0x00, length, useExtended: false, pool);
+                WellKnownCommandParameters.InterIndustryClassByte, InstructionCode.GetChallenge.Code, 0x00, 0x00, length, useExtended: false, pool);
 
             return ExecuteAndParseAsync(device, command, GetChallengeResponse.Parse, pool, cancellationToken);
         }
@@ -128,9 +130,10 @@ public static class ApduCommandExtensions
             ArgumentNullException.ThrowIfNull(device);
             ArgumentNullException.ThrowIfNull(pool);
 
-            //EXTERNAL AUTHENTICATE: P1=P2=00, Case 4 sending the token and asking for the card's token back.
+            //EXTERNAL AUTHENTICATE: P1=00 (no algorithm reference), P2=00 (no key reference), Case 4
+            //sending the token and asking for the card's token back.
             CommandApdu command = CommandApdu.BuildCase4(
-                0x00, InstructionCode.ExternalAuthenticate.Code, 0x00, 0x00, data, expectedResponseLength, pool);
+                WellKnownCommandParameters.InterIndustryClassByte, InstructionCode.ExternalAuthenticate.Code, 0x00, 0x00, data, expectedResponseLength, pool);
 
             return ExecuteAndParseAsync(device, command, ExternalAuthenticateResponse.Parse, pool, cancellationToken);
         }

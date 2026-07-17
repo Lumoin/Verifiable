@@ -53,8 +53,8 @@ namespace Verifiable.Apdu;
 public sealed class ApduDevice : IDisposable, IObservable<ApduExchange>
 {
     private readonly Lock observerLock = new();
-    private readonly TransceiveDelegate handler;
-    private readonly Action? disposeAction;
+    private TransceiveDelegate Handler { get; }
+    private Action? DisposeAction { get; }
     private IObserver<ApduExchange>[] observers = [];
     private bool disposed;
     private ApduTransportFailure? failure;
@@ -82,9 +82,9 @@ public sealed class ApduDevice : IDisposable, IObservable<ApduExchange>
     private ApduDevice(TransceiveDelegate handler, ApduPlatform platform, Action? disposeAction)
     {
         ArgumentNullException.ThrowIfNull(handler);
-        this.handler = handler;
+        this.Handler = handler;
         Platform = platform;
-        this.disposeAction = disposeAction;
+        this.DisposeAction = disposeAction;
     }
 
     /// <summary>
@@ -122,7 +122,7 @@ public sealed class ApduDevice : IDisposable, IObservable<ApduExchange>
         }
 
         long startTicks = Stopwatch.GetTimestamp();
-        ApduResult<ApduResponse> result = await handler(commandApdu, pool, cancellationToken).ConfigureAwait(false);
+        ApduResult<ApduResponse> result = await Handler(commandApdu, pool, cancellationToken).ConfigureAwait(false);
         long endTicks = Stopwatch.GetTimestamp();
 
         if(result.IsTransportError)
@@ -189,7 +189,7 @@ public sealed class ApduDevice : IDisposable, IObservable<ApduExchange>
             observer.OnCompleted();
         }
 
-        disposeAction?.Invoke();
+        DisposeAction?.Invoke();
     }
 
     private void NotifyObservers(long startTicks, long endTicks, ReadOnlySpan<byte> command, ReadOnlySpan<byte> response)

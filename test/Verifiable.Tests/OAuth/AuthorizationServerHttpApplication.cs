@@ -1,6 +1,7 @@
+using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
+using System.IO.Pipelines;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
@@ -56,9 +57,21 @@ namespace Verifiable.Tests.OAuth;
 [DebuggerDisplay("AuthorizationServerHttpApplication")]
 internal sealed class AuthorizationServerHttpApplication: IHttpApplication<HttpContext>
 {
+    /// <summary>
+    /// A request header carrying the authenticated end-user identifier for real-wire capstones that
+    /// drive the authorize endpoint over an actual socket. Stands in for the ASP.NET authentication
+    /// middleware a production deployment runs in front of the authorize endpoint — the same
+    /// collapse <see cref="TestBrowser"/> documents for its in-process dispatch, except here the
+    /// value crosses the wire as a genuine header rather than being placed on
+    /// <see cref="ExchangeContext"/> directly.
+    /// </summary>
+    public const string TestSubjectHeaderName = "X-Test-Subject-Id";
+
+    /// <summary>The server every incoming request is dispatched to.</summary>
     private readonly EndpointServer server;
 
 
+    /// <summary>Wraps <paramref name="server"/> so <see cref="ProcessRequestAsync"/> can dispatch to it.</summary>
     public AuthorizationServerHttpApplication(EndpointServer server)
     {
         ArgumentNullException.ThrowIfNull(server);
@@ -66,10 +79,16 @@ internal sealed class AuthorizationServerHttpApplication: IHttpApplication<HttpC
     }
 
 
+    /// <summary>Creates the per-request <see cref="HttpContext"/> Kestrel dispatches through.</summary>
     public HttpContext CreateContext(IFeatureCollection contextFeatures) =>
         new DefaultHttpContext(contextFeatures);
 
 
+    /// <summary>
+    /// Maps <paramref name="context"/>'s inbound HTTP request to an <see cref="IncomingRequest"/>,
+    /// dispatches it through <see cref="server"/>, and maps the resulting <see cref="ServerHttpResponse"/>
+    /// back onto the HTTP response.
+    /// </summary>
     public async Task ProcessRequestAsync(HttpContext context)
     {
         IncomingRequest incomingRequest = await BuildIncomingRequestAsync(
@@ -92,6 +111,13 @@ internal sealed class AuthorizationServerHttpApplication: IHttpApplication<HttpC
             ExchangeContext.SetCorrelationKey(requestUriHandle);
         }
 
+        if(context.Request.Headers.TryGetValue(TestSubjectHeaderName, out StringValues subjectHeaderValues)
+            && subjectHeaderValues.Count > 0
+            && !string.IsNullOrEmpty(subjectHeaderValues[0]))
+        {
+            ExchangeContext.SetSubjectId(subjectHeaderValues[0]!);
+        }
+
         ServerHttpResponse response = await server.DispatchAsync(
             incomingRequest, ExchangeContext, context.RequestAborted).ConfigureAwait(false);
 
@@ -111,6 +137,7 @@ internal sealed class AuthorizationServerHttpApplication: IHttpApplication<HttpC
     }
 
 
+    /// <summary>No per-request disposable state is held; this is a no-op.</summary>
     public void DisposeContext(HttpContext context, Exception? exception) { }
 
 
@@ -158,12 +185,11 @@ internal sealed class AuthorizationServerHttpApplication: IHttpApplication<HttpC
 
 
     /// <summary>
-    /// Parses the OID4VP per-flow handle from
-    /// <c>/connect/{segment}/request/{handle}</c>. Returns <see langword="null"/>
-    /// for any other path. The JAR endpoint's matcher requires
-    /// <see cref="ExchangeContext.CorrelationKey"/> to be set; the URL shape and
-    /// extraction live in this skin so the matcher itself stays
-    /// mount-point-agnostic.
+    /// Parses a per-flow by-reference handle from <c>/connect/{segment}/request/{handle}</c> (the
+    /// OID4VP JAR fetch) or <c>/connect/{segment}/siop_request_object/{handle}</c> (the SIOPv2 §9
+    /// by-reference Request Object fetch). Returns <see langword="null"/> for any other path. Both
+    /// matchers require <see cref="ExchangeContext.CorrelationKey"/> to be set before dispatch; the
+    /// URL shape and extraction live in this skin so neither matcher is mount-point aware.
     /// </summary>
     private static string? ExtractRequestUriHandleFromPath(string path)
     {
@@ -180,13 +206,25 @@ internal sealed class AuthorizationServerHttpApplication: IHttpApplication<HttpC
             return null;
         }
 
-        const string requestMarker = "/request/";
-        if(string.Compare(path, segmentEnd, requestMarker, 0, requestMarker.Length, StringComparison.Ordinal) != 0)
+        return ExtractHandleAfterMarker(path, segmentEnd, "/request/")
+            ?? ExtractHandleAfterMarker(path, segmentEnd, "/siop_request_object/");
+    }
+
+
+    /// <summary>
+    /// Extracts the path segment following <paramref name="marker"/> starting at
+    /// <paramref name="markerStart"/>, up to the next <c>/</c> or the end of the path. Returns
+    /// <see langword="null"/> when <paramref name="path"/> does not carry <paramref name="marker"/> at
+    /// that position.
+    /// </summary>
+    private static string? ExtractHandleAfterMarker(string path, int markerStart, string marker)
+    {
+        if(string.Compare(path, markerStart, marker, 0, marker.Length, StringComparison.Ordinal) != 0)
         {
             return null;
         }
 
-        int handleStart = segmentEnd + requestMarker.Length;
+        int handleStart = markerStart + marker.Length;
         if(handleStart >= path.Length)
         {
             return null;
@@ -198,22 +236,24 @@ internal sealed class AuthorizationServerHttpApplication: IHttpApplication<HttpC
     }
 
 
+    /// <summary>
+    /// Reads <paramref name="request"/>'s body (if any) and maps it, its content type, its query
+    /// string, and its headers onto a new <see cref="IncomingRequest"/>.
+    /// </summary>
     private static async ValueTask<IncomingRequest> BuildIncomingRequestAsync(
         HttpRequest request, CancellationToken cancellationToken)
     {
         //Buffer the body bytes. OAuth bodies are tiny — form fields or
         //short JSON registration documents — and buffering keeps the
         //mapping straightforward.
-        byte[] bodyBytes;
+        ReadOnlyMemory<byte> bodyBytes;
         if(request.ContentLength is > 0 || HasReadableBody(request))
         {
-            using MemoryStream ms = new();
-            await request.Body.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
-            bodyBytes = ms.ToArray();
+            bodyBytes = await ReadBodyBytesAsync(request.BodyReader, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            bodyBytes = [];
+            bodyBytes = ReadOnlyMemory<byte>.Empty;
         }
 
         string contentType = request.ContentType ?? string.Empty;
@@ -225,7 +265,7 @@ internal sealed class AuthorizationServerHttpApplication: IHttpApplication<HttpC
 
         if(IsFormEncoded(contentType) && bodyBytes.Length > 0)
         {
-            string bodyText = System.Text.Encoding.UTF8.GetString(bodyBytes);
+            string bodyText = System.Text.Encoding.UTF8.GetString(bodyBytes.Span);
             ParseFormUrlEncoded(bodyText, fields);
         }
         else if(bodyBytes.Length > 0)
@@ -266,11 +306,47 @@ internal sealed class AuthorizationServerHttpApplication: IHttpApplication<HttpC
     }
 
 
+    /// <summary>
+    /// Drains <paramref name="bodyReader"/> to completion into a single contiguous buffer. Reads the
+    /// request body through the pipe (<see cref="HttpRequest.BodyReader"/>) rather than the
+    /// stream-typed <see cref="HttpRequest.Body"/> property, accumulating segments in an
+    /// <see cref="ArrayBufferWriter{T}"/>.
+    /// </summary>
+    private static async ValueTask<ReadOnlyMemory<byte>> ReadBodyBytesAsync(
+        PipeReader bodyReader, CancellationToken cancellationToken)
+    {
+        ArrayBufferWriter<byte> bufferWriter = new();
+        while(true)
+        {
+            ReadResult readResult = await bodyReader.ReadAsync(cancellationToken).ConfigureAwait(false);
+            foreach(ReadOnlyMemory<byte> segment in readResult.Buffer)
+            {
+                bufferWriter.Write(segment.Span);
+            }
+
+            bodyReader.AdvanceTo(readResult.Buffer.End);
+
+            if(readResult.IsCompleted)
+            {
+                break;
+            }
+        }
+
+        return bufferWriter.WrittenMemory;
+    }
+
+
+    /// <summary>Returns <see langword="true"/> when <paramref name="request"/> carries a body worth reading.</summary>
     private static bool HasReadableBody(HttpRequest request) =>
         !string.IsNullOrEmpty(request.ContentType)
             || request.Headers.ContainsKey("Transfer-Encoding");
 
 
+    /// <summary>
+    /// Maps <paramref name="response"/>'s status, content type, location, headers, and body onto
+    /// <paramref name="httpResponse"/>, writing the body through the pipe-based
+    /// <see cref="HttpResponse.BodyWriter"/> rather than the stream-typed <see cref="HttpResponse.Body"/>.
+    /// </summary>
     private static async ValueTask WriteResponseAsync(
         ServerHttpResponse response,
         HttpResponse httpResponse,
@@ -301,13 +377,16 @@ internal sealed class AuthorizationServerHttpApplication: IHttpApplication<HttpC
 
         if(!string.IsNullOrEmpty(response.Body))
         {
-            byte[] bodyBytes = System.Text.Encoding.UTF8.GetBytes(response.Body);
-            await httpResponse.Body.WriteAsync(
-                bodyBytes, cancellationToken).ConfigureAwait(false);
+            int maxByteCount = System.Text.Encoding.UTF8.GetMaxByteCount(response.Body.Length);
+            Memory<byte> destination = httpResponse.BodyWriter.GetMemory(maxByteCount);
+            int written = System.Text.Encoding.UTF8.GetBytes(response.Body, destination.Span);
+            httpResponse.BodyWriter.Advance(written);
+            await httpResponse.BodyWriter.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
 
+    /// <summary>Maps Kestrel's header dictionary onto a <see cref="RequestHeaders"/> instance.</summary>
     private static RequestHeaders MapHeaders(IHeaderDictionary source)
     {
         Dictionary<string, string[]> mapped = new(source.Count, StringComparer.OrdinalIgnoreCase);
@@ -351,6 +430,7 @@ internal sealed class AuthorizationServerHttpApplication: IHttpApplication<HttpC
     }
 
 
+    /// <summary>Returns <see langword="true"/> when <paramref name="contentType"/> is form-urlencoded.</summary>
     private static bool IsFormEncoded(string contentType) =>
         contentType.StartsWith(
             WellKnownMediaTypes.Application.FormUrlEncoded,

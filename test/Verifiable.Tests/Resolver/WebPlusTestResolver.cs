@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods.WebPlus;
 using Verifiable.Core.Model.Did;
@@ -60,7 +61,7 @@ internal static class WebPlusTestResolver
             TestSetup.Base64UrlDecoder,
             TestSetup.Base58Decoder,
             BaseMemoryPool.Shared,
-            TimeProvider.System);
+            new FakeTimeProvider(TestClock.CanonicalEpoch));
     }
 
 

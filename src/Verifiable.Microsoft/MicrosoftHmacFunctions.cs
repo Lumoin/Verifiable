@@ -38,18 +38,18 @@ namespace Verifiable.Microsoft;
 /// </remarks>
 public static class MicrosoftHmacFunctions
 {
-    private static readonly ProviderLibrary ProviderLib = new(
+    private static ProviderLibrary ProviderLib { get; } = new(
         typeof(MicrosoftHmacFunctions).Assembly.GetName().Name
             ?? "Verifiable.Microsoft",
         typeof(MicrosoftHmacFunctions).Assembly.GetName().Version?.ToString()
             ?? "Unknown");
 
-    private static readonly CryptoLibraryInfo CryptoLib = new(
+    private static CryptoLibraryInfo CryptoLib { get; } = new(
         "System.Security.Cryptography",
         typeof(HMACSHA256).Assembly.GetName().Version?.ToString()
             ?? System.Environment.Version.ToString());
 
-    private static readonly ProviderClass ProviderCls =
+    private static ProviderClass ProviderCls { get; } =
         new(nameof(MicrosoftHmacFunctions));
 
 

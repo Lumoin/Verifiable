@@ -67,7 +67,7 @@ public static class JsonAppender
     private const int MaxPooledCapacity = 64 * 1024;
     private const int MaxPoolSize = 16;
 
-    private static readonly ConcurrentQueue<StringBuilder> Pool = new();
+    private static ConcurrentQueue<StringBuilder> Pool { get; } = new();
     private static int pooledCount;
 
 
@@ -204,79 +204,62 @@ public static class JsonAppender
     {
         ArgumentNullException.ThrowIfNull(sb);
 
-        switch(value)
+        _ = value switch
         {
-            case null:
-            {
-                sb.Append("null");
-                return;
-            }
+            null => AppendNull(sb),
+            string s => AppendQuoted(sb, s),
+            bool b => AppendBoolLiteral(sb, b),
+            Uri uri => AppendQuoted(sb, uri.ToString()),
+            byte or sbyte or short or ushort or int or uint or long or ulong => AppendNumber(sb, (IFormattable)value, null),
+            float or double or decimal => AppendNumber(sb, (IFormattable)value, "G"),
+            IReadOnlyDictionary<string, object> nested => AppendNestedObject(sb, nested),
+            IEnumerable<object?> list => AppendNestedArray(sb, list),
+            IFormattable formattable => AppendQuoted(sb, formattable.ToString(null, CultureInfo.InvariantCulture)),
+            _ => AppendQuoted(sb, value.ToString() ?? string.Empty)
+        };
 
-            case string s:
-            {
-                sb.Append('"');
-                AppendEscapedString(sb, s);
-                sb.Append('"');
+        static bool AppendNull(StringBuilder sb)
+        {
+            sb.Append("null");
 
-                return;
-            }
+            return true;
+        }
 
-            case bool b:
-            {
-                sb.Append(b ? "true" : "false");
-                return;
-            }
+        static bool AppendQuoted(StringBuilder sb, string s)
+        {
+            sb.Append('"');
+            AppendEscapedString(sb, s);
+            sb.Append('"');
 
-            case Uri uri:
-            {
-                sb.Append('"');
-                AppendEscapedString(sb, uri.ToString());
-                sb.Append('"');
+            return true;
+        }
 
-                return;
-            }
+        static bool AppendBoolLiteral(StringBuilder sb, bool b)
+        {
+            sb.Append(b ? "true" : "false");
 
-            case byte or sbyte or short or ushort or int or uint or long or ulong:
-            {
-                sb.Append(((IFormattable)value).ToString(null, CultureInfo.InvariantCulture));
-                return;
-            }
+            return true;
+        }
 
-            case float or double or decimal:
-            {
-                sb.Append(((IFormattable)value).ToString("G", CultureInfo.InvariantCulture));
-                return;
-            }
+        static bool AppendNumber(StringBuilder sb, IFormattable formattable, string? format)
+        {
+            sb.Append(formattable.ToString(format, CultureInfo.InvariantCulture));
 
-            case IReadOnlyDictionary<string, object> nested:
-            {
-                AppendObject(sb, nested);
-                return;
-            }
+            return true;
+        }
 
-            case IEnumerable<object?> list:
-            {
-                AppendArray(sb, list);
-                return;
-            }
+        static bool AppendNestedObject(StringBuilder sb, IReadOnlyDictionary<string, object> nested)
+        {
+            AppendObject(sb, nested);
 
-            case IFormattable formattable:
-            {
-                sb.Append('"');
-                AppendEscapedString(sb, formattable.ToString(null, CultureInfo.InvariantCulture));
-                sb.Append('"');
+            return true;
+        }
 
-                return;
-            }
+        static bool AppendNestedArray(StringBuilder sb, IEnumerable<object?> list)
+        {
+            AppendArray(sb, list);
 
-            default:
-            {
-                sb.Append('"');
-                AppendEscapedString(sb, value.ToString() ?? string.Empty);
-                sb.Append('"');
-
-                return;
-            }
+            return true;
         }
     }
 
@@ -323,65 +306,40 @@ public static class JsonAppender
         for(int i = 0; i < value.Length; ++i)
         {
             char c = value[i];
-            switch(c)
+            _ = c switch
             {
-                case '"':
-                {
-                    sb.Append("\\\"");
-                    break;
-                }
+                '"' => AppendLiteral(sb, "\\\""),
+                '\\' => AppendLiteral(sb, "\\\\"),
+                '\b' => AppendLiteral(sb, "\\b"),
+                '\f' => AppendLiteral(sb, "\\f"),
+                '\n' => AppendLiteral(sb, "\\n"),
+                '\r' => AppendLiteral(sb, "\\r"),
+                '\t' => AppendLiteral(sb, "\\t"),
+                < (char)0x20 => AppendControlEscape(sb, c),
+                _ => AppendChar(sb, c)
+            };
+        }
 
-                case '\\':
-                {
-                    sb.Append("\\\\");
-                    break;
-                }
+        static bool AppendLiteral(StringBuilder sb, string escape)
+        {
+            sb.Append(escape);
 
-                case '\b':
-                {
-                    sb.Append("\\b");
-                    break;
-                }
+            return true;
+        }
 
-                case '\f':
-                {
-                    sb.Append("\\f");
-                    break;
-                }
+        static bool AppendControlEscape(StringBuilder sb, char c)
+        {
+            sb.Append("\\u");
+            sb.Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
 
-                case '\n':
-                {
-                    sb.Append("\\n");
-                    break;
-                }
+            return true;
+        }
 
-                case '\r':
-                {
-                    sb.Append("\\r");
-                    break;
-                }
+        static bool AppendChar(StringBuilder sb, char c)
+        {
+            sb.Append(c);
 
-                case '\t':
-                {
-                    sb.Append("\\t");
-                    break;
-                }
-
-                default:
-                {
-                    if(c < 0x20)
-                    {
-                        sb.Append("\\u");
-                        sb.Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
-                    }
-                    else
-                    {
-                        sb.Append(c);
-                    }
-
-                    break;
-                }
-            }
+            return true;
         }
     }
 

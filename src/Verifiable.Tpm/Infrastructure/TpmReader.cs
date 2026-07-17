@@ -58,9 +58,10 @@ public ref struct TpmReader
     /// Reads a single byte.
     /// </summary>
     /// <returns>The byte value.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the buffer has no remaining bytes.</exception>
     public byte ReadByte()
     {
-        byte value = remaining[0];
+        byte value = remaining[..1][0];
         Advance(1);
         return value;
     }

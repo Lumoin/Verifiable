@@ -86,8 +86,8 @@ public static class BackChannelLogout
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
         MemoryPool<byte> memoryPool,
-        CancellationToken cancellationToken,
-        string? signingKeyId = null)
+        string? signingKeyId = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(issuer);
         ArgumentException.ThrowIfNullOrWhiteSpace(audience);

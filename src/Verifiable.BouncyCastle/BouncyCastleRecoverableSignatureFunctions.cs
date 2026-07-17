@@ -11,9 +11,11 @@ using System.Buffers;
 using System.Collections.Frozen;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Provider;
 using CryptoLibraryInfo = Verifiable.Cryptography.Provider.CryptoLibrary;
 
@@ -38,17 +40,17 @@ namespace Verifiable.BouncyCastle;
 /// </remarks>
 public static class BouncyCastleRecoverableSignatureFunctions
 {
-    private static readonly ProviderLibrary ProviderLib = new(
+    private static ProviderLibrary ProviderLib { get; } = new(
         typeof(BouncyCastleRecoverableSignatureFunctions).Assembly.GetName().Name ?? "Verifiable.BouncyCastle",
         typeof(BouncyCastleRecoverableSignatureFunctions).Assembly.GetName().Version?.ToString() ?? "Unknown");
 
     //BouncyCastle is an independently versioned NuGet package — its assembly version is the
     //most meaningful CBOM identifier.
-    private static readonly CryptoLibraryInfo CryptoLib = new(
+    private static CryptoLibraryInfo CryptoLib { get; } = new(
         "Org.BouncyCastle.Cryptography",
         typeof(Org.BouncyCastle.Security.SecureRandom).Assembly.GetName().Version?.ToString() ?? "Unknown");
 
-    private static readonly ProviderClass ProviderCls = new(nameof(BouncyCastleRecoverableSignatureFunctions));
+    private static ProviderClass ProviderCls { get; } = new(nameof(BouncyCastleRecoverableSignatureFunctions));
 
 
     /// <summary>
@@ -60,9 +62,13 @@ public static class BouncyCastleRecoverableSignatureFunctions
     /// <param name="signaturePool">The memory pool used to allocate the signature buffer.</param>
     /// <param name="context">Optional context dictionary. Reserved for future use.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.RsaIso9796d2Signature"/>.</returns>
+    /// <returns>
+    /// A pool-allocated signature tagged with <see cref="CryptoTags.RsaIso9796d2Signature"/>, paired with
+    /// the <see cref="SignatureProducedEvent"/> describing the operation. Matches
+    /// <see cref="RecoverableSigningDelegate"/>.
+    /// </returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned Signature transfers to the caller.")]
-    public static ValueTask<Signature> SignRsaIso9796d2Async(
+    public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaIso9796d2Async(
         ReadOnlyMemory<byte> privateKeyBytes,
         ReadOnlyMemory<byte> nonRecoverableMessage,
         MemoryPool<byte> signaturePool,
@@ -105,7 +111,15 @@ public static class BouncyCastleRecoverableSignatureFunctions
         IMemoryOwner<byte> memoryPooledSignature = signaturePool.Rent(signatureBytes.Length);
         signatureBytes.CopyTo(memoryPooledSignature.Memory.Span);
 
-        return ValueTask.FromResult(new Signature(memoryPooledSignature, CryptoTags.RsaIso9796d2Signature));
+        var signatureResult = new Signature(memoryPooledSignature, CryptoTags.RsaIso9796d2Signature);
+
+        //DataLength reports the whole signed message (M1 ‖ M2) — the recoverable block this call generated
+        //plus the caller-supplied non-recovered challenge — matching what SignatureProducedEvent means by
+        //"the data that was signed" for every other signing backend.
+        CryptoEvent evt = SignatureProducedEvent.Create(
+            CryptoAlgorithm.RsaIso9796d2, recoverableCapacity + nonRecoverableMessage.Length, signatureBytes.Length, CryptoLib.Name);
+
+        return ValueTask.FromResult<(Signature, CryptoEvent?)>((signatureResult, evt));
     }
 
 
@@ -119,8 +133,12 @@ public static class BouncyCastleRecoverableSignatureFunctions
     /// <param name="publicKeyMaterial">The DER <c>RSAPublicKey</c> (modulus and public exponent), as carried in EF.DG15.</param>
     /// <param name="context">Optional context dictionary. Reserved for future use.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns><see langword="true"/> if the signature verifies under any recognised trailer/hash pairing; otherwise <see langword="false"/>.</returns>
-    public static ValueTask<bool> VerifyRsaIso9796d2Async(
+    /// <returns>
+    /// <see langword="true"/> if the signature verifies under any recognised trailer/hash pairing; otherwise
+    /// <see langword="false"/>, paired with a <see cref="VerificationCompletedEvent"/> when the verification
+    /// actually ran. Matches <see cref="RecoverableVerificationDelegate"/>.
+    /// </returns>
+    public static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyRsaIso9796d2Async(
         ReadOnlyMemory<byte> nonRecoverableMessage,
         ReadOnlyMemory<byte> signature,
         ReadOnlyMemory<byte> publicKeyMaterial,
@@ -144,8 +162,11 @@ public static class BouncyCastleRecoverableSignatureFunctions
         {
             //A malformed DER public key, or a degenerate/undersized RSA key, fails closed to a non-verifying result
             //rather than throwing out of this bool-returning API — inspection is fail-closed (Doc 9303 Part 11 §6.1):
-            //a non-conformant chip response is rejected, not allowed to crash the terminal.
-            return ValueTask.FromResult(false);
+            //a non-conformant chip response is rejected, not allowed to crash the terminal. No event is emitted:
+            //verification never actually ran against a key, so there is nothing a VerificationCompletedEvent could
+            //truthfully describe (its Outcome distinguishes Valid/Invalid/Error for an attempted verification, not
+            //"the key itself was unusable").
+            return ValueTask.FromResult<(bool, CryptoEvent?)>((false, null));
         }
 
         //BouncyCastle's recovery API takes the signature as a byte[] (UpdateWithRecoveredMessage and
@@ -183,11 +204,22 @@ public static class BouncyCastleRecoverableSignatureFunctions
 
             if(verified)
             {
-                return ValueTask.FromResult(true);
+                //DataLength reports the whole verified message (recovered M1 ‖ the caller-supplied M2), matching
+                //what the sign side reports and what SignatureProducedEvent/VerificationCompletedEvent mean by
+                //"the data" elsewhere: the recovered length comes straight from the signer that just verified it,
+                //not recomputed.
+                int recoveredLength = verifier.GetRecoveredMessage().Length;
+                CryptoEvent verifiedEvt = VerificationCompletedEvent.Create(
+                    CryptoAlgorithm.RsaIso9796d2, VerificationOutcome.Valid, recoveredLength + nonRecoverableMessage.Length, CryptoLib.Name);
+
+                return ValueTask.FromResult<(bool, CryptoEvent?)>((true, verifiedEvt));
             }
         }
 
-        return ValueTask.FromResult(false);
+        CryptoEvent invalidEvt = VerificationCompletedEvent.Create(
+            CryptoAlgorithm.RsaIso9796d2, VerificationOutcome.Invalid, nonRecoverableMessage.Length, CryptoLib.Name);
+
+        return ValueTask.FromResult<(bool, CryptoEvent?)>((false, invalidEvt));
     }
 
 
@@ -196,7 +228,7 @@ public static class BouncyCastleRecoverableSignatureFunctions
     /// (this implementation's signing default), then the classic SHA-1 implicit trailer, then the remaining
     /// explicit trailers. A fresh digest is produced per attempt because BouncyCastle digests are stateful.
     /// </summary>
-    private static readonly (Func<IDigest> DigestFactory, bool IsImplicit)[] TrailerCandidates =
+    private static (Func<IDigest> DigestFactory, bool IsImplicit)[] TrailerCandidates { get; } =
     [
         (static () => new Sha256Digest(), false),
         (static () => new Sha1Digest(), true),
@@ -247,17 +279,31 @@ public static class BouncyCastleRecoverableSignatureFunctions
     /// </summary>
     private static RsaPrivateCrtKeyParameters ParseRsaPrivateKey(ReadOnlySpan<byte> privateKeyBytes)
     {
-        RsaPrivateKeyStructure rsa = RsaPrivateKeyStructure.GetInstance(Asn1Sequence.GetInstance(privateKeyBytes.ToArray()));
+        //BouncyCastle's classic ASN.1 object model (Asn1Sequence, RsaPrivateKeyStructure) accepts only
+        //byte[], so the DER-encoded private key is copied once here and zeroed immediately after the
+        //ASN.1 structure is parsed. The resulting RsaPrivateCrtKeyParameters holds the modulus,
+        //exponents, and CRT factors as BigInteger magnitudes — BigInteger's internal int[] magnitude is
+        //immutable and cannot be zeroed from outside BouncyCastle, so those copies remain for the key's
+        //lifetime.
+        byte[] derBytes = privateKeyBytes.ToArray();
+        try
+        {
+            RsaPrivateKeyStructure rsa = RsaPrivateKeyStructure.GetInstance(Asn1Sequence.GetInstance(derBytes));
 
-        return new RsaPrivateCrtKeyParameters(
-            rsa.Modulus,
-            rsa.PublicExponent,
-            rsa.PrivateExponent,
-            rsa.Prime1,
-            rsa.Prime2,
-            rsa.Exponent1,
-            rsa.Exponent2,
-            rsa.Coefficient);
+            return new RsaPrivateCrtKeyParameters(
+                rsa.Modulus,
+                rsa.PublicExponent,
+                rsa.PrivateExponent,
+                rsa.Prime1,
+                rsa.Prime2,
+                rsa.Exponent1,
+                rsa.Exponent2,
+                rsa.Coefficient);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(derBytes);
+        }
     }
 
 

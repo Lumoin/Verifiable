@@ -34,7 +34,7 @@ namespace Verifiable.DidComm.OutOfBand;
 public static class OutOfBandInvitationExtensions
 {
     //The invitation Message Type URI, parsed once for semver-compatible handler dispatch.
-    private static readonly MessageTypeUri InvitationMessageType = MessageTypeUri.Parse(WellKnownOutOfBandNames.InvitationType);
+    private static MessageTypeUri InvitationMessageType { get; } = MessageTypeUri.Parse(WellKnownOutOfBandNames.InvitationType);
 
 
     /// <summary>

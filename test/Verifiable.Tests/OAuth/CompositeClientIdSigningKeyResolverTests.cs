@@ -5,7 +5,6 @@ using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
-using Verifiable.Core.Model.Dcql;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
@@ -33,7 +32,7 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider();
+    private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
     private static EncodeDelegate Encoder => TestSetup.Base64UrlEncoder;
@@ -133,7 +132,7 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
                     clientId: clientIdWithPrefix,
                     responseUri: new Uri("https://verifier.example.com/cb"),
                     nonce: "nonce-composite-x509",
-                    dcqlQuery: BuildPidDcqlQuery(),
+                    dcqlQuery: DcqlFixtures.BuildPidDcqlQuery(),
                     clientMetadata: clientMetadata,
                     state: "state-composite-x509",
                     iat: now,
@@ -237,7 +236,7 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
                 clientId: clientIdWithPrefix,
                 responseUri: new Uri("https://verifier.example.com/cb"),
                 nonce: "nonce-composite-att",
-                dcqlQuery: BuildPidDcqlQuery(),
+                dcqlQuery: DcqlFixtures.BuildPidDcqlQuery(),
                 clientMetadata: clientMetadata,
                 state: "state-composite-att",
                 iat: now,
@@ -362,7 +361,7 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
                 clientId: clientIdWithPrefix,
                 responseUri: new Uri("https://verifier.example.com/cb"),
                 nonce: "nonce-composite-fed",
-                dcqlQuery: BuildPidDcqlQuery(),
+                dcqlQuery: DcqlFixtures.BuildPidDcqlQuery(),
                 clientMetadata: clientMetadata,
                 state: "state-composite-fed",
                 iat: now,
@@ -387,23 +386,4 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
 
         return JwsSerialization.SerializeCompact(signedJar.Message, Encoder);
     }
-
-
-    private static DcqlQuery BuildPidDcqlQuery() =>
-        new()
-        {
-            Credentials =
-            [
-                new CredentialQuery
-                {
-                    Id = "pid",
-                    Format = WellKnownMediaTypes.Jwt.DcSdJwt,
-                    Claims =
-                    [
-                        ClaimsQuery.ForPath(["given_name"]),
-                        ClaimsQuery.ForPath(["family_name"])
-                    ]
-                }
-            ]
-        };
 }

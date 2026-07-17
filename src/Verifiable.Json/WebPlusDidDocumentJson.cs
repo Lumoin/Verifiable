@@ -26,14 +26,14 @@ namespace Verifiable.Json;
 /// </remarks>
 public static class WebPlusDidDocumentJson
 {
-    private static readonly string IdProperty = WellKnownWebPlusValues.IdField;
-    private static readonly string SelfHashProperty = WellKnownWebPlusValues.SelfHashField;
-    private static readonly string PrevDidDocumentSelfHashProperty = WellKnownWebPlusValues.PrevDidDocumentSelfHashField;
-    private static readonly string UpdateRulesProperty = WellKnownWebPlusValues.UpdateRulesField;
-    private static readonly string ValidFromProperty = WellKnownWebPlusValues.ValidFromField;
-    private static readonly string VersionIdProperty = WellKnownWebPlusValues.VersionIdField;
-    private static readonly string VerificationMethodProperty = WellKnownWebPlusValues.VerificationMethodField;
-    private static readonly string ProofsProperty = WellKnownWebPlusValues.ProofsField;
+    private static string IdProperty { get; } = WellKnownWebPlusValues.IdField;
+    private static string SelfHashProperty { get; } = WellKnownWebPlusValues.SelfHashField;
+    private static string PrevDidDocumentSelfHashProperty { get; } = WellKnownWebPlusValues.PrevDidDocumentSelfHashField;
+    private static string UpdateRulesProperty { get; } = WellKnownWebPlusValues.UpdateRulesField;
+    private static string ValidFromProperty { get; } = WellKnownWebPlusValues.ValidFromField;
+    private static string VersionIdProperty { get; } = WellKnownWebPlusValues.VersionIdField;
+    private static string VerificationMethodProperty { get; } = WellKnownWebPlusValues.VerificationMethodField;
+    private static string ProofsProperty { get; } = WellKnownWebPlusValues.ProofsField;
 
     //A self-hashed did:webplus document MUST have one unambiguous byte form, so duplicate property names are
     //rejected (AllowDuplicateProperties = false). RFC 8785 Section 3.1 leaves JCS over duplicate keys undefined,

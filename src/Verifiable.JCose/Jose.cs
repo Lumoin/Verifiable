@@ -229,7 +229,7 @@ public static class Jws
 
         return SignAsync(
             header, payload, partEncoder, base64UrlEncoder,
-            privateKey, signingDelegate, signaturePool, cancellationToken);
+            privateKey, signingDelegate, signaturePool, cancellationToken: cancellationToken);
     }
 
 
@@ -245,6 +245,13 @@ public static class Jws
     /// <param name="signingDelegate">The signing function to use.</param>
     /// <param name="signaturePool">Memory pool for signature allocation.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="eventSink">
+    /// Receives the <see cref="SignatureProducedEvent"/> the resolved <paramref name="signingDelegate"/>
+    /// constructs, or <see langword="null"/> to route it to <see cref="CryptographicKeyEvents.DefaultSink"/>.
+    /// This overload resolves and invokes <paramref name="signingDelegate"/> directly rather than through a
+    /// bound <see cref="PrivateKey"/>, so a <see cref="CryptoEventSink"/> is this call site's route — see
+    /// <see cref="CryptoEventSink"/>.
+    /// </param>
     /// <returns>The JWS message containing the signature.</returns>
     public static async ValueTask<JwsMessage> SignAsync<TJwtPart>(
         TJwtPart header,
@@ -254,7 +261,8 @@ public static class Jws
         PrivateKeyMemory privateKey,
         SigningDelegate signingDelegate,
         MemoryPool<byte> signaturePool,
-        CancellationToken cancellationToken)
+        CryptoEventSink? eventSink = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(partEncoder);
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
@@ -273,11 +281,16 @@ public static class Jws
         using IMemoryOwner<byte> dataToSignOwner = RentSigningInput(
             headerSegment, payloadSegment, signaturePool, out int signingInputLength);
 
-        Signature signature = await signingDelegate(
+        (Signature signature, CryptoEvent? evt) = await signingDelegate(
             privateKey.AsReadOnlyMemory(),
             dataToSignOwner.Memory[..signingInputLength],
             signaturePool,
             cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        if(evt is not null)
+        {
+            (eventSink ?? CryptographicKeyEvents.DefaultSink)(evt);
+        }
 
         var protectedHeader = BuildProtectedHeaderDictionary(header);
 
@@ -309,6 +322,12 @@ public static class Jws
     /// <param name="signaturePool">Memory pool for the signing-input buffer and the signature.</param>
     /// <param name="unprotectedHeader">Optional per-signature unprotected header (for example <c>{ kid }</c>), or <see langword="null"/>.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="eventSink">
+    /// Receives the <see cref="SignatureProducedEvent"/> the resolved <paramref name="signingDelegate"/>
+    /// constructs, or <see langword="null"/> to route it to <see cref="CryptographicKeyEvents.DefaultSink"/>.
+    /// This is the overload <c>Verifiable.DidComm</c>'s <c>PackSignedAsync</c> reaches; passing no explicit
+    /// sink still publishes to the global stream via the default.
+    /// </param>
     /// <returns>The unserialized JWS message owning the signature. The caller disposes it.</returns>
     public static async ValueTask<JwsMessage> SignAsync<TJwtPart>(
         TJwtPart protectedHeader,
@@ -319,7 +338,8 @@ public static class Jws
         SigningDelegate signingDelegate,
         MemoryPool<byte> signaturePool,
         IReadOnlyDictionary<string, object>? unprotectedHeader,
-        CancellationToken cancellationToken)
+        CryptoEventSink? eventSink = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(protectedHeaderEncoder);
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
@@ -336,11 +356,16 @@ public static class Jws
         using IMemoryOwner<byte> dataToSignOwner = RentSigningInput(
             headerSegment, payload.Span, base64UrlPayload, base64UrlEncoder, signaturePool, out int signingInputLength);
 
-        Signature signature = await signingDelegate(
+        (Signature signature, CryptoEvent? evt) = await signingDelegate(
             privateKey.AsReadOnlyMemory(),
             dataToSignOwner.Memory[..signingInputLength],
             signaturePool,
             cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        if(evt is not null)
+        {
+            (eventSink ?? CryptographicKeyEvents.DefaultSink)(evt);
+        }
 
         return new JwsMessage(
             payload,
@@ -403,7 +428,7 @@ public static class Jws
             CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, purpose);
 
         return VerifyAsync(
-            message, base64UrlEncoder, publicKey, verificationDelegate, pool, cancellationToken);
+            message, base64UrlEncoder, publicKey, verificationDelegate, pool, cancellationToken: cancellationToken);
     }
 
 
@@ -420,6 +445,13 @@ public static class Jws
     /// <param name="verificationDelegate">The verification delegate to use.</param>
     /// <param name="pool">Memory pool for the pooled signing-input buffer.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="eventSink">
+    /// Receives the <see cref="VerificationCompletedEvent"/> the resolved <paramref name="verificationDelegate"/>
+    /// constructs, or <see langword="null"/> to route it to <see cref="CryptographicKeyEvents.DefaultSink"/>.
+    /// This overload resolves and invokes <paramref name="verificationDelegate"/> directly rather than
+    /// through a bound <see cref="PublicKey"/>, so a <see cref="CryptoEventSink"/> is this call site's
+    /// route — see <see cref="CryptoEventSink"/>.
+    /// </param>
     /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown when the message has multiple signatures.
@@ -430,6 +462,7 @@ public static class Jws
         PublicKeyMemory publicKey,
         VerificationDelegate verificationDelegate,
         MemoryPool<byte> pool,
+        CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -455,11 +488,18 @@ public static class Jws
         using IMemoryOwner<byte> dataToVerifyOwner = RentSigningInput(
             signature.Protected, payloadSegment, pool, out int signingInputLength);
 
-        return await verificationDelegate(
+        (bool isVerified, CryptoEvent? evt) = await verificationDelegate(
             dataToVerifyOwner.Memory[..signingInputLength],
             signature.SignatureBytes,
             publicKey.AsReadOnlyMemory(),
             cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        if(evt is not null)
+        {
+            (eventSink ?? CryptographicKeyEvents.DefaultSink)(evt);
+        }
+
+        return isVerified;
     }
 
 
@@ -491,7 +531,7 @@ public static class Jws
     {
         return VerifySignatureAsync(
             protectedSegment, payload, base64UrlPayload: true, signature,
-            base64UrlEncoder, verificationDelegate, publicKey, pool, cancellationToken);
+            base64UrlEncoder, verificationDelegate, publicKey, pool, cancellationToken: cancellationToken);
     }
 
 
@@ -513,6 +553,15 @@ public static class Jws
     /// <param name="publicKey">The verifying public key material.</param>
     /// <param name="pool">Memory pool for the signing-input buffer.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="eventSink">
+    /// Receives the <see cref="VerificationCompletedEvent"/> the resolved <paramref name="verificationDelegate"/>
+    /// constructs, or <see langword="null"/> to route it to <see cref="CryptographicKeyEvents.DefaultSink"/>.
+    /// This is the overload <c>Verifiable.DidComm</c>'s <c>UnpackSignedAsync</c> reaches (via the
+    /// <paramref name="publicKey"/>-and-signature overload above, which forwards here); passing no explicit
+    /// sink still publishes to the global stream via the default, matching what
+    /// <c>DidCommFromPriorExtensions.VerifyFromPriorAsync</c> already does through its own internal emit
+    /// access — the two routes now agree.
+    /// </param>
     /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
     public static async ValueTask<bool> VerifySignatureAsync(
         string protectedSegment,
@@ -523,6 +572,7 @@ public static class Jws
         VerificationDelegate verificationDelegate,
         ReadOnlyMemory<byte> publicKey,
         MemoryPool<byte> pool,
+        CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(protectedSegment);
@@ -535,11 +585,18 @@ public static class Jws
         using IMemoryOwner<byte> dataToVerifyOwner = RentSigningInput(
             protectedSegment, payload.Span, base64UrlPayload, base64UrlEncoder, pool, out int signingInputLength);
 
-        return await verificationDelegate(
+        (bool isVerified, CryptoEvent? evt) = await verificationDelegate(
             dataToVerifyOwner.Memory[..signingInputLength],
             signature,
             publicKey,
             cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        if(evt is not null)
+        {
+            (eventSink ?? CryptographicKeyEvents.DefaultSink)(evt);
+        }
+
+        return isVerified;
     }
 
 
@@ -594,7 +651,7 @@ public static class Jws
 
         return VerifyAsync(
             jws, base64UrlDecoder, pool,
-            publicKey, verificationDelegate, maxJwsLength, cancellationToken);
+            publicKey, verificationDelegate, maxJwsLength, cancellationToken: cancellationToken);
     }
 
 
@@ -618,7 +675,7 @@ public static class Jws
         PublicKeyMemory publicKey,
         VerificationDelegate verificationDelegate,
         CancellationToken cancellationToken)
-        => VerifyAsync(jws, base64UrlDecoder, pool, publicKey, verificationDelegate, DefaultMaxJwsLength, cancellationToken);
+        => VerifyAsync(jws, base64UrlDecoder, pool, publicKey, verificationDelegate, DefaultMaxJwsLength, cancellationToken: cancellationToken);
 
 
     /// <summary>
@@ -633,6 +690,10 @@ public static class Jws
     /// <param name="verificationDelegate">The verification function to use.</param>
     /// <param name="maxJwsLength">Maximum accepted JWS length per RFC 8725 §3.11.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="eventSink">
+    /// Receives the <see cref="VerificationCompletedEvent"/> the resolved <paramref name="verificationDelegate"/>
+    /// constructs, or <see langword="null"/> to route it to <see cref="CryptographicKeyEvents.DefaultSink"/>.
+    /// </param>
     /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
     /// <exception cref="ArgumentException">Thrown when the JWS exceeds <paramref name="maxJwsLength"/> or does not have exactly three parts.</exception>
     public static async ValueTask<bool> VerifyAsync(
@@ -642,6 +703,7 @@ public static class Jws
         PublicKeyMemory publicKey,
         VerificationDelegate verificationDelegate,
         int maxJwsLength,
+        CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(jws);
@@ -682,11 +744,18 @@ public static class Jws
         using IMemoryOwner<byte> dataToVerifyOwner = RentSigningInput(
             parts[0], parts[1], pool, out int signingInputLength);
 
-        return await verificationDelegate(
+        (bool isVerified, CryptoEvent? evt) = await verificationDelegate(
             dataToVerifyOwner.Memory[..signingInputLength],
             signature.Memory,
             publicKey.AsReadOnlyMemory(),
             cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        if(evt is not null)
+        {
+            (eventSink ?? CryptographicKeyEvents.DefaultSink)(evt);
+        }
+
+        return isVerified;
     }
 
 
@@ -744,7 +813,7 @@ public static class Jws
 
         return VerifyAndDecodeAsync(
             jws, base64UrlDecoder, partDecoder, pool,
-            publicKey, verificationDelegate, maxJwsLength, cancellationToken);
+            publicKey, verificationDelegate, maxJwsLength, cancellationToken: cancellationToken);
     }
 
 
@@ -765,6 +834,10 @@ public static class Jws
     /// <param name="verificationDelegate">The verification delegate to use.</param>
     /// <param name="maxJwsLength">Maximum accepted JWS length per RFC 8725 §3.11.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="eventSink">
+    /// Receives the <see cref="VerificationCompletedEvent"/> the resolved <paramref name="verificationDelegate"/>
+    /// constructs, or <see langword="null"/> to route it to <see cref="CryptographicKeyEvents.DefaultSink"/>.
+    /// </param>
     /// <returns>The verification result containing validity and decoded parts.</returns>
     /// <exception cref="ArgumentException">Thrown when the JWS exceeds <paramref name="maxJwsLength"/> or does not have exactly three parts.</exception>
     public static async ValueTask<JwsVerificationResult> VerifyAndDecodeAsync(
@@ -775,6 +848,7 @@ public static class Jws
         PublicKeyMemory publicKey,
         VerificationDelegate verificationDelegate,
         int maxJwsLength,
+        CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(jws);
@@ -809,12 +883,23 @@ public static class Jws
         //extension is invalid; the decoded header/payload are still returned for inspection, but with
         //isValid false.
         bool headerAcceptable = IsProtectedHeaderAcceptable(headerOwner.Memory.Span);
+        bool isValid = false;
 
-        bool isValid = headerAcceptable && await verificationDelegate(
-            dataToVerifyOwner.Memory[..signingInputLength],
-            signatureOwner.Memory,
-            publicKey.AsReadOnlyMemory(),
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        if(headerAcceptable)
+        {
+            (bool isVerified, CryptoEvent? evt) = await verificationDelegate(
+                dataToVerifyOwner.Memory[..signingInputLength],
+                signatureOwner.Memory,
+                publicKey.AsReadOnlyMemory(),
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            if(evt is not null)
+            {
+                (eventSink ?? CryptographicKeyEvents.DefaultSink)(evt);
+            }
+
+            isValid = isVerified;
+        }
 
         return new JwsVerificationResult(isValid, header, payload);
     }
@@ -823,6 +908,15 @@ public static class Jws
     /// <summary>
     /// Creates a JWS using resolver/binder pattern for key resolution.
     /// </summary>
+    /// <remarks>
+    /// This is the second sanctioned route <see cref="CryptoEventSink"/> describes: <paramref name="binder"/>
+    /// constructs a <see cref="PrivateKey"/> around the resolved material, so signing goes through
+    /// <see cref="PrivateKey.SignAsync"/> — the choke point that always emits to
+    /// <see cref="CryptographicKeyEvents.Events"/> — with no <see cref="CryptoEventSink"/> parameter needed
+    /// here at all. A caller already holding (or able to cheaply construct) key material uses this route; a
+    /// caller that only holds raw, disassembled key material uses one of the sink-threaded
+    /// explicit-delegate <c>SignAsync</c> overloads instead. Both routes emit; neither discards.
+    /// </remarks>
     /// <typeparam name="TResolverState">The state type for key material resolution.</typeparam>
     /// <typeparam name="TBinderState">The state type for key material binding.</typeparam>
     /// <param name="header">The JWT header containing algorithm information.</param>
@@ -915,6 +1009,12 @@ public static class Jws
     /// with a caller-supplied <paramref name="maxJwsLength"/> upper bound
     /// per RFC 8725 §3.11.
     /// </summary>
+    /// <remarks>
+    /// The verify-side counterpart of the resolver/binder <c>SignAsync</c> overload's remarks: <paramref name="binder"/>
+    /// constructs a <see cref="PublicKey"/>, so verification goes through <see cref="PublicKey.VerifyAsync"/>
+    /// and emits with no <see cref="CryptoEventSink"/> parameter needed — see <see cref="CryptoEventSink"/>
+    /// for the two-route rationale.
+    /// </remarks>
     /// <typeparam name="TResolverState">The state type for key material resolution.</typeparam>
     /// <typeparam name="TBinderState">The state type for key material binding.</typeparam>
     /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
@@ -1021,6 +1121,12 @@ public static class Jws
     /// pattern, with a caller-supplied <paramref name="maxJwsLength"/>
     /// upper bound per RFC 8725 §3.11.
     /// </summary>
+    /// <remarks>
+    /// The verify-and-decode counterpart of the resolver/binder <c>VerifyAsync</c> overload's remarks:
+    /// <paramref name="binder"/> constructs a <see cref="PublicKey"/>, so verification goes through
+    /// <see cref="PublicKey.VerifyAsync"/> and emits with no <see cref="CryptoEventSink"/> parameter
+    /// needed — see <see cref="CryptoEventSink"/>.
+    /// </remarks>
     /// <typeparam name="TResolverState">The state type for key material resolution.</typeparam>
     /// <typeparam name="TBinderState">The state type for key material binding.</typeparam>
     /// <returns>The verification result containing validity and decoded parts.</returns>

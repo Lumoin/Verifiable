@@ -20,7 +20,7 @@ namespace Verifiable.Cryptography
     /// for maximum flexibility and type safety.
     /// </description></item>
     /// <item><description>
-    /// <strong>Registry delegate constructor</strong> - Accepts <see cref="VerificationDelegate"/> directly,
+    /// <strong>Registry delegate constructor</strong> - Accepts <see cref="Cryptography.VerificationDelegate"/> directly,
     /// allowing seamless use of functions from cryptographic driver implementations.
     /// </description></item>
     /// </list>
@@ -33,12 +33,12 @@ namespace Verifiable.Cryptography
         /// <summary>
         /// The verification delegate that verifies signatures against data using this key.
         /// </summary>
-        private readonly VerificationDelegate verificationDelegate;
+        private VerificationDelegate VerificationDelegate { get; }
 
         /// <summary>
         /// The default context to use for verification operations when none is provided.
         /// </summary>
-        private readonly FrozenDictionary<string, object>? defaultContext;
+        private FrozenDictionary<string, object>? DefaultContext { get; }
 
         /// <summary>
         /// A convenience getter to return the public key memory instead of a generic one.
@@ -47,7 +47,7 @@ namespace Verifiable.Cryptography
 
 
         /// <summary>
-        /// Public key constructor using a <see cref="VerificationDelegate"/>.
+        /// Public key constructor using a <see cref="Cryptography.VerificationDelegate"/>.
         /// </summary>
         /// <param name="sensitiveMemory">The public key bytes of this key.</param>
         /// <param name="id">The key identifier.</param>
@@ -55,8 +55,8 @@ namespace Verifiable.Cryptography
         /// <param name="context">Optional default context for verification operations.</param>
         public PublicKey(PublicKeyMemory sensitiveMemory, string id, VerificationDelegate verificationDelegate, FrozenDictionary<string, object>? context = null): base(sensitiveMemory, id)
         {
-            this.verificationDelegate = verificationDelegate;
-            this.defaultContext = context;
+            this.VerificationDelegate = verificationDelegate;
+            this.DefaultContext = context;
         }
 
 
@@ -69,10 +69,23 @@ namespace Verifiable.Cryptography
         /// <param name="context">Optional context for this verification operation. If not provided,
         /// the default context from construction is used.</param>
         /// <returns><em>True</em> if the signature matches the data. <em>False</em> otherwise.</returns>
-        public ValueTask<bool> VerifyAsync(ReadOnlyMemory<byte> dataToVerify, Signature signature, FrozenDictionary<string, object>? context = null)
+        /// <remarks>
+        /// This is the choke point for every verification performed through a <see cref="PublicKey"/>:
+        /// it unwraps the <see cref="VerificationCompletedEvent"/> the bound delegate constructs
+        /// and emits it through <see cref="CryptographicKeyEvents.Events"/> when non-null. Library
+        /// layers that invoke a resolved <see cref="Cryptography.VerificationDelegate"/> directly (the COSE/JOSE
+        /// and smart-card stacks) emit through their own trailing <see cref="CryptoEventSink"/>
+        /// parameter instead, reaching the same <see cref="CryptographicKeyEvents.Events"/> stream
+        /// by default — see <see cref="CryptoEventSink"/> for the two-route rationale.
+        /// </remarks>
+        public async ValueTask<bool> VerifyAsync(ReadOnlyMemory<byte> dataToVerify, Signature signature, FrozenDictionary<string, object>? context = null)
         {
-            return KeyMaterial.WithKeyBytesAsync((publicKeyBytes, dataToVerify, sig) =>
-                verificationDelegate(dataToVerify, sig.AsReadOnlyMemory(), publicKeyBytes, context ?? defaultContext), dataToVerify, signature);
+            (bool isVerified, CryptoEvent? evt) = await KeyMaterial.WithKeyBytesAsync((publicKeyBytes, dataToVerify, sig) =>
+                VerificationDelegate(dataToVerify, sig.AsReadOnlyMemory(), publicKeyBytes, context ?? DefaultContext), dataToVerify, signature).ConfigureAwait(false);
+
+            CryptographicKeyEvents.Emit(evt);
+
+            return isVerified;
         }
     }
 }

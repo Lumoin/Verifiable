@@ -24,7 +24,7 @@ internal sealed class JwsAccessTokenValidatorTests
     private const string DefaultKid = "test-kid";
     private const string DefaultScope = "openid profile";
 
-    private static readonly DateTimeOffset NowInstant = new(2026, 5, 17, 12, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset NowInstant = TestClock.CanonicalEpoch.AddDays(-15);
     private static readonly TimeSpan IatSkew = TimeSpan.FromSeconds(60);
 
     private FakeTimeProvider TimeProvider { get; } = new(NowInstant);
@@ -34,7 +34,15 @@ internal sealed class JwsAccessTokenValidatorTests
     public async Task ValidatorAcceptsWellFormedAccessToken()
     {
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
-        string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, BuildPayload()).ConfigureAwait(false);
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: DefaultSubject,
+            scope: DefaultScope,
+            clientId: DefaultClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: DefaultIssuer,
+            audience: [DefaultAudience]);
+        string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
         JwsAccessTokenValidationResult result = await ValidateAsync(token, keys.PublicKey).ConfigureAwait(false);
 
@@ -72,7 +80,15 @@ internal sealed class JwsAccessTokenValidatorTests
             ["typ"] = "at+jwt",
             ["kid"] = DefaultKid
         });
-        string payloadJson = JsonSerializer.Serialize(BuildPayloadDict());
+        JwtPayload noneAlgPayload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: DefaultSubject,
+            scope: DefaultScope,
+            clientId: DefaultClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: DefaultIssuer,
+            audience: [DefaultAudience]);
+        string payloadJson = JsonSerializer.Serialize((Dictionary<string, object>)noneAlgPayload);
         string token = string.Concat(
             TestSetup.Base64UrlEncoder(System.Text.Encoding.UTF8.GetBytes(headerJson)),
             ".",
@@ -92,7 +108,15 @@ internal sealed class JwsAccessTokenValidatorTests
     public async Task ValidatorRejectsUnknownKid()
     {
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
-        string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, BuildPayload()).ConfigureAwait(false);
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: DefaultSubject,
+            scope: DefaultScope,
+            clientId: DefaultClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: DefaultIssuer,
+            audience: [DefaultAudience]);
+        string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
         //Resolver returns null for any kid — simulating an unknown key.
         ServerVerificationKeyResolverDelegate resolver = (kid, tenant, ctx, ct) =>
@@ -109,7 +133,15 @@ internal sealed class JwsAccessTokenValidatorTests
     public async Task ValidatorRejectsTamperedSignature()
     {
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
-        string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, BuildPayload()).ConfigureAwait(false);
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: DefaultSubject,
+            scope: DefaultScope,
+            clientId: DefaultClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: DefaultIssuer,
+            audience: [DefaultAudience]);
+        string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
         //Flip a middle character of the signature segment so it still
         //base64url-decodes but verifies as false.
@@ -130,7 +162,14 @@ internal sealed class JwsAccessTokenValidatorTests
     public async Task ValidatorRejectsIssuerMismatch()
     {
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
-        JwtPayload payload = BuildPayload(issuer: "https://other-issuer.test/tenant-b");
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: DefaultSubject,
+            scope: DefaultScope,
+            clientId: DefaultClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: "https://other-issuer.test/tenant-b",
+            audience: [DefaultAudience]);
         string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
         JwsAccessTokenValidationResult result = await ValidateAsync(token, keys.PublicKey).ConfigureAwait(false);
@@ -144,7 +183,14 @@ internal sealed class JwsAccessTokenValidatorTests
     public async Task ValidatorRejectsAudienceMismatch()
     {
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
-        JwtPayload payload = BuildPayload(audience: ["other-resource-server"]);
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: DefaultSubject,
+            scope: DefaultScope,
+            clientId: DefaultClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: DefaultIssuer,
+            audience: ["other-resource-server"]);
         string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
         JwsAccessTokenValidationResult result = await ValidateAsync(token, keys.PublicKey).ConfigureAwait(false);
@@ -159,7 +205,14 @@ internal sealed class JwsAccessTokenValidatorTests
     {
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         string[] auds = ["other-rs", DefaultAudience, "third-rs"];
-        JwtPayload payload = BuildPayload(audience: auds);
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: DefaultSubject,
+            scope: DefaultScope,
+            clientId: DefaultClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: DefaultIssuer,
+            audience: auds);
         string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
         JwsAccessTokenValidationResult result = await ValidateAsync(token, keys.PublicKey).ConfigureAwait(false);
@@ -173,9 +226,14 @@ internal sealed class JwsAccessTokenValidatorTests
     public async Task ValidatorRejectsExpiredToken()
     {
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
-        JwtPayload payload = BuildPayload(
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: DefaultSubject,
+            scope: DefaultScope,
+            clientId: DefaultClientId,
             issuedAt: NowInstant - TimeSpan.FromHours(2),
-            expiresAt: NowInstant - TimeSpan.FromHours(1));
+            expiresAt: NowInstant - TimeSpan.FromHours(1),
+            issuer: DefaultIssuer,
+            audience: [DefaultAudience]);
         string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
         JwsAccessTokenValidationResult result = await ValidateAsync(token, keys.PublicKey).ConfigureAwait(false);
@@ -189,9 +247,14 @@ internal sealed class JwsAccessTokenValidatorTests
     public async Task ValidatorRejectsTokenIssuedInFuture()
     {
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
-        JwtPayload payload = BuildPayload(
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: DefaultSubject,
+            scope: DefaultScope,
+            clientId: DefaultClientId,
             issuedAt: NowInstant + TimeSpan.FromHours(2),
-            expiresAt: NowInstant + TimeSpan.FromHours(3));
+            expiresAt: NowInstant + TimeSpan.FromHours(3),
+            issuer: DefaultIssuer,
+            audience: [DefaultAudience]);
         string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
         JwsAccessTokenValidationResult result = await ValidateAsync(token, keys.PublicKey).ConfigureAwait(false);
@@ -207,7 +270,14 @@ internal sealed class JwsAccessTokenValidatorTests
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         const string expectedThumbprint = "abcdef0123456789-thumbprint-test-value";
 
-        JwtPayload payload = BuildPayload();
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: DefaultSubject,
+            scope: DefaultScope,
+            clientId: DefaultClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: DefaultIssuer,
+            audience: [DefaultAudience]);
         payload[WellKnownJwtClaimNames.Cnf] = new Dictionary<string, object>
         {
             [WellKnownJwtClaimNames.JwkThumbprint] = expectedThumbprint
@@ -226,7 +296,14 @@ internal sealed class JwsAccessTokenValidatorTests
     public async Task ValidatorRejectsAuthorizedPartyMismatch()
     {
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
-        JwtPayload payload = BuildPayload();
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: DefaultSubject,
+            scope: DefaultScope,
+            clientId: DefaultClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: DefaultIssuer,
+            audience: [DefaultAudience]);
         payload[WellKnownJwtClaimNames.Azp] = "some-other-client";
         string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
@@ -244,7 +321,14 @@ internal sealed class JwsAccessTokenValidatorTests
     {
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         string[] auds = ["other-rs", DefaultAudience];
-        JwtPayload payload = BuildPayload(audience: auds);
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: DefaultSubject,
+            scope: DefaultScope,
+            clientId: DefaultClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: DefaultIssuer,
+            audience: auds);
         payload[WellKnownJwtClaimNames.Azp] = "my-client";
         string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
@@ -261,7 +345,14 @@ internal sealed class JwsAccessTokenValidatorTests
     {
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         string[] auds = ["other-rs", DefaultAudience];
-        JwtPayload payload = BuildPayload(audience: auds);
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: DefaultSubject,
+            scope: DefaultScope,
+            clientId: DefaultClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: DefaultIssuer,
+            audience: auds);
         string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
         JwsAccessTokenValidationResult result = await ValidateAsync(
@@ -278,7 +369,14 @@ internal sealed class JwsAccessTokenValidatorTests
     {
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         string[] auds = ["other-rs", DefaultAudience];
-        JwtPayload payload = BuildPayload(audience: auds);
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: DefaultSubject,
+            scope: DefaultScope,
+            clientId: DefaultClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: DefaultIssuer,
+            audience: auds);
         string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
         //No expected authorized party supplied: azp is not enforced even with multiple audiences.
@@ -292,9 +390,14 @@ internal sealed class JwsAccessTokenValidatorTests
     public async Task ValidatorRejectsExpiryAtOrBeforeIssuance()
     {
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
-        JwtPayload payload = BuildPayload(
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: DefaultSubject,
+            scope: DefaultScope,
+            clientId: DefaultClientId,
             issuedAt: NowInstant + TimeSpan.FromMinutes(2),
-            expiresAt: NowInstant + TimeSpan.FromMinutes(1));
+            expiresAt: NowInstant + TimeSpan.FromMinutes(1),
+            issuer: DefaultIssuer,
+            audience: [DefaultAudience]);
         string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
         JwsAccessTokenValidationResult result = await ValidateAsync(token, keys.PublicKey).ConfigureAwait(false);
@@ -310,7 +413,14 @@ internal sealed class JwsAccessTokenValidatorTests
     {
         //exp 30s out, nbf 60s out (== skew, so not NotYetValid) — exp <= nbf, the window never opens.
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
-        JwtPayload payload = BuildPayload(expiresAt: NowInstant + TimeSpan.FromSeconds(30));
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: DefaultSubject,
+            scope: DefaultScope,
+            clientId: DefaultClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromSeconds(30),
+            issuer: DefaultIssuer,
+            audience: [DefaultAudience]);
         payload[WellKnownJwtClaimNames.Nbf] = (NowInstant + TimeSpan.FromSeconds(60)).ToUnixTimeSeconds();
         string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
@@ -319,46 +429,6 @@ internal sealed class JwsAccessTokenValidatorTests
         Assert.IsFalse(result.IsSuccess);
         Assert.AreEqual(JwsAccessTokenValidationFailureReason.InconsistentTemporalClaims, result.FailureReason,
             "exp at or before nbf means the validity window never opens and must be rejected.");
-    }
-
-
-    private static JwtPayload BuildPayload(
-        string subject = DefaultSubject,
-        string? issuer = DefaultIssuer,
-        IReadOnlyList<string>? audience = null,
-        DateTimeOffset? issuedAt = null,
-        DateTimeOffset? expiresAt = null)
-    {
-        audience ??= [DefaultAudience];
-        issuedAt ??= NowInstant - TimeSpan.FromMinutes(1);
-        expiresAt ??= NowInstant + TimeSpan.FromHours(1);
-
-        return JwtPayloadExtensions.ForAccessToken(
-            subject: subject,
-            jti: Guid.NewGuid().ToString("N"),
-            scope: DefaultScope,
-            issuedAt: issuedAt.Value,
-            expiresAt: expiresAt.Value,
-            issuer: issuer,
-            audience: audience,
-            clientId: DefaultClientId);
-    }
-
-
-    private static Dictionary<string, object> BuildPayloadDict()
-    {
-        Dictionary<string, object> dict = new(StringComparer.Ordinal)
-        {
-            ["sub"] = DefaultSubject,
-            ["iss"] = DefaultIssuer,
-            ["aud"] = DefaultAudience,
-            ["iat"] = (NowInstant - TimeSpan.FromMinutes(1)).ToUnixTimeSeconds(),
-            ["exp"] = (NowInstant + TimeSpan.FromHours(1)).ToUnixTimeSeconds(),
-            ["scope"] = DefaultScope,
-            ["client_id"] = DefaultClientId,
-            ["jti"] = Guid.NewGuid().ToString("N"),
-        };
-        return dict;
     }
 
 

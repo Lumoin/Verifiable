@@ -1,6 +1,7 @@
 using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.OAuth.Federation;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Federation;
 
@@ -28,7 +29,7 @@ internal sealed class FederationAutomaticRegistrationTests
     [TestMethod]
     public async Task AdmitsRelyingPartyAndDerivesEffectiveMetadata()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
 
         Dictionary<string, object> rpMetadata = new(StringComparer.Ordinal)
         {
@@ -76,7 +77,7 @@ internal sealed class FederationAutomaticRegistrationTests
     [TestMethod]
     public async Task RefusesWhenSubjectDoesNotMatchClientId()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
 
         Dictionary<string, object> rpMetadata = new(StringComparer.Ordinal)
         {
@@ -116,7 +117,7 @@ internal sealed class FederationAutomaticRegistrationTests
     [TestMethod]
     public async Task RefusesWhenSubjectDeclaresNoRelyingPartyMetadata()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
 
         using ChainFixture fixture = await BuildChainAsync(
             new EntityIdentifier("https://rp.example.com"),
@@ -148,7 +149,7 @@ internal sealed class FederationAutomaticRegistrationTests
     [TestMethod]
     public async Task RefusesWhenAnchorPolicyExcludesDeclaredMetadata()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
 
         //Subject declares grant_types=[authorization_code]; the anchor's superset_of
         //policy requires refresh_token, which the subject lacks → policy application
@@ -198,7 +199,7 @@ internal sealed class FederationAutomaticRegistrationTests
     [TestMethod]
     public async Task RefusesReversedChain()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
 
         using ChainFixture fixture = await BuildChainAsync(
             new EntityIdentifier("https://rp.example.com"),
@@ -234,7 +235,7 @@ internal sealed class FederationAutomaticRegistrationTests
     [TestMethod]
     public async Task RefusesTruncatedChain()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
 
         using ChainFixture fixture = await BuildChainAsync(
             new EntityIdentifier("https://rp.example.com"),
@@ -268,7 +269,7 @@ internal sealed class FederationAutomaticRegistrationTests
     [TestMethod]
     public async Task RefusesWhenTerminalAnchorNotTrusted()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
 
         using ChainFixture fixture = await BuildChainAsync(
             new EntityIdentifier("https://rp.example.com"),
@@ -304,7 +305,7 @@ internal sealed class FederationAutomaticRegistrationTests
     [TestMethod]
     public async Task AdmitsThroughIntermediateWithStackedMetadataPolicy()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
 
         //Leaf declares grant_types = [authorization_code]. The intermediate
         //and the anchor each tighten via subset_of; the merged policy still
@@ -347,7 +348,7 @@ internal sealed class FederationAutomaticRegistrationTests
     [TestMethod]
     public async Task RefusesWhenAnchorPolicyDeeperInChainRequiresMissingGrant()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
 
         //Leaf declares grant_types=[authorization_code]. The INTERMEDIATE superset_of
         //requires only authorization_code (satisfiable), but the ANCHOR superset_of (the

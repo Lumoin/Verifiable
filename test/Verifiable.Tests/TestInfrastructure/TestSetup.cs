@@ -139,6 +139,7 @@ internal static class TestSetup
         InitializeSymmetricFunctions();
         InitializeEcPointFunctions();
         InitializeKeyAgreementFunctions();
+        InitializeKeyCreationFunctions();
         MulticodecHeaderRegistry.Initialize();
     }
 
@@ -178,6 +179,8 @@ internal static class TestSetup
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignRsa4096Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha256) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignRsaSha256Pkcs1Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha256Pss) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignRsaSha256PssAsync,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha384) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignRsaSha384Pkcs1Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha384Pss) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignRsaSha384PssAsync,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha512) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignRsaSha512Pkcs1Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha512Pss) && p.Equals(Purpose.Signing) => MicrosoftCryptographicFunctions.SignRsaSha512PssAsync,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctions.SignEd25519Async,
@@ -205,6 +208,8 @@ internal static class TestSetup
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyRsa4096Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha256) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsaSha256Pkcs1Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha256Pss) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsaSha256PssAsync,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha384) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsaSha384Pkcs1Async,
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha384Pss) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsaSha384PssAsync,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha512) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsaSha512Pkcs1Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha512Pss) && p.Equals(Purpose.Verification) => MicrosoftCryptographicFunctions.VerifyRsaSha512PssAsync,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctions.VerifyEd25519Async,
@@ -591,5 +596,93 @@ internal static class TestSetup
                     _ => throw new ArgumentException(
                         $"No multi-recipient authenticated key agreement encrypt function for algorithm '{algorithm}' purpose '{purpose}'.")
                 });
+    }
+
+
+    /// <summary>
+    /// Registers key-creation adapters for exactly the algorithm/purpose combinations
+    /// <see cref="InitializeCryptoFunctions"/> and <see cref="InitializeKeyAgreementFunctions"/> already wire
+    /// a signing or key-agreement consumer for: P-256/384/521, secp256k1, RSA-2048/4096, Ed25519, ML-DSA-44/65/87,
+    /// and the five Brainpool signing curves for <see cref="Purpose.Signing"/>; P-256/384/521, the five
+    /// Brainpool curves, and X25519 for <see cref="Purpose.Exchange"/>. Backend attribution matches
+    /// <see cref="TestKeyMaterialProvider"/>'s own convention exactly (P-256/384/521 and RSA-2048/4096
+    /// signing keys mint via the Microsoft backend; every other algorithm — including the P-256/384/521
+    /// exchange keys, which mint via BouncyCastle even though their ECDH-ES <em>agreement</em> and 1PU
+    /// counterparts are split across both backends — mints via BouncyCastle), so a test that asserts
+    /// <see cref="KeyMaterialGeneratedEvent"/> provenance sees the same <c>Backend</c> string the cached
+    /// <see cref="TestKeyMaterialProvider"/> sources would have produced.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately excludes ML-KEM-512/768/1024: <see cref="InitializeKeyAgreementFunctions"/> passes
+    /// <c>kemDecapsulationMatcher: null</c>, so no consumer can bind a minted ML-KEM key today — registering
+    /// its keygen would produce a <see cref="KeyMaterialGeneratedEvent"/> for a key nothing downstream uses.
+    /// NSec is not registered either: despite <c>Verifiable.NSec</c> also implementing Ed25519/X25519 key
+    /// creation, <see cref="TestKeyMaterialProvider"/> sources both exclusively from
+    /// <c>BouncyCastleKeyMaterialCreator</c>, and neither <see cref="InitializeCryptoFunctions"/> nor
+    /// <see cref="InitializeKeyAgreementFunctions"/> routes Ed25519/X25519 signing or exchange to NSec.
+    /// </remarks>
+    private static void InitializeKeyCreationFunctions()
+    {
+        KeyCreationFunctionRegistry<CryptoAlgorithm, Purpose>.Initialize(
+            (CryptoAlgorithm algorithm, Purpose purpose, string? qualifier) =>
+            {
+                return (algorithm, purpose) switch
+                {
+                    //Signing keys.
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Signing) =>
+                        pool => MicrosoftKeyMaterialCreator.CreateKeysWithEvent(MicrosoftKeyMaterialCreator.CreateP256Keys, CryptoAlgorithm.P256, Purpose.Signing, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Signing) =>
+                        pool => MicrosoftKeyMaterialCreator.CreateKeysWithEvent(MicrosoftKeyMaterialCreator.CreateP384Keys, CryptoAlgorithm.P384, Purpose.Signing, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Signing) =>
+                        pool => MicrosoftKeyMaterialCreator.CreateKeysWithEvent(MicrosoftKeyMaterialCreator.CreateP521Keys, CryptoAlgorithm.P521, Purpose.Signing, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Secp256k1) && p.Equals(Purpose.Signing) =>
+                        pool => BouncyCastleKeyMaterialCreator.CreateKeysWithEvent(BouncyCastleKeyMaterialCreator.CreateSecp256k1Keys, CryptoAlgorithm.Secp256k1, Purpose.Signing, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Signing) =>
+                        pool => MicrosoftKeyMaterialCreator.CreateKeysWithEvent(MicrosoftKeyMaterialCreator.CreateRsa2048Keys, CryptoAlgorithm.Rsa2048, Purpose.Signing, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Signing) =>
+                        pool => MicrosoftKeyMaterialCreator.CreateKeysWithEvent(MicrosoftKeyMaterialCreator.CreateRsa4096Keys, CryptoAlgorithm.Rsa4096, Purpose.Signing, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Signing) =>
+                        pool => BouncyCastleKeyMaterialCreator.CreateKeysWithEvent(BouncyCastleKeyMaterialCreator.CreateEd25519Keys, CryptoAlgorithm.Ed25519, Purpose.Signing, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.MlDsa44) && p.Equals(Purpose.Signing) =>
+                        pool => BouncyCastleKeyMaterialCreator.CreateKeysWithEvent(BouncyCastleKeyMaterialCreator.CreateMlDsa44Keys, CryptoAlgorithm.MlDsa44, Purpose.Signing, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.MlDsa65) && p.Equals(Purpose.Signing) =>
+                        pool => BouncyCastleKeyMaterialCreator.CreateKeysWithEvent(BouncyCastleKeyMaterialCreator.CreateMlDsa65Keys, CryptoAlgorithm.MlDsa65, Purpose.Signing, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.MlDsa87) && p.Equals(Purpose.Signing) =>
+                        pool => BouncyCastleKeyMaterialCreator.CreateKeysWithEvent(BouncyCastleKeyMaterialCreator.CreateMlDsa87Keys, CryptoAlgorithm.MlDsa87, Purpose.Signing, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP224r1) && p.Equals(Purpose.Signing) =>
+                        pool => BouncyCastleKeyMaterialCreator.CreateKeysWithEvent(BouncyCastleKeyMaterialCreator.CreateBrainpoolP224r1Keys, CryptoAlgorithm.BrainpoolP224r1, Purpose.Signing, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP256r1) && p.Equals(Purpose.Signing) =>
+                        pool => BouncyCastleKeyMaterialCreator.CreateKeysWithEvent(BouncyCastleKeyMaterialCreator.CreateBrainpoolP256r1Keys, CryptoAlgorithm.BrainpoolP256r1, Purpose.Signing, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP320r1) && p.Equals(Purpose.Signing) =>
+                        pool => BouncyCastleKeyMaterialCreator.CreateKeysWithEvent(BouncyCastleKeyMaterialCreator.CreateBrainpoolP320r1Keys, CryptoAlgorithm.BrainpoolP320r1, Purpose.Signing, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP384r1) && p.Equals(Purpose.Signing) =>
+                        pool => BouncyCastleKeyMaterialCreator.CreateKeysWithEvent(BouncyCastleKeyMaterialCreator.CreateBrainpoolP384r1Keys, CryptoAlgorithm.BrainpoolP384r1, Purpose.Signing, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP512r1) && p.Equals(Purpose.Signing) =>
+                        pool => BouncyCastleKeyMaterialCreator.CreateKeysWithEvent(BouncyCastleKeyMaterialCreator.CreateBrainpoolP512r1Keys, CryptoAlgorithm.BrainpoolP512r1, Purpose.Signing, pool),
+
+                    //Exchange keys.
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Exchange) =>
+                        pool => BouncyCastleKeyMaterialCreator.CreateKeysWithEvent(BouncyCastleKeyMaterialCreator.CreateP256ExchangeKeys, CryptoAlgorithm.P256, Purpose.Exchange, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Exchange) =>
+                        pool => BouncyCastleKeyMaterialCreator.CreateKeysWithEvent(BouncyCastleKeyMaterialCreator.CreateP384ExchangeKeys, CryptoAlgorithm.P384, Purpose.Exchange, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Exchange) =>
+                        pool => BouncyCastleKeyMaterialCreator.CreateKeysWithEvent(BouncyCastleKeyMaterialCreator.CreateP521ExchangeKeys, CryptoAlgorithm.P521, Purpose.Exchange, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP224r1) && p.Equals(Purpose.Exchange) =>
+                        pool => BouncyCastleKeyMaterialCreator.CreateKeysWithEvent(BouncyCastleKeyMaterialCreator.CreateBrainpoolP224r1ExchangeKeys, CryptoAlgorithm.BrainpoolP224r1, Purpose.Exchange, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP256r1) && p.Equals(Purpose.Exchange) =>
+                        pool => BouncyCastleKeyMaterialCreator.CreateKeysWithEvent(BouncyCastleKeyMaterialCreator.CreateBrainpoolP256r1ExchangeKeys, CryptoAlgorithm.BrainpoolP256r1, Purpose.Exchange, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP320r1) && p.Equals(Purpose.Exchange) =>
+                        pool => BouncyCastleKeyMaterialCreator.CreateKeysWithEvent(BouncyCastleKeyMaterialCreator.CreateBrainpoolP320r1ExchangeKeys, CryptoAlgorithm.BrainpoolP320r1, Purpose.Exchange, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP384r1) && p.Equals(Purpose.Exchange) =>
+                        pool => BouncyCastleKeyMaterialCreator.CreateKeysWithEvent(BouncyCastleKeyMaterialCreator.CreateBrainpoolP384r1ExchangeKeys, CryptoAlgorithm.BrainpoolP384r1, Purpose.Exchange, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP512r1) && p.Equals(Purpose.Exchange) =>
+                        pool => BouncyCastleKeyMaterialCreator.CreateKeysWithEvent(BouncyCastleKeyMaterialCreator.CreateBrainpoolP512r1ExchangeKeys, CryptoAlgorithm.BrainpoolP512r1, Purpose.Exchange, pool),
+                    (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.X25519) && p.Equals(Purpose.Exchange) =>
+                        pool => BouncyCastleKeyMaterialCreator.CreateKeysWithEvent(BouncyCastleKeyMaterialCreator.CreateX25519Keys, CryptoAlgorithm.X25519, Purpose.Exchange, pool),
+
+                    _ => throw new ArgumentException(
+                        $"No key creation function registered for '{algorithm}', '{purpose}' with qualifier '{qualifier}'.")
+                };
+            });
     }
 }

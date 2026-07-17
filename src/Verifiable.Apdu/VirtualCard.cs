@@ -44,7 +44,7 @@ namespace Verifiable.Apdu;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class VirtualCard
 {
-    private readonly Dictionary<int, byte[]> responses = [];
+    private Dictionary<int, byte[]> Responses { get; } = [];
     private readonly Lock gate = new();
 
     /// <summary>
@@ -56,7 +56,7 @@ public sealed class VirtualCard
         {
             lock(gate)
             {
-                return responses.Count;
+                return Responses.Count;
             }
         }
     }
@@ -76,7 +76,7 @@ public sealed class VirtualCard
                 if(exchange.Response.Length >= ApduConstants.StatusWordSize)
                 {
                     int hash = ComputeCommandHash(exchange.Command.Span);
-                    responses[hash] = exchange.Response.ToArray();
+                    Responses[hash] = exchange.Response.ToArray();
                 }
             }
         }
@@ -97,7 +97,7 @@ public sealed class VirtualCard
                 if(exchange.Response.Length >= ApduConstants.StatusWordSize)
                 {
                     int hash = ComputeCommandHash(exchange.Command.Span);
-                    responses[hash] = exchange.Response.ToArray();
+                    Responses[hash] = exchange.Response.ToArray();
                 }
             }
         }
@@ -113,7 +113,7 @@ public sealed class VirtualCard
         int hash = ComputeCommandHash(command);
         lock(gate)
         {
-            responses[hash] = response.ToArray();
+            Responses[hash] = response.ToArray();
         }
     }
 
@@ -127,7 +127,7 @@ public sealed class VirtualCard
         int hash = ComputeCommandHash(command);
         lock(gate)
         {
-            return responses.ContainsKey(hash);
+            return Responses.ContainsKey(hash);
         }
     }
 
@@ -138,7 +138,7 @@ public sealed class VirtualCard
     {
         lock(gate)
         {
-            responses.Clear();
+            Responses.Clear();
         }
     }
 
@@ -165,7 +165,7 @@ public sealed class VirtualCard
 
         lock(gate)
         {
-            if(!responses.TryGetValue(hash, out byte[]? canned))
+            if(!Responses.TryGetValue(hash, out byte[]? canned))
             {
                 //No canned response available. Return INS not supported.
                 canned = [0x6D, 0x00];

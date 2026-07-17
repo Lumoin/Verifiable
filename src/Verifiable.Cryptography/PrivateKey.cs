@@ -21,7 +21,7 @@ namespace Verifiable.Cryptography
     /// for maximum flexibility and type safety.
     /// </description></item>
     /// <item><description>
-    /// <strong>Registry delegate constructor</strong> - Accepts <see cref="SigningDelegate"/> directly,
+    /// <strong>Registry delegate constructor</strong> - Accepts <see cref="Cryptography.SigningDelegate"/> directly,
     /// allowing seamless use of functions from cryptographic driver implementations.
     /// </description></item>
     /// </list>
@@ -34,16 +34,16 @@ namespace Verifiable.Cryptography
         /// <summary>
         /// The signing delegate that calculates signatures on data using this key.
         /// </summary>
-        private readonly SigningDelegate signingDelegate;
+        private SigningDelegate SigningDelegate { get; }
 
         /// <summary>
         /// The default context to use for signing operations when none is provided.
         /// </summary>
-        private readonly FrozenDictionary<string, object>? defaultContext;
+        private FrozenDictionary<string, object>? DefaultContext { get; }
 
 
         /// <summary>
-        /// Private key constructor using a <see cref="SigningDelegate"/>.
+        /// Private key constructor using a <see cref="Cryptography.SigningDelegate"/>.
         /// </summary>
         /// <param name="privateKeyMaterial">The private key bytes of this key.</param>
         /// <param name="id">The identifier for this private key.</param>
@@ -55,8 +55,8 @@ namespace Verifiable.Cryptography
             ArgumentException.ThrowIfNullOrEmpty(id, nameof(id));
             ArgumentNullException.ThrowIfNull(signingDelegate, nameof(signingDelegate));
 
-            this.signingDelegate = signingDelegate;
-            this.defaultContext = context;
+            this.SigningDelegate = signingDelegate;
+            this.DefaultContext = context;
         }
 
 
@@ -75,13 +75,26 @@ namespace Verifiable.Cryptography
         /// <param name="context">Optional context for this signing operation. If not provided,
         /// the default context from construction is used.</param>
         /// <returns>The signature of the data.</returns>
-        public ValueTask<Signature> SignAsync(ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
+        /// <remarks>
+        /// This is the choke point for every signing performed through a <see cref="PrivateKey"/>:
+        /// it unwraps the <see cref="SignatureProducedEvent"/> the bound delegate constructs and
+        /// emits it through <see cref="CryptographicKeyEvents.Events"/> when non-null. Library
+        /// layers that invoke a resolved <see cref="Cryptography.SigningDelegate"/> directly (the COSE/JOSE and
+        /// smart-card stacks) emit through their own trailing <see cref="CryptoEventSink"/>
+        /// parameter instead, reaching the same <see cref="CryptographicKeyEvents.Events"/> stream
+        /// by default — see <see cref="CryptoEventSink"/> for the two-route rationale.
+        /// </remarks>
+        public async ValueTask<Signature> SignAsync(ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
         {
-            return KeyMaterial.WithKeyBytesAsync(
+            (Signature signature, CryptoEvent? evt) = await KeyMaterial.WithKeyBytesAsync(
                 (privateKeyBytes, dataToSign, signaturePool) =>
-                    signingDelegate(privateKeyBytes, dataToSign, signaturePool, context ?? defaultContext),
+                    SigningDelegate(privateKeyBytes, dataToSign, signaturePool, context ?? DefaultContext),
                 dataToSign,
-                signaturePool);
+                signaturePool).ConfigureAwait(false);
+
+            CryptographicKeyEvents.Emit(evt);
+
+            return signature;
         }
     }
 }

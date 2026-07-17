@@ -1,5 +1,7 @@
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Assessment;
 using Verifiable.OAuth.Federation;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Federation;
 
@@ -19,7 +21,7 @@ internal sealed class MetadataPolicyOrchestratorTests
     [TestMethod]
     public async Task ChainWithNoMetadataEmitsNoClaims()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
@@ -33,7 +35,7 @@ internal sealed class MetadataPolicyOrchestratorTests
             chain.Chain,
             FederationDefaultHooks.EvaluateMetadataPolicy,
             FederationDefaultHooks.ApplyMetadataPolicy,
-            TimeProvider.System,
+            new FakeTimeProvider(TestClock.CanonicalEpoch),
             "test-correlation",
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -49,7 +51,7 @@ internal sealed class MetadataPolicyOrchestratorTests
     [TestMethod]
     public async Task SubjectMetadataPlusEmptyPolicyEmitsSuccessClaims()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
@@ -89,7 +91,7 @@ internal sealed class MetadataPolicyOrchestratorTests
             trustChain,
             FederationDefaultHooks.EvaluateMetadataPolicy,
             FederationDefaultHooks.ApplyMetadataPolicy,
-            TimeProvider.System,
+            new FakeTimeProvider(TestClock.CanonicalEpoch),
             "test-correlation",
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -106,7 +108,7 @@ internal sealed class MetadataPolicyOrchestratorTests
     [TestMethod]
     public async Task AnchorPolicyConstrainsSubjectDeclaredMetadataSuccessfully()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
@@ -160,7 +162,7 @@ internal sealed class MetadataPolicyOrchestratorTests
             trustChain,
             FederationDefaultHooks.EvaluateMetadataPolicy,
             FederationDefaultHooks.ApplyMetadataPolicy,
-            TimeProvider.System,
+            new FakeTimeProvider(TestClock.CanonicalEpoch),
             "test-correlation",
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -177,7 +179,7 @@ internal sealed class MetadataPolicyOrchestratorTests
     [TestMethod]
     public async Task AnchorPolicyConstraintViolationFailsApplyClaim()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
@@ -231,7 +233,7 @@ internal sealed class MetadataPolicyOrchestratorTests
             trustChain,
             FederationDefaultHooks.EvaluateMetadataPolicy,
             FederationDefaultHooks.ApplyMetadataPolicy,
-            TimeProvider.System,
+            new FakeTimeProvider(TestClock.CanonicalEpoch),
             "test-correlation",
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -245,7 +247,7 @@ internal sealed class MetadataPolicyOrchestratorTests
     [TestMethod]
     public async Task MergeConflictBetweenStatementsEmitsFailureAndNotApplicable()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode intermediate = FederationTestRing.CreateNode(
@@ -317,7 +319,7 @@ internal sealed class MetadataPolicyOrchestratorTests
             trustChain,
             FederationDefaultHooks.EvaluateMetadataPolicy,
             FederationDefaultHooks.ApplyMetadataPolicy,
-            TimeProvider.System,
+            new FakeTimeProvider(TestClock.CanonicalEpoch),
             "test-correlation",
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -335,7 +337,7 @@ internal sealed class MetadataPolicyOrchestratorTests
     [TestMethod]
     public async Task KnownCriticalOperatorsPassCritCheck()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
@@ -372,7 +374,7 @@ internal sealed class MetadataPolicyOrchestratorTests
             trustChain,
             FederationDefaultHooks.EvaluateMetadataPolicy,
             FederationDefaultHooks.ApplyMetadataPolicy,
-            TimeProvider.System,
+            new FakeTimeProvider(TestClock.CanonicalEpoch),
             "test-correlation",
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -385,7 +387,7 @@ internal sealed class MetadataPolicyOrchestratorTests
     [TestMethod]
     public async Task UnknownCriticalOperatorFailsCritCheck()
     {
-        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode subject = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/subject"));
         using FederationTestRingNode anchor = FederationTestRing.CreateNode(
@@ -421,7 +423,7 @@ internal sealed class MetadataPolicyOrchestratorTests
             trustChain,
             FederationDefaultHooks.EvaluateMetadataPolicy,
             FederationDefaultHooks.ApplyMetadataPolicy,
-            TimeProvider.System,
+            new FakeTimeProvider(TestClock.CanonicalEpoch),
             "test-correlation",
             TestContext.CancellationToken).ConfigureAwait(false);
 

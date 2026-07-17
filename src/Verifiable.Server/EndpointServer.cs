@@ -36,7 +36,7 @@ public sealed class EndpointServer: IDisposable
 {
     private bool Disposed { get; set; }
 
-    private readonly Dictionary<Type, ServerIntegration> integrations = [];
+    private Dictionary<Type, ServerIntegration> Integrations { get; } = [];
 
 
     /// <summary>
@@ -92,7 +92,7 @@ public sealed class EndpointServer: IDisposable
     public void AddIntegration<T>(T integration) where T : ServerIntegration
     {
         ArgumentNullException.ThrowIfNull(integration);
-        integrations[typeof(T)] = integration;
+        Integrations[typeof(T)] = integration;
     }
 
 
@@ -105,7 +105,7 @@ public sealed class EndpointServer: IDisposable
     /// </exception>
     public T GetIntegration<T>() where T : ServerIntegration
     {
-        if(integrations.TryGetValue(typeof(T), out ServerIntegration? integration))
+        if(Integrations.TryGetValue(typeof(T), out ServerIntegration? integration))
         {
             return (T)integration;
         }

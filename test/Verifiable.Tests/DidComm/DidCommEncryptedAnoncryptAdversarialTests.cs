@@ -447,7 +447,7 @@ internal sealed class DidCommEncryptedAnoncryptAdversarialTests
                 MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
                 BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
                 Pool,
-                TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
 
@@ -507,7 +507,7 @@ internal sealed class DidCommEncryptedAnoncryptAdversarialTests
             MicrosoftKeyAgreementFunctions.AesKeyWrapAsync,
             BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync,
             Pool,
-            TestContext.CancellationToken).ConfigureAwait(false))
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false))
         {
             wireJson = Encoding.UTF8.GetString(encrypted.AsReadOnlySpan());
         }
@@ -533,7 +533,7 @@ internal sealed class DidCommEncryptedAnoncryptAdversarialTests
             MicrosoftKeyAgreementFunctions.AesKeyUnwrapAsync,
             BouncyCastleKeyAgreementFunctions.AesGcmDecryptAsync,
             Pool,
-            TestContext.CancellationToken);
+            cancellationToken: TestContext.CancellationToken);
     }
 
 

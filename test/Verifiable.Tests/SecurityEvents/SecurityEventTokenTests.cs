@@ -294,9 +294,9 @@ internal sealed class SecurityEventTokenTests
             SecurityEventTestJson.HeaderSerializer,
             SecurityEventTestJson.PayloadSerializer,
             Pool,
-            TestContext.CancellationToken,
             signingKeyId: "key-1",
-            subjectId: subjectId).ConfigureAwait(false);
+            subjectId: subjectId,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
 
     private async Task<SecurityEventTokenVerificationResult> VerifyAsync(

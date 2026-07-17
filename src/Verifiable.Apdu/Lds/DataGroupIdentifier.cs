@@ -24,7 +24,7 @@ public static class DataGroupIdentifier
     public const int MaximumNumber = 16;
 
     //Presence/template tag per data-group number, index = DG number.
-    private static readonly byte[] TagByNumber =
+    private static byte[] TagByNumber { get; } =
     [
         0x00,                                                       // unused (index 0)
         0x61, 0x75, 0x63, 0x76, 0x65, 0x66, 0x67, 0x68,             // DG1..DG8

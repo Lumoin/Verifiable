@@ -240,12 +240,13 @@ namespace Verifiable.Tests.Cryptography
             VerificationDelegate verify)
         {
             ReadOnlyMemory<byte> data = TestData;
-            using var signature = await sign(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
+            (Signature signature, CryptoEvent? _) = await sign(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            using var disposableSignature = signature;
 
             Assert.IsGreaterThan(0, signature.AsReadOnlyMemory().Length);
 
-            bool isValid = await verify(data, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory(),
+            (bool isValid, CryptoEvent? _) = await verify(data, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory(),
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(isValid);
         }

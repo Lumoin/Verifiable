@@ -4,9 +4,11 @@ using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Microsoft;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tests.X509;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
@@ -73,12 +75,13 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
-        TimeProvider time = TimeProvider.System;
+        TimeProvider time = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
         using CreatePrimaryResponse ek = await CreateStoragePrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
         try
         {
-            //Reconstruct the EK public key from the TPM's exported public area only.
+            //Reconstruct the EK public key from the TPM's exported public area only; ECDsa.Create wraps the TPM's
+            //own key (not a substitutable fixture) because the certificate below must certify this exact key.
             ECParameters ekParameters = ExportEkPublicParameters(ek);
             using ECDsa ekPublic = ECDsa.Create(ekParameters);
 
@@ -91,7 +94,7 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
             using PkiCertificateMemory caCertMemory = ToPkiCertificate(manufacturerCa.Certificate.RawData, pool);
 
             using PublicKeyMemory validatedLeafKey = await MicrosoftX509Functions.ValidateChainAsync(
-                [ekCertMemory], [caCertMemory], time.GetUtcNow(), pool, TestContext.CancellationToken).ConfigureAwait(false);
+                [ekCertMemory], [caCertMemory], time.GetUtcNow(), pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsFalse(validatedLeafKey.AsReadOnlySpan().IsEmpty, "Validation must yield the certified EK public key.");
 
             //Binding check: the certificate certifies THIS TPM's EK — its SubjectPublicKeyInfo is exactly the EK's.
@@ -113,11 +116,13 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
-        TimeProvider time = TimeProvider.System;
+        TimeProvider time = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
         using CreatePrimaryResponse ek = await CreateStoragePrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
         try
         {
+            //ECDsa.Create wraps the TPM's own exported EK key (not a substitutable fixture); the untrusted-CA
+            //rejection is only meaningful if the certificate certifies this exact key.
             ECParameters ekParameters = ExportEkPublicParameters(ek);
             using ECDsa ekPublic = ECDsa.Create(ekParameters);
 
@@ -133,7 +138,7 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
             try
             {
                 using PublicKeyMemory _ = await MicrosoftX509Functions.ValidateChainAsync(
-                    [ekCertMemory], [unrelatedCaMemory], time.GetUtcNow(), pool, TestContext.CancellationToken).ConfigureAwait(false);
+                    [ekCertMemory], [unrelatedCaMemory], time.GetUtcNow(), pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
             }
             catch(System.Security.SecurityException)
             {
@@ -155,11 +160,13 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
-        TimeProvider time = TimeProvider.System;
+        TimeProvider time = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
         using CreatePrimaryResponse ek = await CreateStoragePrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
         try
         {
+            //ECDsa.Create wraps the TPM's own exported EK key (not a substitutable fixture); the NV round-trip
+            //certificate must certify this exact key.
             ECParameters ekParameters = ExportEkPublicParameters(ek);
             using ECDsa ekPublic = ECDsa.Create(ekParameters);
 
@@ -179,7 +186,7 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
             using PkiCertificateMemory caCertMemory = ToPkiCertificate(manufacturerCa.Certificate.RawData, pool);
 
             using PublicKeyMemory validatedLeafKey = await MicrosoftX509Functions.ValidateChainAsync(
-                [ekCertMemory], [caCertMemory], time.GetUtcNow(), pool, TestContext.CancellationToken).ConfigureAwait(false);
+                [ekCertMemory], [caCertMemory], time.GetUtcNow(), pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsFalse(validatedLeafKey.AsReadOnlySpan().IsEmpty, "The NV-sourced EK certificate must validate to the manufacturer CA.");
         }
         finally
@@ -278,6 +285,9 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
     private static X509Certificate2 IssueEkCertificate(X509ChainTestRingNode manufacturerCa, ECDsa ekPublicKey, TimeProvider time)
     {
         DateTimeOffset now = time.GetUtcNow();
+
+        //Test-side certificate factory standing in for the manufacturer CA (CertificateRequest and friends) — the
+        //standing carve-out for minting CA/attestation chains; the CA private key never touches the TPM.
         var request = new CertificateRequest("CN=TPM EK, O=Verifiable Test Infrastructure", ekPublicKey, HashAlgorithmName.SHA256);
 
         request.CertificateExtensions.Add(
@@ -287,6 +297,7 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
         request.CertificateExtensions.Add(
             new X509KeyUsageExtension(X509KeyUsageFlags.KeyEncipherment | X509KeyUsageFlags.KeyAgreement, critical: true));
 
+        //A random serial number is junk/noise data, not identity material — any unique value would serve.
         byte[] serialNumber = RandomNumberGenerator.GetBytes(8);
         using X509Certificate2 caWithKey = manufacturerCa.Certificate.CopyWithPrivateKey(manufacturerCa.SigningKey);
 

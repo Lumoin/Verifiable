@@ -4,7 +4,7 @@ namespace Verifiable.OAuth.IdJag;
 
 /// <summary>
 /// The proof-of-possession outcome of the
-/// draft-ietf-oauth-identity-assertion-authz-grant §9.8.1.2 decision matrix, combining whether the
+/// draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §9.8.1.2 decision matrix, combining whether the
 /// redeemed ID-JAG is key-bound (carries a <c>cnf.jkt</c>) with whether the client presented a valid
 /// DPoP proof and whether the Resource Server requires sender-constrained tokens.
 /// </summary>
@@ -34,7 +34,7 @@ public enum IdJagDpopDecisionKind
 
 
 /// <summary>
-/// Evaluates the draft-ietf-oauth-identity-assertion-authz-grant §9.8.1.2 proof-of-possession matrix
+/// Evaluates the draft-ietf-oauth-identity-assertion-authz-grant-04 §9.8.1.2 proof-of-possession matrix
 /// for redeeming an ID-JAG at a Resource Authorization Server: given the grant's bound key thumbprint
 /// (the <c>cnf.jkt</c> claim, if any), the thumbprint of a validated DPoP proof (if one was
 /// presented), and the Resource Server's sender-constraint requirement, it returns whether to issue a

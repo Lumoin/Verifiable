@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.WebVh;
@@ -543,7 +544,7 @@ internal sealed class WebVhDidUrlDereferencerTests
             Base58Encoder,
             Base58Decoder,
             BaseMemoryPool.Shared,
-            TimeProvider.System);
+            new FakeTimeProvider(TestClock.CanonicalEpoch));
 
         DidMethodDereferencerDelegate webVhDereferencer = WebVhDidUrlDereferencer.Build(
             webVhResolver,
