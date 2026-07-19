@@ -157,8 +157,8 @@ internal sealed class CoseKeyConformanceTests
     {
         int[] expected = [CoseKeyParameters.Kty, CoseKeyParameters.Alg, CoseKeyParameters.Crv, CoseKeyParameters.X, CoseKeyParameters.Y];
 
-        CollectionAssert.AreEquivalent(expected, CoseKeyConformance.RequiredParameterLabels(CoseKeyTypes.Ec2).ToArray());
-        CollectionAssert.AreEquivalent(expected, CoseKeyConformance.AllowedParameterLabels(CoseKeyTypes.Ec2).ToArray());
+        Assert.AreSequenceEqual(expected, CoseKeyConformance.RequiredParameterLabels(CoseKeyTypes.Ec2).ToArray(), SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual(expected, CoseKeyConformance.AllowedParameterLabels(CoseKeyTypes.Ec2).ToArray(), SequenceOrder.InAnyOrder);
     }
 
 
@@ -168,8 +168,8 @@ internal sealed class CoseKeyConformanceTests
     {
         int[] expected = [CoseKeyParameters.Kty, CoseKeyParameters.Alg, CoseKeyParameters.Crv, CoseKeyParameters.X];
 
-        CollectionAssert.AreEquivalent(expected, CoseKeyConformance.RequiredParameterLabels(CoseKeyTypes.Okp).ToArray());
-        CollectionAssert.AreEquivalent(expected, CoseKeyConformance.AllowedParameterLabels(CoseKeyTypes.Okp).ToArray());
+        Assert.AreSequenceEqual(expected, CoseKeyConformance.RequiredParameterLabels(CoseKeyTypes.Okp).ToArray(), SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual(expected, CoseKeyConformance.AllowedParameterLabels(CoseKeyTypes.Okp).ToArray(), SequenceOrder.InAnyOrder);
     }
 
 
@@ -179,8 +179,8 @@ internal sealed class CoseKeyConformanceTests
     {
         int[] expected = [CoseKeyParameters.Kty, CoseKeyParameters.Alg, CoseKeyParameters.RsaN, CoseKeyParameters.RsaE];
 
-        CollectionAssert.AreEquivalent(expected, CoseKeyConformance.RequiredParameterLabels(CoseKeyTypes.Rsa).ToArray());
-        CollectionAssert.AreEquivalent(expected, CoseKeyConformance.AllowedParameterLabels(CoseKeyTypes.Rsa).ToArray());
+        Assert.AreSequenceEqual(expected, CoseKeyConformance.RequiredParameterLabels(CoseKeyTypes.Rsa).ToArray(), SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual(expected, CoseKeyConformance.AllowedParameterLabels(CoseKeyTypes.Rsa).ToArray(), SequenceOrder.InAnyOrder);
     }
 
 

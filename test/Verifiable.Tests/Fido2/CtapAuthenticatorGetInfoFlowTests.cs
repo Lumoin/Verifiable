@@ -115,10 +115,10 @@ internal sealed class CtapAuthenticatorGetInfoFlowTests
         Guid expectedAaguid = new(expectedAaguidBytes, bigEndian: true);
 
         Assert.AreEqual(expectedAaguid, response.Aaguid);
-        CollectionAssert.AreEqual(new[] { WellKnownCtapVersions.Fido23 }, (ICollection)new List<string>(response.Versions));
+        Assert.AreSequenceEqual(new[] { WellKnownCtapVersions.Fido23 }, (ICollection)new List<string>(response.Versions));
         Assert.IsNotNull(response.Extensions);
         Assert.HasCount(supportedExtensions.Count, response.Extensions!);
-        CollectionAssert.AreEqual(supportedExtensions, new List<string>(response.Extensions!));
+        Assert.AreSequenceEqual(supportedExtensions, new List<string>(response.Extensions!));
         Assert.IsNotNull(response.Options);
         Assert.IsTrue(response.Options!.ResidentKey);
     }

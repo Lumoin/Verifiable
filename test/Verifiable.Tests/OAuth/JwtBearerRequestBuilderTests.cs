@@ -96,7 +96,7 @@ internal sealed class JwtBearerRequestBuilderTests
     [TestMethod]
     public void ReservedParameterNamesCoverExactlyTheSetFromTheRfcTexts()
     {
-        CollectionAssert.AreEquivalent(
+        Assert.AreSequenceEqual(
             new[]
             {
                 OAuthRequestParameterNames.GrantType,
@@ -107,7 +107,8 @@ internal sealed class JwtBearerRequestBuilderTests
                 OAuthRequestParameterNames.ClientAssertion,
                 OAuthRequestParameterNames.ClientAssertionType
             },
-            JwtBearerRequestBuilder.ReservedParameterNames.ToArray());
+            JwtBearerRequestBuilder.ReservedParameterNames.ToArray(),
+            SequenceOrder.InAnyOrder);
     }
 
 

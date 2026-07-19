@@ -52,9 +52,9 @@ internal sealed class KeriEventReaderTests
         Assert.AreEqual(Aid, inception.Prefix);
         Assert.AreEqual(0, inception.SequenceNumber);
         Assert.AreEqual(KeriThreshold.Unweighted(2), inception.SigningThreshold);
-        CollectionAssert.AreEqual(SigningKeys, (System.Collections.ICollection)inception.SigningKeys);
-        CollectionAssert.AreEqual(NextKeyDigests, (System.Collections.ICollection)inception.NextKeyDigests);
-        CollectionAssert.AreEqual(ConfigurationTraits, (System.Collections.ICollection)inception.ConfigurationTraits);
+        Assert.AreSequenceEqual(SigningKeys, (System.Collections.ICollection)inception.SigningKeys);
+        Assert.AreSequenceEqual(NextKeyDigests, (System.Collections.ICollection)inception.NextKeyDigests);
+        Assert.AreSequenceEqual(ConfigurationTraits, (System.Collections.ICollection)inception.ConfigurationTraits);
     }
 
 
@@ -115,8 +115,8 @@ internal sealed class KeriEventReaderTests
 
         Assert.IsInstanceOfType<KeriRotationEvent>(read);
         var rotation = (KeriRotationEvent)read;
-        CollectionAssert.AreEqual(toRemove, (System.Collections.ICollection)rotation.BackersToRemove);
-        CollectionAssert.AreEqual(toAdd, (System.Collections.ICollection)rotation.BackersToAdd);
+        Assert.AreSequenceEqual(toRemove, (System.Collections.ICollection)rotation.BackersToRemove);
+        Assert.AreSequenceEqual(toAdd, (System.Collections.ICollection)rotation.BackersToAdd);
     }
 
 
@@ -232,7 +232,7 @@ internal sealed class KeriEventReaderTests
 
         Assert.AreEqual(Aid, state.Prefix);
         Assert.AreEqual(0, state.SequenceNumber);
-        CollectionAssert.AreEqual(SigningKeys, (System.Collections.ICollection)state.SigningKeys);
+        Assert.AreSequenceEqual(SigningKeys, (System.Collections.ICollection)state.SigningKeys);
     }
 
 

@@ -87,7 +87,7 @@ internal sealed class FederationTrustMarkListEndpointTests
 
         List<string> ids = ParseStringArray(body);
         Assert.HasCount(2, ids, "Both trust-marked subjects must be listed.");
-        CollectionAssert.AreEqual(
+        Assert.AreSequenceEqual(
             new[] { alice.Value, bob.Value },
             ids.ToArray(),
             "The §8.5 array must preserve the membership order the delegate returned.");

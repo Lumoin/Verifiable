@@ -2281,7 +2281,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             (PresentationBuilt)wallet.GetFlowState(walletFlowId).State;
         Assert.IsNotNull(presentationBuilt.Request.TransactionData,
             "ParseJar must have populated TransactionData from the signed JAR.");
-        CollectionAssert.AreEqual(
+        Assert.AreSequenceEqual(
             transactionData.ToArray(),
             presentationBuilt.Request.TransactionData.ToArray(),
             "TransactionData must round-trip through the JAR exactly — hash inputs depend on byte equality.");

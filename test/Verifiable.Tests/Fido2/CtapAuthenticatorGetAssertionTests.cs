@@ -88,7 +88,7 @@ internal sealed class CtapAuthenticatorGetAssertionTests
         try
         {
             Assert.IsNotNull(decoded.User);
-            CollectionAssert.AreEqual(userId, decoded.User!.Id.AsReadOnlySpan().ToArray());
+            Assert.AreSequenceEqual(userId, decoded.User!.Id.AsReadOnlySpan().ToArray());
             Assert.IsNull(decoded.User.Name);
             Assert.IsNull(decoded.User.DisplayName);
         }

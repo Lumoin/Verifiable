@@ -72,7 +72,7 @@ internal sealed class DidDocumentOperationsTests
         Assert.AreEqual(Did, result.Id!.Id, "Add preserves the current document's id, not the payload's.");
         Assert.AreEqual(Context.DidCore11, result.Context!.Contexts![0], "Add preserves the current document's @context.");
         Assert.HasCount(2, result.VerificationMethod!);
-        CollectionAssert.AreEquivalent(ExpectedKeyOneAndTwo, result.VerificationMethod!.Select(static method => method.Id).ToArray());
+        Assert.AreSequenceEqual(ExpectedKeyOneAndTwo, result.VerificationMethod!.Select(static method => method.Id).ToArray(), SequenceOrder.InAnyOrder);
     }
 
 
@@ -115,10 +115,10 @@ internal sealed class DidDocumentOperationsTests
 
         DidDocument result = DidDocumentOperations.Apply(current, WellKnownDidRegistrationValues.AddToDidDocument, additions);
 
-        CollectionAssert.AreEquivalent(ExpectedKeyOneAndTwo, result.Authentication!.Select(static reference => reference.Id).ToArray());
-        CollectionAssert.AreEquivalent(ExpectedServiceOneAndTwo, result.Service!.Select(static service => service.Id!.ToString()).ToArray());
-        CollectionAssert.AreEquivalent(ExpectedControllerAAndB, result.Controller!.Select(static controller => controller.Did).ToArray());
-        CollectionAssert.AreEquivalent(ExpectedAkaAAndB, result.AlsoKnownAs!);
+        Assert.AreSequenceEqual(ExpectedKeyOneAndTwo, result.Authentication!.Select(static reference => reference.Id).ToArray(), SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual(ExpectedServiceOneAndTwo, result.Service!.Select(static service => service.Id!.ToString()).ToArray(), SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual(ExpectedControllerAAndB, result.Controller!.Select(static controller => controller.Did).ToArray(), SequenceOrder.InAnyOrder);
+        Assert.AreSequenceEqual(ExpectedAkaAAndB, result.AlsoKnownAs!, SequenceOrder.InAnyOrder);
     }
 
 
@@ -266,7 +266,7 @@ internal sealed class DidDocumentOperationsTests
             ]);
 
         Assert.HasCount(2, result.VerificationMethod!);
-        CollectionAssert.AreEquivalent(ExpectedKeyOneAndTwo, result.VerificationMethod!.Select(static method => method.Id).ToArray());
+        Assert.AreSequenceEqual(ExpectedKeyOneAndTwo, result.VerificationMethod!.Select(static method => method.Id).ToArray(), SequenceOrder.InAnyOrder);
     }
 
 

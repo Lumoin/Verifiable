@@ -173,7 +173,7 @@ internal sealed class CtapAuthenticatorHmacSecretMcFlowTests
         byte[] gaCiphertext = DecodeCborByteString(FindExtensionOutput(gaOutputs, WellKnownWebAuthnExtensionIdentifiers.HmacSecret));
         byte[] gaDecrypted = await gaSession.DecryptHmacSecretOutputAsync(gaCiphertext, cancellationToken).ConfigureAwait(false);
 
-        CollectionAssert.AreEqual(mcDecrypted, gaDecrypted,
+        Assert.AreSequenceEqual(mcDecrypted, gaDecrypted,
             "the mc-time hmac-secret-mc output and a later ga hmac-secret call for the same salt and (non-uv) posture must decrypt to the identical HMAC output.");
     }
 

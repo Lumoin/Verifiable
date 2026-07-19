@@ -74,7 +74,7 @@ internal sealed class CtapNfcTransportTests
             WellKnownCtapCommandParameters.SupportsGetResponseP1Bit, 0x00,
             0x00, 0x00, 0x01, .. request, 0x00, 0x00
         ];
-        CollectionAssert.AreEqual(expectedCommand, capturedCommand);
+        Assert.AreSequenceEqual(expectedCommand, capturedCommand);
     }
 
     [TestMethod]
@@ -116,7 +116,7 @@ internal sealed class CtapNfcTransportTests
             WellKnownCtapCommandParameters.ClassByte, WellKnownCtapInstructionCodes.NfcCtapGetResponse.Code,
             0x00, 0x00, 0x00
         ];
-        CollectionAssert.AreEqual(expectedPoll, pollCommand);
+        Assert.AreSequenceEqual(expectedPoll, pollCommand);
     }
 
     [TestMethod]
@@ -150,7 +150,7 @@ internal sealed class CtapNfcTransportTests
             WellKnownCtapCommandParameters.ClassByte, WellKnownCtapInstructionCodes.NfcCtapGetResponse.Code,
             WellKnownCtapCommandParameters.CancelP1, 0x00, 0x00
         ];
-        CollectionAssert.AreEqual(expectedCancel, commands[1]);
+        Assert.AreSequenceEqual(expectedCancel, commands[1]);
     }
 
     [TestMethod]

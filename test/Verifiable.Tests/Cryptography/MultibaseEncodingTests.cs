@@ -149,7 +149,7 @@ namespace Verifiable.Tests.Cryptography
             td.PublicKeyMulticodecHeader.CopyTo(expectedData);
             compressed.CopyTo(expectedData.AsSpan(td.PublicKeyMulticodecHeader.Length));
 
-            CollectionAssert.AreEqual(expectedData, decodedWithHeader);
+            Assert.AreSequenceEqual(expectedData, decodedWithHeader);
         }
 
 

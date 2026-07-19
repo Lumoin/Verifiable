@@ -263,7 +263,7 @@ internal sealed class Oid4VciWalletOfferTests
     private static void AssertOfferEquivalent(CredentialOffer expected, CredentialOffer actual)
     {
         Assert.AreEqual(expected.CredentialIssuer.OriginalString, actual.CredentialIssuer.OriginalString);
-        CollectionAssert.AreEqual(expected.CredentialConfigurationIds.ToArray(), actual.CredentialConfigurationIds.ToArray());
+        Assert.AreSequenceEqual(expected.CredentialConfigurationIds.ToArray(), actual.CredentialConfigurationIds.ToArray());
 
         Assert.AreEqual(expected.PreAuthorizedCodeGrant?.PreAuthorizedCode, actual.PreAuthorizedCodeGrant?.PreAuthorizedCode);
         Assert.AreEqual(expected.PreAuthorizedCodeGrant?.TxCode?.InputMode, actual.PreAuthorizedCodeGrant?.TxCode?.InputMode);

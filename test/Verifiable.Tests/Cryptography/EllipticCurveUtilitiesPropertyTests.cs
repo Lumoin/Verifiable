@@ -40,7 +40,7 @@ namespace Verifiable.Tests.Cryptography
                     byte[] decompressedY = EllipticCurveUtilities.Decompress(compressedPoint, curveType);
 
                     //Ensure the decompressed Y matches the original Y.
-                    Assert.AreEqual(publicKeyY, decompressedY);
+                    Assert.AreSequenceEqual(publicKeyY, decompressedY);
                 }
             });
         }

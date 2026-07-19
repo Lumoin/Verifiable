@@ -141,11 +141,11 @@ internal sealed class PackedEnterpriseAttestationTests
         byte[] decoded = reader.ReadOctetString();
 
         Assert.IsFalse(reader.HasData);
-        CollectionAssert.AreEqual(serialNumber, decoded);
+        Assert.AreSequenceEqual(serialNumber, decoded);
 
         var handWritten = new AsnWriter(AsnEncodingRules.DER);
         handWritten.WriteOctetString(serialNumber);
-        CollectionAssert.AreEqual(handWritten.Encode(), encoded);
+        Assert.AreSequenceEqual(handWritten.Encode(), encoded);
     }
 
 

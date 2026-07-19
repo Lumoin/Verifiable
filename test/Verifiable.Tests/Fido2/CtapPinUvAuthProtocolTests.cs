@@ -279,7 +279,7 @@ internal sealed class CtapPinUvAuthProtocolTests
         using DecryptedContent decrypted = await protocol.DecryptAsync(
             key, ciphertext.AsReadOnlyMemory(), BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
-        CollectionAssert.AreEqual(plaintext, decrypted.AsReadOnlySpan().ToArray());
+        Assert.AreSequenceEqual(plaintext, decrypted.AsReadOnlySpan().ToArray());
     }
 
     /// <summary>
@@ -323,7 +323,7 @@ internal sealed class CtapPinUvAuthProtocolTests
         using DecryptedContent decrypted = await protocol.DecryptAsync(
             key, ciphertext.AsReadOnlyMemory(), BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
-        CollectionAssert.AreEqual(plaintext, decrypted.AsReadOnlySpan().ToArray());
+        Assert.AreSequenceEqual(plaintext, decrypted.AsReadOnlySpan().ToArray());
     }
 
     /// <summary>CTAP 2.3 §6.5.7 line 6250-6261: protocol two's <c>decrypt</c> must reject ciphertext shorter than the 16-byte prefixed IV.</summary>

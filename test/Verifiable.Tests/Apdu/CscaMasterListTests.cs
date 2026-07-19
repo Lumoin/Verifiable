@@ -52,13 +52,14 @@ internal sealed class CscaMasterListTests
 
         Assert.AreEqual(0, parsed.Version, "The master-list version is 0.");
         Assert.HasCount(2, parsed.CountrySigningCertificateAuthorities, "Both CSCA certificates must be extracted.");
-        CollectionAssert.AreEquivalent(
+        Assert.AreSequenceEqual(
             new[] { Convert.ToHexString(first.RawData), Convert.ToHexString(second.RawData) },
             new[]
             {
                 Convert.ToHexString(parsed.CountrySigningCertificateAuthorities[0].AsReadOnlySpan()),
                 Convert.ToHexString(parsed.CountrySigningCertificateAuthorities[1].AsReadOnlySpan())
             },
+            SequenceOrder.InAnyOrder,
             "Each extracted CSCA certificate must be byte-for-byte the one the master list carried.");
         Assert.AreEqual(Convert.ToHexString(signer.RawData), Convert.ToHexString(parsed.SignerCertificate.AsReadOnlySpan()),
             "The signer certificate must be the Master List Signer the CMS embedded.");

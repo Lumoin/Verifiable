@@ -74,7 +74,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
 
         CtapGetInfoResponse getInfoResponse = await CtapAuthenticatorGetInfoClient.GetInfoAsync(
             harness.Transceive, CtapGetInfoResponseCborReader.Read, pool, cancellationToken).ConfigureAwait(false);
-        CollectionAssert.AreEqual(
+        Assert.AreSequenceEqual(
             new[]
             {
                 WellKnownWebAuthnExtensionIdentifiers.CredProtect,
@@ -136,7 +136,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
         (byte[] twoSaltOutput, _) = await SendHmacSecretGetAssertionAsync(
             harness, pool, RpId, credentialIdBytes, twoSaltExtensions, protocolTwoSession, cancellationToken).ConfigureAwait(false);
         Assert.HasCount(64, twoSaltOutput, "a two-salt hmac-secret output decrypts to exactly 64 bytes, on the wire.");
-        CollectionAssert.AreEqual(
+        Assert.AreSequenceEqual(
             nonUvOutput, twoSaltOutput[..32],
             "R14(c) linkage: a two-salt output's first 32 bytes must equal the one-salt output for the same salt1.");
 
@@ -147,7 +147,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
             determinismSession.PlatformPublicKeyCose, determinismSaltEnc, determinismSaltAuth, pinUvAuthProtocol: null);
         (byte[] determinismOutput, _) = await SendHmacSecretGetAssertionAsync(
             harness, pool, RpId, credentialIdBytes, determinismExtensions, determinismSession, cancellationToken).ConfigureAwait(false);
-        CollectionAssert.AreEqual(
+        Assert.AreSequenceEqual(
             nonUvOutput, determinismOutput, "R14(a) determinism: the same salt and uv posture must decrypt to the identical output every time.");
 
         byte[] uvToken = await IssueTokenAsync(harness, pool, CtapPinUvAuthProtocolId.Two, WellKnownCtapPinUvAuthTokenPermissions.Ga, RpId, cancellationToken).ConfigureAwait(false);
@@ -161,7 +161,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
         (byte[] uvOutput, _) = await SendHmacSecretGetAssertionAsync(
             harness, pool, RpId, credentialIdBytes, uvExtensions, uvSession, cancellationToken,
             gaParam: gaParam, gaProtocolId: CtapPinUvAuthProtocolId.Two).ConfigureAwait(false);
-        CollectionAssert.AreNotEqual(
+        Assert.AreNotSequenceEqual(
             nonUvOutput, uvOutput, "R14(b) uv-separation (trap 4): uv=0 and uv=1 must select different CredRandom values for the same salt.");
 
         byte[] secondCredentialIdBytes = await RegisterHmacSecretCredentialAsync(
@@ -173,7 +173,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
             isolationSession.PlatformPublicKeyCose, isolationSaltEnc, isolationSaltAuth, pinUvAuthProtocol: null);
         (byte[] isolationOutput, _) = await SendHmacSecretGetAssertionAsync(
             harness, pool, RpId, secondCredentialIdBytes, isolationExtensions, isolationSession, cancellationToken).ConfigureAwait(false);
-        CollectionAssert.AreNotEqual(
+        Assert.AreNotSequenceEqual(
             nonUvOutput, isolationOutput,
             "R14(d) credential isolation (trap 21): the same salt against two different credentials must decrypt to different outputs.");
 
@@ -186,10 +186,10 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
             harness, pool, RpId, credentialIdBytes, ivExtensions, ivSession, cancellationToken).ConfigureAwait(false);
         (byte[] secondIvDecrypted, byte[] secondIvCiphertext) = await SendHmacSecretGetAssertionAsync(
             harness, pool, RpId, credentialIdBytes, ivExtensions, ivSession, cancellationToken).ConfigureAwait(false);
-        CollectionAssert.AreNotEqual(
+        Assert.AreNotSequenceEqual(
             firstIvCiphertext, secondIvCiphertext,
             "R14(e) protocol-two IV freshness (trap 6): two identical protocol-two requests must produce different wire ciphertext bytes.");
-        CollectionAssert.AreEqual(
+        Assert.AreSequenceEqual(
             firstIvDecrypted, secondIvDecrypted, "R14(e): both requests must decrypt to the identical output despite the different ciphertext.");
 
         using CtapWave5bPlatformPinSession tamperedSession = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
@@ -295,7 +295,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
         (byte[] gaDecrypted, _) = await SendHmacSecretGetAssertionAsync(
             harness, pool, RpId, credentialIdBytes, gaExtensions, gaSession, cancellationToken).ConfigureAwait(false);
 
-        CollectionAssert.AreEqual(
+        Assert.AreSequenceEqual(
             mcDecrypted, gaDecrypted,
             "the mc-time hmac-secret-mc output and a later ga hmac-secret call for the same salt and (non-uv) posture must decrypt to the identical output, on the wire.");
     }

@@ -96,7 +96,7 @@ internal sealed class ApduReaderWriterTests
 
         ReadOnlySpan<byte> aid = reader.ReadBytes(5);
 
-        Assert.AreEqual(5, aid.Length);
+        Assert.HasCount(5, aid);
         Assert.AreEqual((byte)0xA0, aid[0]);
         Assert.AreEqual((byte)0x08, aid[4]);
         Assert.AreEqual(2, reader.Remaining);
@@ -111,7 +111,7 @@ internal sealed class ApduReaderWriterTests
         reader.ReadByte();
         ReadOnlySpan<byte> remaining = reader.ReadRemainingBytes();
 
-        Assert.AreEqual(2, remaining.Length);
+        Assert.HasCount(2, remaining);
         Assert.IsTrue(reader.IsEmpty);
     }
 
@@ -123,7 +123,7 @@ internal sealed class ApduReaderWriterTests
 
         ReadOnlySpan<byte> peeked = reader.PeekBytes(2);
 
-        Assert.AreEqual(2, peeked.Length);
+        Assert.HasCount(2, peeked);
         Assert.AreEqual(0, reader.Consumed);
     }
 

@@ -47,9 +47,9 @@ internal sealed class CtapGetInfoResponseCborReaderTests
         TaggedMemory<byte> encoded = CtapGetInfoResponseCborWriter.Write(written);
         CtapGetInfoResponse decoded = CtapGetInfoResponseCborReader.Read(encoded.Memory);
 
-        CollectionAssert.AreEqual(new List<string>(written.Versions), new List<string>(decoded.Versions));
+        Assert.AreSequenceEqual(new List<string>(written.Versions), new List<string>(decoded.Versions));
         Assert.AreEqual(aaguid, decoded.Aaguid);
-        CollectionAssert.AreEqual(new List<string>(written.Extensions!), new List<string>(decoded.Extensions!));
+        Assert.AreSequenceEqual(new List<string>(written.Extensions!), new List<string>(decoded.Extensions!));
         Assert.IsNotNull(decoded.Options);
         Assert.IsTrue(decoded.Options!.ResidentKey!.Value);
         Assert.IsFalse(decoded.Options!.Platform!.Value);
@@ -140,7 +140,7 @@ internal sealed class CtapGetInfoResponseCborReaderTests
         Assert.IsTrue(decoded.Options.PinUvAuthToken!.Value);
         Assert.IsTrue(decoded.Options.MakeCredUvNotRqd!.Value);
         Assert.IsNotNull(decoded.PinUvAuthProtocols);
-        CollectionAssert.AreEqual(new List<int> { 2, 1 }, new List<int>(decoded.PinUvAuthProtocols!));
+        Assert.AreSequenceEqual(new List<int> { 2, 1 }, new List<int>(decoded.PinUvAuthProtocols!));
     }
 
 
@@ -192,7 +192,7 @@ internal sealed class CtapGetInfoResponseCborReaderTests
         Assert.AreEqual(isAlwaysUvEnabled ? 6 : 4, decoded.MinPinLength!.Value);
         Assert.AreEqual(0, decoded.MaxRpIdsForSetMinPinLength!.Value);
         Assert.AreEqual(8, decoded.RemainingDiscoverableCredentials!.Value);
-        CollectionAssert.AreEqual(new List<int> { 2, 3 }, new List<int>(decoded.AuthenticatorConfigCommands!));
+        Assert.AreSequenceEqual(new List<int> { 2, 3 }, new List<int>(decoded.AuthenticatorConfigCommands!));
     }
 
 
@@ -257,7 +257,7 @@ internal sealed class CtapGetInfoResponseCborReaderTests
         Assert.IsNotNull(decoded.Options);
         Assert.AreEqual(isEnterpriseAttestationEnabled, decoded.Options!.Ep!.Value);
         Assert.IsTrue(decoded.Options!.ResidentKey!.Value);
-        CollectionAssert.AreEqual(new List<int> { 1, 2, 3 }, new List<int>(decoded.AuthenticatorConfigCommands!));
+        Assert.AreSequenceEqual(new List<int> { 1, 2, 3 }, new List<int>(decoded.AuthenticatorConfigCommands!));
     }
 
 

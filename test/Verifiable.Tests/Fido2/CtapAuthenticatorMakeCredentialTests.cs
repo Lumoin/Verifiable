@@ -55,7 +55,7 @@ internal sealed class CtapAuthenticatorMakeCredentialTests
         //Independent oracle: rpIdHash computed here via the framework SHA-256 API, not the production
         //ComputeDigest seam the simulator itself used.
         byte[] expectedRpIdHash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(DefaultRpId));
-        CollectionAssert.AreEqual(expectedRpIdHash, authenticatorData.RpIdHash.AsReadOnlySpan().ToArray());
+        Assert.AreSequenceEqual(expectedRpIdHash, authenticatorData.RpIdHash.AsReadOnlySpan().ToArray());
 
         Assert.IsTrue(authenticatorData.Flags.UserPresent);
         Assert.IsFalse(authenticatorData.Flags.UserVerified);
@@ -298,7 +298,7 @@ internal sealed class CtapAuthenticatorMakeCredentialTests
         byte[] firstCredentialId = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x91), TestContext.CancellationToken);
         byte[] secondCredentialId = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x92), TestContext.CancellationToken);
 
-        CollectionAssert.AreNotEqual(firstCredentialId, secondCredentialId);
+        Assert.AreNotSequenceEqual(firstCredentialId, secondCredentialId);
     }
 
 
@@ -317,7 +317,7 @@ internal sealed class CtapAuthenticatorMakeCredentialTests
         byte[] firstCredentialId = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, userId, TestContext.CancellationToken);
         byte[] secondCredentialId = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, userId, TestContext.CancellationToken);
 
-        CollectionAssert.AreNotEqual(firstCredentialId, secondCredentialId);
+        Assert.AreNotSequenceEqual(firstCredentialId, secondCredentialId);
     }
 
 
@@ -337,7 +337,7 @@ internal sealed class CtapAuthenticatorMakeCredentialTests
         byte[] firstCredentialId = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, userId, TestContext.CancellationToken);
         byte[] secondCredentialId = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, userId, TestContext.CancellationToken);
 
-        CollectionAssert.AreNotEqual(firstCredentialId, secondCredentialId);
+        Assert.AreNotSequenceEqual(firstCredentialId, secondCredentialId);
 
         CtapMakeCredentialRequest thirdRequest = BuildMakeCredentialRequest(
             pool,

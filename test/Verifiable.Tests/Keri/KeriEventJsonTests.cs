@@ -53,9 +53,9 @@ internal sealed class KeriEventJsonTests
         Assert.AreEqual(Aid, inception.Prefix);
         Assert.AreEqual(0, inception.SequenceNumber);
         Assert.AreEqual(KeriThreshold.Unweighted(2), inception.SigningThreshold);
-        CollectionAssert.AreEqual(SigningKeys, (System.Collections.ICollection)inception.SigningKeys);
-        CollectionAssert.AreEqual(NextKeyDigests, (System.Collections.ICollection)inception.NextKeyDigests);
-        CollectionAssert.AreEqual(ConfigurationTraits, (System.Collections.ICollection)inception.ConfigurationTraits);
+        Assert.AreSequenceEqual(SigningKeys, (System.Collections.ICollection)inception.SigningKeys);
+        Assert.AreSequenceEqual(NextKeyDigests, (System.Collections.ICollection)inception.NextKeyDigests);
+        Assert.AreSequenceEqual(ConfigurationTraits, (System.Collections.ICollection)inception.ConfigurationTraits);
     }
 
 

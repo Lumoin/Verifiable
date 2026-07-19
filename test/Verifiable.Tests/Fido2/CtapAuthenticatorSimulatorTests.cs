@@ -76,7 +76,7 @@ internal sealed class CtapAuthenticatorSimulatorTests
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, response.AsReadOnlySpan()[0]);
 
         CtapGetInfoResponse decoded = CtapGetInfoResponseCborReader.Read(response.AsReadOnlyMemory()[1..]);
-        CollectionAssert.Contains(new List<string>(decoded.Versions), WellKnownCtapVersions.Fido23);
+        Assert.Contains(WellKnownCtapVersions.Fido23, new List<string>(decoded.Versions));
         Assert.AreEqual(expectedAaguid, decoded.Aaguid);
         Assert.IsNotNull(decoded.Options);
         Assert.IsTrue(decoded.Options!.ResidentKey);

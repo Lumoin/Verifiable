@@ -70,7 +70,7 @@ internal sealed class AttestationObjectCborWriterTests
         AttestationObjectParts parts = AttestationObjectCborReader.Parse(written.Memory);
 
         Assert.AreEqual(WellKnownWebAuthnAttestationFormats.None, parts.Format);
-        Assert.AreEqual(1, parts.AttestationStatement.Length);
+        Assert.HasCount(1, parts.AttestationStatement);
         Assert.AreEqual(NoneAttestation.CanonicalEmptyMap, parts.AttestationStatement.Span[0]);
     }
 

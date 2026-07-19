@@ -63,6 +63,6 @@ internal sealed class SymmetricKeyMemoryTests
             static (bytes, _) => ValueTask.FromResult(bytes.ToArray()),
             0).ConfigureAwait(false);
 
-        CollectionAssert.AreEqual(expected, observed);
+        Assert.AreSequenceEqual(expected, observed);
     }
 }

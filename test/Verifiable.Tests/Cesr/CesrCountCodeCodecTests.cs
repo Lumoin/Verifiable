@@ -146,8 +146,8 @@ internal sealed class CesrCountCodeCodecTests
             Assert.AreEqual(bodyBytes, counter.BinaryByteCount, "The count must describe the exact binary span of the same group.");
 
             //Sanity: the binary primitive lengths equal the per-primitive triplet spans implied by their qb64.
-            Assert.AreEqual(first.Length / 4 * 3, firstBinary.Memory.Span[..(first.Length / 4 * 3)].Length);
-            Assert.AreEqual(second.Length / 4 * 3, secondBinary.Memory.Span[..(second.Length / 4 * 3)].Length);
+            Assert.HasCount(first.Length / 4 * 3, firstBinary.Memory.Span[..(first.Length / 4 * 3)]);
+            Assert.HasCount(second.Length / 4 * 3, secondBinary.Memory.Span[..(second.Length / 4 * 3)]);
         }
     }
 

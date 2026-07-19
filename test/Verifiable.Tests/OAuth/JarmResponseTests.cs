@@ -5,6 +5,7 @@ using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
+using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Jar;
 using Verifiable.OAuth.Jarm;
 using Verifiable.Tests.TestDataProviders;
@@ -159,6 +160,73 @@ internal sealed class JarmResponseTests
         Assert.IsFalse(result.IsValid);
         Assert.IsFalse(isResolverInvoked);
         Assert.IsNull(result.Parameters);
+    }
+
+
+    [TestMethod]
+    public async Task RejectsIssuerAbsentFromKnownAuthorizationServerStore()
+    {
+        //RFC 9207 §4: an iss that ordinally matches the expected issuer still is not a
+        //valid issuer for the response unless it also resolves to a known, uniquely-
+        //configured authorization server in the application's own store — and, exactly
+        //like an unexpected issuer, it must never trigger key resolution.
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory serverPublic = keys.PublicKey;
+        using PrivateKeyMemory serverPrivate = keys.PrivateKey;
+
+        string responseJwt = await IssueAsync(serverPrivate, new Dictionary<string, object>
+        {
+            ["code"] = "abc"
+        }).ConfigureAwait(false);
+
+        bool isResolverInvoked = false;
+        ResolveJarmVerificationKeyDelegate resolver = (_, _, _) =>
+        {
+            isResolverInvoked = true;
+
+            return ValueTask.FromResult<PublicKeyMemory?>(serverPublic);
+        };
+
+        KnownAuthorizationServerIssuerResolver isKnownAuthorizationServerIssuer =
+            issuer => string.Equals(issuer, "https://other-as.example.com", StringComparison.Ordinal);
+
+        JarmResponseValidationResult result = await JarmResponseValidation.ValidateAsync(
+            responseJwt, Issuer, ClientId, AllowedAlgorithms, TimeProvider.GetUtcNow(),
+            resolver, PayloadDeserializer, TestSetup.Base64UrlDecoder, Pool,
+            isKnownAuthorizationServerIssuer,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsIssuerValid);
+        Assert.IsFalse(result.IsValid);
+        Assert.IsFalse(isResolverInvoked);
+        Assert.IsNull(result.Parameters);
+    }
+
+
+    [TestMethod]
+    public async Task AcceptsIssuerPresentInKnownAuthorizationServerStore()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory serverPublic = keys.PublicKey;
+        using PrivateKeyMemory serverPrivate = keys.PrivateKey;
+
+        string responseJwt = await IssueAsync(serverPrivate, new Dictionary<string, object>
+        {
+            ["code"] = "PyyFaux2o7Q0YfXBU32jhw.5FXSQpvr8akv9CeRDSd0QA"
+        }).ConfigureAwait(false);
+
+        KnownAuthorizationServerIssuerResolver isKnownAuthorizationServerIssuer =
+            issuer => string.Equals(issuer, Issuer, StringComparison.Ordinal);
+
+        JarmResponseValidationResult result = await ValidateAsync(
+            responseJwt, serverPublic, Issuer, ClientId, isKnownAuthorizationServerIssuer).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsIssuerValid);
+        Assert.IsTrue(result.IsSignatureValid);
+        Assert.IsTrue(result.IsValid);
+        Assert.AreEqual("PyyFaux2o7Q0YfXBU32jhw.5FXSQpvr8akv9CeRDSd0QA", result.Code);
     }
 
 
@@ -357,7 +425,8 @@ internal sealed class JarmResponseTests
         string responseJwt,
         PublicKeyMemory serverPublic,
         string expectedIssuer,
-        string expectedClientId)
+        string expectedClientId,
+        KnownAuthorizationServerIssuerResolver? isKnownAuthorizationServerIssuer = null)
     {
         ResolveJarmVerificationKeyDelegate resolver = (_, _, _) =>
             ValueTask.FromResult<PublicKeyMemory?>(serverPublic);
@@ -365,7 +434,7 @@ internal sealed class JarmResponseTests
         return await JarmResponseValidation.ValidateAsync(
             responseJwt, expectedIssuer, expectedClientId, AllowedAlgorithms,
             TimeProvider.GetUtcNow(), resolver, PayloadDeserializer,
-            TestSetup.Base64UrlDecoder, Pool,
+            TestSetup.Base64UrlDecoder, Pool, isKnownAuthorizationServerIssuer,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 }

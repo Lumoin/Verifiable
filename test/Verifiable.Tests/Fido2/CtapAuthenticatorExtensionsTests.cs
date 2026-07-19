@@ -182,7 +182,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
         using AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(decoded.AuthData, CredentialPublicKeyCborReader.Read, pool);
 
         Assert.IsFalse(authenticatorData.Flags.ExtensionDataIncluded);
-        Assert.AreEqual(0, authenticatorData.Extensions.Length);
+        Assert.HasCount(0, authenticatorData.Extensions);
     }
 
 

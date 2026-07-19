@@ -119,8 +119,8 @@ internal sealed class CtapNfcFragmentationWorkedExampleTests
 
         //Exactly the two GET RESPONSE commands the spec's worked example shows, byte-for-byte.
         Assert.HasCount(2, issuedGetResponseCommands);
-        CollectionAssert.AreEqual(thirdCommand, issuedGetResponseCommands[0]);
-        CollectionAssert.AreEqual(fourthCommand, issuedGetResponseCommands[1]);
+        Assert.AreSequenceEqual(thirdCommand, issuedGetResponseCommands[0]);
+        Assert.AreSequenceEqual(fourthCommand, issuedGetResponseCommands[1]);
 
         //The assembled data is exactly the three responses' data fields (status word stripped), concatenated.
         byte[] expectedData =
@@ -129,7 +129,7 @@ internal sealed class CtapNfcFragmentationWorkedExampleTests
             .. thirdResponse.AsSpan(0, thirdResponse.Length - ApduConstants.StatusWordSize).ToArray(),
             .. fourthResponse.AsSpan(0, fourthResponse.Length - ApduConstants.StatusWordSize).ToArray()
         ];
-        CollectionAssert.AreEqual(expectedData, assembled.Data.ToArray());
+        Assert.AreSequenceEqual(expectedData, assembled.Data.ToArray());
     }
 
     /// <summary>

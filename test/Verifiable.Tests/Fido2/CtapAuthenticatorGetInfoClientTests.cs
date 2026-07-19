@@ -40,7 +40,7 @@ internal sealed class CtapAuthenticatorGetInfoClientTests
         CtapGetInfoResponse decoded = await CtapAuthenticatorGetInfoClient.GetInfoAsync(
             Transceive, CtapGetInfoResponseCborReader.Read, BaseMemoryPool.Shared, TestContext.CancellationToken);
 
-        CollectionAssert.AreEqual(new byte[] { WellKnownCtapCommands.GetInfo }, capturedRequest);
+        Assert.AreSequenceEqual(new byte[] { WellKnownCtapCommands.GetInfo }, capturedRequest);
         Assert.AreEqual(aaguid, decoded.Aaguid);
         Assert.AreEqual(WellKnownCtapVersions.Fido23, decoded.Versions[0]);
     }

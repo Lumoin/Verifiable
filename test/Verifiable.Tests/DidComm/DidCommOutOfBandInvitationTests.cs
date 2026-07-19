@@ -96,7 +96,7 @@ internal sealed class DidCommOutOfBandInvitationTests
         Assert.AreEqual(invitation.From, result.Invitation.From);
         Assert.AreEqual("issue-vc", result.Invitation.GetOutOfBandGoalCode());
         Assert.AreEqual("To issue a Faber College Graduate credential", result.Invitation.GetOutOfBandGoal());
-        CollectionAssert.AreEqual(
+        Assert.AreSequenceEqual(
             new List<string> { "didcomm/v2", "didcomm/aip2;env=rfc587" },
             new List<string>(result.Invitation.GetOutOfBandAccept()));
     }

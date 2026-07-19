@@ -48,7 +48,7 @@ internal sealed class CtapAuthenticatorLargeBlobKeyExtensionTests
         CtapMakeCredentialResponse decoded = CtapMakeCredentialResponseCborReader.Read(response.AsReadOnlyMemory()[1..]);
 
         Assert.IsNotNull(decoded.LargeBlobKey);
-        Assert.AreEqual(32, decoded.LargeBlobKey!.Value.Length);
+        Assert.HasCount(32, decoded.LargeBlobKey!.Value);
     }
 
 

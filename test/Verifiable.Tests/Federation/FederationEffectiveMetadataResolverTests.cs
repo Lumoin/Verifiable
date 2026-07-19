@@ -327,7 +327,7 @@ internal sealed class FederationEffectiveMetadataResolverTests
         Assert.IsNotNull(result);
         Assert.IsTrue(result.IsSuccess, result.FailureReason);
         List<object> grantTypes = (List<object>)result.EffectiveMetadata!["grant_types"];
-        CollectionAssert.AreEquivalent(ExpectedOverriddenGrantTypes, grantTypes);
+        Assert.AreSequenceEqual(ExpectedOverriddenGrantTypes, grantTypes, SequenceOrder.InAnyOrder);
     }
 
 
@@ -374,7 +374,7 @@ internal sealed class FederationEffectiveMetadataResolverTests
         Assert.IsNotNull(result);
         Assert.IsTrue(result.IsSuccess, result.FailureReason);
         List<object> grantTypes = (List<object>)result.EffectiveMetadata!["grant_types"];
-        CollectionAssert.AreEqual(ExpectedTrimmedToAuthCode, grantTypes);
+        Assert.AreSequenceEqual(ExpectedTrimmedToAuthCode, grantTypes);
     }
 
 

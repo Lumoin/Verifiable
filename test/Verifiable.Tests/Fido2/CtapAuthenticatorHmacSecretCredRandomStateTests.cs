@@ -69,8 +69,8 @@ internal sealed class CtapAuthenticatorHmacSecretCredRandomStateTests
         string credentialIdHex = Convert.ToHexStringLower(credentialIdBytes);
         CtapCredentialRecord record = trace.Received[^1].StateAfter.CredentialsByCredentialId[credentialIdHex];
 
-        Assert.AreEqual(32, record.CredRandomWithUV.Memory.Length);
-        Assert.AreEqual(32, record.CredRandomWithoutUV.Memory.Length);
+        Assert.HasCount(32, record.CredRandomWithUV.Memory);
+        Assert.HasCount(32, record.CredRandomWithoutUV.Memory);
         Assert.IsFalse(
             record.CredRandomWithUV.Memory.Span.SequenceEqual(record.CredRandomWithoutUV.Memory.Span),
             "CredRandomWithUV and CredRandomWithoutUV must be two independently random values, never the same content.");

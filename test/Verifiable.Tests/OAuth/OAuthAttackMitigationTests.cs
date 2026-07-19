@@ -307,6 +307,132 @@ internal sealed class OAuthAttackMitigationTests
     }
 
 
+    //RFC 9207 §4 — authorization-server issuer uniqueness (client-side, opt-in).
+    //
+    //Configuration hazard beyond §2.4: a callback whose iss string-matches the issuer this
+    //flow targeted — so every per-flow issuer check passes — yet does not correspond to a
+    //known, uniquely-configured authorization server in the application's own store. §4
+    //draws the client's obligation to ensure an issuer identifier uniquely names one
+    //authorization server, which the per-flow ordinal comparison cannot establish on its own.
+    //
+    //Mitigation: when the application wires a KnownAuthorizationServerIssuerResolver, the
+    //callback additionally requires a present iss to resolve to a known authorization server;
+    //membership in the application-owned, uniqueness-guaranteeing store is required, not
+    //merely an ordinal match against the flow's expected issuer. A null resolver opts out and
+    //leaves the per-flow check as the sole issuer gate.
+
+    [TestMethod]
+    public async Task Rfc9207Section4KnownIssuerResolverAcceptsCallbackFromKnownAuthorizationServer()
+    {
+        var store = new Dictionary<string, FlowState>();
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
+            store,
+            PolicyProfile.Haip10,
+            knownIssuerResolver: KnownIssuers("https://as.example.com"));
+        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        string flowId = GetSingleFlowId(store);
+        AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.Code] = "auth-code",
+                [OAuthRequestParameterNames.State] = flowId,
+                [OAuthRequestParameterNames.Iss] = "https://as.example.com"
+            },
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome,
+            "A callback whose iss is a known, uniquely-configured authorization server matching the flow must proceed.");
+        AssertAllClaimsSucceeded(result.ValidationClaims);
+    }
+
+
+    [TestMethod]
+    public async Task Rfc9207Section4KnownIssuerResolverRejectsIssuerAbsentFromTheApplicationStore()
+    {
+        var store = new Dictionary<string, FlowState>();
+
+        //The resolver knows a DIFFERENT authorization server than the one this registration
+        //pins, so the callback iss — which does ordinally match the flow's expected issuer, so
+        //every per-flow issuer check passes — is rejected solely because it is absent from the
+        //application's known, uniquely-configured store: the §4 requirement the per-flow check
+        //cannot enforce. The token endpoint is wired to redeem successfully so the chained
+        //HandleTokenAsync discriminates: a BadRequest can only mean the rejected callback
+        //persisted no AuthorizationCodeReceivedState.
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
+            store,
+            PolicyProfile.Haip10,
+            tokenResponse: BuildTokenJson("at.123", "Bearer", 3600, null),
+            knownIssuerResolver: KnownIssuers("https://other-as.example.com"));
+        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        string flowId = GetSingleFlowId(store);
+        AuthCodeFlowEndpointResult callbackResult = await AuthCodeFlowHandlers.HandleCallbackAsync(
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.Code] = "auth-code",
+                [OAuthRequestParameterNames.State] = flowId,
+                [OAuthRequestParameterNames.Iss] = "https://as.example.com"
+            },
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, callbackResult.Outcome,
+            "An iss absent from the application's known-issuer store must be rejected even when it matches the flow's expected issuer.");
+        Assert.AreEqual("invalid_request", callbackResult.ErrorCode);
+        Assert.IsTrue(
+            callbackResult.ErrorDescription is not null
+                && callbackResult.ErrorDescription.Contains("RFC 9207", StringComparison.Ordinal),
+            "The rejection must be attributed to the RFC 9207 §4 known-issuer gate.");
+
+        AuthCodeFlowEndpointResult tokenResult = await AuthCodeFlowHandlers.HandleTokenAsync(
+            new Dictionary<string, string> { [AuthCodeFlowRoutes.FlowIdField] = flowId },
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, tokenResult.Outcome,
+            "A callback rejected by the §4 known-issuer gate must never persist state the token endpoint can redeem.");
+    }
+
+
+    [TestMethod]
+    public async Task Rfc9207Section4NullResolverLeavesPerFlowIssuerCheckUnchanged()
+    {
+        //Opt-out: with no resolver wired, the callback applies only the per-flow issuer check,
+        //so a present iss matching the flow's expected issuer proceeds exactly as it does
+        //without the §4 gate — the nullable slot means "not opted in", never "reject".
+        var store = new Dictionary<string, FlowState>();
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
+            store,
+            PolicyProfile.Haip10,
+            knownIssuerResolver: null);
+        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        string flowId = GetSingleFlowId(store);
+        AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.Code] = "auth-code",
+                [OAuthRequestParameterNames.State] = flowId,
+                [OAuthRequestParameterNames.Iss] = "https://as.example.com"
+            },
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome,
+            "With no known-issuer resolver wired, the per-flow issuer check alone governs and a matching iss proceeds.");
+        AssertAllClaimsSucceeded(result.ValidationClaims);
+    }
+
+
     //RFC 9700 §4.7 — Cross-Site Request Forgery (CSRF)
     //
     //Attacker capability: A web attacker (A1 in RFC 9700 §3) that can cause the
@@ -516,7 +642,8 @@ internal sealed class OAuthAttackMitigationTests
         Dictionary<string, string>? captureFormFields = null,
         Dictionary<string, string>? captureTokenFields = null,
         Uri? revocationEndpoint = null,
-        bool useDefaultRevocationEndpoint = true)
+        bool useDefaultRevocationEndpoint = true,
+        KnownAuthorizationServerIssuerResolver? knownIssuerResolver = null)
     {
         Uri? resolvedRevocationEndpoint = revocationEndpoint
             ?? (useDefaultRevocationEndpoint ? new Uri("https://as.example.com/revoke") : null);
@@ -586,6 +713,7 @@ internal sealed class OAuthAttackMitigationTests
             resolveAuthorizationServerMetadataAsync: (issuer, context, ct) =>
                 ValueTask.FromResult(metadata),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
+            isKnownAuthorizationServerIssuer: knownIssuerResolver,
             base64UrlEncoder: TestSetup.Base64UrlEncoder,
             timeProvider: TimeProvider);
 
@@ -600,6 +728,11 @@ internal sealed class OAuthAttackMitigationTests
 
         return (infrastructure, registration);
     }
+
+    //A resolver over an application-owned set of trusted, uniquely-configured issuers,
+    //compared by the same ordinal rule the library applies.
+    private static KnownAuthorizationServerIssuerResolver KnownIssuers(params string[] issuers) =>
+        issuer => Array.Exists(issuers, known => string.Equals(known, issuer, StringComparison.Ordinal));
 
     private static string GetSingleFlowId(Dictionary<string, FlowState> store)
     {

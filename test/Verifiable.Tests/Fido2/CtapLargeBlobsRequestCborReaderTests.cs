@@ -70,10 +70,10 @@ internal sealed class CtapLargeBlobsRequestCborReaderTests
         CtapLargeBlobsRequest decoded = CtapLargeBlobsRequestCborReader.Read(encoded.Memory);
 
         Assert.AreEqual(written.Get, decoded.Get);
-        CollectionAssert.AreEqual(new byte[] { 0xAA, 0xBB, 0xCC }, decoded.Set!.Value.ToArray());
+        Assert.AreSequenceEqual(new byte[] { 0xAA, 0xBB, 0xCC }, decoded.Set!.Value.ToArray());
         Assert.AreEqual(written.Offset, decoded.Offset);
         Assert.AreEqual(written.Length, decoded.Length);
-        CollectionAssert.AreEqual(new byte[] { 0x11, 0x22, 0x33 }, decoded.PinUvAuthParam!.Value.ToArray());
+        Assert.AreSequenceEqual(new byte[] { 0x11, 0x22, 0x33 }, decoded.PinUvAuthParam!.Value.ToArray());
         Assert.AreEqual(written.PinUvAuthProtocol, decoded.PinUvAuthProtocol);
     }
 
@@ -98,7 +98,7 @@ internal sealed class CtapLargeBlobsRequestCborReaderTests
         Assert.IsTrue(encoded.Span.SequenceEqual(expected));
 
         CtapLargeBlobsRequest decoded = CtapLargeBlobsRequestCborReader.Read(encoded.Memory);
-        CollectionAssert.AreEqual(new byte[] { 0x11, 0x22, 0x33 }, decoded.PinUvAuthParam!.Value.ToArray());
+        Assert.AreSequenceEqual(new byte[] { 0x11, 0x22, 0x33 }, decoded.PinUvAuthParam!.Value.ToArray());
         Assert.AreEqual(2, decoded.PinUvAuthProtocol);
     }
 

@@ -264,7 +264,7 @@ internal class HwTpmCreatePrimaryTests
 
         Assert.IsNotNull(firstKeyName);
         Assert.IsNotNull(secondKeyName);
-        CollectionAssert.AreEqual(firstKeyName, secondKeyName, "Same template should produce same key name.");
+        Assert.AreSequenceEqual(firstKeyName, secondKeyName, "Same template should produce same key name.");
         TestContext.WriteLine($"Both keys have same name: {Convert.ToHexString(firstKeyName)}");
     }    
 }

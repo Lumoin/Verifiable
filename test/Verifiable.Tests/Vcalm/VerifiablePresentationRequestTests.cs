@@ -141,7 +141,7 @@ internal sealed class VerifiablePresentationRequestTests
         Assert.AreEqual(VcalmParseFailure.None, request.Failure);
         DidAuthenticationQuery didAuth = Assert.IsInstanceOfType<DidAuthenticationQuery>(request.Query[0]);
         Assert.AreEqual(VcalmQueryTypes.DidAuthentication, didAuth.Type);
-        CollectionAssert.AreEquivalent(KeyAndWebMethods, didAuth.AcceptedMethods.ToArray());
+        Assert.AreSequenceEqual(KeyAndWebMethods, didAuth.AcceptedMethods.ToArray(), SequenceOrder.InAnyOrder);
         Assert.Contains("ecdsa-rdfc-2019", didAuth.AcceptedCryptosuites);
 
         //§3.4.3 holder predicate: a did:key holder is accepted, a did:cheqd holder is not.
@@ -218,7 +218,7 @@ internal sealed class VerifiablePresentationRequestTests
             Assert.IsInstanceOfType<AuthorizationCapabilityRequestQuery>(request.Query[0]);
         Assert.HasCount(1, capability.CapabilityQuery);
         Assert.AreEqual("a-memorable-name", capability.CapabilityQuery[0].ReferenceId);
-        CollectionAssert.AreEquivalent(ReadAndWriteActions, capability.CapabilityQuery[0].AllowedAction.ToArray());
+        Assert.AreSequenceEqual(ReadAndWriteActions, capability.CapabilityQuery[0].AllowedAction.ToArray(), SequenceOrder.InAnyOrder);
     }
 
 

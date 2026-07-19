@@ -204,7 +204,7 @@ internal sealed class JcsTests
         var result = Jcs.CanonicalizeToUtf8Bytes(input);
 
         var expected = Encoding.UTF8.GetBytes(/*lang=json,strict*/ """{"a":"b"}""");
-        CollectionAssert.AreEqual(expected, result);
+        Assert.AreSequenceEqual(expected, result);
     }
 
 

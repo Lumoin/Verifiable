@@ -1,6 +1,7 @@
 using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Jar;
 
 namespace Verifiable.OAuth.Jarm;
@@ -26,6 +27,14 @@ namespace Verifiable.OAuth.Jarm;
 /// parameters surface on the result only when every check passed.
 /// </para>
 /// <para>
+/// An optional <see cref="KnownAuthorizationServerIssuerResolver"/> adds the
+/// <see href="https://www.rfc-editor.org/rfc/rfc9207#section-4">RFC 9207 §4</see> known-issuer
+/// gate: an <c>iss</c> that ordinally matches the expected issuer but is absent from the
+/// application's known-issuer store is treated as an invalid issuer, so — exactly like an
+/// unexpected issuer — it never triggers key resolution either. A <see langword="null"/>
+/// resolver keeps the §2.4 ordinal match as the sole issuer check.
+/// </para>
+/// <para>
 /// Signed-and-encrypted (Nested JWT) responses are out of this primitive's scope —
 /// FAPI 2.0 Message Signing §6.1 recommends against response encryption; a deployment
 /// that uses it decrypts the JWE first and passes the inner signed JWT here.
@@ -45,6 +54,7 @@ public static class JarmResponseValidation
     /// <param name="payloadDeserializer">Deserialises the payload JSON into a claim dictionary, so response parameters keep their JSON types (strings, numbers).</param>
     /// <param name="base64UrlDecoder">Base64url decoder.</param>
     /// <param name="memoryPool">Memory pool for transient buffers.</param>
+    /// <param name="isKnownAuthorizationServerIssuer">The application's <see href="https://www.rfc-editor.org/rfc/rfc9207#section-4">RFC 9207 §4</see> known-issuer gate over its own authorization-server store (each configured AS under a UNIQUE issuer identifier); see <see cref="KnownAuthorizationServerIssuerResolver"/>. <see langword="null"/> opts out. Evaluated before any key resolution, alongside the ordinal <c>iss</c> match.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <param name="expirationLeeway">Clock-skew leeway added to <c>exp</c>; defaults to none.</param>
     /// <returns>The per-check validation outcome.</returns>
@@ -58,6 +68,7 @@ public static class JarmResponseValidation
         JwtPayloadDeserializer payloadDeserializer,
         DecodeDelegate base64UrlDecoder,
         MemoryPool<byte> memoryPool,
+        KnownAuthorizationServerIssuerResolver? isKnownAuthorizationServerIssuer = null,
         TimeSpan? expirationLeeway = null,
         CancellationToken cancellationToken = default)
     {
@@ -105,11 +116,13 @@ public static class JarmResponseValidation
             return new JarmResponseValidationResult();
         }
 
-        //§2.4 step 2: iss must identify the expected issuer — checked before any key
-        //resolution per the §5.1 DoS consideration.
+        //§2.4 step 2 + §4: iss must identify the expected issuer and, when a known-issuer
+        //resolver is supplied, resolve to a known, uniquely-configured authorization server —
+        //checked before any key resolution per the §5.1 DoS consideration.
         bool isIssuerValid = claims!.TryGetValue(WellKnownJwtClaimNames.Iss, out object? issValue)
             && issValue is string iss
-            && string.Equals(iss, expectedIssuer, StringComparison.Ordinal);
+            && string.Equals(iss, expectedIssuer, StringComparison.Ordinal)
+            && (isKnownAuthorizationServerIssuer is null || isKnownAuthorizationServerIssuer(iss));
 
         //§2.4 step 3: aud must match the client id used in the authorization request.
         bool isAudienceValid = claims.TryGetValue(WellKnownJwtClaimNames.Aud, out object? audValue)

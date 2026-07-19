@@ -233,7 +233,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
             ReadOnlyMemory<byte> nonceCaller = ExtractCommandNonceCaller(observedCommand);
             ReadOnlyMemory<byte> encryptedFirstParam = ExtractCommandFirstParameterData(observedCommand);
 
-            Assert.AreEqual(PlaintextLength, encryptedFirstParam.Length, "Parameter encryption must not change the data length.");
+            Assert.HasCount(PlaintextLength, encryptedFirstParam, "Parameter encryption must not change the data length.");
             Assert.IsFalse(encryptedFirstParam.Span.SequenceEqual(plaintext.Memory.Span[..PlaintextLength]), "The first command parameter must be encrypted on the wire.");
 
             //Command direction (Part 1 §19.2): nonceNewer = nonceCaller, nonceOlder = nonceTPM (the session's
@@ -378,7 +378,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
             ReadOnlyMemory<byte> nonceCaller = ExtractCommandNonceCaller(observedCommand);
             ReadOnlyMemory<byte> encryptedFirstParam = ExtractCommandFirstParameterData(observedCommand);
 
-            Assert.AreEqual(PlaintextLength, encryptedFirstParam.Length, "Parameter encryption must not change the data length.");
+            Assert.HasCount(PlaintextLength, encryptedFirstParam, "Parameter encryption must not change the data length.");
             Assert.IsFalse(encryptedFirstParam.Span.SequenceEqual(plaintext.Memory.Span[..PlaintextLength]), "The first command parameter must be encrypted on the wire.");
 
             //Command direction (Part 1 §19.2): nonceNewer = nonceCaller, nonceOlder = nonceTPM (the session's

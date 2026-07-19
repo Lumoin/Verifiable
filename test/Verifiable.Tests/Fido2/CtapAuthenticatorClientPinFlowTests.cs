@@ -171,7 +171,7 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
         byte[] secondToken = await freshTokenSession.DecryptTokenAsync(freshTokenResponse.PinUvAuthToken!.Value, TestContext.CancellationToken);
 
         Assert.HasCount(32, secondToken);
-        CollectionAssert.AreNotEqual(firstToken, secondToken, "the token issued before changePIN must be invalidated by the PIN change.");
+        Assert.AreNotSequenceEqual(firstToken, secondToken, "the token issued before changePIN must be invalidated by the PIN change.");
     }
 
 

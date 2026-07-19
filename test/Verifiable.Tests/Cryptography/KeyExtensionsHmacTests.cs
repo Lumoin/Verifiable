@@ -30,7 +30,7 @@ internal sealed class KeyExtensionsHmacTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         byte[] viaBcl = HMACSHA256.HashData(keyBytes, message);
-        CollectionAssert.AreEqual(viaBcl, viaExtension.AsReadOnlySpan().ToArray());
+        Assert.AreSequenceEqual(viaBcl, viaExtension.AsReadOnlySpan().ToArray());
     }
 
 

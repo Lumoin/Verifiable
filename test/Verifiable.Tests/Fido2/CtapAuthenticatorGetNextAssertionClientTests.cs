@@ -51,9 +51,9 @@ internal sealed class CtapAuthenticatorGetNextAssertionClientTests
         CtapGetAssertionResponse decoded = await CtapAuthenticatorGetNextAssertionClient.GetNextAssertionAsync(
             Transceive, CtapGetAssertionResponseCborReader.Read, pool, TestContext.CancellationToken);
 
-        CollectionAssert.AreEqual(new byte[] { WellKnownCtapCommands.GetNextAssertion }, capturedRequest);
-        CollectionAssert.AreEqual(scriptedResponse.AuthData.ToArray(), decoded.AuthData.ToArray());
-        CollectionAssert.AreEqual(scriptedResponse.Signature.ToArray(), decoded.Signature.ToArray());
+        Assert.AreSequenceEqual(new byte[] { WellKnownCtapCommands.GetNextAssertion }, capturedRequest);
+        Assert.AreSequenceEqual(scriptedResponse.AuthData.ToArray(), decoded.AuthData.ToArray());
+        Assert.AreSequenceEqual(scriptedResponse.Signature.ToArray(), decoded.Signature.ToArray());
 
         credentialId.Dispose();
         decoded.Credential.Id.Dispose();

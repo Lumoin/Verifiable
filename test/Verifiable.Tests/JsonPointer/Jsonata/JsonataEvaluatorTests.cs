@@ -150,7 +150,7 @@ internal sealed class JsonataEvaluatorTests
         IReadOnlyDictionary<string, JsonataValue> members = result.AsObject();
         Assert.AreEqual("urn:1", members["id"].AsString());
         Assert.AreEqual("credential", members["kind"].AsString());
-        CollectionAssert.AreEqual(ExpectedOrderedKeys, members.Keys.ToArray());
+        Assert.AreSequenceEqual(ExpectedOrderedKeys, members.Keys.ToArray());
     }
 
 

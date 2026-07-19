@@ -93,7 +93,7 @@ internal sealed class KeriRotationTests
         KeriKeyState rotated = await KeriKeyStateMachine.RotateAsync(inception, rotation, AgileDigest, BaseMemoryPool.Shared, CancellationToken.None);
 
         Assert.AreEqual(1, rotated.SequenceNumber);
-        CollectionAssert.AreEqual(NextKeys, (System.Collections.ICollection)rotated.SigningKeys, "The newly current keys are the revealed next keys.");
+        Assert.AreSequenceEqual(NextKeys, (System.Collections.ICollection)rotated.SigningKeys, "The newly current keys are the revealed next keys.");
         Assert.AreEqual(KeriThreshold.Unweighted(1), rotated.SigningThreshold);
         Assert.AreEqual(rotation.Said, rotated.LastEventSaid);
     }
@@ -116,7 +116,7 @@ internal sealed class KeriRotationTests
         KeriKeyState rotated = await KeriKeyStateMachine.RotateAsync(inception, rotation, AgileDigest, BaseMemoryPool.Shared, CancellationToken.None);
 
         Assert.AreEqual(1, rotated.SequenceNumber);
-        CollectionAssert.AreEqual(subset, (System.Collections.ICollection)rotated.SigningKeys, "The newly current keys are exactly the revealed subset; the third committed key was held in reserve.");
+        Assert.AreSequenceEqual(subset, (System.Collections.ICollection)rotated.SigningKeys, "The newly current keys are exactly the revealed subset; the third committed key was held in reserve.");
     }
 
 
@@ -154,7 +154,7 @@ internal sealed class KeriRotationTests
 
         KeriKeyState rotated = await KeriKeyStateMachine.RotateAsync(inception, rotation, AgileDigest, BaseMemoryPool.Shared, CancellationToken.None);
 
-        CollectionAssert.AreEqual(revealed, (System.Collections.ICollection)rotated.SigningKeys, "The augmented key is carried as a current key alongside the exposed pre-rotated keys.");
+        Assert.AreSequenceEqual(revealed, (System.Collections.ICollection)rotated.SigningKeys, "The augmented key is carried as a current key alongside the exposed pre-rotated keys.");
     }
 
 
@@ -171,7 +171,7 @@ internal sealed class KeriRotationTests
 
         KeriKeyState rotated = await KeriKeyStateMachine.RotateAsync(inception, rotation, AgileDigest, BaseMemoryPool.Shared, CancellationToken.None);
 
-        CollectionAssert.AreEqual(new[] { Backers[1], toAdd[0] }, (System.Collections.ICollection)rotated.Backers, "The removed backer is gone and the added backer is appended.");
+        Assert.AreSequenceEqual(new[] { Backers[1], toAdd[0] }, (System.Collections.ICollection)rotated.Backers, "The removed backer is gone and the added backer is appended.");
     }
 
 

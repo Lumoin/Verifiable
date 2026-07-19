@@ -63,8 +63,8 @@ internal sealed class MdocCborMsoReaderTests
         Assert.IsTrue(nsDigests.ContainsKey(0u));
         Assert.IsTrue(nsDigests.ContainsKey(1u));
 
-        Assert.AreEqual(32, nsDigests[0u].Length, "SHA-256 digest is 32 bytes.");
-        Assert.AreEqual(32, nsDigests[1u].Length);
+        Assert.HasCount(32, nsDigests[0u], "SHA-256 digest is 32 bytes.");
+        Assert.HasCount(32, nsDigests[1u]);
     }
 
 
@@ -94,8 +94,8 @@ internal sealed class MdocCborMsoReaderTests
         Assert.AreEqual(CoseKeyCurves.P256, deviceKey.Curve);
         Assert.IsNotNull(deviceKey.X);
         Assert.IsNotNull(deviceKey.Y);
-        Assert.AreEqual(32, deviceKey.X!.Value.Length);
-        Assert.AreEqual(32, deviceKey.Y!.Value.Length);
+        Assert.HasCount(32, deviceKey.X!.Value);
+        Assert.HasCount(32, deviceKey.Y!.Value);
         Assert.IsNull(mso.DeviceKeyInfo.EncodedKeyAuthorizations);
         Assert.IsNull(mso.DeviceKeyInfo.EncodedKeyInfo);
     }

@@ -79,7 +79,7 @@ internal sealed class KeriKeyEventLogReplayTests
             var rotation = (KeriRotationEvent)entries[2].Operation!;
 
             Assert.AreEqual(2, finalState.SequenceNumber, "The log advances to sequence two.");
-            CollectionAssert.AreEqual((System.Collections.ICollection)rotation.SigningKeys, (System.Collections.ICollection)finalState.SigningKeys, "The final keys are the rotated-in keys.");
+            Assert.AreSequenceEqual((System.Collections.ICollection)rotation.SigningKeys, (System.Collections.ICollection)finalState.SigningKeys, "The final keys are the rotated-in keys.");
             Assert.AreEqual(rotation.Said, finalState.LastEventSaid, "The last event SAID is the rotation's.");
         }
         finally

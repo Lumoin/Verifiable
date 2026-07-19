@@ -58,7 +58,7 @@ internal sealed class ConcatKdfMultiRoundTests
         byte[] expected = ReferenceConcatKdf(z, algorithmId, [], [], keydataLenBits, committedTag: []);
 
         using SymmetricKeyMemory derivedKey = derived.UseKey();
-        Assert.AreEqual(keydataLenBits / 8, derivedKey.AsReadOnlySpan().Length,
+        Assert.HasCount(keydataLenBits / 8, derivedKey.AsReadOnlySpan(),
             "The single-round derivation must produce exactly keydataLenBits / 8 octets.");
         Assert.AreEqual(Convert.ToHexString(expected), Convert.ToHexString(derivedKey.AsReadOnlySpan()),
             "The ≤256-bit single-round path must remain byte identical to the reference SHA-256 oracle.");
@@ -84,7 +84,7 @@ internal sealed class ConcatKdfMultiRoundTests
         byte[] expected = ReferenceConcatKdf(z, algorithmId, [], [], keydataLenBits: 512, committedTag: []);
 
         using SymmetricKeyMemory derivedKey = derived.UseKey();
-        Assert.AreEqual(64, derivedKey.AsReadOnlySpan().Length,
+        Assert.HasCount(64, derivedKey.AsReadOnlySpan(),
             "A 512-bit derivation must produce 64 octets.");
         Assert.AreEqual(Convert.ToHexString(expected), Convert.ToHexString(derivedKey.AsReadOnlySpan()),
             "The 512-bit derivation must equal SHA256(round 1) || SHA256(round 2) of the reference oracle.");

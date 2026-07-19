@@ -14,7 +14,7 @@ internal sealed class WellKnownAidTests
     {
         ReadOnlySpan<byte> piv = WellKnownAid.Piv;
 
-        Assert.AreEqual(9, piv.Length);
+        Assert.HasCount(9, piv);
         Assert.AreEqual((byte)0xA0, piv[0]);
         Assert.AreEqual((byte)0x00, piv[8]);
     }
@@ -24,7 +24,7 @@ internal sealed class WellKnownAidTests
     {
         ReadOnlySpan<byte> mrtd = WellKnownAid.Mrtd;
 
-        Assert.AreEqual(7, mrtd.Length);
+        Assert.HasCount(7, mrtd);
         Assert.AreEqual((byte)0xA0, mrtd[0]);
         Assert.AreEqual((byte)0x01, mrtd[6]);
     }
@@ -34,7 +34,7 @@ internal sealed class WellKnownAidTests
     {
         ReadOnlySpan<byte> fido = WellKnownAid.Fido;
 
-        Assert.AreEqual(8, fido.Length);
+        Assert.HasCount(8, fido);
         Assert.AreEqual((byte)0xA0, fido[0]);
         Assert.AreEqual((byte)0x01, fido[7]);
     }

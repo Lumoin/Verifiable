@@ -62,7 +62,7 @@ internal sealed class CtapClientPinResponseCborReaderTests
         Assert.AreEqual(CoseKeyTypes.Ec2, decoded.KeyAgreement!.Kty);
         Assert.AreEqual(-25, decoded.KeyAgreement.Alg);
         Assert.AreEqual(CoseKeyCurves.P256, decoded.KeyAgreement.Curve);
-        CollectionAssert.AreEqual(new byte[] { 0xAA, 0xBB }, decoded.PinUvAuthToken!.Value.ToArray());
+        Assert.AreSequenceEqual(new byte[] { 0xAA, 0xBB }, decoded.PinUvAuthToken!.Value.ToArray());
         Assert.AreEqual(7, decoded.PinRetries);
         Assert.IsFalse(decoded.PowerCycleState!.Value);
         Assert.AreEqual(3, decoded.UvRetries);

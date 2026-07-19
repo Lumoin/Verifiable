@@ -106,7 +106,7 @@ internal class HwTpmCreateLoadTests
             byte[] secondName = await LoadAndFlushAsync(created, parentHandle, pool, registry).ConfigureAwait(false);
 
             Assert.IsNotEmpty(firstName, "The loaded object Name must be non-empty.");
-            CollectionAssert.AreEqual(firstName, secondName, "Reloading the same blob must produce the same Name.");
+            Assert.AreSequenceEqual(firstName, secondName, "Reloading the same blob must produce the same Name.");
         }
         finally
         {

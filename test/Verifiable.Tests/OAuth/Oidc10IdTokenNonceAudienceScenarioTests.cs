@@ -178,6 +178,62 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
 
 
     /// <summary>
+    /// An id_token validated through <see cref="Oidc10IdTokenValidator.ValidateAsync"/> is rejected with
+    /// <see cref="JwsAccessTokenValidationFailureReason.IssuerMismatch"/> when the relying party's
+    /// expected issuer does not equal the token's <c>iss</c> — the same shared-core check
+    /// <see cref="JwsAccessTokenValidatorTests.ValidatorRejectsIssuerMismatch"/> proves through the
+    /// access-token entry point, exercised here through the id_token entry point instead.
+    /// </summary>
+    [TestMethod]
+    public async Task IdTokenWithMismatchedIssuerIsRejected()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+
+        string idToken = await DriveCodeExchangeForIdTokenAsync(
+            host, material, nonce: null, stampSessionId: false).ConfigureAwait(false);
+
+        Oidc10IdTokenValidationResult result = await ValidateAsRelyingPartyAsync(
+            idToken, material, expectedNonce: null, trustedAudiences: null,
+            expectedIssuerOverride: "https://wrong-issuer.example.com").ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual(JwsAccessTokenValidationFailureReason.IssuerMismatch, result.FailureReason,
+            "An id_token whose iss does not equal the relying party's expected issuer must be rejected (OIDC Core §3.1.3.7).");
+    }
+
+
+    /// <summary>
+    /// An id_token validated through <see cref="Oidc10IdTokenValidator.ValidateAsync"/> is rejected with
+    /// <see cref="JwsAccessTokenValidationFailureReason.AudienceMismatch"/> when the relying party's
+    /// <c>client_id</c> is not a member of the token's <c>aud</c> — the same shared-core check
+    /// <see cref="JwsAccessTokenValidatorTests.ValidatorRejectsAudienceMismatch"/> proves through the
+    /// access-token entry point, exercised here through the id_token entry point instead.
+    /// </summary>
+    [TestMethod]
+    public async Task IdTokenWithMismatchedAudienceIsRejected()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+
+        string idToken = await DriveCodeExchangeForIdTokenAsync(
+            host, material, nonce: null, stampSessionId: false).ConfigureAwait(false);
+
+        Oidc10IdTokenValidationResult result = await ValidateAsRelyingPartyAsync(
+            idToken, material, expectedNonce: null, trustedAudiences: null,
+            expectedAudienceOverride: "https://unregistered-client.example.com").ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual(JwsAccessTokenValidationFailureReason.AudienceMismatch, result.FailureReason,
+            "An id_token whose aud does not contain the relying party's client_id must be rejected (OIDC Core §3.1.3.7).");
+    }
+
+
+    /// <summary>
     /// Replaces the host's claim issuer with the standard rules plus a deployment contributor that
     /// adds a second, application-chosen audience to the ID Token — the shape the untrusted-audience
     /// scenarios validate against.
@@ -293,7 +349,9 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
         string idToken,
         VerifierKeyMaterial material,
         string? expectedNonce,
-        IReadOnlyCollection<string>? trustedAudiences)
+        IReadOnlyCollection<string>? trustedAudiences,
+        string? expectedIssuerOverride = null,
+        string? expectedAudienceOverride = null)
     {
         ServerVerificationKeyResolverDelegate resolveKey = (kid, tenant, ctx, ct) =>
             ValueTask.FromResult<PublicKeyMemory?>(
@@ -302,8 +360,8 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
 
         return await Oidc10IdTokenValidator.ValidateAsync(
             idToken,
-            material.Registration.IssuerUri!.OriginalString,
-            ClientId,
+            expectedIssuerOverride ?? material.Registration.IssuerUri!.OriginalString,
+            expectedAudienceOverride ?? ClientId,
             resolveKey,
             MicrosoftCryptographicFunctions.VerifyP256Async,
             JwsAccessTokenTestSupport.Parser,

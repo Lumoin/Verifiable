@@ -374,7 +374,7 @@ internal sealed class CtapAuthenticatorResetTests
 
         ReadOnlySpan<byte> initialLargeBlobArray = CtapAuthenticatorState.InitialSerializedLargeBlobArray;
         Assert.AreEqual(initialLargeBlobArray.Length, after.SerializedLargeBlobArray.Length, "line 7541: the initial serialized large-blob array is 17 bytes.");
-        CollectionAssert.AreEqual(
+        Assert.AreSequenceEqual(
             initialLargeBlobArray.ToArray(), after.SerializedLargeBlobArray.AsReadOnlySpan().ToArray(),
             "line 7705's MUST + line 6336: FactoryReset restores the initial serialized large-blob array byte string, byte-exact, even though `before` carried a grown (40-byte) array.");
 
@@ -389,10 +389,10 @@ internal sealed class CtapAuthenticatorResetTests
         Assert.AreSame(before.ProtocolTwoKeyAgreementKeyPair, after.ProtocolTwoKeyAgreementKeyPair);
         Assert.AreSame(before.ProtocolOneToken, after.ProtocolOneToken);
         Assert.AreSame(before.ProtocolTwoToken, after.ProtocolTwoToken);
-        CollectionAssert.AreEqual(protocolOneKeyBefore, after.ProtocolOneKeyAgreementKeyPair.PublicKey.AsReadOnlySpan().ToArray());
-        CollectionAssert.AreEqual(protocolTwoKeyBefore, after.ProtocolTwoKeyAgreementKeyPair.PublicKey.AsReadOnlySpan().ToArray());
-        CollectionAssert.AreEqual(protocolOneTokenBefore, after.ProtocolOneToken.Token.AsReadOnlySpan().ToArray());
-        CollectionAssert.AreEqual(protocolTwoTokenBefore, after.ProtocolTwoToken.Token.AsReadOnlySpan().ToArray());
+        Assert.AreSequenceEqual(protocolOneKeyBefore, after.ProtocolOneKeyAgreementKeyPair.PublicKey.AsReadOnlySpan().ToArray());
+        Assert.AreSequenceEqual(protocolTwoKeyBefore, after.ProtocolTwoKeyAgreementKeyPair.PublicKey.AsReadOnlySpan().ToArray());
+        Assert.AreSequenceEqual(protocolOneTokenBefore, after.ProtocolOneToken.Token.AsReadOnlySpan().ToArray());
+        Assert.AreSequenceEqual(protocolTwoTokenBefore, after.ProtocolTwoToken.Token.AsReadOnlySpan().ToArray());
 
         after.ProtocolOneKeyAgreementKeyPair.Dispose();
         after.ProtocolTwoKeyAgreementKeyPair.Dispose();
@@ -520,7 +520,7 @@ internal sealed class CtapAuthenticatorResetTests
 
         using PooledMemory postReset = await simulator.TransceiveAsync(getInfoRequest, pool, TestContext.CancellationToken);
 
-        CollectionAssert.AreEqual(birthBytes, postReset.AsReadOnlySpan().ToArray());
+        Assert.AreSequenceEqual(birthBytes, postReset.AsReadOnlySpan().ToArray());
     }
 
 

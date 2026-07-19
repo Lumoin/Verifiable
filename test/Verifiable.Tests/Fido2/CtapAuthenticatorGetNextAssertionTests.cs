@@ -58,7 +58,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionTests
             Assert.AreEqual(2, decoded.NumberOfCredentials);
             Assert.IsNull(decoded.UserSelected);
             Assert.IsNotNull(decoded.User);
-            CollectionAssert.AreEqual(newerUserId, decoded.User!.Id.AsReadOnlySpan().ToArray());
+            Assert.AreSequenceEqual(newerUserId, decoded.User!.Id.AsReadOnlySpan().ToArray());
             Assert.IsNull(decoded.User.Name);
             Assert.IsNull(decoded.User.DisplayName);
         }
@@ -101,7 +101,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionTests
             Assert.IsNull(decoded.NumberOfCredentials);
             Assert.IsNull(decoded.UserSelected);
             Assert.IsNotNull(decoded.User);
-            CollectionAssert.AreEqual(olderUserId, decoded.User!.Id.AsReadOnlySpan().ToArray());
+            Assert.AreSequenceEqual(olderUserId, decoded.User!.Id.AsReadOnlySpan().ToArray());
             Assert.IsNull(decoded.User.Name);
             Assert.IsNull(decoded.User.DisplayName);
         }
@@ -135,15 +135,15 @@ internal sealed class CtapAuthenticatorGetNextAssertionTests
         CtapGetAssertionRequest request = BuildGetAssertionRequest(pool);
         byte[] userIdFromFirstResponse = ReadAndDisposeUserId(
             await SendGetAssertionAsync(simulator, request, pool, TestContext.CancellationToken), pool);
-        CollectionAssert.AreEqual(thirdUserId, userIdFromFirstResponse);
+        Assert.AreSequenceEqual(thirdUserId, userIdFromFirstResponse);
 
         byte[] userIdFromSecondResponse = ReadAndDisposeUserId(
             await SendGetNextAssertionAsync(simulator, pool, TestContext.CancellationToken), pool);
-        CollectionAssert.AreEqual(secondUserId, userIdFromSecondResponse);
+        Assert.AreSequenceEqual(secondUserId, userIdFromSecondResponse);
 
         byte[] userIdFromThirdResponse = ReadAndDisposeUserId(
             await SendGetNextAssertionAsync(simulator, pool, TestContext.CancellationToken), pool);
-        CollectionAssert.AreEqual(firstUserId, userIdFromThirdResponse);
+        Assert.AreSequenceEqual(firstUserId, userIdFromThirdResponse);
     }
 
 
@@ -417,7 +417,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionTests
 
         byte[] userIdFromNext = ReadAndDisposeUserId(
             await SendGetNextAssertionAsync(simulator, pool, TestContext.CancellationToken), pool);
-        CollectionAssert.AreEqual(secondRpOlderUserId, userIdFromNext, "authenticatorGetNextAssertion must walk the SECOND (replacing) relying party's sequence.");
+        Assert.AreSequenceEqual(secondRpOlderUserId, userIdFromNext, "authenticatorGetNextAssertion must walk the SECOND (replacing) relying party's sequence.");
     }
 
 

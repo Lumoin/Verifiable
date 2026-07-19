@@ -450,7 +450,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
 
         CtapBioEnrollmentResponse decoded = CtapBioEnrollmentResponseCborReader.Read(response.AsReadOnlyMemory()[1..]);
         Assert.IsNotNull(decoded.TemplateId);
-        Assert.AreEqual(16, decoded.TemplateId!.Value.Length);
+        Assert.HasCount(16, decoded.TemplateId!.Value);
         Assert.AreEqual(WellKnownCtapLastEnrollSampleStatuses.Good, decoded.LastEnrollSampleStatus);
         Assert.AreEqual(CtapAuthenticatorState.MaxCaptureSamplesRequiredForEnroll - 1, decoded.RemainingSamples);
     }

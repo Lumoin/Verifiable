@@ -46,8 +46,8 @@ internal class TreeTraversalTests
             Assert.HasCount(3, asyncOutputList);
 
             var expectedOrder = new List<Claim> { mainClaim }.Concat(subClaims).ToList();
-            CollectionAssert.AreEqual(expectedOrder, outputList);
-            CollectionAssert.AreEqual(expectedOrder, asyncOutputList);
+            Assert.AreSequenceEqual(expectedOrder, outputList);
+            Assert.AreSequenceEqual(expectedOrder, asyncOutputList);
         }
 
 

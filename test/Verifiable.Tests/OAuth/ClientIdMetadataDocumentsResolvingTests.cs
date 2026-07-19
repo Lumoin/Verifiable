@@ -312,7 +312,7 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
 
         Assert.IsTrue(resolution.IsResolved);
         Assert.IsNotNull(resolution.PrefetchedLogo);
-        CollectionAssert.AreEqual(logoBytes, resolution.PrefetchedLogo!.Value.ToArray());
+        Assert.AreSequenceEqual(logoBytes, resolution.PrefetchedLogo!.Value.ToArray());
         Assert.AreEqual("image/png", resolution.PrefetchedLogoContentType);
         Assert.Contains(LogoUrl, transport.Calls.ConvertAll(static c => c.Target.AbsoluteUri));
     }

@@ -65,7 +65,7 @@ internal class TpmReaderWriterRoundtripTests
         var reader = new TpmReader(buffer);
         ReadOnlySpan<byte> parsed = reader.ReadTpm2b();
 
-        Assert.AreEqual(originalData.Length, parsed.Length);
+        Assert.HasCount(originalData.Length, parsed);
         Assert.IsTrue(originalData.AsSpan().SequenceEqual(parsed));
     }
 
@@ -81,7 +81,7 @@ internal class TpmReaderWriterRoundtripTests
         var reader = new TpmReader(buffer);
         ReadOnlySpan<byte> parsed = reader.ReadTpm2b();
 
-        Assert.AreEqual(0, parsed.Length);
+        Assert.HasCount(0, parsed);
     }
 
     [TestMethod]

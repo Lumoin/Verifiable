@@ -45,7 +45,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
 
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, response.AsReadOnlySpan()[0]);
         CtapLargeBlobsResponse decoded = CtapLargeBlobsResponseCborReader.Read(response.AsReadOnlyMemory()[1..]);
-        CollectionAssert.AreEqual(CtapAuthenticatorState.InitialSerializedLargeBlobArray.ToArray(), decoded.Config.ToArray());
+        Assert.AreSequenceEqual(CtapAuthenticatorState.InitialSerializedLargeBlobArray.ToArray(), decoded.Config.ToArray());
     }
 
 
@@ -65,7 +65,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
 
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, response.AsReadOnlySpan()[0]);
         CtapLargeBlobsResponse decoded = CtapLargeBlobsResponseCborReader.Read(response.AsReadOnlyMemory()[1..]);
-        Assert.AreEqual(CtapAuthenticatorState.InitialSerializedLargeBlobArray.Length, decoded.Config.Length);
+        Assert.HasCount(CtapAuthenticatorState.InitialSerializedLargeBlobArray.Length, decoded.Config);
     }
 
 
@@ -84,7 +84,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
 
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, response.AsReadOnlySpan()[0]);
         CtapLargeBlobsResponse decoded = CtapLargeBlobsResponseCborReader.Read(response.AsReadOnlyMemory()[1..]);
-        Assert.AreEqual(0, decoded.Config.Length);
+        Assert.HasCount(0, decoded.Config);
     }
 
 
@@ -104,7 +104,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
 
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, response.AsReadOnlySpan()[0]);
         CtapLargeBlobsResponse decoded = CtapLargeBlobsResponseCborReader.Read(response.AsReadOnlyMemory()[1..]);
-        Assert.AreEqual(0, decoded.Config.Length);
+        Assert.HasCount(0, decoded.Config);
     }
 
 
@@ -658,7 +658,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
         using PooledMemory getResponse = await SendLargeBlobsAsync(simulator, getRequest, pool, TestContext.CancellationToken);
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, getResponse.AsReadOnlySpan()[0]);
         CtapLargeBlobsResponse decoded = CtapLargeBlobsResponseCborReader.Read(getResponse.AsReadOnlyMemory()[1..]);
-        CollectionAssert.AreEqual(fullArray, decoded.Config.ToArray());
+        Assert.AreSequenceEqual(fullArray, decoded.Config.ToArray());
     }
 
 
@@ -680,7 +680,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
         using PooledMemory getResponse = await SendLargeBlobsAsync(simulator, getRequest, pool, TestContext.CancellationToken);
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, getResponse.AsReadOnlySpan()[0]);
         CtapLargeBlobsResponse decoded = CtapLargeBlobsResponseCborReader.Read(getResponse.AsReadOnlyMemory()[1..]);
-        CollectionAssert.AreEqual(CtapAuthenticatorState.InitialSerializedLargeBlobArray.ToArray(), decoded.Config.ToArray());
+        Assert.AreSequenceEqual(CtapAuthenticatorState.InitialSerializedLargeBlobArray.ToArray(), decoded.Config.ToArray());
     }
 
 
@@ -719,7 +719,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
         using PooledMemory getResponse = await SendLargeBlobsAsync(simulator, getRequest, pool, TestContext.CancellationToken);
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, getResponse.AsReadOnlySpan()[0]);
         CtapLargeBlobsResponse decoded = CtapLargeBlobsResponseCborReader.Read(getResponse.AsReadOnlyMemory()[1..]);
-        CollectionAssert.AreEqual(CtapAuthenticatorState.InitialSerializedLargeBlobArray.ToArray(), decoded.Config.ToArray());
+        Assert.AreSequenceEqual(CtapAuthenticatorState.InitialSerializedLargeBlobArray.ToArray(), decoded.Config.ToArray());
     }
 
 
@@ -790,7 +790,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
         using PooledMemory getResponse = await SendLargeBlobsAsync(simulator, getRequest, pool, TestContext.CancellationToken);
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, getResponse.AsReadOnlySpan()[0]);
         CtapLargeBlobsResponse decoded = CtapLargeBlobsResponseCborReader.Read(getResponse.AsReadOnlyMemory()[1..]);
-        CollectionAssert.AreEqual(committed, decoded.Config.ToArray(), "the previously committed array must survive the power cycle untouched.");
+        Assert.AreSequenceEqual(committed, decoded.Config.ToArray(), "the previously committed array must survive the power cycle untouched.");
     }
 
 
@@ -958,7 +958,7 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
         ];
         using(DigestValue actualDigest = CryptographicKeyEvents.ComputeDigest(fragment, 32, CryptoTags.Sha256Digest, pool))
         {
-            CollectionAssert.AreEqual(expectedSha256OfAbc, actualDigest.AsReadOnlySpan().ToArray(), "SHA-256(\"abc\") must match the well-known NIST test vector, hand-verified independently of this KAT's own offset encoding.");
+            Assert.AreSequenceEqual(expectedSha256OfAbc, actualDigest.AsReadOnlySpan().ToArray(), "SHA-256(\"abc\") must match the well-known NIST test vector, hand-verified independently of this KAT's own offset encoding.");
         }
 
         using CtapAuthenticatorSimulator correctSimulator = CreateSimulator("largeblobs-kat-correct");

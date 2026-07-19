@@ -113,7 +113,7 @@ internal sealed class TrustChainResolverTests
 
         Assert.IsNotNull(chain, "The walker must assemble a chain to the trust anchor.");
         Assert.HasCount(5, chain!, "leaf EC, SS, intermediate EC, SS, anchor EC.");
-        CollectionAssert.AreEqual(
+        Assert.AreSequenceEqual(
             new[]
             {
                 leafEc.CompactJws,
