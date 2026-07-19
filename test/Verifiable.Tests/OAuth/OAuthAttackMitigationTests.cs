@@ -137,6 +137,82 @@ internal sealed class OAuthAttackMitigationTests
     }
 
 
+    //R9207-017 / R9207-020 / M2 (MCP 2026-07-28 overlay) — a PRESENT iss must still be
+    //validated under Rfc6749WithPkce even though this profile does not require iss to be
+    //present at all. The overlay's M2 phrasing ("client MUST validate a present iss ...
+    //before redeeming the authorization code") is unconditional, independent of R9207's
+    //own profile-relative MUSTs.
+
+    [TestMethod]
+    public async Task Rfc9207Section2Point4PresentWrongIssuerIsRejectedUnderRfc6749()
+    {
+        var store = new Dictionary<string, FlowState>();
+
+        //The token endpoint is wired to redeem successfully so the chained
+        //HandleTokenAsync assertion discriminates: BadRequest can only mean the
+        //rejected callback persisted no AuthorizationCodeReceivedState — a
+        //wrongly-persisted state would redeem Ok and fail the test.
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
+            store,
+            PolicyProfile.Rfc6749WithPkce,
+            tokenResponse: BuildTokenJson("at.123", "Bearer", 3600, null));
+        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        string flowId = GetSingleFlowId(store);
+        AuthCodeFlowEndpointResult callbackResult = await AuthCodeFlowHandlers.HandleCallbackAsync(
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.Code] = "auth-code",
+                [OAuthRequestParameterNames.State] = flowId,
+                [OAuthRequestParameterNames.Iss] = "https://attacker.example.com"
+            },
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, callbackResult.Outcome,
+            "A present, mismatched iss must be rejected even under Rfc6749WithPkce.");
+        AssertClaimFailed(callbackResult.ValidationClaims, ValidationClaimIds.IssuerMatchesExpectedWhenPresent,
+            "Issuer mismatch must produce a failed IssuerMatchesExpectedWhenPresent claim.");
+
+        AuthCodeFlowEndpointResult tokenResult = await AuthCodeFlowHandlers.HandleTokenAsync(
+            new Dictionary<string, string> { [AuthCodeFlowRoutes.FlowIdField] = flowId },
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, tokenResult.Outcome,
+            "A rejected callback must never persist state the token endpoint can redeem.");
+    }
+
+
+    [TestMethod]
+    public async Task Rfc9207Section2Point4PresentCorrectIssuerSucceedsUnderRfc6749()
+    {
+        var store = new Dictionary<string, FlowState>();
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Rfc6749WithPkce);
+        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        string flowId = GetSingleFlowId(store);
+        AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.Code] = "auth-code",
+                [OAuthRequestParameterNames.State] = flowId,
+                [OAuthRequestParameterNames.Iss] = "https://as.example.com"
+            },
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome,
+            "A present iss that matches the expected issuer must proceed under Rfc6749WithPkce.");
+        AssertAllClaimsSucceeded(result.ValidationClaims);
+    }
+
+
     [TestMethod]
     public async Task Rfc9700Section4Point4MixUpAttackCallbackWithCorrectIssuerSucceeds()
     {
@@ -159,6 +235,75 @@ internal sealed class OAuthAttackMitigationTests
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome);
         AssertAllClaimsSucceeded(result.ValidationClaims);
+    }
+
+
+    //RFC 9207 §2.4 / §4 + R9207-012 — error responses are not exempt from mix-up defense.
+    //
+    //Attacker capability: a network attacker able to forge a callback carrying error/
+    //error_description (RFC 6749 §4.1.2.1) together with a forged iss, attempting to make
+    //the client attribute an attacker-manufactured denial to the intended authorization
+    //server (or otherwise process a forged error as authoritative).
+    //
+    //Mitigation: a PRESENT iss on an error callback is validated against the flow's
+    //recorded issuer exactly like on a success callback; a mismatch is rejected as
+    //tampering rather than surfaced as the authorization server's error.
+
+    [TestMethod]
+    public async Task Rfc9207Section4ErrorCallbackWithWrongIssuerIsRejectedAsTampering()
+    {
+        var store = new Dictionary<string, FlowState>();
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Haip10);
+        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        string flowId = GetSingleFlowId(store);
+        AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.Error] = "access_denied",
+                [OAuthRequestParameterNames.ErrorDescription] = "User declined consent.",
+                [OAuthRequestParameterNames.State] = flowId,
+                [OAuthRequestParameterNames.Iss] = "https://attacker.example.com"
+            },
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome);
+        Assert.AreEqual("invalid_request", result.ErrorCode,
+            "A mismatched iss on an error callback must be surfaced as tampering (invalid_request), " +
+            "not passed through as the authorization server's access_denied error.");
+        AssertClaimFailed(result.ValidationClaims, ValidationClaimIds.IssuerMatchesExpectedWhenPresent,
+            "Issuer mismatch on the error callback must produce a failed IssuerMatchesExpectedWhenPresent claim.");
+    }
+
+
+    [TestMethod]
+    public async Task Rfc9207Section4ErrorCallbackWithCorrectIssuerSurfacesAsErrorResponse()
+    {
+        var store = new Dictionary<string, FlowState>();
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Haip10);
+        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        string flowId = GetSingleFlowId(store);
+        AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.Error] = "access_denied",
+                [OAuthRequestParameterNames.ErrorDescription] = "User declined consent.",
+                [OAuthRequestParameterNames.State] = flowId,
+                [OAuthRequestParameterNames.Iss] = "https://as.example.com"
+            },
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome);
+        Assert.AreEqual("access_denied", result.ErrorCode,
+            "A correctly-issued error callback must surface the authorization server's own error code.");
+        Assert.AreEqual("User declined consent.", result.ErrorDescription);
     }
 
 

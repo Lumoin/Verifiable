@@ -3,14 +3,20 @@ using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.Model.SelectiveDisclosure.Strategy;
+using Verifiable.Core.OutboundFetch;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Context;
@@ -128,20 +134,26 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <summary>Disposable DPoP-related resources owned by this shell, released on <see cref="DisposeAsync"/>.</summary>
     private List<IDisposable> DpopOwnedDisposables { get; } = [];
 
+    /// <summary>
+    /// Disposable transport resources (pinned <see cref="System.Net.Http.HttpClient"/> instances)
+    /// <see cref="WireCimdMaterialization"/> owns, released on <see cref="DisposeAsync"/>.
+    /// </summary>
+    private List<IDisposable> TransportOwnedDisposables { get; } = [];
+
     /// <summary>The DPoP HMAC confirmation key set shared by tests that need symmetric DPoP proofs.</summary>
     private InProcessKeySet? DpopHmacKeySet { get; set; }
 
     /// <summary>Guards <see cref="DisposeAsync"/> against running its teardown more than once.</summary>
     private bool Disposed { get; set; }
 
-    /// <summary>The <see cref="Default"/> host's Kestrel server instance, set once <see cref="StartHttpHostAsync"/> runs.</summary>
-    private global::Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServer? KestrelServer
+    /// <summary>The <see cref="Default"/> host's HTTPS <see cref="WebApplication"/> instance, set once <see cref="StartHttpHostAsync"/> runs.</summary>
+    private global::Microsoft.AspNetCore.Builder.WebApplication? HttpHost
     {
-        get => Default.KestrelServer;
-        set => Default.KestrelServer = value;
+        get => Default.HttpHost;
+        set => Default.HttpHost = value;
     }
 
-    /// <summary>The <see cref="Default"/> host's loopback base address once it is serving HTTP.</summary>
+    /// <summary>The <see cref="Default"/> host's loopback base address once it is serving HTTPS.</summary>
     private Uri? HttpBaseAddress
     {
         get => Default.HttpBaseAddress;
@@ -153,6 +165,52 @@ internal sealed class TestHostShell: IAsyncDisposable
     {
         get => Default.SharedHttpClient;
         set => Default.SharedHttpClient = value;
+    }
+
+    /// <summary>
+    /// The shared self-signed leaf certificate an HTTPS host this shell starts presents unless the
+    /// host was added with its own distinct certificate (<see cref="AddHost(string, bool)"/>) — minted
+    /// lazily on first use via <see cref="LoopbackTls.CreateServerCertificate"/> and shared
+    /// thereafter, since its SAN covers both <c>127.0.0.1</c> and <c>localhost</c> and every host
+    /// binds loopback. Wire-level tests that build their own <see cref="System.Net.Http.HttpClient"/>
+    /// pin to this exact certificate via <see cref="LoopbackTls.CreatePinnedHandler"/> rather than
+    /// trusting a CA. <see cref="HostCertificate"/> answers which certificate a NAMED host actually
+    /// presents, covering both the shared and the distinct-certificate cases.
+    /// </summary>
+    internal X509Certificate2 ServerCertificate => serverCertificate ??= LoopbackTls.CreateServerCertificate("oauth-loopback-test-host");
+
+    private X509Certificate2? serverCertificate;
+
+    /// <summary>
+    /// The per-host certificates for hosts added with <c>useDistinctCertificate: true</c> on
+    /// <see cref="AddHost(string, bool)"/>, keyed by host name. Hosts absent from this map present
+    /// the shared <see cref="ServerCertificate"/>; <see cref="HostCertificate"/> is the one
+    /// selection authority both listener bootstrap and client pinning read.
+    /// </summary>
+    private Dictionary<string, X509Certificate2> DistinctHostCertificates { get; } =
+        new(StringComparer.Ordinal);
+
+
+    /// <summary>
+    /// The certificate the named host's HTTPS listener presents: the host's own distinct
+    /// certificate when it was added with <c>useDistinctCertificate: true</c> on
+    /// <see cref="AddHost(string, bool)"/>, otherwise the shared <see cref="ServerCertificate"/>.
+    /// A test-side client dialing several hosts with distinct TLS identities pins each host's
+    /// exact certificate via
+    /// <see cref="LoopbackTls.CreatePinnedHandler(IReadOnlyCollection{X509Certificate2})"/>.
+    /// </summary>
+    /// <param name="hostName">The host's role name as registered via <see cref="AddHost(string, bool)"/>.</param>
+    internal X509Certificate2 HostCertificate(string hostName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
+
+        //Validates the host exists so a mistyped name fails with the host-lookup
+        //error instead of silently answering the shared certificate.
+        _ = Host(hostName);
+
+        return DistinctHostCertificates.TryGetValue(hostName, out X509Certificate2? certificate)
+            ? certificate
+            : ServerCertificate;
     }
 
     /// <summary>Base64Url encoder shared by tests with the host's own wiring.</summary>
@@ -467,7 +525,15 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// validator with the Default host so trust and claim seeding stay
     /// centralised on the orchestrator.
     /// </summary>
-    public HostedAuthorizationServer AddHost(string name)
+    /// <param name="name">The host's role name (e.g. "anchor", "as2").</param>
+    /// <param name="useDistinctCertificate">
+    /// When <see langword="true"/>, mints the host its own leaf certificate via
+    /// <see cref="LoopbackTls.CreateServerCertificate"/> so the host is a distinct TLS identity —
+    /// distinct trust domains in a multi-party topology present distinct certificates. When
+    /// <see langword="false"/>, the host presents the shared <see cref="ServerCertificate"/>.
+    /// <see cref="HostCertificate"/> answers the effective certificate either way.
+    /// </param>
+    public HostedAuthorizationServer AddHost(string name, bool useDistinctCertificate = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
@@ -475,6 +541,11 @@ internal sealed class TestHostShell: IAsyncDisposable
         {
             throw new InvalidOperationException(
                 $"A host named '{name}' is already registered.");
+        }
+
+        if(useDistinctCertificate)
+        {
+            DistinctHostCertificates[name] = LoopbackTls.CreateServerCertificate($"oauth-loopback-{name}");
         }
 
         HostedAuthorizationServer host = HostedAuthorizationServer.Build(
@@ -729,6 +800,138 @@ internal sealed class TestHostShell: IAsyncDisposable
             new ExchangeContext());
 
         return registration;
+    }
+
+
+    /// <summary>
+    /// Registers a Client ID Metadata Document (CIMD) stub client on the <c>"default"</c> host: a
+    /// <see cref="ClientRecord"/> whose <see cref="ClientRecord.ClientId"/> equals
+    /// <paramref name="documentUri"/>'s <see cref="Uri.OriginalString"/> and whose
+    /// <see cref="ClientRecord.ClientMetadataUri"/> is <paramref name="documentUri"/> itself, per
+    /// draft-ietf-oauth-client-id-metadata-document-02 §4 (CIMD-013/014/015/016 — the document's
+    /// <c>client_id</c> must match the Client Identifier URL, which must match the URL fetched).
+    /// Carries <see cref="WellKnownCapabilityIdentifiers.OAuthClientIdMetadataDocument"/> among
+    /// <paramref name="capabilities"/> (added when the caller omits it) and an EMPTY
+    /// <see cref="ClientRecord.AllowedRedirectUris"/> — the fetched document supplies redirect URIs
+    /// at materialization time (§4.2), never the stub. AS-owned facets (capabilities, scopes,
+    /// signing keys, profile) mirror <see cref="RegisterSigningClient"/>; client-data-dependent
+    /// facets (redirect URIs, auth method, JWKS, display) are left for
+    /// <see cref="ClientIdMetadataMaterialization"/> to overlay from the fetched document.
+    /// </summary>
+    public ClientRecord RegisterCimdStubClient(
+        Uri documentUri,
+        ImmutableHashSet<CapabilityIdentifier> capabilities,
+        PolicyProfile? profile = null) =>
+        RegisterCimdStubClientOnHost("default", documentUri, capabilities, profile);
+
+
+    /// <summary>
+    /// Host-aware variant of <see cref="RegisterCimdStubClient"/>, for multi-host CIMD topologies
+    /// (a document host distinct from the AS host is the common case; a multi-AS-host topology also
+    /// reaches this overload directly).
+    /// </summary>
+    public ClientRecord RegisterCimdStubClientOnHost(
+        string hostName,
+        Uri documentUri,
+        ImmutableHashSet<CapabilityIdentifier> capabilities,
+        PolicyProfile? profile = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
+        ArgumentNullException.ThrowIfNull(documentUri);
+        ArgumentNullException.ThrowIfNull(capabilities);
+
+        HostedAuthorizationServer host = Host(hostName);
+
+        if(!capabilities.Contains(WellKnownCapabilityIdentifiers.OAuthClientIdMetadataDocument))
+        {
+            capabilities = capabilities.Add(WellKnownCapabilityIdentifiers.OAuthClientIdMetadataDocument);
+        }
+
+        string segment = Guid.NewGuid().ToString("N")[..8];
+        KeyId signingKeyId = new($"urn:uuid:{Guid.NewGuid()}");
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> signingKeyPair =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        host.SigningKeys[signingKeyId] = signingKeyPair.PrivateKey;
+        host.VerificationKeys[signingKeyId] = signingKeyPair.PublicKey;
+
+        ClientRecord registration = new()
+        {
+            ClientId = documentUri.OriginalString,
+            TenantId = segment,
+            IssuerUri = new Uri($"https://issuer.test/{segment}"),
+            Profile = profile,
+            AllowedCapabilities = capabilities,
+            AllowedRedirectUris = ImmutableHashSet<Uri>.Empty,
+            AllowedScopes = ImmutableHashSet.Create(WellKnownScopes.OpenId),
+            SigningKeys = ImmutableDictionary<KeyUsageContext, SigningKeySet>.Empty
+                .Add(KeyUsageContext.AccessTokenIssuance, new SigningKeySet { Current = [signingKeyId] }),
+            TokenLifetimes = ImmutableDictionary<string, TimeSpan>.Empty,
+            ClientMetadataUri = documentUri
+        };
+
+        host.Registrations[segment] = registration;
+        host.Registrations[registration.ClientId] = registration;
+
+        host.Server.RegisterClient(
+            registration,
+            new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
+            new ExchangeContext());
+
+        return registration;
+    }
+
+
+    /// <summary>
+    /// Wires CIMD materialization onto the named host:
+    /// <see cref="AuthorizationServerIntegration.MaterializeRegistrationAsync"/> to
+    /// <see cref="ClientIdMetadataMaterialization.Build"/>'s factory output, and
+    /// <see cref="AuthorizationServerIntegration.ResolveClientMetadataAsync"/> to
+    /// <see cref="ClientIdMetadataDocuments.BuildResolving"/> over a transport built from
+    /// <see cref="LoopbackTls.CreateSingleHopPinnedHttpClient(X509Certificate2)"/> (auto-redirect
+    /// disabled per the <see cref="Verifiable.Core.OutboundFetch.OutboundTransportDelegate"/>
+    /// contract) and <see cref="GuardedHttpClientTransport.BuildSingleHopTransport"/>, pinned to
+    /// <paramref name="documentHostCertificate"/> — the CIMD document host's OWN certificate,
+    /// distinct from this AS host's <see cref="ServerCertificate"/> when the document is served by a
+    /// separate loopback listener.
+    /// </summary>
+    /// <remarks>
+    /// The resolved delegate sets <see cref="LoopbackOutboundFetchPolicy"/> on the live per-request
+    /// <see cref="ExchangeContext"/> immediately before delegating to the built resolver — the same
+    /// context <see cref="AuthorizationServerHttpApplication.ProcessRequestAsync"/> constructs fresh
+    /// per inbound request, so the guarded fetch the resolver drives is permitted to dial another
+    /// loopback listener exactly as <see cref="LoopbackOutboundFetchPolicy"/>'s own remarks describe
+    /// (the test deployment's document host genuinely is another loopback listener). Owns the pinned
+    /// <see cref="System.Net.Http.HttpClient"/>, released on <see cref="DisposeAsync"/>.
+    /// </remarks>
+    public void WireCimdMaterialization(
+        string hostName,
+        X509Certificate2 documentHostCertificate,
+        ClientIdMetadataDocumentResolverOptions? options = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
+        ArgumentNullException.ThrowIfNull(documentHostCertificate);
+
+        HostedAuthorizationServer host = Host(hostName);
+
+        System.Net.Http.HttpClient documentHttpClient =
+            LoopbackTls.CreateSingleHopPinnedHttpClient(documentHostCertificate);
+        TransportOwnedDisposables.Add(documentHttpClient);
+
+        Verifiable.Core.OutboundFetch.OutboundTransportDelegate transport =
+            GuardedHttpClientTransport.BuildSingleHopTransport(documentHttpClient);
+        ResolveClientMetadataDelegate resolve = ClientIdMetadataDocuments.BuildResolving(
+            transport, options ?? new ClientIdMetadataDocumentResolverOptions(), Time);
+
+        AuthorizationServerIntegration oauth = host.Server.OAuth();
+        oauth.MaterializeRegistrationAsync = ClientIdMetadataMaterialization.Build();
+        oauth.ResolveClientMetadataAsync = (clientMetadataUri, context, cancellationToken) =>
+        {
+            context.SetOutboundFetchPolicy(LoopbackOutboundFetchPolicy);
+
+            return resolve(clientMetadataUri, context, cancellationToken);
+        };
     }
 
 
@@ -1152,18 +1355,18 @@ internal sealed class TestHostShell: IAsyncDisposable
 
     /// <summary>
     /// The outbound-fetch policy for wallet sends against this fixture's loopback
-    /// Kestrel listener: the secure default relaxed for plain-<c>http</c> loopback
-    /// targets, because the test deployment's transport endpoint genuinely is a
-    /// local listener. The relaxation is the deployment's explicit, principled
-    /// per-call choice — production wallets keep
-    /// <see cref="Verifiable.Core.OutboundFetch.OutboundFetchPolicy.SecureDefault"/>,
+    /// HTTPS listener: the secure default relaxed for loopback targets, because
+    /// the test deployment's transport endpoint genuinely is a local listener.
+    /// The scheme stays <c>https</c>-only — every loopback test host serves TLS —
+    /// so only <see cref="Verifiable.Core.OutboundFetch.OutboundFetchPolicy.BlockPrivateAndLoopback"/>
+    /// is relaxed, a deployment's explicit, principled per-call choice. Production
+    /// wallets keep <see cref="Verifiable.Core.OutboundFetch.OutboundFetchPolicy.SecureDefault"/>,
     /// under which an authorization request pointing the wallet at a private or
     /// loopback address is denied before any network contact.
     /// </summary>
     public static Verifiable.Core.OutboundFetch.OutboundFetchPolicy LoopbackOutboundFetchPolicy { get; } =
         Verifiable.Core.OutboundFetch.OutboundFetchPolicy.SecureDefault with
         {
-            AllowedSchemes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "http", "https" },
             BlockPrivateAndLoopback = false
         };
 
@@ -1395,14 +1598,14 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// Re-issues the supplied <see cref="ClientRecord"/> with its external
     /// URLs (<see cref="ClientRecord.IssuerUri"/> and, when set,
     /// <see cref="ClientRecord.ResponseUri"/>) swapped to point at the
-    /// Kestrel base address while preserving each URL's path. The in-memory
-    /// registration dictionary is updated to match so the AS resolves the
-    /// same record on subsequent dispatch.
+    /// HTTPS host's base address while preserving each URL's path. The
+    /// in-memory registration dictionary is updated to match so the AS
+    /// resolves the same record on subsequent dispatch.
     /// </summary>
     /// <remarks>
     /// OID4VP JAR signing reads <c>response_uri</c> directly off
     /// <see cref="ClientRecord.ResponseUri"/>, so wallet HTTP POSTs miss the
-    /// Kestrel unless ResponseUri is aligned as well. AuthCode-only flows do
+    /// host unless ResponseUri is aligned as well. AuthCode-only flows do
     /// not consult ResponseUri; the alignment is a no-op for those.
     /// </remarks>
     private ClientRecord AlignRegistrationIssuerToHttpBase(ClientRecord record) =>
@@ -1411,11 +1614,18 @@ internal sealed class TestHostShell: IAsyncDisposable
 
     /// <summary>
     /// Host-aware variant: aligns the registration's external URLs to the
-    /// named host's Kestrel base. Used for multi-host federation
+    /// named host's HTTPS base. Used for multi-host federation
     /// topologies where each entity lives on its own listener — the
     /// anchor's registration aligns to anchor.HttpBaseAddress, the
     /// verifier's to default.HttpBaseAddress.
     /// </summary>
+    /// <remarks>
+    /// The registration's issuer authority now equals the wire authority — both are the same
+    /// <c>https://127.0.0.1:{port}</c> host — so <see cref="DefaultIssuerResolver"/>'s RFC 9207 §2 /
+    /// RFC 8414 §2 https-shape gate and the RFC 9449 §4.2 <c>htu</c> comparison are satisfied by
+    /// construction, with no application-supplied <see cref="AuthorizationServerIntegration.ResolveIssuerAsync"/>
+    /// override needed.
+    /// </remarks>
     internal ClientRecord AlignRegistrationToHostHttpBase(string hostName, ClientRecord record)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
@@ -1427,6 +1637,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             throw new InvalidOperationException(
                 $"HTTP host '{hostName}' must be started before aligning registration issuer.");
         }
+
         if(record.IssuerUri is null)
         {
             return record;
@@ -3641,8 +3852,8 @@ internal sealed class TestHostShell: IAsyncDisposable
 
 
     /// <summary>
-    /// Starts an in-process Kestrel listener bound to localhost on an
-    /// OS-assigned ephemeral port and maps inbound HTTP requests to
+    /// Starts an in-process HTTPS listener bound to loopback on an
+    /// OS-assigned ephemeral port and maps inbound requests to
     /// <see cref="AuthorizationServer.DispatchAsync"/> via
     /// <see cref="AuthorizationServerHttpApplication"/>.
     /// Idempotent — repeat calls return without re-binding.
@@ -3659,7 +3870,7 @@ internal sealed class TestHostShell: IAsyncDisposable
 
 
     /// <summary>
-    /// Starts an in-process Kestrel listener for the named host. Multi-host
+    /// Starts an in-process HTTPS listener for the named host. Multi-host
     /// federation topologies (verifier + anchor) start each host's listener
     /// independently so each gets its own ephemeral port and authority.
     /// Idempotent per host — repeat calls return without re-binding.
@@ -3669,52 +3880,55 @@ internal sealed class TestHostShell: IAsyncDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
 
         HostedAuthorizationServer host = Host(hostName);
-        if(host.KestrelServer is not null)
+        if(host.HttpHost is not null)
         {
             return;
         }
 
-        global::Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions kestrelOptions = new();
-        //Kestrel's ListenLocalhost(0) rejects dynamic port (it binds both
-        //IPv4 + IPv6 loopback and can't reconcile a single OS-assigned port
-        //across two sockets). Listen on IPv4 loopback with an ephemeral
-        //port; the dispatched URL uses 127.0.0.1 explicitly.
-        kestrelOptions.Listen(System.Net.IPAddress.Loopback, port: 0);
+        X509Certificate2 hostCertificate = HostCertificate(hostName);
 
-        global::Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets.SocketTransportOptions socketOptions = new();
-        global::Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets.SocketTransportFactory socketFactory = new(
-            global::Microsoft.Extensions.Options.Options.Create(socketOptions),
-            global::Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
+        global::Microsoft.AspNetCore.Builder.WebApplicationBuilder builder =
+            global::Microsoft.AspNetCore.Builder.WebApplication.CreateSlimBuilder();
+        builder.Logging.ClearProviders();
 
-        global::Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServer kestrel = new(
-            global::Microsoft.Extensions.Options.Options.Create(kestrelOptions),
-            socketFactory,
-            global::Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
+        //Kestrel's ListenLocalhost(0) rejects dynamic port (it binds both IPv4 + IPv6 loopback and
+        //can't reconcile a single OS-assigned port across two sockets). Listen on IPv4 loopback with
+        //an ephemeral port, presenting the host's certificate (its own distinct one when added with
+        //useDistinctCertificate: true, the shell's shared one otherwise); the dispatched URL uses
+        //127.0.0.1 explicitly. A single explicit HTTPS Listen call — no UseUrls — so there is no
+        //plaintext fallback on this host at all.
+        builder.WebHost.ConfigureKestrel(options =>
+            options.Listen(System.Net.IPAddress.Loopback, port: 0,
+                listenOptions => listenOptions.UseHttps(hostCertificate)));
 
-        AuthorizationServerHttpApplication app = new(host.Server);
-        await kestrel.StartAsync(app, cancellationToken: cancellationToken).ConfigureAwait(false);
+        global::Microsoft.AspNetCore.Builder.WebApplication app = builder.Build();
 
-        global::Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature? addresses =
-            kestrel.Features.Get<global::Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>();
-        if(addresses is null || addresses.Addresses.Count == 0)
-        {
-            throw new InvalidOperationException(
-                $"Kestrel for host '{hostName}' started but no server addresses were exposed via IServerAddressesFeature.");
-        }
+        AuthorizationServerHttpApplication application = new(host.Server);
+        app.Run(application.ProcessRequestAsync);
 
-        host.KestrelServer = kestrel;
-        host.HttpBaseAddress = new Uri(addresses.Addresses.First());
-        host.SharedHttpClient = new System.Net.Http.HttpClient { BaseAddress = host.HttpBaseAddress };
+        await app.StartAsync(cancellationToken).ConfigureAwait(false);
+
+        global::Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature addresses =
+            app.Services.GetRequiredService<global::Microsoft.AspNetCore.Hosting.Server.IServer>()
+                .Features.Get<global::Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>()
+            ?? throw new InvalidOperationException(
+                $"HTTPS host '{hostName}' started but no server addresses were exposed via IServerAddressesFeature.");
+        string boundAddress = addresses.Addresses.FirstOrDefault()
+            ?? throw new InvalidOperationException($"HTTPS host '{hostName}' bound no address.");
+
+        host.HttpHost = app;
+        host.HttpBaseAddress = new Uri(boundAddress);
+        host.SharedHttpClient = LoopbackTls.CreatePinnedHttpClient(hostCertificate, host.HttpBaseAddress);
     }
 
 
     /// <summary>
-    /// Starts an in-process Kestrel listener for the W3C VCALM 1.0 conformance bridge (chunk V-6a):
+    /// Starts an in-process HTTPS listener for the W3C VCALM 1.0 conformance bridge (chunk V-6a):
     /// the same ephemeral-port loopback bootstrap as <see cref="StartHttpHostAsync(string, CancellationToken)"/>,
     /// but mounting <see cref="Verifiable.Tests.Vcalm.VcalmConformanceHttpApplication"/> so the VCALM
     /// issuer / verifier interfaces are served at the STABLE, suite-expected flat paths
     /// (<c>/credentials/issue</c>, <c>/credentials/verify</c>, <c>/presentations/verify</c>) over real
-    /// HTTP behind an OAuth2 client-credentials bearer gate, with the AS token endpoint reachable at
+    /// HTTPS behind an OAuth2 client-credentials bearer gate, with the AS token endpoint reachable at
     /// <c>/token</c>. The external <c>vc-api-issuer-test-suite</c> / <c>vc-api-verifier-test-suite</c>
     /// JS suites POST to those flat paths; this is the in-repo bridge the suites would later be pointed
     /// at (V-6b). Idempotent per host. The supplied <paramref name="registration"/> is the conformance
@@ -3727,38 +3941,40 @@ internal sealed class TestHostShell: IAsyncDisposable
         ArgumentNullException.ThrowIfNull(registration);
 
         HostedAuthorizationServer host = Host(hostName);
-        if(host.KestrelServer is not null)
+        if(host.HttpHost is not null)
         {
             return;
         }
 
-        global::Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions kestrelOptions = new();
-        kestrelOptions.Listen(System.Net.IPAddress.Loopback, port: 0);
+        X509Certificate2 hostCertificate = HostCertificate(hostName);
 
-        global::Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets.SocketTransportOptions socketOptions = new();
-        global::Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets.SocketTransportFactory socketFactory = new(
-            global::Microsoft.Extensions.Options.Options.Create(socketOptions),
-            global::Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
+        global::Microsoft.AspNetCore.Builder.WebApplicationBuilder builder =
+            global::Microsoft.AspNetCore.Builder.WebApplication.CreateSlimBuilder();
+        builder.Logging.ClearProviders();
 
-        global::Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServer kestrel = new(
-            global::Microsoft.Extensions.Options.Options.Create(kestrelOptions),
-            socketFactory,
-            global::Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
+        builder.WebHost.ConfigureKestrel(options =>
+            options.Listen(System.Net.IPAddress.Loopback, port: 0,
+                listenOptions => listenOptions.UseHttps(hostCertificate)));
 
-        Verifiable.Tests.Vcalm.VcalmConformanceHttpApplication app = new(host.Server, registration);
-        await kestrel.StartAsync(app, cancellationToken: cancellationToken).ConfigureAwait(false);
+        global::Microsoft.AspNetCore.Builder.WebApplication app = builder.Build();
 
-        global::Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature? addresses =
-            kestrel.Features.Get<global::Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>();
-        if(addresses is null || addresses.Addresses.Count == 0)
-        {
-            throw new InvalidOperationException(
-                $"Kestrel for VCALM conformance host '{hostName}' started but no server addresses were exposed.");
-        }
+        Verifiable.Tests.Vcalm.VcalmConformanceHttpApplication application = new(host.Server, registration);
+        app.Run(application.ProcessRequestAsync);
 
-        host.KestrelServer = kestrel;
-        host.HttpBaseAddress = new Uri(addresses.Addresses.First());
-        host.SharedHttpClient = new System.Net.Http.HttpClient { BaseAddress = host.HttpBaseAddress };
+        await app.StartAsync(cancellationToken).ConfigureAwait(false);
+
+        global::Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature addresses =
+            app.Services.GetRequiredService<global::Microsoft.AspNetCore.Hosting.Server.IServer>()
+                .Features.Get<global::Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>()
+            ?? throw new InvalidOperationException(
+                $"HTTPS host for VCALM conformance host '{hostName}' started but no server addresses were exposed.");
+        string boundAddress = addresses.Addresses.FirstOrDefault()
+            ?? throw new InvalidOperationException(
+                $"HTTPS host for VCALM conformance host '{hostName}' bound no address.");
+
+        host.HttpHost = app;
+        host.HttpBaseAddress = new Uri(boundAddress);
+        host.SharedHttpClient = LoopbackTls.CreatePinnedHttpClient(hostCertificate, host.HttpBaseAddress);
     }
 
 
@@ -3781,11 +3997,11 @@ internal sealed class TestHostShell: IAsyncDisposable
             host.SharedHttpClient?.Dispose();
             host.SharedHttpClient = null;
 
-            if(host.KestrelServer is not null)
+            if(host.HttpHost is not null)
             {
-                await host.KestrelServer.StopAsync(cancellationToken: CancellationToken.None).ConfigureAwait(false);
-                host.KestrelServer.Dispose();
-                host.KestrelServer = null;
+                await host.HttpHost.StopAsync(CancellationToken.None).ConfigureAwait(false);
+                await host.HttpHost.DisposeAsync().ConfigureAwait(false);
+                host.HttpHost = null;
             }
 
             host.Server.Dispose();
@@ -3810,6 +4026,18 @@ internal sealed class TestHostShell: IAsyncDisposable
         {
             owned.Dispose();
         }
+
+        foreach(IDisposable owned in TransportOwnedDisposables)
+        {
+            owned.Dispose();
+        }
+
+        foreach(X509Certificate2 certificate in DistinctHostCertificates.Values)
+        {
+            certificate.Dispose();
+        }
+
+        serverCertificate?.Dispose();
     }
 
 

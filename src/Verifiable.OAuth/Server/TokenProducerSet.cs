@@ -9,9 +9,10 @@ namespace Verifiable.OAuth.Server;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The library's token endpoint walks the set, filters by
-/// <see cref="TokenProducer.RequiredCapability"/> and
-/// <see cref="TokenProducer.IsApplicable"/>, calls each producer's
+/// The library's token endpoint walks the set, skips a producer only when its
+/// optional <see cref="TokenProducer.RequiredCapability"/> feature gate is set and the
+/// registration's resolved capability set does not allow it, filters the remainder by
+/// <see cref="TokenProducer.IsApplicable"/>, calls each applicable producer's
 /// <see cref="TokenProducer.BuildAsync"/>, and composes the JSON response from
 /// the collected tokens keyed by <see cref="TokenProducer.ResponseField"/>.
 /// </para>

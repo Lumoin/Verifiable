@@ -185,6 +185,11 @@ public static class RegistrationEndpoints
             AllowedRedirectUris = redirectUris,
             AllowedScopes = scopes,
             AllowedAuthorizationDetailsTypes = ToAllowedAuthorizationDetailsTypes(metadata),
+            TokenEndpointAuthMethod = metadata.TokenEndpointAuthMethod,
+            ClientJwksUri = metadata.JwksUri,
+            ClientJwks = metadata.Jwks,
+            ClientName = metadata.ClientName,
+            ClientUri = metadata.ClientUri,
             TokenLifetimes = FrozenDictionary<string, TimeSpan>.Empty,
             SigningKeys = FrozenDictionary<Verifiable.Cryptography.Context.KeyUsageContext, SigningKeySet>.Empty
         };
@@ -445,7 +450,12 @@ public static class RegistrationEndpoints
             AllowedScopes = scopes,
             AllowedAuthorizationDetailsTypes = newMetadata.AuthorizationDetailsTypes is null
                 ? previous.AllowedAuthorizationDetailsTypes
-                : ToAllowedAuthorizationDetailsTypes(newMetadata)
+                : ToAllowedAuthorizationDetailsTypes(newMetadata),
+            TokenEndpointAuthMethod = newMetadata.TokenEndpointAuthMethod,
+            ClientJwksUri = newMetadata.JwksUri,
+            ClientJwks = newMetadata.Jwks,
+            ClientName = newMetadata.ClientName,
+            ClientUri = newMetadata.ClientUri
         };
     }
 

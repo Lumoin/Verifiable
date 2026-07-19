@@ -58,6 +58,12 @@ internal static class ContributorTestFixtures
             Subject = "subject-contributor-test",
             Scope = scope,
             ClientId = "client-contributor-test",
+            //The end-user-authenticating grant every contributor fixture assumes: the id_token
+            //target's contributor rules (AcrAmrClaimContributor, OidcStandardClaimsContributor)
+            //model a genuine authorization_code session, and the access-token/UserInfo/
+            //introspection targets built alongside it never read GrantType, so this default is
+            //harmless for every current caller.
+            GrantType = WellKnownGrantTypes.AuthorizationCode,
             IssuedAt = FixedIssuedAt,
             Nonce = null,
             AuthTime = authTime,

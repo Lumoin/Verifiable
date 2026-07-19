@@ -67,7 +67,7 @@ internal sealed class WebAuthnRpHttpCeremonyCredentialManagementTests
             RpId, Origin, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xF5), "wavecm-user", "Wavecm User", pool,
             residentKey: ResidentKeyRequirement.Required);
         await using MinimalHttpHost host = await MinimalHttpHost.StartAsync(skin.HandleAsync, cancellationToken).ConfigureAwait(false);
-        using HttpClient httpClient = new() { BaseAddress = host.BaseAddress };
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(host.Certificate, host.BaseAddress);
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("webauthn-rp-http-cm-authenticator");
         using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);

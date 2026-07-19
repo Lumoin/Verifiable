@@ -115,6 +115,48 @@ internal sealed class DiscoveryEndpointTests
     }
 
 
+    /// <summary>
+    /// RFC 9207 §3: "<c>authorization_response_iss_parameter_supported</c> ... If omitted,
+    /// the default value is <c>false</c>." A parsed metadata document that carries no
+    /// <c>authorization_response_iss_parameter_supported</c> member leaves
+    /// <see cref="AuthorizationServerMetadata.AuthorizationResponseIssParameterSupported"/>
+    /// unset, and the type's own default — <c>bool</c>'s C# default — is <see langword="false"/>,
+    /// matching the wire default without any parser-side special-casing.
+    /// </summary>
+    [TestMethod]
+    public void AuthorizationResponseIssParameterSupportedDefaultsToFalseWhenOmitted()
+    {
+        AuthorizationServerMetadata metadataWithoutTheField = new()
+        {
+            Issuer = new Uri("https://as.example.com")
+        };
+
+        Assert.IsFalse(metadataWithoutTheField.AuthorizationResponseIssParameterSupported,
+            "RFC 9207 §3: an omitted authorization_response_iss_parameter_supported must default to false.");
+    }
+
+
+    /// <summary>
+    /// draft-ietf-oauth-client-id-metadata-document-02 §6: <c>client_id_metadata_document_supported</c>
+    /// is "OPTIONAL. Boolean value ...". A parsed metadata document that carries no
+    /// <c>client_id_metadata_document_supported</c> member leaves
+    /// <see cref="AuthorizationServerMetadata.ClientIdMetadataDocumentSupported"/> unset, and the
+    /// type's own default — <c>bool</c>'s C# default — is <see langword="false"/>, matching the
+    /// wire default without any parser-side special-casing.
+    /// </summary>
+    [TestMethod]
+    public void ClientIdMetadataDocumentSupportedDefaultsToFalseWhenOmitted()
+    {
+        AuthorizationServerMetadata metadataWithoutTheField = new()
+        {
+            Issuer = new Uri("https://as.example.com")
+        };
+
+        Assert.IsFalse(metadataWithoutTheField.ClientIdMetadataDocumentSupported,
+            "draft-ietf-oauth-client-id-metadata-document-02 §6: an omitted client_id_metadata_document_supported must default to false.");
+    }
+
+
     [TestMethod]
     public async Task DiscoveryEmitsSubjectTypesSupportedAsPublic()
     {
@@ -413,6 +455,113 @@ internal sealed class DiscoveryEndpointTests
             body.RootElement.GetProperty(
                 AuthorizationServerMetadataParameterNames.RequirePushedAuthorizationRequests).GetBoolean(),
             "RFC 6749 + PKCE does not mandate PAR; advertise require_pushed_authorization_requests=false.");
+    }
+
+
+    /// <summary>
+    /// draft-ietf-oauth-client-id-metadata-document-02 §6 dual gate: the flag is emitted
+    /// <see langword="true"/> only when the <see cref="WellKnownCapabilityIdentifiers.OAuthClientIdMetadataDocument"/>
+    /// capability is allowed AND <see cref="AuthorizationServerIntegration.ResolveClientMetadataAsync"/>
+    /// is wired. The resolver is never invoked by discovery emission (privacy §9.1: discovery/JWKS
+    /// requests must not trigger client-document fetches), so a throwing lambda proves the seam is
+    /// consulted only for its non-null-ness.
+    /// </summary>
+    [TestMethod]
+    public async Task DiscoveryEmitsClientIdMetadataDocumentSupportedWhenCapabilityAllowedAndResolverWired()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        ImmutableHashSet<CapabilityIdentifier> capabilities = ImmutableHashSet.Create(
+            WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+            WellKnownCapabilityIdentifiers.OAuthPushedAuthorization,
+            WellKnownCapabilityIdentifiers.OidcOpenIdConnect,
+            WellKnownCapabilityIdentifiers.OidcUserInfo,
+            WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+            WellKnownCapabilityIdentifiers.OAuthJwksEndpoint,
+            WellKnownCapabilityIdentifiers.OAuthClientIdMetadataDocument);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: capabilities);
+
+        host.Server.OAuth().ResolveClientMetadataAsync = (uri, context, ct) =>
+            throw new NotImplementedException(
+                "Discovery emission only checks ResolveClientMetadataAsync for non-null-ness; it must never invoke it.");
+
+        ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+
+        using JsonDocument body = JsonDocument.Parse(response.Body);
+        Assert.IsTrue(
+            body.RootElement.TryGetProperty(
+                AuthorizationServerMetadataParameterNames.ClientIdMetadataDocumentSupported,
+                out JsonElement flag),
+            $"client_id_metadata_document_supported must be present when the capability is allowed " +
+            $"and the resolver is wired. Body: {response.Body}");
+        Assert.IsTrue(flag.GetBoolean(),
+            "draft-ietf-oauth-client-id-metadata-document-02 §6 advertises true under the dual gate.");
+    }
+
+
+    /// <summary>
+    /// Fail-closed half of the §6 dual gate: the capability is allowed but
+    /// <see cref="AuthorizationServerIntegration.ResolveClientMetadataAsync"/> is left unwired, so
+    /// the flag must be omitted rather than advertised as <see langword="false"/> — an AS that
+    /// cannot resolve CIMD documents at all does not claim the capability on the wire.
+    /// </summary>
+    [TestMethod]
+    public async Task DiscoveryOmitsClientIdMetadataDocumentSupportedWhenResolverUnwired()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        ImmutableHashSet<CapabilityIdentifier> capabilities = ImmutableHashSet.Create(
+            WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+            WellKnownCapabilityIdentifiers.OAuthPushedAuthorization,
+            WellKnownCapabilityIdentifiers.OidcOpenIdConnect,
+            WellKnownCapabilityIdentifiers.OidcUserInfo,
+            WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+            WellKnownCapabilityIdentifiers.OAuthJwksEndpoint,
+            WellKnownCapabilityIdentifiers.OAuthClientIdMetadataDocument);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: capabilities);
+
+        ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+
+        using JsonDocument body = JsonDocument.Parse(response.Body);
+        Assert.IsFalse(
+            body.RootElement.TryGetProperty(
+                AuthorizationServerMetadataParameterNames.ClientIdMetadataDocumentSupported, out _),
+            $"client_id_metadata_document_supported must be omitted when the resolver seam is unwired. Body: {response.Body}");
+    }
+
+
+    /// <summary>
+    /// Fail-closed half of the §6 dual gate: the resolver is wired but the registration does not
+    /// carry <see cref="WellKnownCapabilityIdentifiers.OAuthClientIdMetadataDocument"/> (the default
+    /// <see cref="TestHostShell.RegisterDpopClient"/> capability set), so the flag must be omitted.
+    /// </summary>
+    [TestMethod]
+    public async Task DiscoveryOmitsClientIdMetadataDocumentSupportedWhenCapabilityMissing()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+
+        host.Server.OAuth().ResolveClientMetadataAsync = (uri, context, ct) =>
+            throw new NotImplementedException(
+                "Discovery emission only checks ResolveClientMetadataAsync for non-null-ness; it must never invoke it.");
+
+        ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+
+        using JsonDocument body = JsonDocument.Parse(response.Body);
+        Assert.IsFalse(
+            body.RootElement.TryGetProperty(
+                AuthorizationServerMetadataParameterNames.ClientIdMetadataDocumentSupported, out _),
+            $"client_id_metadata_document_supported must be omitted when the capability is not allowed. Body: {response.Body}");
     }
 
 

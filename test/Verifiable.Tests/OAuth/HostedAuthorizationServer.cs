@@ -46,7 +46,7 @@ namespace Verifiable.Tests.OAuth;
 /// <summary>
 /// Per-host state for a single test-fixture <see cref="AuthorizationServer"/>
 /// deployment: registrations, key stores, flow-handle indexes, and the
-/// associated Kestrel + HttpClient when the host is serving HTTP.
+/// associated HTTPS host + HttpClient when the host is serving requests.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -63,7 +63,7 @@ namespace Verifiable.Tests.OAuth;
 /// <see cref="AuthorizationServer"/> instance.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("HostedAuthorizationServer Name={Name} Clients={Registrations.Count} HasHttp={KestrelServer != null}")]
+[DebuggerDisplay("HostedAuthorizationServer Name={Name} Clients={Registrations.Count} HasHttp={HttpHost != null}")]
 internal sealed class HostedAuthorizationServer
 {
     /// <summary>The host's role name (e.g. "verifier", "anchor", "resource-server").</summary>
@@ -98,9 +98,9 @@ internal sealed class HostedAuthorizationServer
     public ConcurrentDictionary<string, string> RegistrationAccessTokens { get; } = new();
 
 
-    //Kestrel state — populated when StartHttpHostAsync runs against this host.
+    //HTTPS host state — populated when StartHttpHostAsync runs against this host.
 
-    public global::Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServer? KestrelServer { get; set; }
+    public global::Microsoft.AspNetCore.Builder.WebApplication? HttpHost { get; set; }
     public Uri? HttpBaseAddress { get; set; }
     public System.Net.Http.HttpClient? SharedHttpClient { get; set; }
 

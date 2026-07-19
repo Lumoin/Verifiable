@@ -174,6 +174,19 @@ internal sealed class OidcStandardClaimsContributorTests
     }
 
 
+    [TestMethod]
+    public async Task EmailReturnsNotApplicableForAccessTokenTarget()
+    {
+        AccessTokenTarget target = ContributorTestFixtures.BuildAccessTokenTarget("openid email");
+
+        List<Claim> claims = await OidcStandardClaimsContributor.GenerateEmailClaims(
+            target, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.HasCount(1, claims);
+        Assert.AreEqual(ClaimOutcome.NotApplicable, claims[0].Outcome);
+    }
+
+
     //AddressClaims contributor.
 
     [TestMethod]
@@ -231,6 +244,19 @@ internal sealed class OidcStandardClaimsContributorTests
     }
 
 
+    [TestMethod]
+    public async Task AddressReturnsNotApplicableForAccessTokenTarget()
+    {
+        AccessTokenTarget target = ContributorTestFixtures.BuildAccessTokenTarget("openid address");
+
+        List<Claim> claims = await OidcStandardClaimsContributor.GenerateAddressClaims(
+            target, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.HasCount(1, claims);
+        Assert.AreEqual(ClaimOutcome.NotApplicable, claims[0].Outcome);
+    }
+
+
     //PhoneClaims contributor.
 
     [TestMethod]
@@ -266,6 +292,19 @@ internal sealed class OidcStandardClaimsContributorTests
         List<Claim> claims = await OidcStandardClaimsContributor.GeneratePhoneClaims(
             target, TestContext.CancellationToken).ConfigureAwait(false);
 
+        Assert.AreEqual(ClaimOutcome.NotApplicable, claims[0].Outcome);
+    }
+
+
+    [TestMethod]
+    public async Task PhoneReturnsNotApplicableForAccessTokenTarget()
+    {
+        AccessTokenTarget target = ContributorTestFixtures.BuildAccessTokenTarget("openid phone");
+
+        List<Claim> claims = await OidcStandardClaimsContributor.GeneratePhoneClaims(
+            target, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.HasCount(1, claims);
         Assert.AreEqual(ClaimOutcome.NotApplicable, claims[0].Outcome);
     }
 

@@ -104,6 +104,46 @@ public sealed record AuthorizationRequestEvaluation
     /// application stamped no authentication time.
     /// </summary>
     public DateTimeOffset? EstablishedAuthTime { get; init; }
+
+    /// <summary>
+    /// The host component of the request's <c>client_id</c> when it is URL-shaped, or
+    /// <see langword="null"/> otherwise. Populated for every URL-shaped <c>client_id</c>
+    /// regardless of whether its Client ID Metadata Document was fetched — draft-ietf-oauth-client-id-metadata-document-02
+    /// §8.5: "The authorization server SHOULD display the hostname of the client_id on the
+    /// authorization interface, in addition to displaying the fetched client information if any."
+    /// </summary>
+    public string? ClientIdHost { get; init; }
+
+    /// <summary>
+    /// Whether this authorization request's registration carries document-derived client
+    /// metadata (<see cref="ClientName"/>, <see cref="ClientUri"/>, <see cref="LogoUri"/>) —
+    /// draft-ietf-oauth-client-id-metadata-document-02 §8.5: "Authorization servers SHOULD fetch
+    /// the client_id metadata document ... in order to provide users with additional
+    /// information about the request." <see langword="false"/> for a pre-registered client or a
+    /// CIMD client whose document fetch did not run or did not overlay any display field, in
+    /// which case §8.5 ¶2 calls for the application to "take additional measures to ensure the
+    /// user is provided with as much information as possible about the request" using
+    /// <see cref="ClientIdHost"/> alone.
+    /// </summary>
+    public bool HasFetchedClientMetadata { get; init; }
+
+    /// <summary>
+    /// The client's human-readable name from the materialized registration
+    /// (<see cref="ClientRecord.ClientName"/>), or <see langword="null"/> when none is known.
+    /// </summary>
+    public string? ClientName { get; init; }
+
+    /// <summary>
+    /// The client's web page from the materialized registration
+    /// (<see cref="ClientRecord.ClientUri"/>), or <see langword="null"/> when none is known.
+    /// </summary>
+    public Uri? ClientUri { get; init; }
+
+    /// <summary>
+    /// The client's logo image URL from the materialized registration
+    /// (<see cref="ClientRecord.LogoUri"/>), or <see langword="null"/> when none is known.
+    /// </summary>
+    public Uri? LogoUri { get; init; }
 }
 
 

@@ -9,9 +9,9 @@ namespace Verifiable.OAuth;
 
 /// <summary>
 /// Emits one token type at a token endpoint. The Authorization Server's token
-/// endpoint walks <see cref="EndpointServer.TokenProducers"/>, filters
-/// by <see cref="RequiredCapability"/> and <see cref="IsApplicable"/>, and for
-/// each applicable producer runs the pipeline:
+/// endpoint walks <see cref="AuthorizationServerIntegration.TokenProducers"/>, filters
+/// by the optional <see cref="RequiredCapability"/> feature gate and by
+/// <see cref="IsApplicable"/>, and for each applicable producer runs the pipeline:
 /// resolve key (via <see cref="KeyUsage"/>) → producer's <see cref="BuildAsync"/>
 /// → claim contributors → request-claim filtering → sign.
 /// </summary>
@@ -70,11 +70,19 @@ public sealed record TokenProducer
     public required string ResponseField { get; init; }
 
     /// <summary>
-    /// The capability the registration must have for this producer to run. The
-    /// endpoint handler skips producers whose <see cref="RequiredCapability"/> is
-    /// not allowed by the active <see cref="ClientRecord"/>.
+    /// An optional coarse tenant-feature gate. When set, the endpoint handler skips this
+    /// producer unless the active <see cref="ClientRecord"/>'s resolved capability set
+    /// allows it; <see langword="null"/> means the producer is not feature-gated at all —
+    /// it may still decline per-request via <see cref="IsApplicable"/>.
+    /// <see cref="Server.Rfc9068AccessTokenProducer"/> leaves this <see langword="null"/>
+    /// because it applies to every token-issuing grant and the grant's own endpoint match
+    /// (for example <see cref="WellKnownCapabilityIdentifiers.OAuthClientCredentials"/>)
+    /// already gated the request before the producer walk begins;
+    /// <see cref="Server.Oidc10IdTokenProducer"/> sets
+    /// <see cref="WellKnownCapabilityIdentifiers.OidcOpenIdConnect"/> because OIDC is a
+    /// genuine opt-in tenant feature independent of which grant capability matched.
     /// </summary>
-    public required CapabilityIdentifier RequiredCapability { get; init; }
+    public CapabilityIdentifier? RequiredCapability { get; init; }
 
     /// <summary>
     /// The protocol-level usage context this producer signs with. The endpoint

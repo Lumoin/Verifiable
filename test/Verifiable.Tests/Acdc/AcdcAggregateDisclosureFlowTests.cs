@@ -55,7 +55,7 @@ internal sealed class AcdcAggregateDisclosureFlowTests
             issuer.Publish("/kel", AcdcFlowKit.SerializeKel(kel), "application/json");
             discloser.Publish("/acdc", acdc.Disclosed.Serialization, "application/json");
 
-            using HttpClient httpClient = new();
+            using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient([issuer.Certificate, discloser.Certificate]);
 
             //Fetch the selective disclosure and fold it into a typed ACDC: the top-level reader now reads the
             //aggregate section 'A' as a first-class section into AcdcMessage.Aggregate.
@@ -124,7 +124,7 @@ internal sealed class AcdcAggregateDisclosureFlowTests
             await using StaticContentHost discloser = await StaticContentHost.StartAsync(cancellationToken).ConfigureAwait(false);
             discloser.Publish("/acdc", Encoding.UTF8.GetBytes(tampered), "application/json");
 
-            using HttpClient httpClient = new();
+            using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(discloser.Certificate);
             string json = await httpClient.GetStringAsync(new Uri(discloser.BaseAddress, "/acdc"), cancellationToken).ConfigureAwait(false);
             using AcdcTestSupport.EncodedSerialization credential = AcdcTestSupport.Encode(json);
             MessageFieldMap map = AcdcJson.DecodeFieldMap(credential.Memory);

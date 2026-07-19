@@ -258,7 +258,21 @@ public sealed class EndpointServer: IDisposable
                 }
                 else
                 {
-                    response = await HandleCoreAsync(
+                    ServerHttpResponse? materializationFailure = null;
+                    if(Integration.MaterializeRegistrationAsync is not null)
+                    {
+                        RegistrationMaterialization materialization = await Integration.MaterializeRegistrationAsync(
+                            registration, context, cancellationToken).ConfigureAwait(false);
+
+                        materializationFailure = materialization.Failure;
+                        if(materializationFailure is null && materialization.Registration is not null)
+                        {
+                            registration = materialization.Registration;
+                            context.SetRegistration(registration);
+                        }
+                    }
+
+                    response = materializationFailure ?? await HandleCoreAsync(
                         matched.Endpoint, request.Fields, context, registration, activity, cancellationToken)
                         .ConfigureAwait(false);
                 }

@@ -85,9 +85,31 @@ internal sealed class GuardedHttpClientTransportTests
         using HttpClient httpClient = new(handler, disposeHandler: false);
         SendFormPostDelegate send = GuardedHttpClientTransport.BuildGuardedFormPost(httpClient);
 
-        //The deployment's transport endpoint genuinely is a loopback listener, so
+        //The deployment's transport endpoint genuinely is a loopback HTTPS listener, so
         //the policy is relaxed for exactly that — the same principled choice the
         //HTTP-backed flow tests make. The fetch now proceeds to the stub.
+        ExchangeContext context = new();
+        context.SetOutboundFetchPolicy(TestHostShell.LoopbackOutboundFetchPolicy);
+
+        HttpResponseData response = await send(
+            new Uri("https://127.0.0.1:8080/cb"),
+            Form, NoHeaders, context, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode,
+            "Under the relaxed loopback policy the configured local listener is reachable.");
+    }
+
+
+    [TestMethod]
+    public async Task RelaxedLoopbackPolicyStillDeniesPlainHttp()
+    {
+        using ThrowingHandler handler = new();
+        using HttpClient httpClient = new(handler, disposeHandler: false);
+        SendFormPostDelegate send = GuardedHttpClientTransport.BuildGuardedFormPost(httpClient);
+
+        //Every loopback test host now serves HTTPS; the loopback policy relaxes only
+        //BlockPrivateAndLoopback, never the https-only scheme gate. A plain-http target
+        //must still be denied before any network contact — the throwing handler is never hit.
         ExchangeContext context = new();
         context.SetOutboundFetchPolicy(TestHostShell.LoopbackOutboundFetchPolicy);
 
@@ -95,8 +117,12 @@ internal sealed class GuardedHttpClientTransportTests
             new Uri("http://127.0.0.1:8080/cb"),
             Form, NoHeaders, context, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(200, response.StatusCode,
-            "Under the relaxed loopback policy the configured local listener is reachable.");
+        Assert.AreEqual(0, response.StatusCode,
+            "Plain http must remain denied even under the relaxed loopback policy.");
+        Assert.AreEqual(
+            nameof(OutboundFetchOutcome.DeniedByPolicy),
+            response.TransportMetadata?[GuardedHttpClientTransport.OutcomeMetadataKey],
+            "The deny outcome must be carried in the transport metadata.");
     }
 
 

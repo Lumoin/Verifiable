@@ -24,7 +24,12 @@ public static class OutgoingFormFieldsClientAuthExtensions
         /// wire-decoded strings; the transport's <see cref="Verifiable.OAuth.AuthCode.SendFormPostDelegate"/> owns
         /// <c>application/x-www-form-urlencoded</c> encoding (the builder-output ruling). This is
         /// unlike <see cref="OutgoingHeadersClientAuthExtensions.WithClientSecretBasic"/>, which
-        /// composes a header value the library must encode itself.
+        /// composes a header value the library must encode itself and so can Base64-encode straight
+        /// from a cleared scratch buffer. Here the single <see cref="Encoding.GetString(ReadOnlySpan{byte})"/>
+        /// call is the irreducible copy: <see cref="OutgoingFormFields"/> is a plain string-keyed
+        /// dictionary matching the RFC 6749 §2.3.1 body-parameter shape, so the <c>client_secret</c>
+        /// field value itself — not an extra intermediate — is where this method's copy of the secret
+        /// ends up, exactly as long as <paramref name="form"/> retains it.
         /// <paramref name="clientSecretUtf8"/> is read once during the call and not retained anywhere
         /// by this method — the caller owns clearing its own pooled backing buffer afterward.
         /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-2.3">RFC 6749 §2.3</see>: "The

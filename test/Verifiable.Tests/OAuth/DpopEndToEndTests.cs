@@ -158,10 +158,10 @@ internal sealed class DpopEndToEndTests
 
         //Audit follow-up — RFC 9068 §2 / RFC 8414 §3: the access token's iss
         //claim preserves the full issuer URL including any path component.
-        //Under HTTP, the issuer URI is aligned to the Kestrel base address
-        //(carrying the tenant segment as the path component); read the
-        //live value from the client-side registration that the factory
-        //wired with the aligned URI.
+        //On the real-wire host, the issuer URI is aligned to the https
+        //base address (carrying the tenant segment as the path component);
+        //read the live value from the client-side registration that the
+        //factory wired with the aligned URI.
         string wireIss = JwtPayloadReader.ReadIssuer(accessToken)
             ?? throw new AssertFailedException("Access-token JWT must carry iss claim.");
         Assert.AreEqual(fixture.Registration.AuthorizationServerIssuer.OriginalString, wireIss,

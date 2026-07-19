@@ -488,8 +488,9 @@ internal sealed class CredentialDiVpProofTests
             holderDidDocument, holderPrivate, CredentialNonce, issuerIdentifier).ConfigureAwait(false);
 
         //The did:web method handler dereferences the holder document through the genuine OutboundFetch
-        //chokepoint, driving a real-HttpClient single-hop transport bound to the loopback Kestrel.
-        using HttpClient httpClient = new();
+        //chokepoint, driving a real-HttpClient single-hop transport bound to the loopback Kestrel,
+        //pinned to its certificate rather than a CA — there is no CA in this loopback topology.
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(didWebHost.Certificate);
         DidResolver webResolver = BuildLoopbackFetchingWebDidResolver(httpClient, didWebHost.BaseAddress);
 
         WireDiVpExpectationSeam(host, webResolver);
@@ -718,23 +719,25 @@ internal sealed class CredentialDiVpProofTests
 
 
     //Builds a DidResolver whose did:web handler dereferences the holder did.json through the genuine
-    //OutboundFetch chokepoint over a REAL HTTP socket. WebDidResolver.Resolve computes the canonical
+    //OutboundFetch chokepoint over a REAL HTTPS socket. WebDidResolver.Resolve computes the canonical
     //https://<authority>/.well-known/did.json URL; the policy on the threaded ExchangeContext gates
-    //that genuine URL (so SecureDefault's loopback block fires honestly). The single-hop transport
-    //then dials the in-process loopback Kestrel, which serves plain http — the same reason
-    //TestHostShell.LoopbackOutboundFetchPolicy exists — so it rewrites the scheme to the listener's
-    //before hitting the socket. The fetch + parse — the work a network DID method does — lives in
-    //test/application code per the library's transport-agnostic discipline.
+    //that genuine URL (so SecureDefault's loopback block fires honestly). The single-hop transport then
+    //dials the in-process loopback Kestrel over HTTPS with the pinned handler carried on httpClient
+    //(LoopbackTls.CreatePinnedHttpClient) — the resolved did:web authority is 'localhost:{port}', which
+    //already matches the listener's own https scheme, so no scheme rewrite is needed. The fetch + parse —
+    //the work a network DID method does — lives in test/application code per the library's
+    //transport-agnostic discipline.
     private static DidResolver BuildLoopbackFetchingWebDidResolver(HttpClient httpClient, Uri loopbackBase)
     {
         OutboundTransportDelegate singleHop = GuardedHttpClientTransport.BuildSingleHopTransport(httpClient);
 
-        //The resolved did:web URL is https://localhost:<port>/...; the loopback Kestrel listens on plain
-        //http. Because the host is a DNS name (localhost), the SecureDefault SSRF block is the connection-time
-        //half: resolve the host and reject if any resolved address is loopback/private. Pinning runs first, so
-        //a SecureDefault policy refuses the loopback fetch before the socket dial; under the explicit permit it
-        //passes. After pinning, rebind the scheme (and only the scheme) to the listener's so the real socket
-        //dial reaches the in-process host. The chokepoint has already evaluated the genuine https URL.
+        //The resolved did:web URL is https://localhost:<port>/..., matching the loopback Kestrel's own
+        //https listener. Because the host is a DNS name (localhost), the SecureDefault SSRF block is the
+        //connection-time half: resolve the host and reject if any resolved address is loopback/private.
+        //Pinning runs first, so a SecureDefault policy refuses the loopback fetch before the socket dial;
+        //under the explicit permit it passes. The scheme rebind below is now a no-op (both sides are
+        //https) but stays, since the chokepoint evaluates the resolved URL's scheme independently of
+        //whatever the transport ultimately dials.
         OutboundTransportDelegate transport = async (request, context, ct) =>
         {
             _ = await SsrfHardenedTransport.ResolveAndPinAsync(

@@ -32,7 +32,7 @@ namespace Verifiable.Tests.Vcalm;
 
 /// <summary>
 /// The W3C VCALM 1.0 conformance bridge end-to-end test (chunk V-6a): the in-repo proof that the
-/// §3.2.1 issue and §3.3.1 verify interfaces serve over REAL Kestrel HTTP at the stable,
+/// §3.2.1 issue and §3.3.1 verify interfaces serve over REAL Kestrel HTTPS at the stable,
 /// suite-expected flat paths behind an OAuth2 client-credentials bearer gate — the exact path the
 /// external <c>vc-api-issuer-test-suite</c> / <c>vc-api-verifier-test-suite</c> JS suites would drive
 /// when pointed at this host (V-6b). The flow over the wire is:
@@ -59,7 +59,7 @@ namespace Verifiable.Tests.Vcalm;
 /// The Kestrel listener contends for sockets with the other HTTP lifecycle tests under Workers=4; it
 /// passes in isolation like <see cref="Verifiable.Tests.OAuth.MultiHostHttpLifecycleTests"/>. The
 /// VCALM signing / verification seams are the same library primitives the dispatch-level
-/// <see cref="VcalmIssuerEndpointTests"/> uses — the bridge COMPOSES them over real HTTP, it does not
+/// <see cref="VcalmIssuerEndpointTests"/> uses — the bridge COMPOSES them over real HTTPS, it does not
 /// re-roll cryptography.
 /// </para>
 /// </remarks>
@@ -132,7 +132,7 @@ internal sealed class VcalmConformanceBridgeTests
 
 
     /// <summary>
-    /// The bridge's money shot over real HTTP: client-credentials token → §3.2.1 issue (201) →
+    /// The bridge's money shot over real HTTPS: client-credentials token → §3.2.1 issue (201) →
     /// §3.3.1 verify (200, verified:true), every exchange across the Kestrel socket with the Bearer
     /// token; and a 401 on each protected endpoint when the token is absent or invalid.
     /// </summary>
@@ -144,7 +144,7 @@ internal sealed class VcalmConformanceBridgeTests
         HttpClient http = app.Host("default").SharedHttpClient!;
         Uri baseAddress = app.Host("default").HttpBaseAddress!;
 
-        //=== Step 1: obtain the client-credentials Bearer access token over HTTP. ===
+        //=== Step 1: obtain the client-credentials Bearer access token over HTTPS. ===
         string accessToken = await ObtainClientCredentialsTokenAsync(http, baseAddress).ConfigureAwait(false);
 
         //=== Step 2: POST a credential to /credentials/issue WITH the token → 201 secured VC. ===
@@ -162,7 +162,7 @@ internal sealed class VcalmConformanceBridgeTests
         JsonElement securedCredential = issued.RootElement.GetProperty(VcalmParameterNames.VerifiableCredential);
         Assert.AreEqual("DataIntegrityProof",
             FirstProof(securedCredential).GetProperty("type").GetString(),
-            "The §3.2.1 issue response over HTTP carries a Data Integrity proof.");
+            "The §3.2.1 issue response over HTTPS carries a Data Integrity proof.");
 
         //=== Step 3: POST that VC to /credentials/verify WITH the token → 200 verified:true. ===
         string verifyBody = "{\"verifiableCredential\":" + securedCredential.GetRawText()
@@ -177,7 +177,7 @@ internal sealed class VcalmConformanceBridgeTests
 
         using JsonDocument verifyDoc = JsonDocument.Parse(verifyResponseBody);
         Assert.IsTrue(verifyDoc.RootElement.GetProperty(VcalmParameterNames.Verified).GetBoolean(),
-            "A credential issued by the bridge's issuer endpoint must verify TRUE at its verifier endpoint over HTTP.");
+            "A credential issued by the bridge's issuer endpoint must verify TRUE at its verifier endpoint over HTTPS.");
     }
 
 

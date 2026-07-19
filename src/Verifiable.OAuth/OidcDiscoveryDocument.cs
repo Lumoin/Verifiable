@@ -63,6 +63,13 @@ public sealed class OidcDiscoveryDocument: IEquatable<OidcDiscoveryDocument>
     /// <summary>Whether the AS supports the <c>iss</c> authorization response parameter (RFC 9207).</summary>
     public bool AuthorizationResponseIssParameterSupported { get; init; }
 
+    /// <summary>
+    /// Whether the AS supports retrieving client metadata from a <c>client_id</c> URL;
+    /// advertised as <c>client_id_metadata_document_supported</c> per
+    /// draft-ietf-oauth-client-id-metadata-document-02 §6.
+    /// </summary>
+    public bool ClientIdMetadataDocumentSupported { get; init; }
+
     /// <summary>The JWS algorithms the AS accepts on DPoP proofs (RFC 9449 §5.1).</summary>
     public string[] DpopSigningAlgValuesSupported { get; init; } = [];
 
@@ -88,6 +95,7 @@ public sealed class OidcDiscoveryDocument: IEquatable<OidcDiscoveryDocument>
             && JwksUri == other.JwksUri
             && RequirePushedAuthorizationRequests == other.RequirePushedAuthorizationRequests
             && AuthorizationResponseIssParameterSupported == other.AuthorizationResponseIssParameterSupported
+            && ClientIdMetadataDocumentSupported == other.ClientIdMetadataDocumentSupported
             && DpopSigningAlgValuesSupported.SequenceEqual(other.DpopSigningAlgValuesSupported)
             && ResponseTypesSupported.SequenceEqual(other.ResponseTypesSupported)
             && SubjectTypesSupported.SequenceEqual(other.SubjectTypesSupported)
@@ -114,6 +122,7 @@ public sealed class OidcDiscoveryDocument: IEquatable<OidcDiscoveryDocument>
         hash.Add(JwksUri);
         hash.Add(RequirePushedAuthorizationRequests);
         hash.Add(AuthorizationResponseIssParameterSupported);
+        hash.Add(ClientIdMetadataDocumentSupported);
         foreach(string s in DpopSigningAlgValuesSupported) { hash.Add(s); }
         foreach(string s in ResponseTypesSupported) { hash.Add(s); }
         foreach(string s in SubjectTypesSupported) { hash.Add(s); }

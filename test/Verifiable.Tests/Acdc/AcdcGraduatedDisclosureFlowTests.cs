@@ -59,7 +59,7 @@ internal sealed class AcdcGraduatedDisclosureFlowTests
             discloser.Publish("/acdc/compact", graduated.Compact.Serialization, "application/json");
             discloser.Publish("/acdc/expanded", graduated.Expanded.Serialization, "application/json");
 
-            using HttpClient httpClient = new();
+            using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient([issuer.Certificate, discloser.Certificate]);
 
             //Proof of Disclosure for each variant: the received form compacts to the top-level SAID it claims.
             (AcdcMessage compactMessage, string compactCompactedSaid) = await FetchAndCompactAsync(httpClient, new Uri(discloser.BaseAddress, "/acdc/compact"), cancellationToken).ConfigureAwait(false);
@@ -125,7 +125,7 @@ internal sealed class AcdcGraduatedDisclosureFlowTests
             await using StaticContentHost discloser = await StaticContentHost.StartAsync(cancellationToken).ConfigureAwait(false);
             discloser.Publish("/acdc/expanded", Encoding.UTF8.GetBytes(tampered), "application/json");
 
-            using HttpClient httpClient = new();
+            using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(discloser.Certificate);
             (AcdcMessage message, string compactedSaid) = await FetchAndCompactAsync(httpClient, new Uri(discloser.BaseAddress, "/acdc/expanded"), cancellationToken).ConfigureAwait(false);
 
             Assert.AreEqual(graduated.Said, message.Said, "The tamper leaves the claimed SAID in place; only the disclosed value changed.");

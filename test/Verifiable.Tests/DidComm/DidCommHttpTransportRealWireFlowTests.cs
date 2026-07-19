@@ -110,7 +110,7 @@ internal sealed class DidCommHttpTransportRealWireFlowTests
             await PackAnoncryptForBobAsync(TestContext.CancellationToken).ConfigureAwait(false);
         try
         {
-            using HttpClient httpClient = new();
+            using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(inbox.Certificate);
             DidCommTransmitResult transmit = await packed.TransmitAsync(
                 inbox.BaseAddress,
                 NewLoopbackContext(),
@@ -169,7 +169,7 @@ internal sealed class DidCommHttpTransportRealWireFlowTests
             await PackAnoncryptForBobAsync(TestContext.CancellationToken).ConfigureAwait(false);
         try
         {
-            using HttpClient httpClient = new();
+            using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(inbox.Certificate);
             DidCommTransmitResult transmit = await packed.TransmitAsync(
                 inbox.BaseAddress,
                 NewLoopbackContext(),
@@ -232,7 +232,7 @@ internal sealed class DidCommHttpTransportRealWireFlowTests
 
 
     /// <summary>
-    /// A fresh context whose policy permits http loopback so the genuine http://127.0.0.1:{port}/ inbox URL
+    /// A fresh context whose policy permits loopback so the genuine https://127.0.0.1:{port}/ inbox URL
     /// is allowed; production keeps <see cref="OutboundFetchPolicy.SecureDefault"/>, which denies a loopback
     /// target before any network contact.
     /// </summary>
@@ -241,7 +241,6 @@ internal sealed class DidCommHttpTransportRealWireFlowTests
         var context = new ExchangeContext();
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault with
         {
-            AllowedSchemes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "http", "https" },
             BlockPrivateAndLoopback = false
         });
 

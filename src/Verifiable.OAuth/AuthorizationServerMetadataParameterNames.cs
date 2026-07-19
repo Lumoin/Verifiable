@@ -308,4 +308,20 @@ public static class AuthorizationServerMetadataParameterNames
     /// parameter is the matching ADVERTISEMENT.
     /// </summary>
     public static readonly string PreAuthorizedGrantAnonymousAccessSupported = Utf8Constants.ToInternedString(PreAuthorizedGrantAnonymousAccessSupportedUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ClientIdMetadataDocumentSupported"/>.</summary>
+    public static ReadOnlySpan<byte> ClientIdMetadataDocumentSupportedUtf8 => "client_id_metadata_document_supported"u8;
+
+    /// <summary>
+    /// Whether the authorization server supports retrieving client metadata from a
+    /// <c>client_id</c> URL, advertised as <c>client_id_metadata_document_supported</c> per
+    /// draft-ietf-oauth-client-id-metadata-document-02 §6: "Authorization servers that
+    /// publish Authorization Server Metadata [RFC8414] MUST include the following property
+    /// to signal support for Client ID Metadata Documents as described in this
+    /// specification." §6 defines the value itself as "OPTIONAL. Boolean value specifying
+    /// whether the authorization server supports retrieving client metadata from a
+    /// client_id URL as described in this specification." Registered in the IANA "OAuth
+    /// Authorization Server Metadata" registry per §10.1.
+    /// </summary>
+    public static readonly string ClientIdMetadataDocumentSupported = Utf8Constants.ToInternedString(ClientIdMetadataDocumentSupportedUtf8);
 }

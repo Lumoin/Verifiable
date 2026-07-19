@@ -1,9 +1,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Features;
 using StringValues = Microsoft.Extensions.Primitives.StringValues;
 using Verifiable.Core;
 using Verifiable.JCose;
@@ -15,19 +13,21 @@ using Verifiable.Server.Routing;
 namespace Verifiable.Tests.Vcalm;
 
 /// <summary>
-/// The Kestrel host skin for the W3C VCALM 1.0 conformance bridge (chunk V-6a). It is the analogue of
+/// The <see cref="Microsoft.AspNetCore.Builder.WebApplication"/> host skin for the W3C VCALM 1.0
+/// conformance bridge (chunk V-6a), mounted directly as its HTTPS pipeline's <c>RequestDelegate</c>
+/// (<c>app.Run(application.ProcessRequestAsync)</c>). It is the analogue of
 /// <see cref="Verifiable.Tests.OAuth.AuthorizationServerHttpApplication"/>, specialised for the
 /// external W3C <c>vc-api-issuer-test-suite</c> / <c>vc-api-verifier-test-suite</c> JS suites: it
 /// serves the §3.2.1 <c>POST /credentials/issue</c>, §3.3.1 <c>POST /credentials/verify</c>, and
 /// §3.3.2 <c>POST /presentations/verify</c> interfaces at STABLE, suite-expected URL paths over real
-/// HTTP, protected by an OAuth2 client-credentials bearer token, and exposes the AS token endpoint
+/// HTTPS, protected by an OAuth2 client-credentials bearer token, and exposes the AS token endpoint
 /// the suites obtain that token from.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Test-only construct. The library does not reference Kestrel; a production VCALM deployment writes
-/// its own host adapter. The body-buffering, header-mapping, and <see cref="ServerHttpResponse"/> →
-/// HTTP behaviours are identical to
+/// Test-only construct. The library does not reference Kestrel or ASP.NET Core; a production VCALM
+/// deployment writes its own host adapter. The body-buffering, header-mapping, and
+/// <see cref="ServerHttpResponse"/> → HTTP behaviours are identical to
 /// <see cref="Verifiable.Tests.OAuth.AuthorizationServerHttpApplication"/>; this skin adds two
 /// conformance-bridge concerns on top of plain dispatch:
 /// </para>
@@ -52,7 +52,7 @@ namespace Verifiable.Tests.Vcalm;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("VcalmConformanceHttpApplication Tenant={tenantSegment}")]
-internal sealed class VcalmConformanceHttpApplication: IHttpApplication<HttpContext>
+internal sealed class VcalmConformanceHttpApplication
 {
     private readonly EndpointServer server;
     private readonly string tenantSegment;
@@ -83,10 +83,6 @@ internal sealed class VcalmConformanceHttpApplication: IHttpApplication<HttpCont
         this.registration = registration;
         tenantSegment = registration.TenantId.Value;
     }
-
-
-    public HttpContext CreateContext(IFeatureCollection contextFeatures) =>
-        new DefaultHttpContext(contextFeatures);
 
 
     public async Task ProcessRequestAsync(HttpContext context)
@@ -127,9 +123,6 @@ internal sealed class VcalmConformanceHttpApplication: IHttpApplication<HttpCont
         await WriteResponseAsync(response, context.Response, context.RequestAborted)
             .ConfigureAwait(false);
     }
-
-
-    public void DisposeContext(HttpContext context, Exception? exception) { }
 
 
     /// <summary>

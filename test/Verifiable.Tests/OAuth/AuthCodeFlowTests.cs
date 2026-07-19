@@ -103,6 +103,69 @@ internal sealed class AuthCodeFlowTests
     }
 
 
+    //R9207-013 / RFC 8414 §3.3 — the client-side metadata-consumption seam
+    //(ResolveValidatedAuthorizationServerMetadataAsync) verifies a resolved
+    //AuthorizationServerMetadata.Issuer against the pinned ClientRegistration.
+    //AuthorizationServerIssuer before any flow handler uses the metadata's endpoints,
+    //so a resolver returning metadata for the wrong authorization server is caught before
+    //any request is sent to it.
+
+    [TestMethod]
+    public async Task HandleParAsyncRejectsWhenMetadataIssuerDoesNotMatchPinnedRegistration()
+    {
+        Uri pinnedIssuer = new("https://as.example.com");
+        Uri divergentMetadataIssuer = new("https://different-as.example.com");
+
+        AuthorizationServerMetadata metadata = new()
+        {
+            Issuer = divergentMetadataIssuer,
+            PushedAuthorizationRequestEndpoint = new Uri("https://as.example.com/par"),
+            AuthorizationEndpoint = new Uri("https://as.example.com/authorize"),
+            TokenEndpoint = new Uri("https://as.example.com/token")
+        };
+
+        OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
+            sendFormPostAsync: (_, _, _, _, _) =>
+                throw new InvalidOperationException(
+                    "Must not send a PAR request when the metadata issuer fails validation."),
+            saveStateAsync: (_, _, _) => ValueTask.CompletedTask,
+            loadStateAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),
+            loadStateByRequestUriAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),
+            parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
+            parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
+            parseAuthorizationServerMetadataAsync: (body, ct) =>
+                throw new NotImplementedException("Test pre-resolves metadata; the parser is not exercised."),
+            parseRegistrationResponseAsync: (body, ct) =>
+                throw new NotImplementedException("Test does not exercise dynamic registration."),
+            resolveAuthorizationServerMetadataAsync: (issuer, context, ct) =>
+                ValueTask.FromResult(metadata),
+            resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
+            base64UrlEncoder: TestSetup.Base64UrlEncoder,
+            timeProvider: TimeProvider);
+
+        ClientRegistration registration = new()
+        {
+            ClientId = new ClientId("test-client"),
+            AuthorizationServerIssuer = pinnedIssuer,
+            RedirectUris = [DefaultRedirectUri],
+            AuthenticationMethod = ClientAuthenticationMethod.None,
+            Profile = PolicyProfile.Haip10
+        };
+
+        AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleParAsync(
+            new Dictionary<string, string>(),
+            DefaultRedirectUri,
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome,
+            "A metadata issuer diverging from the pinned AuthorizationServerIssuer must be rejected " +
+            "before any request is sent to the (potentially wrong) authorization server.");
+        Assert.AreEqual("invalid_request", result.ErrorCode);
+    }
+
+
     [TestMethod]
     public async Task HandleCallbackAsyncReturnsBadRequestWhenMissingParameters()
     {

@@ -140,8 +140,8 @@ internal sealed class GlobalLogoutDualChannelHttpTests
         //The application's session→RP registry the fan-out walks (what a deployment maintains).
         List<RegisteredRelyingParty> sessionRelyingParties =
         [
-            new RegisteredRelyingParty(rp1.ClientId, rp1.BackChannelLogoutUri),
-            new RegisteredRelyingParty(rp2.ClientId, rp2.BackChannelLogoutUri)
+            new RegisteredRelyingParty(rp1.ClientId, rp1.BackChannelLogoutUri, rp1.Certificate),
+            new RegisteredRelyingParty(rp2.ClientId, rp2.BackChannelLogoutUri, rp2.Certificate)
         ];
 
         //The OP: a Global Token Revocation endpoint whose revoke-subject seam composes BOTH
@@ -149,8 +149,7 @@ internal sealed class GlobalLogoutDualChannelHttpTests
         await using TestHostShell op = new(TimeProvider);
         using VerifierKeyMaterial gtrMaterial = op.RegisterClient(GtrClientId, GtrClientBaseUri, GtrCapabilities);
 
-        using HttpClient deliveryClient = new();
-        using HttpClient transmitterClient = new();
+        using HttpClient transmitterClient = LoopbackTls.CreatePinnedHttpClient(ssfReceiver.Certificate);
         op.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) => ValueTask.FromResult(true);
         op.Server.OAuth().UseDefaultGlobalTokenRevocationJsonParsing();
         op.Server.OAuth().RevokeSubjectTokensAsync = async (subId, _, _, ct) =>
@@ -176,6 +175,7 @@ internal sealed class GlobalLogoutDualChannelHttpTests
 
                 using FormUrlEncodedContent content = new(
                     [new KeyValuePair<string, string>(WellKnownTokenTypes.LogoutToken, logoutToken)]);
+                using HttpClient deliveryClient = LoopbackTls.CreatePinnedHttpClient(relyingParty.Certificate);
                 using HttpResponseMessage delivery = await deliveryClient.PostAsync(
                     relyingParty.BackChannelLogoutUri, content, cancellationToken: ct).ConfigureAwait(false);
                 Assert.AreEqual(200, (int)delivery.StatusCode,

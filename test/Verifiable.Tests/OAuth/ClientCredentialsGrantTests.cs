@@ -1,13 +1,18 @@
 using System.Buffers;
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
+using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.OAuth;
+using Verifiable.OAuth.Diagnostics;
 using Verifiable.OAuth.Server;
+using Verifiable.Server.Diagnostics;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -25,6 +30,12 @@ internal sealed class ClientCredentialsGrantTests
 {
     private const string ClientId = "https://machine.example.com";
     private const string ClientSecret = "s3cret-of-the-machine";
+
+    //A non-identity scope, granted alongside RegisterDpopClient's fixed OIDC identity scope set
+    //(RegisterMachineClient patches it in) so a happy-path request has SOMETHING left to retain
+    //once RFC 6749 §3.3 narrowing (contract wave-4 D4) removes openid/profile/email/address/phone
+    //from every client_credentials grant.
+    private const string MachineScope = "telemetry.read";
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -49,7 +60,7 @@ internal sealed class ClientCredentialsGrantTests
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             ["client_secret"] = ClientSecret,
-            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+            [OAuthRequestParameterNames.Scope] = MachineScope
         }, TestContext.CancellationToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)response.StatusCode, body);
@@ -59,7 +70,9 @@ internal sealed class ClientCredentialsGrantTests
         string accessToken = root.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
         Assert.AreEqual(WellKnownAuthenticationSchemes.Bearer, root.GetProperty("token_type").GetString());
         Assert.IsGreaterThan(0, root.GetProperty("expires_in").GetInt32(), "expires_in must reflect the token's exp-iat.");
-        Assert.AreEqual(WellKnownScopes.OpenId, root.GetProperty(OAuthRequestParameterNames.Scope).GetString());
+        Assert.AreEqual(MachineScope, root.GetProperty(OAuthRequestParameterNames.Scope).GetString(),
+            "A non-identity scope survives RFC 6749 §3.3 narrowing unchanged (contract wave-4 D4 "
+            + "narrows only openid and the OIDC identity scopes).");
 
         //RFC 9068 §3: with no end-user involved, the subject is the client itself.
         string[] segments = accessToken.Split('.');
@@ -129,9 +142,7 @@ internal sealed class ClientCredentialsGrantTests
         using VerifierKeyMaterial bareMaterial = bare.RegisterClient(
             ClientId,
             new Uri(ClientId),
-            ImmutableHashSet.Create(
-                WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
-                WellKnownCapabilityIdentifiers.OAuthClientCredentials));
+            ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthClientCredentials));
         await bare.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer bareHost = bare.Host("default");
         Uri bareTokenUrl = new(bareHost.HttpBaseAddress!, $"/connect/{bareMaterial.Registration.TenantId.Value}/token");
@@ -228,11 +239,14 @@ internal sealed class ClientCredentialsGrantTests
 
 
     /// <summary>
-    /// Registers a confidential machine client and wires a client_secret_post
-    /// validator. The registration carries OAuthAuthorizationCode alongside
-    /// OAuthClientCredentials because the shipped RFC 9068 access-token producer
-    /// is gated on it; a client-credentials-only deployment supplies its own
-    /// producer set.
+    /// Registers a truly client-credentials-only confidential machine client (no
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthAuthorizationCode"/>) and wires a
+    /// client_secret_post validator. Grant-only issuance works because
+    /// <see cref="Rfc9068AccessTokenProducer"/>'s <c>RequiredCapability</c> is
+    /// <see langword="null"/> — an optional tenant-feature gate, not a grant-capability proxy
+    /// (contract wave-4 D2) — so every token-issuing grant's own endpoint-match capability
+    /// (here <see cref="WellKnownCapabilityIdentifiers.OAuthClientCredentials"/>) is sufficient
+    /// on its own.
     /// </summary>
     private static VerifierKeyMaterial RegisterMachineClient(TestHostShell app)
     {
@@ -243,10 +257,24 @@ internal sealed class ClientCredentialsGrantTests
             new Uri(ClientId),
             profile: PolicyProfile.Rfc6749WithPkce,
             capabilities: ImmutableHashSet.Create(
-                WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthClientCredentials,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
                 WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+
+        //RegisterDpopClient fixes AllowedScopes to the OIDC identity scope set; add MachineScope
+        //(the register-then-upgrade pattern — the routing dictionaries are host-internal) so a
+        //happy-path request retains something once the identity scopes are narrowed away.
+        HostedAuthorizationServer host = app.Host("default");
+        string segment = material.Registration.TenantId.Value;
+        ClientRecord previous = host.Registrations[segment];
+        ClientRecord updated = previous with
+        {
+            AllowedScopes = previous.AllowedScopes.Add(MachineScope)
+        };
+        host.Registrations[segment] = updated;
+        host.Registrations[updated.ClientId] = updated;
+        host.Server.UpdateClient(previous, updated, new ExchangeContext());
+        material.Registration = updated;
 
         //client_secret_post (RFC 6749 §2.3.1): the application owns the secret
         //store and the comparison; this test glue checks the form field.
@@ -256,5 +284,142 @@ internal sealed class ClientCredentialsGrantTests
                 && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
 
         return material;
+    }
+
+
+    /// <summary>
+    /// Contract wave-4 D3/D4: even though this tenant is granted the
+    /// <see cref="WellKnownCapabilityIdentifiers.OidcOpenIdConnect"/> feature — ruling out D2's
+    /// capability gate as the explanation — a <c>client_credentials</c> token request carrying
+    /// <c>openid</c> never yields an id_token. <see cref="Oidc10IdTokenProducer"/>'s
+    /// <c>IsApplicable</c> independently requires <c>GrantType ∈ {authorization_code,
+    /// refresh_token}</c>, and the source-side <c>DropIdentityScopesForNonEndUserGrant</c> already
+    /// strips <c>openid</c> before the producer walk even runs — this test pins BOTH layers hold.
+    /// </summary>
+    [TestMethod]
+    public async Task NoIdTokenIsMintedForClientCredentialsEvenWithOpenidRequestedAndOidcFeatureGranted()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = app.RegisterDpopClient(
+            ClientId,
+            new Uri(ClientId),
+            profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: ImmutableHashSet.Create(
+                WellKnownCapabilityIdentifiers.OAuthClientCredentials,
+                WellKnownCapabilityIdentifiers.OidcOpenIdConnect,
+                WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+        app.Server.OAuth().ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+            ValueTask.FromResult(
+                fields.TryGetValue("client_secret", out string? secret)
+                && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            ["client_secret"] = ClientSecret,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+        }, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+
+        using JsonDocument doc = JsonDocument.Parse(body);
+        Assert.IsTrue(doc.RootElement.TryGetProperty(WellKnownTokenTypes.AccessToken, out _),
+            "An access token must still be minted (D3 leaves the access-token producer unaffected).");
+        Assert.IsFalse(doc.RootElement.TryGetProperty(WellKnownTokenTypes.IdToken, out _),
+            "client_credentials must never carry an id_token even when openid was requested on a "
+            + "tenant with the OidcOpenIdConnect feature granted.");
+    }
+
+
+    /// <summary>
+    /// Contract wave-4 D4 source layer: <c>client_credentials</c> has no authenticated End-User (the
+    /// token's <c>sub</c> is the client itself), so a request carrying <c>openid</c> and every OIDC
+    /// Core §5.4 identity scope has them narrowed away (RFC 6749 §3.3) before the granted scope ever
+    /// reaches the token — the issued access token's <c>scope</c> claim carries none of them — and
+    /// the narrowing emits <see cref="OAuthEventNames.IdentityScopesDroppedForNonEndUserGrant"/>
+    /// naming exactly the dropped values.
+    /// </summary>
+    [TestMethod]
+    public async Task OpenidAndIdentityScopesAreDroppedFromClientCredentialsGrantedScopeWithOtelEvent()
+    {
+        ConcurrentBag<Activity> captured = [];
+        using ActivityListener listener = new()
+        {
+            ShouldListenTo = static source =>
+                string.Equals(source.Name, ServerActivitySource.SourceName, StringComparison.Ordinal),
+            Sample = static (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = activity => captured.Add(activity)
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = RegisterMachineClient(app);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        string segment = material.Registration.TenantId.Value;
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/token");
+
+        //RegisterMachineClient's AllowedScopes (via RegisterDpopClient) is exactly the OIDC identity
+        //scope set — every token requested here is an identity scope, so the narrowed grant is empty.
+        string requestedScope = string.Join(' ',
+            WellKnownScopes.OpenId, WellKnownScopes.Profile, WellKnownScopes.Email,
+            WellKnownScopes.Address, WellKnownScopes.Phone);
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            ["client_secret"] = ClientSecret,
+            [OAuthRequestParameterNames.Scope] = requestedScope
+        }, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+
+        using JsonDocument doc = JsonDocument.Parse(body);
+        //client_credentials always writes the scope field (unlike pre_authorized_code, which omits
+        //it when empty) — every identity token was narrowed away, so it comes back empty.
+        Assert.AreEqual(string.Empty, doc.RootElement.GetProperty(OAuthRequestParameterNames.Scope).GetString(),
+            "The response scope must be empty once every requested token — all five are identity scopes — is narrowed away.");
+
+        string accessToken = doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+        string[] segments = accessToken.Split('.');
+        Assert.HasCount(3, segments);
+        byte[] payloadBytes = SecurityEventTestJson.DecodeSegment(segments[1], Pool);
+        using JsonDocument payload = JsonDocument.Parse(payloadBytes);
+        string issuedScope = payload.RootElement.GetProperty(OAuthRequestParameterNames.Scope).GetString()!;
+        Assert.AreEqual(string.Empty, issuedScope,
+            "The issued access token's scope claim must be empty — RFC 6749 §3.3 narrowing removed "
+            + "every identity token before IssuanceContext.Scope was set.");
+
+        //ActivityListener is process-wide (see the ActivityListener cross-contamination
+        //guidance): filter captured activities to this test's tenant before asserting.
+        List<ActivityEvent> dropEvents = captured
+            .Where(a => string.Equals(
+                a.GetTagItem(ServerTagNames.TenantId) as string, segment, StringComparison.Ordinal))
+            .SelectMany(a => a.Events)
+            .Where(e => string.Equals(e.Name, OAuthEventNames.IdentityScopesDroppedForNonEndUserGrant, StringComparison.Ordinal))
+            .ToList();
+
+        Assert.IsGreaterThan(0, dropEvents.Count,
+            $"A '{OAuthEventNames.IdentityScopesDroppedForNonEndUserGrant}' event tagged with tenant "
+            + $"'{segment}' must be emitted.");
+
+        string droppedScopesTagValue = dropEvents[0].Tags
+            .FirstOrDefault(t => string.Equals(t.Key, OAuthEventNames.DroppedScopesTagName, StringComparison.Ordinal))
+            .Value as string ?? string.Empty;
+        string[] droppedTokens = droppedScopesTagValue.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        Assert.HasCount(5, droppedTokens, $"Dropped scopes tag was '{droppedScopesTagValue}'.");
+        Assert.Contains(WellKnownScopes.OpenId, droppedTokens);
+        Assert.Contains(WellKnownScopes.Profile, droppedTokens);
+        Assert.Contains(WellKnownScopes.Email, droppedTokens);
+        Assert.Contains(WellKnownScopes.Address, droppedTokens);
+        Assert.Contains(WellKnownScopes.Phone, droppedTokens);
     }
 }

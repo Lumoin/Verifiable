@@ -137,7 +137,7 @@ internal sealed class GlobalLogoutCaepEmitHttpTests
         await using TestHostShell op = new(TimeProvider);
         using VerifierKeyMaterial material = op.RegisterClient(GtrClientId, GtrClientBaseUri, GtrCapabilities);
 
-        using HttpClient transmitterClient = new();
+        using HttpClient transmitterClient = LoopbackTls.CreatePinnedHttpClient(receiver.Certificate);
         op.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) => ValueTask.FromResult(true);
         op.Server.OAuth().UseDefaultGlobalTokenRevocationJsonParsing();
         op.Server.OAuth().RevokeSubjectTokensAsync = async (subId, _, _, ct) =>

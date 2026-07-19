@@ -2,9 +2,7 @@ using System;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Features;
 using Verifiable.Core;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.OutboundFetch;
@@ -26,13 +24,13 @@ namespace Verifiable.Tests.Resolver;
 /// lives in the test project.
 /// </para>
 /// <para>
-/// The binding handler is transport-agnostic. The spec's "All HTTPS bindings MUST use TLS" is a
-/// deployment transport requirement satisfied by terminating TLS in front of the handler; this test
-/// drives it over the plain http loopback socket (the repo convention for real-socket binding tests),
-/// so no certificate or TLS plumbing is wired here.
+/// The binding handler itself is transport-agnostic — it knows nothing of TLS or certificates. The
+/// spec's "All HTTPS bindings MUST use TLS" is satisfied by the enclosing
+/// <see cref="Verifiable.Tests.Resolver.DidResolutionHttpBindingTests"/> host, which terminates a real
+/// loopback HTTPS listener with a pinned ephemeral certificate in front of this handler.
 /// </para>
 /// </remarks>
-internal sealed class DidResolutionHttpApplication: IHttpApplication<HttpContext>
+internal sealed class DidResolutionHttpApplication
 {
     private readonly DidResolver resolver;
     private readonly DidResolutionResultSerializer serializeResolution;
@@ -63,10 +61,6 @@ internal sealed class DidResolutionHttpApplication: IHttpApplication<HttpContext
         this.serializeContentStream = serializeContentStream;
         this.fetchPolicy = fetchPolicy;
     }
-
-
-    public HttpContext CreateContext(IFeatureCollection contextFeatures) =>
-        new DefaultHttpContext(contextFeatures);
 
 
     public async Task ProcessRequestAsync(HttpContext context)
@@ -101,9 +95,6 @@ internal sealed class DidResolutionHttpApplication: IHttpApplication<HttpContext
 
         await WriteResponseAsync(binding, httpResponse, context.RequestAborted).ConfigureAwait(false);
     }
-
-
-    public void DisposeContext(HttpContext context, Exception? exception) { }
 
 
     private async ValueTask<BindingResponse> HandleAsync(

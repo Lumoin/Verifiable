@@ -79,4 +79,29 @@ public static class OAuthEventNames
     /// </summary>
     public static readonly string Oid4VpClientIdMixUpRejected =
         Utf8Constants.ToInternedString(Oid4VpClientIdMixUpRejectedUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="IdentityScopesDroppedForNonEndUserGrant"/>.</summary>
+    public static ReadOnlySpan<byte> IdentityScopesDroppedForNonEndUserGrantUtf8 =>
+        "oauth.token.identity_scopes_dropped_for_non_end_user_grant"u8;
+
+    /// <summary>
+    /// The token endpoint narrowed the granted scope for a non-end-user grant
+    /// (<c>client_credentials</c> or <c>pre_authorized_code</c>) by dropping <c>openid</c> and
+    /// the OIDC Core §5.4 identity scopes (<c>profile</c> / <c>email</c> / <c>address</c> /
+    /// <c>phone</c>) per <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC
+    /// 6749 §3.3</see> narrowing. These grants have no authenticated End-User — the subject is
+    /// the client itself, or a Wallet with no established session — so a granted <c>openid</c>
+    /// scope would let an ID Token or UserInfo response misrepresent a machine as an
+    /// authenticated user. The dropped scope values ride under
+    /// <see cref="DroppedScopesTagName"/>.
+    /// </summary>
+    public static readonly string IdentityScopesDroppedForNonEndUserGrant =
+        Utf8Constants.ToInternedString(IdentityScopesDroppedForNonEndUserGrantUtf8);
+
+    /// <summary>
+    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key carrying the
+    /// space-separated scope values dropped by an
+    /// <see cref="IdentityScopesDroppedForNonEndUserGrant"/> event.
+    /// </summary>
+    public static readonly string DroppedScopesTagName = "oauth.token.dropped_scopes";
 }

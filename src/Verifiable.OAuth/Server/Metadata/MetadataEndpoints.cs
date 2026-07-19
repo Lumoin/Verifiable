@@ -632,6 +632,21 @@ public static class MetadataEndpoints
                         true);
                 }
 
+                //draft-ietf-oauth-client-id-metadata-document-02 §6: advertise
+                //client_id_metadata_document_supported only when the capability is
+                //allowed AND the CIMD resolver seam is wired (fail-closed) — mirroring
+                //the back-channel-logout dual gate above. CIMD applies AS-wide (any
+                //grant a URL-shaped client_id can drive), so this is not gated on
+                //authorizationCodeOnChain.
+                if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthClientIdMetadataDocument)
+                    && oauth.ResolveClientMetadataAsync is not null)
+                {
+                    AppendBooleanField(
+                        sb,
+                        AuthorizationServerMetadataParameterNames.ClientIdMetadataDocumentSupported,
+                        true);
+                }
+
                 //token_endpoint_auth_methods_supported (RFC 8414 §2 OPTIONAL).
                 //The library's token endpoint accepts PKCE-only public clients
                 //per OAuth 2.1 — auth method "none". Deployments that add

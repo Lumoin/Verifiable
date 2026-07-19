@@ -129,7 +129,7 @@ internal sealed class SsfHttpFlowTests
 
         string compact = await IssueAsync(transmitterPrivate, jwtId: Guid.NewGuid().ToString("N")).ConfigureAwait(false);
 
-        using HttpClient transmitterClient = new();
+        using HttpClient transmitterClient = LoopbackTls.CreatePinnedHttpClient(receiver.Certificate);
         Uri pushUrl = new(receiver.BaseAddress, "/ssf/push");
 
         //First delivery: verified end to end over the socket and acknowledged.
@@ -212,7 +212,7 @@ internal sealed class SsfHttpFlowTests
         await using MinimalHttpHost transmitter = await MinimalHttpHost.StartAsync(
             TransmitterPollHandler, TestContext.CancellationToken).ConfigureAwait(false);
 
-        using HttpClient receiverClient = new();
+        using HttpClient receiverClient = LoopbackTls.CreatePinnedHttpClient(transmitter.Certificate);
         Uri pollUrl = new(transmitter.BaseAddress, "/ssf/poll");
 
         //Poll 1: fetch pending SETs.

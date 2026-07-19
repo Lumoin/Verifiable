@@ -32,8 +32,11 @@ namespace Verifiable.Tests.OAuth;
 /// <see cref="WellKnownCapabilityIdentifiers.OAuthJwtBearer"/> capability AND the assertion-validation
 /// seam is wired; client AUTHENTICATION is OPTIONAL (§2.1/§3.1), so the client-authentication seam is
 /// NOT required for the grant to exist — but when the request carries client credentials they MUST be
-/// validated (§3.1). A host with the capability but no validation seam fails closed: the grant
-/// endpoint does not exist and a well-formed request never reaches 200.
+/// validated (§3.1), and when the effective registration declares a non-<c>none</c>
+/// <c>token_endpoint_auth_method</c> a credential-less request is refused with <c>401 invalid_client</c>
+/// (draft-ietf-oauth-client-id-metadata-document-02 §8.2, CIMD-049). A host with the capability but no
+/// validation seam fails closed: the grant endpoint does not exist and a well-formed request never
+/// reaches 200.
 /// </remarks>
 [TestClass]
 internal sealed class JwtBearerGrantTests
@@ -43,10 +46,16 @@ internal sealed class JwtBearerGrantTests
     private const string AssertionSubject = "https://user.example/alice";
     private const string GrantedScope = "read";
 
-    //The openid scope maps to this resource-server identifier on every client RegisterDpopClient
-    //registers (ScopeToAudience[openid]); a real AS-issued client_credentials token carries it as
-    //aud, so the end-to-end test has a concrete audience to perform the §3 rule-3 aud == this AS
-    //check against, and the exchanged jwt-bearer access token carries it too.
+    //A non-identity scope RegisterJwtBearerClient maps onto ResourceServerAudience: contract
+    //wave-4 D4 narrows openid away from every client_credentials grant (client_credentials has no
+    //authenticated End-User), so the end-to-end tests mint their real assertion under this scope
+    //instead, to still reach a concrete audience for the §3 rule-3 aud == this AS check.
+    private const string MachineScope = "machine.telemetry.read";
+
+    //The resource-server identifier RegisterJwtBearerClient maps MachineScope onto; a real
+    //AS-issued client_credentials token carries it as aud, so the end-to-end test has a concrete
+    //audience to perform the §3 rule-3 aud == this AS check against, and the exchanged jwt-bearer
+    //access token carries it too.
     private const string ResourceServerAudience = "https://rs.example.com";
 
     public TestContext TestContext { get; set; } = null!;
@@ -412,10 +421,12 @@ internal sealed class JwtBearerGrantTests
             await BuildJwksKeyResolverAsync(http, host.HttpBaseAddress!, segment).ConfigureAwait(false);
 
         //STEP 1 — Mint a REAL signed JWT to serve as the assertion (client_credentials, RFC 6749 §4.4).
-        //iss == asIssuer; openid scope embeds aud == ResourceServerAudience (the AS's audience identity
-        //for the §3 rule-3 check). The project's signing surface mints it — no hand-rolled crypto.
+        //iss == asIssuer; MachineScope embeds aud == ResourceServerAudience (the AS's audience identity
+        //for the §3 rule-3 check) — contract wave-4 D4 narrows openid away from every
+        //client_credentials grant, so RegisterJwtBearerClient maps this non-identity scope instead.
+        //The project's signing surface mints it — no hand-rolled crypto.
         string assertion = await ObtainClientCredentialsAccessTokenAsync(
-            http, tokenUrl, ClientId, ClientSecret, WellKnownScopes.OpenId).ConfigureAwait(false);
+            http, tokenUrl, ClientId, ClientSecret, MachineScope).ConfigureAwait(false);
 
         //Pin "real": the assertion is itself a valid AS-issued, correctly-audienced token before we
         //present it as the grant — the same check the validation seam performs below.
@@ -573,6 +584,171 @@ internal sealed class JwtBearerGrantTests
 
 
     /// <summary>
+    /// RFC 7523 §3.1 composed with draft-ietf-oauth-client-id-metadata-document-02 §8.2 (CIMD-049): a
+    /// registration that declares a non-<c>none</c> <c>token_endpoint_auth_method</c> is a confidential
+    /// client, and "any communication with the authorization server MUST include client authentication
+    /// of the registered type." A jwt-bearer request carrying a valid assertion but NO client
+    /// credentials at all is refused with <c>401 invalid_client</c> — the §3.1 anonymous path is open
+    /// only to clients that declared no authentication method.
+    /// </summary>
+    [TestMethod]
+    public async Task DeclaredConfidentialClientWithoutCredentialsIsRejectedAsInvalidClient()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
+        DeclareTokenEndpointAuthMethod(app, material, ClientAuthenticationMethod.ClientSecretPost);
+        WireClientAuthentication(app);
+        WireAcceptingValidator(app);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        //client_id identifies the client but NO client_secret and NO Authorization header — the same
+        //credential-less wire shape the anonymous test uses, now against a DECLARED confidential client.
+        OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
+        {
+            Assertion = "eyJhbGciOiJFUzI1NiJ9.opaque-assertion-blob.signature"
+        }).WithClientSecretPost(ClientId, ReadOnlySpan<byte>.Empty);
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(401, (int)response.StatusCode, body);
+        Assert.Contains(OAuthErrors.InvalidClient, body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// CIMD-049 fail-closed: a registration that declares a non-<c>none</c>
+    /// <c>token_endpoint_auth_method</c> on an authorization server whose
+    /// <see cref="AuthorizationServerIntegration.ValidateClientCredentialsAsync"/> seam is NOT wired
+    /// cannot authenticate anything, so a credential-less jwt-bearer request is refused with
+    /// <c>401 invalid_client</c> — never silently passed through as anonymous.
+    /// </summary>
+    [TestMethod]
+    public async Task DeclaredConfidentialClientWithUnwiredAuthSeamFailsClosed()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
+        DeclareTokenEndpointAuthMethod(app, material, ClientAuthenticationMethod.ClientSecretPost);
+
+        //Only the assertion validator is wired — the client-authentication seam is deliberately absent.
+        WireAcceptingValidator(app);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
+        {
+            Assertion = "eyJhbGciOiJFUzI1NiJ9.opaque.signature"
+        }).WithClientSecretPost(ClientId, ReadOnlySpan<byte>.Empty);
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(401, (int)response.StatusCode, body);
+        Assert.Contains(OAuthErrors.InvalidClient, body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// RFC 7523 §3.1 + CIMD-049 composition, the credential-bearing leg: a declared confidential
+    /// client that presents its valid <c>client_secret</c> is authenticated on the §3.1
+    /// validate-if-present path and the grant proceeds to a token. The seam invocation count proves the
+    /// two enforcement branches are disjoint — the credentials are validated exactly ONCE, never a
+    /// second time by the declared-method requirement.
+    /// </summary>
+    [TestMethod]
+    public async Task DeclaredConfidentialClientWithValidCredentialsIsIssuedTokenWithoutDoubleValidation()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
+        DeclareTokenEndpointAuthMethod(app, material, ClientAuthenticationMethod.ClientSecretPost);
+        WireAcceptingValidator(app);
+
+        int validationCallCount = 0;
+        app.Server.OAuth().ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+        {
+            validationCallCount++;
+
+            return ValueTask.FromResult(
+                fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+        };
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
+        {
+            Assertion = "eyJhbGciOiJFUzI1NiJ9.opaque-assertion-blob.signature"
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+        Assert.AreEqual(1, validationCallCount,
+            "The presented credentials must be validated exactly once — the declared-method requirement (CIMD-049) must not re-run the §3.1 validate-if-present check.");
+
+        using JsonDocument doc = JsonDocument.Parse(body);
+        string accessToken = doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+
+        //RFC 7523 §3 rule 2.A: the issued token's subject is the assertion's subject.
+        using JsonDocument payload = DecodePayload(accessToken);
+        Assert.AreEqual(AssertionSubject, payload.RootElement.GetProperty("sub").GetString());
+    }
+
+
+    /// <summary>
+    /// The declared PUBLIC-client shape: a registration whose <c>token_endpoint_auth_method</c> is
+    /// explicitly <c>none</c> keeps the RFC 7523 §2.1/§3.1 anonymous path open — a credential-less
+    /// request with an accepted assertion is issued a token, with no client-authentication seam wired
+    /// at all. Together with <see cref="AnonymousRequestWithoutClientCredentialsIssuesToken"/> (the
+    /// UNDECLARED shape) this pins that only a non-<c>none</c> declaration closes the anonymous path
+    /// (CIMD-049 gates on confidential declarations, nothing else).
+    /// </summary>
+    [TestMethod]
+    public async Task DeclaredNoneClientWithoutCredentialsIssuesToken()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = RegisterJwtBearerClient(app);
+        DeclareTokenEndpointAuthMethod(app, material, ClientAuthenticationMethod.None);
+
+        //No WireClientAuthentication — a declared-none public client must not require the seam.
+        WireAcceptingValidator(app);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
+        {
+            Assertion = "eyJhbGciOiJFUzI1NiJ9.opaque-assertion-blob.signature"
+        }).WithClientSecretPost(ClientId, ReadOnlySpan<byte>.Empty);
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+
+        using JsonDocument doc = JsonDocument.Parse(body);
+        string accessToken = doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+
+        //RFC 7523 §3 rule 2.A: the issued token's subject is the assertion's subject.
+        using JsonDocument payload = DecodePayload(accessToken);
+        Assert.AreEqual(AssertionSubject, payload.RootElement.GetProperty("sub").GetString());
+    }
+
+
+    /// <summary>
     /// A real, stub-free negative end-to-end: a genuine AS-issued assertion is TAMPERED (its signature
     /// segment is corrupted) and presented. The wired validator runs the project's real
     /// <see cref="JwsAccessTokenValidator"/>, whose P-256 signature check (RFC 7523 §3 rule 9) rejects
@@ -598,9 +774,10 @@ internal sealed class JwtBearerGrantTests
             await BuildJwksKeyResolverAsync(http, host.HttpBaseAddress!, segment).ConfigureAwait(false);
 
         //Mint a REAL signed JWT (client_credentials) to serve as the assertion — same as the positive
-        //end-to-end. iss == asIssuer; openid scope embeds aud == ResourceServerAudience.
+        //end-to-end. iss == asIssuer; MachineScope embeds aud == ResourceServerAudience (contract
+        //wave-4 D4 narrows openid away from every client_credentials grant).
         string realAssertion = await ObtainClientCredentialsAccessTokenAsync(
-            http, tokenUrl, ClientId, ClientSecret, WellKnownScopes.OpenId).ConfigureAwait(false);
+            http, tokenUrl, ClientId, ClientSecret, MachineScope).ConfigureAwait(false);
 
         //Wire the REAL assertion validator — it runs JwsAccessTokenValidator (signature §3 rule 9, iss
         //§3 rule 1, timing §3 rules 4–5, and aud == this AS §3 rule 3). A forgery or expired window
@@ -874,14 +1051,14 @@ internal sealed class JwtBearerGrantTests
     {
         await using TestHostShell app = new(TimeProvider);
 
-        //Register a client allowed every grant EXCEPT jwt-bearer — the capability that materializes the
-        //grant. The seam is wired so the only reason a token could not issue is the missing capability.
+        //Register a client allowed the client_credentials grant capability (plus discovery/jwks, neither
+        //a grant capability) but NOT jwt-bearer — the capability that materializes the grant. The seam
+        //is wired so the only reason a token could not issue is the missing capability.
         using VerifierKeyMaterial material = app.RegisterDpopClient(
             ClientId,
             new Uri(ClientId),
             profile: PolicyProfile.Rfc6749WithPkce,
             capabilities: ImmutableHashSet.Create(
-                WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthClientCredentials,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
                 WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
@@ -907,24 +1084,120 @@ internal sealed class JwtBearerGrantTests
 
 
     /// <summary>
-    /// Registers the confidential client allowed the
-    /// <see cref="WellKnownCapabilityIdentifiers.OAuthJwtBearer"/> capability. The registration also
-    /// carries OAuthAuthorizationCode and OAuthClientCredentials: the shipped RFC 9068 access-token
-    /// producer is gated on those capabilities (and the end-to-end test obtains a real assertion via
-    /// the client_credentials grant), and the RegisterDpopClient helper supplies the AccessTokenIssuance
-    /// signing keys the producers resolve. The discovery/jwks capabilities round out the standard surface.
+    /// Registers a truly grant-only confidential client — no
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthAuthorizationCode"/> — allowed
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthJwtBearer"/> plus
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthClientCredentials"/> (the end-to-end test
+    /// obtains a real assertion via the client_credentials grant). Grant-only jwt-bearer issuance
+    /// works because <see cref="Rfc9068AccessTokenProducer"/>'s <c>RequiredCapability</c> is
+    /// <see langword="null"/> — an optional tenant-feature gate, not a grant-capability proxy
+    /// (contract wave-4 D2) — so the endpoint-match capability alone is sufficient. RegisterDpopClient
+    /// supplies the AccessTokenIssuance signing keys the producers resolve; the discovery/jwks
+    /// capabilities round out the standard surface. <see cref="MachineScope"/> is added to
+    /// <c>AllowedScopes</c> and mapped onto <see cref="ResourceServerAudience"/> in
+    /// <c>ScopeToAudience</c> (the register-then-upgrade pattern — the routing dictionaries are
+    /// host-internal) so <see cref="ObtainClientCredentialsAccessTokenAsync"/> can mint a correctly
+    /// audienced real assertion without requesting <c>openid</c> — contract wave-4 D4 narrows
+    /// <c>openid</c> away from every <c>client_credentials</c> grant, so such a grant cannot carry the
+    /// audience mapping the end-to-end tests rely on.
     /// </summary>
-    private static VerifierKeyMaterial RegisterJwtBearerClient(TestHostShell app) =>
-        app.RegisterDpopClient(
+    private static VerifierKeyMaterial RegisterJwtBearerClient(TestHostShell app)
+    {
+        VerifierKeyMaterial material = app.RegisterDpopClient(
             ClientId,
             new Uri(ClientId),
             profile: PolicyProfile.Rfc6749WithPkce,
             capabilities: ImmutableHashSet.Create(
-                WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthClientCredentials,
                 WellKnownCapabilityIdentifiers.OAuthJwtBearer,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
                 WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+
+        HostedAuthorizationServer host = app.Host("default");
+        string segment = material.Registration.TenantId.Value;
+        ClientRecord previous = host.Registrations[segment];
+        Dictionary<string, IReadOnlyList<string>> scopeToAudience = previous.ScopeToAudience is null
+            ? new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+            : new Dictionary<string, IReadOnlyList<string>>(previous.ScopeToAudience, StringComparer.Ordinal);
+        scopeToAudience[MachineScope] = [ResourceServerAudience];
+
+        ClientRecord updated = previous with
+        {
+            AllowedScopes = previous.AllowedScopes.Add(MachineScope),
+            ScopeToAudience = scopeToAudience
+        };
+        host.Registrations[segment] = updated;
+        host.Registrations[updated.ClientId] = updated;
+        host.Server.UpdateClient(previous, updated, new ExchangeContext());
+        material.Registration = updated;
+
+        return material;
+    }
+
+
+    /// <summary>
+    /// Contract wave-4 D3/D4: on a tenant granted the
+    /// <see cref="WellKnownCapabilityIdentifiers.OidcOpenIdConnect"/> feature — ruling out D2's
+    /// capability gate as the explanation — a jwt-bearer grant whose seam legitimately grants
+    /// <c>openid</c> (the app opting in per the source-layer contract: <c>jwt_bearer</c> honors the
+    /// app-granted scope, unlike <c>client_credentials</c>) still never yields an id_token.
+    /// <see cref="Oidc10IdTokenProducer"/>'s <c>IsApplicable</c> independently requires
+    /// <c>GrantType ∈ {authorization_code, refresh_token}</c> — this test proves that gate holds even
+    /// when <c>openid</c> survives all the way to the issued access token's <c>scope</c> claim,
+    /// which is the non-vacuous case (nothing upstream removed <c>openid</c> here).
+    /// </summary>
+    [TestMethod]
+    public async Task NoIdTokenIsMintedForJwtBearerEvenWithOpenidGrantedAndOidcFeatureEnabled()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = app.RegisterDpopClient(
+            ClientId,
+            new Uri(ClientId),
+            profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: ImmutableHashSet.Create(
+                WellKnownCapabilityIdentifiers.OAuthJwtBearer,
+                WellKnownCapabilityIdentifiers.OidcOpenIdConnect,
+                WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+        WireClientAuthentication(app);
+
+        //The seam grants openid — an app opting in to vouch that the exchanged subject is an
+        //End-User (contract wave-4 D4: jwt_bearer honors whatever scope the app's authorization
+        //seam decides, unlike client_credentials' source-layer narrowing).
+        app.Server.OAuth().ValidateJwtBearerAssertionAsync =
+            static (assertion, requestedScope, registration, context, ct) =>
+                ValueTask.FromResult<JwtBearerGrant?>(
+                    new JwtBearerGrant { Subject = AssertionSubject, Scope = WellKnownScopes.OpenId });
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
+        {
+            Assertion = "eyJhbGciOiJFUzI1NiJ9.opaque-assertion-blob.signature",
+            Scope = WellKnownScopes.OpenId
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+
+        using JsonDocument doc = JsonDocument.Parse(body);
+        Assert.AreEqual(WellKnownScopes.OpenId, doc.RootElement.GetProperty(OAuthRequestParameterNames.Scope).GetString(),
+            "Sanity: openid must have actually reached the response scope — otherwise the id_token's "
+            + "absence would be trivially explained by scope, not by the grant-type gate under test.");
+        Assert.IsFalse(doc.RootElement.TryGetProperty(WellKnownTokenTypes.IdToken, out _),
+            "jwt_bearer must never carry an id_token even when openid survived to the granted scope "
+            + "on a tenant with the OidcOpenIdConnect feature granted.");
+
+        string accessToken = doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+        using JsonDocument payload = DecodePayload(accessToken);
+        Assert.AreEqual(WellKnownScopes.OpenId, payload.RootElement.GetProperty(OAuthRequestParameterNames.Scope).GetString(),
+            "The issued access token's own scope claim must also carry openid unchanged.");
+    }
 
 
     /// <summary>
@@ -950,6 +1223,34 @@ internal sealed class JwtBearerGrantTests
             static (assertion, requestedScope, registration, context, ct) =>
                 ValueTask.FromResult<JwtBearerGrant?>(
                     new JwtBearerGrant { Subject = AssertionSubject, Scope = GrantedScope });
+
+
+    /// <summary>
+    /// Re-registers <paramref name="material"/>'s client with
+    /// <see cref="ClientRecord.TokenEndpointAuthMethod"/> set to <paramref name="method"/> — the
+    /// declared-client shape draft-ietf-oauth-client-id-metadata-document-02 §8.2 (CIMD-049) gates on.
+    /// Uses the same register-then-upgrade pattern as
+    /// <see cref="TestHostShell.SetAccessTokenLifetime"/>, because the routing dictionaries are
+    /// host-internal.
+    /// </summary>
+    private static void DeclareTokenEndpointAuthMethod(
+        TestHostShell app, VerifierKeyMaterial material, ClientAuthenticationMethod method)
+    {
+        HostedAuthorizationServer host = app.Host("default");
+        string segment = material.Registration.TenantId.Value;
+        ClientRecord previous = host.Registrations[segment];
+        ClientRecord updated = previous with
+        {
+            TokenEndpointAuthMethod = method
+        };
+
+        host.Registrations[segment] = updated;
+        host.Registrations[updated.ClientId] = updated;
+
+        host.Server.UpdateClient(previous, updated, new ExchangeContext());
+
+        material.Registration = updated;
+    }
 
 
     /// <summary>

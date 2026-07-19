@@ -16,12 +16,24 @@ namespace Verifiable.OAuth;
 /// </summary>
 /// <remarks>
 /// <para>
-/// On an <see cref="IdTokenTarget"/> the <c>acr</c> and <c>amr</c> claims come
-/// exclusively from <see cref="OidcClaims.AuthContext"/>; the <c>auth_time</c>
-/// claim has the documented fallback chain —
-/// <see cref="AuthenticationContext.AuthTime"/> when populated, otherwise
-/// <see cref="IssuanceContext.AuthTime"/> (the instant the End-User authenticated
-/// as observed by the AS).
+/// On an <see cref="IdTokenTarget"/> whose <see cref="IssuanceContext.GrantType"/> is
+/// <em>not</em> <c>refresh_token</c> — the original-authentication ID Token — the
+/// <c>acr</c> and <c>amr</c> claims come exclusively from
+/// <see cref="OidcClaims.AuthContext"/>, and <c>auth_time</c> follows the documented
+/// fallback chain: <see cref="AuthenticationContext.AuthTime"/> when populated,
+/// otherwise <see cref="IssuanceContext.AuthTime"/> (the instant the End-User
+/// authenticated as observed by the AS).
+/// </para>
+/// <para>
+/// On an <see cref="IdTokenTarget"/> whose <see cref="IssuanceContext.GrantType"/>
+/// <em>is</em> <c>refresh_token</c>, a refresh is not a new authentication event, so
+/// the resolver's <see cref="AuthenticationContext"/> is not consulted for the
+/// authentication-context claims: <c>auth_time</c> and <c>acr</c> are pinned to the
+/// carried-forward original values (<see cref="IssuanceContext.AuthTime"/> and
+/// <see cref="IssuanceContext.Acr"/>), and <c>amr</c> is suppressed because it names
+/// the methods used at authentication — which did not occur on this request — and the
+/// original <c>amr</c> is not carried forward on the refresh state. This is required by
+/// <see href="https://openid.net/specs/openid-connect-core-1_0.html#RefreshTokenResponse">OIDC Core §12.2</see>.
 /// </para>
 /// <para>
 /// On an <see cref="AccessTokenTarget"/> the claims come from the threaded
@@ -64,9 +76,9 @@ public static class AcrAmrClaimContributor
         AuthenticationContext? authContext = await ResolveAuthContextAsync(
             idt, cancellationToken).ConfigureAwait(false);
 
-        DateTimeOffset? authTime = authContext?.AuthTime ?? idt.Issuance.AuthTime;
-        string? acr = authContext?.Acr;
-        bool hasAmr = authContext?.Amr is { Count: > 0 };
+        (DateTimeOffset? authTime, string? acr, IReadOnlyList<string>? amr) =
+            ResolveAuthContextClaims(idt, authContext);
+        bool hasAmr = amr is { Count: > 0 };
 
         List<Claim> claims = [];
 
@@ -95,7 +107,7 @@ public static class AcrAmrClaimContributor
             claims.Add(Success(
                 WellKnownClaimIds.OidcAuthClass,
                 WellKnownJwtClaimNames.Amr,
-                authContext!.Amr!));
+                amr!));
         }
 
         if(acr is null && !hasAmr)
@@ -146,6 +158,23 @@ public static class AcrAmrClaimContributor
 
         return claims;
     }
+
+
+    /// <summary>
+    /// Resolves the <c>auth_time</c>/<c>acr</c>/<c>amr</c> values for an
+    /// <see cref="IdTokenTarget"/>: the resolver's <paramref name="authContext"/> for an
+    /// original-authentication ID Token, or the carried-forward original values pinned
+    /// per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#RefreshTokenResponse">OIDC Core §12.2</see>
+    /// when <see cref="IssuanceContext.GrantType"/> is <c>refresh_token</c> — with
+    /// <c>amr</c> suppressed, since the refresh state carries no original <c>amr</c>.
+    /// </summary>
+    private static (DateTimeOffset? AuthTime, string? Acr, IReadOnlyList<string>? Amr) ResolveAuthContextClaims(
+        IdTokenTarget idt,
+        AuthenticationContext? authContext) =>
+        WellKnownGrantTypes.IsRefreshToken(idt.Issuance.GrantType)
+            ? (idt.Issuance.AuthTime, idt.Issuance.Acr, null)
+            : (authContext?.AuthTime ?? idt.Issuance.AuthTime, authContext?.Acr, authContext?.Amr);
 
 
     /// <summary>

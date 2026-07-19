@@ -222,6 +222,17 @@ public static class WellKnownCapabilityIdentifiers
     public static CapabilityIdentifier OAuthDirectAuthorization { get; } =
         CapabilityIdentifier.Create("urn:verifiable:capability:oauth:direct_authorization");
 
+    /// <summary>
+    /// Client ID Metadata Documents (CIMD) per
+    /// <see href="https://datatracker.ietf.org/doc/draft-ietf-oauth-client-id-metadata-document/">draft-ietf-oauth-client-id-metadata-document-02</see> —
+    /// the authorization server resolves a client's registration data from a
+    /// <c>https://</c> URL used directly as the <c>client_id</c>, instead of from a
+    /// pre-registered record. Gates both the materialization dispatch hook and the
+    /// <c>client_id_metadata_document_supported</c> discovery advertisement (§6).
+    /// </summary>
+    public static CapabilityIdentifier OAuthClientIdMetadataDocument { get; } =
+        CapabilityIdentifier.Create("urn:verifiable:capability:oauth:client-id-metadata-document");
+
 
     //OpenID Connect.
 

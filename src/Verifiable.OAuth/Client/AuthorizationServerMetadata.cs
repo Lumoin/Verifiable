@@ -149,4 +149,14 @@ public sealed record AuthorizationServerMetadata
     /// <c>require_signed_request_object</c> per RFC 9101 §10.6.
     /// </summary>
     public bool RequireSignedRequestObject { get; init; }
+
+    /// <summary>
+    /// Whether the AS supports retrieving client metadata from a <c>client_id</c> URL;
+    /// advertised as <c>client_id_metadata_document_supported</c> per
+    /// draft-ietf-oauth-client-id-metadata-document-02 §6. A client uses this to avoid
+    /// redirecting the user to an AS that cannot resolve its Client ID Metadata Document.
+    /// An omitted member leaves this <see langword="false"/>, matching §6's OPTIONAL
+    /// boolean's unstated default.
+    /// </summary>
+    public bool ClientIdMetadataDocumentSupported { get; init; }
 }

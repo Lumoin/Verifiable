@@ -42,6 +42,20 @@ internal static class GuardedHttpClientTransport
     /// <summary>The transport-metadata key carrying the policy deny reason.</summary>
     public const string DenyReasonMetadataKey = "outboundFetchDenyReason";
 
+    /// <summary>
+    /// The W3C Trace Context response header whose value is copied into
+    /// <see cref="HttpResponseData.TransportMetadata"/> under
+    /// <see cref="HttpResponseDataKeys.TraceParent"/>.
+    /// </summary>
+    private const string TraceParentHeaderName = "traceparent";
+
+    /// <summary>
+    /// The W3C Trace Context response header whose value is copied into
+    /// <see cref="HttpResponseData.TransportMetadata"/> under
+    /// <see cref="HttpResponseDataKeys.TraceState"/>.
+    /// </summary>
+    private const string TraceStateHeaderName = "tracestate";
+
 
     /// <summary>
     /// Builds a <see cref="SendFormPostDelegate"/> that routes the POST through
@@ -114,10 +128,33 @@ internal static class GuardedHttpClientTransport
                 headerBuilder[header.Key] = header.Value;
             }
 
+            //W3C Trace Context response headers are lifted into TransportMetadata under
+            //the documented HttpResponseDataKeys constants so that
+            //OAuthParseError.WithTransportMetadata can surface the server's trace
+            //identity as the DecisionSupport correlation id — the same mapping the
+            //plain OAuth.HttpClientTransport performs. A server sends these headers
+            //only when its deployment chooses to echo trace context on responses;
+            //when absent, TransportMetadata stays null.
+            Dictionary<string, string>? transportMetadata = null;
+            if(headerBuilder.TryGetValue(TraceParentHeaderName, out string? traceParent))
+            {
+                transportMetadata = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [HttpResponseDataKeys.TraceParent] = traceParent
+                };
+            }
+
+            if(headerBuilder.TryGetValue(TraceStateHeaderName, out string? traceState))
+            {
+                transportMetadata ??= new Dictionary<string, string>(StringComparer.Ordinal);
+                transportMetadata[HttpResponseDataKeys.TraceState] = traceState;
+            }
+
             return new HttpResponseData
             {
                 Body = Encoding.UTF8.GetString(response.Body.Span),
                 StatusCode = response.StatusCode,
+                TransportMetadata = transportMetadata,
                 Headers = new ResponseHeaders { Values = headerBuilder.ToImmutable() }
             };
         };

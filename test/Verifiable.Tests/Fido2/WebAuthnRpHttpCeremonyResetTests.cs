@@ -70,7 +70,7 @@ internal sealed class WebAuthnRpHttpCeremonyResetTests
             RpId, Origin, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xF6), "wavereset-user", "Wavereset User", pool,
             residentKey: ResidentKeyRequirement.Required);
         await using MinimalHttpHost host = await MinimalHttpHost.StartAsync(skin.HandleAsync, cancellationToken).ConfigureAwait(false);
-        using HttpClient httpClient = new() { BaseAddress = host.BaseAddress };
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(host.Certificate, host.BaseAddress);
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("webauthn-rp-http-reset-authenticator");
         using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);

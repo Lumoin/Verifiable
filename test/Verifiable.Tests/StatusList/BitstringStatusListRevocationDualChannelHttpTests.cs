@@ -146,8 +146,8 @@ internal sealed class BitstringStatusListRevocationDualChannelHttpTests
 
         await using MinimalHttpHost ssfReceiver = await MinimalHttpHost.StartAsync(ReceiverPushHandler, ct).ConfigureAwait(false);
 
-        using HttpClient verifierClient = new();
-        using HttpClient transmitterClient = new();
+        using HttpClient verifierClient = LoopbackTls.CreatePinnedHttpClient(statusListHost.Certificate);
+        using HttpClient transmitterClient = LoopbackTls.CreatePinnedHttpClient(ssfReceiver.Certificate);
 
         async Task<BitstringStatusListStatus> CheckStatusAsync(int index, CancellationToken token)
         {

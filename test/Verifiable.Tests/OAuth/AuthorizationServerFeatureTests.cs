@@ -2582,7 +2582,8 @@ internal sealed class AuthorizationServerFeatureTests
 
 
     //Builds the IssuanceContext the resolver consumes. Subject and ClientId are
-    //placeholder; only Scope is varied per test.
+    //placeholder; only Scope is varied per test. GrantType is fixed at
+    //authorization_code — audience resolution does not vary by grant.
     private static IssuanceContext MakeIssuanceContext(
         ClientRecord registration, string scope) =>
         new()
@@ -2593,6 +2594,7 @@ internal sealed class AuthorizationServerFeatureTests
             Subject = "alice",
             Scope = scope,
             ClientId = registration.ClientId,
+            GrantType = WellKnownGrantTypes.AuthorizationCode,
             IssuedAt = DateTimeOffset.UnixEpoch
         };
 }

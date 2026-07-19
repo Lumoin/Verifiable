@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
+using System.Net.Http;
 using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Core.Model.Did;
@@ -8,6 +9,10 @@ using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
+using Verifiable.OAuth.AuthCode;
+using Verifiable.OAuth.AuthCode.States;
+using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -89,6 +94,60 @@ internal sealed class ResolveIssuerDelegateTests
     }
 
 
+    //R9207-002 — RFC 9207 §2: "Its value MUST be a URL that uses the https scheme
+    //without any query or fragment components." IssuerIdentifierValidation is the
+    //pure shape check; DefaultIssuerResolver wires it in below so every default-path
+    //consumer (discovery issuer, Authorize-redirect iss) enforces it.
+
+    [TestMethod]
+    public void IssuerIdentifierValidationRejectsHttpsWithQuery()
+    {
+        Assert.IsFalse(IssuerIdentifierValidation.IsValidIssuerShape(new Uri("https://as.example.com?tenant=a")),
+            "An issuer identifier with a query component must be rejected per RFC 9207 §2.");
+    }
+
+
+    [TestMethod]
+    public void IssuerIdentifierValidationRejectsFragment()
+    {
+        Assert.IsFalse(IssuerIdentifierValidation.IsValidIssuerShape(new Uri("https://as.example.com/tenant#frag")),
+            "An issuer identifier with a fragment component must be rejected per RFC 9207 §2.");
+    }
+
+
+    [TestMethod]
+    public void IssuerIdentifierValidationRejectsHttp()
+    {
+        Assert.IsFalse(IssuerIdentifierValidation.IsValidIssuerShape(new Uri("http://as.example.com")),
+            "An issuer identifier that does not use the https scheme must be rejected per RFC 9207 §2.");
+    }
+
+
+    [TestMethod]
+    public void IssuerIdentifierValidationAcceptsCleanHttps()
+    {
+        Assert.IsTrue(IssuerIdentifierValidation.IsValidIssuerShape(new Uri("https://as.example.com/tenant-a")),
+            "A clean https URL with no query or fragment must be accepted.");
+    }
+
+
+    [TestMethod]
+    public async Task DefaultIssuerResolverThrowsWhenRegistrationIssuerHasQueryComponent()
+    {
+        ClientRecord registration = BuildRegistration(issuerUri: new Uri("https://as.example.com?tenant=a"));
+        ExchangeContext context = new();
+
+        InvalidOperationException thrown = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+            async () => await DefaultIssuerResolver.ResolveAsync(
+                registration, context, TestContext.CancellationToken).ConfigureAwait(false))
+            .ConfigureAwait(false);
+
+        Assert.Contains("RFC 9207", thrown.Message,
+            "A shape-invalid configured issuer must fail with an RFC 9207-attributed message, " +
+            "distinct from the not-configured case.");
+    }
+
+
     [TestMethod]
     public async Task ApplicationResolverOverridesDefault()
     {
@@ -107,6 +166,184 @@ internal sealed class ResolveIssuerDelegateTests
         Assert.AreEqual(overrideUri, resolved,
             "An application-supplied resolver must replace the default entirely, " +
             "even when the registration declares a different IssuerUri.");
+    }
+
+
+    //R9207-004 — RFC 9207 §2.3: "The issuer identifier included in the server's metadata
+    //value issuer MUST be identical to the iss parameter's value." Drives a custom
+    //AuthorizationServerIntegration.ResolveIssuerAsync through both the discovery endpoint
+    //and a live Authorize redirect and asserts the two emitted issuer values agree
+    //byte-for-byte — proving the redirect builder routes through the same resolution path
+    //as discovery rather than its own independent ClientRegistration?.IssuerUri fallback.
+
+    [TestMethod]
+    public async Task CustomResolverProducesByteIdenticalIssuerOnMetadataAndRedirect()
+    {
+        FakeTimeProvider timeProvider = new(DateTimeOffset.Parse(
+            "2026-04-22T10:00:00Z", System.Globalization.CultureInfo.InvariantCulture));
+
+        await using TestHostShell app = new(timeProvider);
+        app.SeedTestSubject(subject: "subject-r9207-004");
+
+        using VerifierKeyMaterial material = app.RegisterDpopClient(
+            "client-r9207-004", new Uri("https://client.example.com"));
+
+        Uri customIssuer = new("https://custom-resolver.example.com/tenant-x");
+        app.Server.OAuth().ResolveIssuerAsync = (_, _, _) =>
+            ValueTask.FromResult<Uri?>(customIssuer);
+
+        string segment = material.Registration.TenantId.Value;
+
+        ServerHttpResponse discoveryResponse = await app.DispatchAtEndpointAsync(
+            segment, WellKnownEndpointNames.MetadataDiscovery, "GET",
+            new RequestFields(), new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, discoveryResponse.StatusCode, discoveryResponse.Body);
+
+        using JsonDocument discoveryBody = JsonDocument.Parse(discoveryResponse.Body);
+        string metadataIssuer = discoveryBody.RootElement.GetProperty("issuer").GetString()!;
+        Assert.AreEqual(customIssuer.OriginalString, metadataIssuer,
+            "The discovery issuer must equal the custom-resolved issuer.");
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        RequestFields parFields = new()
+        {
+            [OAuthRequestParameterNames.ClientId] = material.Registration.ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+            [OAuthRequestParameterNames.RedirectUri] = "https://client.example.com/callback",
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+        };
+        ServerHttpResponse parResponse = await app.DispatchAtEndpointAsync(
+            segment, WellKnownEndpointNames.AuthCodePar, "POST",
+            parFields, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
+
+        using JsonDocument parBody = JsonDocument.Parse(parResponse.Body);
+        string requestUri = parBody.RootElement.GetProperty("request_uri").GetString()!;
+
+        RequestFields authorizeFields = new()
+        {
+            [OAuthRequestParameterNames.ClientId] = material.Registration.ClientId,
+            [OAuthRequestParameterNames.RequestUri] = requestUri
+        };
+        ExchangeContext authorizeContext = new();
+        authorizeContext.SetSubjectId("subject-r9207-004");
+
+        ServerHttpResponse authorizeResponse = await app.DispatchAtEndpointAsync(
+            segment, WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
+            authorizeFields, authorizeContext, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(302, authorizeResponse.StatusCode, authorizeResponse.Body);
+
+        string location = authorizeResponse.Location!;
+        int issIndex = location.IndexOf("iss=", StringComparison.Ordinal);
+        Assert.IsGreaterThanOrEqualTo(0, issIndex, $"Redirect must carry iss. Location: {location}");
+        int ampIndex = location.IndexOf('&', issIndex);
+        string issRaw = ampIndex < 0 ? location[(issIndex + 4)..] : location[(issIndex + 4)..ampIndex];
+        string redirectIssuer = Uri.UnescapeDataString(issRaw);
+
+        Assert.AreEqual(metadataIssuer, redirectIssuer,
+            "R9207-004: the redirect iss and the discovery issuer must be byte-identical under a custom resolver.");
+    }
+
+
+    //R9207-002 — RFC 9207 §2's https-only issuer shape, proven over the real wire rather than the
+    //in-process dispatch <see cref="CustomResolverProducesByteIdenticalIssuerOnMetadataAndRedirect"/>
+    //uses: every loopback test host now serves genuine HTTPS on an ephemeral pinned certificate, so the
+    //DEFAULT resolver (no application override) already produces an issuer whose scheme, authority, and
+    //shape satisfy the library's own RFC 9207 §2 / RFC 8414 §2 gate — closing the http-align bypass this
+    //fixture used to carry.
+
+    [TestMethod]
+    public async Task DefaultResolverServesHttpsIssuerOverRealWireEndToEnd()
+    {
+        FakeTimeProvider timeProvider = new(DateTimeOffset.Parse(
+            "2026-04-22T10:00:00Z", System.Globalization.CultureInfo.InvariantCulture));
+
+        await using TestHostShell host = new(timeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            "client-r9207-002-real-wire",
+            new Uri("https://client.example.com"),
+            profile: PolicyProfile.Haip10);
+
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+            await host.CreateOAuthClientAndRegistrationAsync(
+                material.Registration,
+                "https://client.example.com/callback",
+                profile: PolicyProfile.Haip10,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+        HostedAuthorizationServer hosted = host.Host("default");
+
+        //Guards against a bypass reintroduction: the DEFAULT resolver — no application-supplied
+        //ResolveIssuerAsync — is what serves this real-wire flow.
+        Assert.IsNull(hosted.Server.OAuth().ResolveIssuerAsync,
+            "The default resolver must be in play; no application override should be wired for this host.");
+
+        string segment = material.Registration.TenantId.Value;
+        Uri discoveryUri = new(
+            hosted.HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.MetadataDiscovery, segment));
+
+        using HttpResponseMessage discoveryResponse = await hosted.SharedHttpClient!
+            .GetAsync(discoveryUri, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)discoveryResponse.StatusCode,
+            "The discovery document must be reachable over the pinned real-wire HTTPS client.");
+
+        string discoveryBody = await discoveryResponse.Content
+            .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        using JsonDocument discoveryDocument = JsonDocument.Parse(discoveryBody);
+        string metadataIssuer = discoveryDocument.RootElement.GetProperty("issuer").GetString()!;
+
+        Uri issuerUri = new(metadataIssuer);
+        Assert.AreEqual("https", issuerUri.Scheme,
+            "RFC 9207 §2: the issuer identifier must use the https scheme.");
+        Assert.AreEqual(string.Empty, issuerUri.Query,
+            "RFC 9207 §2: the issuer identifier must carry no query component.");
+        Assert.AreEqual(string.Empty, issuerUri.Fragment,
+            "RFC 9207 §2: the issuer identifier must carry no fragment component.");
+        Assert.AreEqual(hosted.HttpBaseAddress!.Authority, issuerUri.Authority,
+            "The issuer authority must equal the wire authority the discovery document was actually served from.");
+
+        AuthCodeFlowEndpointResult parResult = await client.AuthCode.StartParAsync(
+            registration,
+            new Uri("https://client.example.com/callback"),
+            OAuthFormEncodedFields.Empty,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
+            $"PAR must redirect over the real wire. ErrorCode={parResult.ErrorCode} ErrorDescription={parResult.ErrorDescription}");
+
+        string flowId = clientFlowStore.Keys.Single();
+        ParCompletedState parState = (ParCompletedState)clientFlowStore[flowId];
+
+        Uri authorizeUrl = new(
+            hosted.HttpBaseAddress!,
+            $"{TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment)}" +
+            $"?{OAuthRequestParameterNames.ClientId}={Uri.EscapeDataString(material.Registration.ClientId)}" +
+            $"&{OAuthRequestParameterNames.RequestUri}={Uri.EscapeDataString(parState.Par.RequestUri.ToString())}");
+
+        //A fresh pinned, no-redirect client for the browser leg: the same certificate the shell's
+        //SharedHttpClient pins, so the real-wire GET succeeds without trusting a CA, and with
+        //auto-redirect disabled so the 302 Location is read off the wire directly.
+        using HttpClientHandler noRedirectHandler = LoopbackTls.CreatePinnedHandler(host.ServerCertificate);
+        noRedirectHandler.AllowAutoRedirect = false;
+        using HttpClient browserClient = new(noRedirectHandler) { BaseAddress = hosted.HttpBaseAddress };
+        using HttpRequestMessage authorizeRequest = new(HttpMethod.Get, authorizeUrl);
+        authorizeRequest.Headers.Add(AuthorizationServerHttpApplication.TestSubjectHeaderName, "subject-r9207-002-real-wire");
+
+        using HttpResponseMessage authorizeResponse = await browserClient
+            .SendAsync(authorizeRequest, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(302, (int)authorizeResponse.StatusCode,
+            "The authorize endpoint must redirect with the iss parameter over the real wire.");
+
+        string location = authorizeResponse.Headers.Location!.ToString();
+        int issIndex = location.IndexOf("iss=", StringComparison.Ordinal);
+        Assert.IsGreaterThanOrEqualTo(0, issIndex, $"Redirect must carry iss. Location: {location}");
+        int ampIndex = location.IndexOf('&', issIndex);
+        string issRaw = ampIndex < 0 ? location[(issIndex + 4)..] : location[(issIndex + 4)..ampIndex];
+        string redirectIssuer = Uri.UnescapeDataString(issRaw);
+
+        Assert.AreEqual(metadataIssuer, redirectIssuer,
+            "R9207-002: the real-wire redirect iss and the real-wire discovery issuer must be byte-identical.");
     }
 
 

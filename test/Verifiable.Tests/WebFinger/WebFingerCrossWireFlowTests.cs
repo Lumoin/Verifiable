@@ -1,7 +1,5 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.DidWebs;
@@ -77,7 +75,7 @@ internal sealed class WebFingerCrossWireFlowTests
         await using WebFingerHttpApplication.Host nodeA = await WebFingerHttpApplication.Host.StartAsync(
             server, TestContext.CancellationToken).ConfigureAwait(false);
 
-        using HttpClient httpClient = CreatePinnedHttpClient(nodeA.Certificate);
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(nodeA.Certificate);
         TransportSpy spy = new(GuardedHttpClientTransport.BuildSingleHopTransport(httpClient));
         WebFingerResolveDelegate resolve = WebFingerClient.BuildResolving(spy.Delegate, WebFingerJrdJsonParsing.ParseJrd);
 
@@ -139,7 +137,7 @@ internal sealed class WebFingerCrossWireFlowTests
         await using WebFingerHttpApplication.Host nodeA = await WebFingerHttpApplication.Host.StartAsync(
             server, TestContext.CancellationToken).ConfigureAwait(false);
 
-        using HttpClient httpClient = CreatePinnedHttpClient(nodeA.Certificate);
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(nodeA.Certificate);
         OutboundTransportDelegate transport = GuardedHttpClientTransport.BuildSingleHopTransport(httpClient);
         WebFingerResolveDelegate resolve = WebFingerClient.BuildResolving(transport, WebFingerJrdJsonParsing.ParseJrd);
 
@@ -169,7 +167,7 @@ internal sealed class WebFingerCrossWireFlowTests
         await using WebFingerHttpApplication.Host nodeA = await WebFingerHttpApplication.Host.StartAsync(
             server, TestContext.CancellationToken).ConfigureAwait(false);
 
-        using HttpClient httpClient = CreatePinnedHttpClient(nodeA.Certificate);
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(nodeA.Certificate);
 
         Uri target = new(
             $"{nodeA.BaseAddress.Scheme}://{nodeA.BaseAddress.Host}:{nodeA.BaseAddress.Port}{WellKnownWebFingerValues.WellKnownPath}"
@@ -205,7 +203,7 @@ internal sealed class WebFingerCrossWireFlowTests
 
         //Pin to the TRUSTED node's certificate, then dial the IMPOSTOR node, which presents a different
         //self-signed leaf.
-        using HttpClient httpClient = CreatePinnedHttpClient(trustedNode.Certificate);
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(trustedNode.Certificate);
         OutboundTransportDelegate transport = GuardedHttpClientTransport.BuildSingleHopTransport(httpClient);
         WebFingerResolveDelegate resolve = WebFingerClient.BuildResolving(transport, WebFingerJrdJsonParsing.ParseJrd);
 
@@ -234,22 +232,6 @@ internal sealed class WebFingerCrossWireFlowTests
 
         return context;
     }
-
-
-    /// <summary>
-    /// Builds an <see cref="HttpClient"/> whose TLS validation pins to <paramref name="pinnedCertificate"/>
-    /// byte-for-byte — RFC 7033 §9.1's "verify the certificate is valid" MUST, satisfied by explicit
-    /// pinning (there is no CA in this loopback topology) rather than by disabling validation.
-    /// </summary>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "HttpClient takes ownership of the handler (default disposeHandler: true) and disposes it when the returned client is disposed via the caller's using declaration.")]
-    private static HttpClient CreatePinnedHttpClient(X509Certificate2 pinnedCertificate) =>
-        new(new HttpClientHandler
-        {
-            ServerCertificateCustomValidationCallback = (requestMessage, certificate, chain, sslPolicyErrors) =>
-                certificate is not null
-                && CryptographicOperations.FixedTimeEquals(certificate.RawData, pinnedCertificate.RawData)
-        });
 
 
     /// <summary>

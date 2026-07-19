@@ -55,10 +55,15 @@ internal sealed class TokenExchangeGrantTests
     private const string ActorClientId = "https://agent.example.com";
     private const string ActorClientSecret = "s3cret-of-the-agent";
 
-    //The openid scope maps to this resource-server identifier on every client
-    //RegisterDpopClient registers (ScopeToAudience[openid]); both the
-    //client_credentials subject token and the exchanged token carry it as aud,
-    //so the real resource-server validator has a concrete audience to match.
+    //A non-identity scope AddMachineScopeAudienceMapping maps onto ResourceServerAudience: contract
+    //wave-4 D4 narrows openid away from every client_credentials grant (client_credentials has no
+    //authenticated End-User), so the end-to-end tests mint their real subject/actor tokens under
+    //this scope instead, to still reach a concrete audience.
+    private const string MachineScope = "machine.telemetry.read";
+
+    //The resource-server identifier AddMachineScopeAudienceMapping maps MachineScope onto; both the
+    //client_credentials subject token and the exchanged token carry it as aud, so the real
+    //resource-server validator has a concrete audience to match.
     private const string ResourceServerAudience = "https://rs.example.com";
 
     public TestContext TestContext { get; set; } = null!;
@@ -673,9 +678,9 @@ internal sealed class TokenExchangeGrantTests
             await BuildJwksKeyResolverAsync(http, host.HttpBaseAddress!, segment).ConfigureAwait(false);
 
         //STEP 1 — Issue a real subject token over the wire (client_credentials, RFC 6749 §4.4).
-        //sub == ClientId (RFC 9068 §3); openid scope embeds aud == ResourceServerAudience.
+        //sub == ClientId (RFC 9068 §3); MachineScope embeds aud == ResourceServerAudience.
         string subjectToken = await ObtainClientCredentialsAccessTokenAsync(
-            http, tokenUrl, ClientId, ClientSecret, WellKnownScopes.OpenId).ConfigureAwait(false);
+            http, tokenUrl, ClientId, ClientSecret, MachineScope).ConfigureAwait(false);
 
         //Prove, before exchanging, that the subject token is itself a real, valid AS token —
         //the same check the validation seam performs below. This pins what "real" means here.
@@ -826,9 +831,9 @@ internal sealed class TokenExchangeGrantTests
 
         //STEP 1 — Mint TWO real client_credentials tokens with DISTINCT real subjects.
         string subjectToken = await ObtainClientCredentialsAccessTokenAsync(
-            http, subjectTokenUrl, ClientId, ClientSecret, WellKnownScopes.OpenId).ConfigureAwait(false);
+            http, subjectTokenUrl, ClientId, ClientSecret, MachineScope).ConfigureAwait(false);
         string actorToken = await ObtainClientCredentialsAccessTokenAsync(
-            http, actorTokenUrl, ActorClientId, ActorClientSecret, WellKnownScopes.OpenId).ConfigureAwait(false);
+            http, actorTokenUrl, ActorClientId, ActorClientSecret, MachineScope).ConfigureAwait(false);
 
         //Pin "real": both tokens verify against their own AS and carry their own distinct subject.
         JwsAccessTokenValidationResult subjectCheck = await VerifyAgainstAsAsync(subjectToken, subjectIssuer, subjectJwks).ConfigureAwait(false);
@@ -1224,7 +1229,7 @@ internal sealed class TokenExchangeGrantTests
         //Mint a real subject token (client_credentials, RFC 6749 §4.4) — sub == ClientId, P-256-signed
         //by the AS. It is, before tampering, a genuinely valid AS-issued token.
         string subjectToken = await ObtainClientCredentialsAccessTokenAsync(
-            http, tokenUrl, ClientId, ClientSecret, WellKnownScopes.OpenId).ConfigureAwait(false);
+            http, tokenUrl, ClientId, ClientSecret, MachineScope).ConfigureAwait(false);
 
         //The compact JWS splits into header.payload.signature. Both tamper cases below leave the
         //header and payload intact and corrupt only the signature segment, deterministically — never
@@ -1430,8 +1435,8 @@ internal sealed class TokenExchangeGrantTests
 
 
     /// <summary>
-    /// Grant-type disjointness. A client allowed the OTHER grant capabilities
-    /// (authorization_code, client_credentials) but NOT
+    /// Grant-type disjointness. A client allowed the OTHER grant capability
+    /// (client_credentials) but NOT
     /// <see cref="WellKnownCapabilityIdentifiers.OAuthTokenExchange"/> — with all three
     /// token-exchange seams wired — does not have its well-formed <c>token-exchange</c> request served
     /// as a successful exchange. The grant materializes only on its own capability; it never falls
@@ -1442,13 +1447,12 @@ internal sealed class TokenExchangeGrantTests
     {
         await using TestHostShell app = new(TimeProvider);
 
-        //Register a client allowed the other grants' capabilities but NOT OAuthTokenExchange.
+        //Register a client allowed the other grant's capability (client_credentials) but NOT OAuthTokenExchange.
         using VerifierKeyMaterial material = app.RegisterDpopClient(
             ClientId,
             new Uri(ClientId),
             profile: PolicyProfile.Rfc6749WithPkce,
             capabilities: ImmutableHashSet.Create(
-                WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthClientCredentials,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
                 WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
@@ -1476,24 +1480,216 @@ internal sealed class TokenExchangeGrantTests
 
 
     /// <summary>
-    /// Registers the confidential client allowed the
-    /// <see cref="WellKnownCapabilityIdentifiers.OAuthTokenExchange"/> capability.
-    /// The registration also carries OAuthAuthorizationCode and OAuthClientCredentials:
-    /// the shipped RFC 9068 access-token producer is gated on those capabilities, and the
-    /// RegisterDpopClient helper supplies the AccessTokenIssuance signing keys the
-    /// producers resolve. The discovery/jwks capabilities round out the standard surface.
+    /// Contract wave-4 D3/D4: on a tenant granted the
+    /// <see cref="WellKnownCapabilityIdentifiers.OidcOpenIdConnect"/> feature — ruling out D2's
+    /// capability gate as the explanation — a token-exchange grant whose authorization seam
+    /// legitimately grants <c>openid</c> (the app opting in, per the source-layer contract:
+    /// <c>token_exchange</c> honors the app-granted scope, unlike <c>client_credentials</c>) still
+    /// never yields an id_token. <see cref="Oidc10IdTokenProducer"/>'s <c>IsApplicable</c>
+    /// independently requires <c>GrantType ∈ {authorization_code, refresh_token}</c> — this test
+    /// proves that gate holds even when <c>openid</c> survives all the way to the issued access
+    /// token's <c>scope</c> claim, which is the non-vacuous case (nothing upstream removed
+    /// <c>openid</c> here).
     /// </summary>
-    private static VerifierKeyMaterial RegisterTokenExchangeClient(TestHostShell app) =>
-        app.RegisterDpopClient(
+    [TestMethod]
+    public async Task NoIdTokenIsMintedForTokenExchangeEvenWithOpenidGrantedAndOidcFeatureEnabled()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = app.RegisterDpopClient(
             ClientId,
             new Uri(ClientId),
             profile: PolicyProfile.Rfc6749WithPkce,
             capabilities: ImmutableHashSet.Create(
+                WellKnownCapabilityIdentifiers.OAuthTokenExchange,
+                WellKnownCapabilityIdentifiers.OidcOpenIdConnect,
+                WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+        WireClientAuthentication(app);
+
+        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
+            static (token, tokenType, registration, context, ct) =>
+                ValueTask.FromResult<ValidatedSecurityToken?>(
+                    new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
+
+        //The policy seam grants openid — an app opting in to vouch that the exchanged subject is an
+        //End-User (contract wave-4 D4: token_exchange honors whatever scope the app's authorization
+        //seam decides, unlike client_credentials' source-layer narrowing).
+        app.Server.OAuth().AuthorizeTokenExchangeAsync =
+            static (subject, actor, request, registration, context, ct) =>
+                ValueTask.FromResult<TokenExchangeAuthorization?>(
+                    new TokenExchangeAuthorization
+                    {
+                        Subject = subject.Subject,
+                        Scope = WellKnownScopes.OpenId,
+                        IssuedTokenType = TokenType.AccessToken
+                    });
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
+        {
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+
+        using JsonDocument doc = JsonDocument.Parse(body);
+        Assert.AreEqual(WellKnownScopes.OpenId, doc.RootElement.GetProperty(OAuthRequestParameterNames.Scope).GetString(),
+            "Sanity: openid must have actually reached the response scope — otherwise the id_token's "
+            + "absence would be trivially explained by scope, not by the grant-type gate under test.");
+        Assert.IsFalse(doc.RootElement.TryGetProperty(WellKnownTokenTypes.IdToken, out _),
+            "token_exchange must never carry an id_token even when openid survived to the granted "
+            + "scope on a tenant with the OidcOpenIdConnect feature granted.");
+
+        string accessToken = doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+        using JsonDocument payload = DecodePayload(accessToken);
+        Assert.AreEqual(WellKnownScopes.OpenId, payload.RootElement.GetProperty(OAuthRequestParameterNames.Scope).GetString(),
+            "The issued access token's own scope claim must also carry openid unchanged.");
+    }
+
+
+    /// <summary>
+    /// Contract wave-4 D3/D4 refresh-ladder: a refresh token minted by a token-exchange grant
+    /// (draft-ietf-oauth-identity-assertion-authz-grant-04 §4.5's SAML-to-OAuth transition shape —
+    /// the authorization seam sets <see cref="TokenExchangeAuthorization.IssuedTokenType"/> to
+    /// <see cref="TokenType.RefreshToken"/>) never yields an id_token on redemption via
+    /// <c>grant_type=refresh_token</c>, even on a tenant granted
+    /// <see cref="WellKnownCapabilityIdentifiers.OidcOpenIdConnect"/> — ruling out D2's capability
+    /// gate as the explanation — and even though <c>openid</c> genuinely rode both the exchange
+    /// response and the redeemed access token's own <c>scope</c> claim. <see cref="Oidc10IdTokenProducer"/>'s
+    /// <c>IsApplicable</c> reads <see cref="IssuanceContext.RefreshTokenOriginatingGrantType"/> — carried
+    /// verbatim off <see cref="Verifiable.OAuth.AuthCode.Server.States.ServerRefreshTokenIssuedState.OriginatingGrantType"/>
+    /// — which is <c>token_exchange</c> here, not <c>authorization_code</c>, so the absence proves the
+    /// origin-grant gate rather than a scope that never reached the refreshed token.
+    /// </summary>
+    [TestMethod]
+    public async Task RefreshTokenMintedByTokenExchangeNeverYieldsIdTokenOnRedemption()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = app.RegisterDpopClient(
+            ClientId,
+            new Uri(ClientId),
+            profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: ImmutableHashSet.Create(
+                WellKnownCapabilityIdentifiers.OAuthTokenExchange,
+
+                //The refresh_token grant's own endpoint match requires this capability
+                //(AuthCodeEndpoints.BuildRefreshToken), independent of the D2 tenant-feature gate under
+                //test here — without it the redemption leg below would 404 before ever reaching the
+                //id_token producer walk.
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+                WellKnownCapabilityIdentifiers.OidcOpenIdConnect,
+                WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+        WireClientAuthentication(app);
+
+        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
+            static (token, tokenType, registration, context, ct) =>
+                ValueTask.FromResult<ValidatedSecurityToken?>(
+                    new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
+
+        //The app opts the exchanged subject into a refresh-token issuance carrying openid — the §4.5
+        //SAML-to-OAuth transition shape, where the mint runs through BuildRefreshTokenExchangeResponseAsync
+        //and stamps OriginatingGrantType = token_exchange on the stored refresh state.
+        app.Server.OAuth().AuthorizeTokenExchangeAsync =
+            static (subject, actor, request, registration, context, ct) =>
+                ValueTask.FromResult<TokenExchangeAuthorization?>(
+                    new TokenExchangeAuthorization
+                    {
+                        Subject = subject.Subject,
+                        Scope = WellKnownScopes.OpenId,
+                        IssuedTokenType = TokenType.RefreshToken
+                    });
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields exchangeForm = BuildRequest(new TokenExchangeBuilderOptions
+        {
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage exchangeResponse = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, exchangeForm, TestContext.CancellationToken).ConfigureAwait(false);
+
+        string exchangeBody = await exchangeResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)exchangeResponse.StatusCode, exchangeBody);
+
+        using JsonDocument exchangeDoc = JsonDocument.Parse(exchangeBody);
+        Assert.AreEqual(
+            TokenTypeNames.GetName(TokenType.RefreshToken),
+            exchangeDoc.RootElement.GetProperty(OAuthRequestParameterNames.IssuedTokenType).GetString(),
+            "Sanity: the exchange must have actually minted a refresh token (§4.5), not an access token.");
+        Assert.AreEqual(WellKnownScopes.OpenId, exchangeDoc.RootElement.GetProperty(OAuthRequestParameterNames.Scope).GetString(),
+            "Sanity: openid must have actually reached the token-exchange response scope.");
+        string refreshToken = exchangeDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+
+        //Redeem the token-exchange-minted refresh token through the ordinary grant_type=refresh_token
+        //leg — the same endpoint an authorization_code-originated refresh token redeems through.
+        using HttpResponseMessage refreshResponse = await OAuthTestTransport.PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.RefreshToken,
+            [OAuthRequestParameterNames.RefreshToken] = refreshToken,
+            [OAuthRequestParameterNames.ClientId] = ClientId
+        }, TestContext.CancellationToken).ConfigureAwait(false);
+
+        string refreshBody = await refreshResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)refreshResponse.StatusCode, refreshBody);
+
+        using JsonDocument refreshDoc = JsonDocument.Parse(refreshBody);
+        Assert.IsFalse(refreshDoc.RootElement.TryGetProperty(WellKnownTokenTypes.IdToken, out _),
+            "A refresh token minted by token_exchange must never yield an id_token on redemption, even "
+            + "with openid granted and OidcOpenIdConnect enabled — RefreshTokenOriginatingGrantType gates it.");
+
+        string refreshedAccessToken = refreshDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+        using JsonDocument refreshedPayload = DecodePayload(refreshedAccessToken);
+        Assert.AreEqual(WellKnownScopes.OpenId, refreshedPayload.RootElement.GetProperty(WellKnownJwtClaimNames.Scope).GetString(),
+            "openid must have ridden the refresh redemption onto the refreshed access token's own scope "
+            + "claim — proving the id_token's absence is the origin-grant gate, not a scope that never "
+            + "reached the redeemed token.");
+    }
+
+
+    /// <summary>
+    /// Registers a truly grant-only confidential client — no
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthAuthorizationCode"/> — allowed the
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthTokenExchange"/> capability plus
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthClientCredentials"/> (some end-to-end tests
+    /// obtain a real subject/actor token via the client_credentials grant). Grant-only token-exchange
+    /// issuance works because <see cref="Rfc9068AccessTokenProducer"/>'s <c>RequiredCapability</c> is
+    /// <see langword="null"/> — an optional tenant-feature gate, not a grant-capability proxy
+    /// (contract wave-4 D2) — so the endpoint-match capability alone is sufficient. RegisterDpopClient
+    /// supplies the AccessTokenIssuance signing keys the producers resolve. The discovery/jwks
+    /// capabilities round out the standard surface. <see cref="AddMachineScopeAudienceMapping"/> maps
+    /// <see cref="MachineScope"/> onto <see cref="ResourceServerAudience"/> so the real
+    /// client_credentials subject/actor tokens minted below still reach a concrete audience —
+    /// contract wave-4 D4 narrows <c>openid</c> away from every <c>client_credentials</c> grant.
+    /// </summary>
+    private static VerifierKeyMaterial RegisterTokenExchangeClient(TestHostShell app)
+    {
+        VerifierKeyMaterial material = app.RegisterDpopClient(
+            ClientId,
+            new Uri(ClientId),
+            profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthClientCredentials,
                 WellKnownCapabilityIdentifiers.OAuthTokenExchange,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
                 WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+
+        AddMachineScopeAudienceMapping(app, material);
+
+        return material;
+    }
 
 
     /// <summary>
@@ -1502,17 +1698,50 @@ internal sealed class TokenExchangeGrantTests
     /// <c>client_credentials</c> token's subject (itself) is a distinct real subject, verified
     /// against its own published JWKS.
     /// </summary>
-    private static VerifierKeyMaterial RegisterActorClient(TestHostShell app) =>
-        app.RegisterDpopClient(
+    private static VerifierKeyMaterial RegisterActorClient(TestHostShell app)
+    {
+        VerifierKeyMaterial material = app.RegisterDpopClient(
             ActorClientId,
             new Uri(ActorClientId),
             profile: PolicyProfile.Rfc6749WithPkce,
             capabilities: ImmutableHashSet.Create(
-                WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthClientCredentials,
                 WellKnownCapabilityIdentifiers.OAuthTokenExchange,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
                 WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+
+        AddMachineScopeAudienceMapping(app, material);
+
+        return material;
+    }
+
+
+    /// <summary>
+    /// Adds <see cref="MachineScope"/> to <paramref name="material"/>'s <c>AllowedScopes</c> and maps
+    /// it onto <see cref="ResourceServerAudience"/> in <c>ScopeToAudience</c> — the register-then-
+    /// upgrade pattern the sibling grant suites use, because the routing dictionaries are
+    /// host-internal.
+    /// </summary>
+    private static void AddMachineScopeAudienceMapping(TestHostShell app, VerifierKeyMaterial material)
+    {
+        HostedAuthorizationServer host = app.Host("default");
+        string segment = material.Registration.TenantId.Value;
+        ClientRecord previous = host.Registrations[segment];
+        Dictionary<string, IReadOnlyList<string>> scopeToAudience = previous.ScopeToAudience is null
+            ? new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+            : new Dictionary<string, IReadOnlyList<string>>(previous.ScopeToAudience, StringComparer.Ordinal);
+        scopeToAudience[MachineScope] = [ResourceServerAudience];
+
+        ClientRecord updated = previous with
+        {
+            AllowedScopes = previous.AllowedScopes.Add(MachineScope),
+            ScopeToAudience = scopeToAudience
+        };
+        host.Registrations[segment] = updated;
+        host.Registrations[updated.ClientId] = updated;
+        host.Server.UpdateClient(previous, updated, new ExchangeContext());
+        material.Registration = updated;
+    }
 
 
     /// <summary>

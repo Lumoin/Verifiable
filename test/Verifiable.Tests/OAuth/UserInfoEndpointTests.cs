@@ -304,6 +304,81 @@ internal sealed class UserInfoEndpointTests
     }
 
 
+    /// <summary>
+    /// Contract wave-4 D4: <see cref="UserInfoEndpoints"/>'s <c>openid</c>-in-token-scope check
+    /// (OIDC Core §5.3.1) is correct only because the token endpoint's scope source guarantees a
+    /// <c>client_credentials</c> token — whose <c>sub</c> is the client itself, a machine, not an
+    /// End-User — never carries <c>openid</c>: <c>DropIdentityScopesForNonEndUserGrant</c> narrows it
+    /// away at issuance (RFC 6749 §3.3) even though the request explicitly asked for it and the
+    /// tenant has the <see cref="WellKnownCapabilityIdentifiers.OidcOpenIdConnect"/> feature granted.
+    /// UserInfo therefore refuses the resulting token an identity body — proving the refusal follows
+    /// from the source-side guarantee, not from UserInfo second-guessing the grant type itself.
+    /// </summary>
+    [TestMethod]
+    public async Task ClientCredentialsAccessTokenIsRefusedIdentityBodyAtUserInfo()
+    {
+        await using TestHostShell host = new(TimeProvider);
+
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId,
+            ClientBaseUri,
+            profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: ImmutableHashSet.Create(
+                WellKnownCapabilityIdentifiers.OAuthClientCredentials,
+                WellKnownCapabilityIdentifiers.OidcOpenIdConnect,
+                WellKnownCapabilityIdentifiers.OidcUserInfo,
+                WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+        const string ClientSecret = "s3cret-of-the-machine";
+        host.Server.OAuth().ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+            ValueTask.FromResult(
+                fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+
+        string accessToken = await IssueClientCredentialsAccessTokenAsync(
+            host, material, ClientSecret, WellKnownScopes.OpenId).ConfigureAwait(false);
+
+        ServerHttpResponse response = await DispatchUserInfoAsync(
+            host, material, WellKnownHttpMethods.Post,
+            authorizationHeader: "Bearer " + accessToken)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(403, response.StatusCode,
+            "OIDC Core §5.3.1 refuses UserInfo (insufficient_scope) to a token whose scope never "
+            + "carries openid — guaranteed here because client_credentials narrows it away at issuance.");
+        Assert.Contains(OAuthErrors.InsufficientScope, response.Body);
+    }
+
+
+    /// <summary>
+    /// Dispatches a real <c>client_credentials</c> token request (RFC 6749 §4.4) and returns the
+    /// issued access token — the machine-subject counterpart to <see cref="IssueAccessTokenAsync"/>'s
+    /// authorization_code drive.
+    /// </summary>
+    private async ValueTask<string> IssueClientCredentialsAccessTokenAsync(
+        TestHostShell host, VerifierKeyMaterial material, string clientSecret, string scope)
+    {
+        ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
+            material.Registration.TenantId.Value,
+            WellKnownEndpointNames.ClientCredentialsToken,
+            WellKnownHttpMethods.Post,
+            new RequestFields
+            {
+                [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
+                [OAuthRequestParameterNames.ClientId] = material.Registration.ClientId,
+                [OAuthRequestParameterNames.ClientSecret] = clientSecret,
+                [OAuthRequestParameterNames.Scope] = scope
+            },
+            new ExchangeContext(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
+
+        using JsonDocument body = JsonDocument.Parse(tokenResponse.Body);
+
+        return body.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+    }
+
+
     [TestMethod]
     public async Task ExpiredAccessTokenReturnsUnauthorized()
     {

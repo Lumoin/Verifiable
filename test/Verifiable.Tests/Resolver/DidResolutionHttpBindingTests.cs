@@ -5,14 +5,17 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Server.Kestrel.Core;
-using Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods;
@@ -41,10 +44,9 @@ namespace Verifiable.Tests.Resolver;
 /// content-negotiation and error-to-status rules.
 /// </summary>
 /// <remarks>
-/// TLS is the deployment transport's responsibility (the spec's "All HTTPS bindings MUST use TLS" is a
-/// transport requirement satisfied by terminating TLS in front of the handler); the handler is
-/// transport-agnostic, so this test drives it over the plain http loopback socket — the repo convention
-/// for real-socket binding tests.
+/// The handler itself is transport-agnostic; this test drives it over a genuine loopback HTTPS socket
+/// with a pinned ephemeral certificate (<see cref="LoopbackTls"/>) — the repo convention for real-socket
+/// binding tests — so the spec's "All HTTPS bindings MUST use TLS" is exercised rather than assumed.
 /// </remarks>
 [TestClass]
 internal sealed class DidResolutionHttpBindingTests
@@ -573,16 +575,19 @@ internal sealed class DidResolutionHttpBindingTests
     }
 
 
-    //An in-process Kestrel listener bound to the http loopback socket on an OS-assigned ephemeral port,
-    //mounting the DID-resolution skin. The same bootstrap as TestHostShell.StartHttpHostAsync, kept
-    //standalone here so the resolution binding test owns its lifecycle.
+    //An in-process HTTPS listener bound to the loopback socket on an OS-assigned ephemeral port, mounting
+    //the DID-resolution skin behind a pinned ephemeral certificate. The same slim-builder bootstrap as
+    //TestHostShell.StartHttpHostAsync, kept standalone here so the resolution binding test owns its
+    //lifecycle.
     private sealed class DidResolutionHttpHost: IAsyncDisposable
     {
-        private readonly KestrelServer server;
+        private readonly WebApplication app;
+        private readonly X509Certificate2 certificate;
 
-        private DidResolutionHttpHost(KestrelServer server, Uri baseAddress, HttpClient client)
+        private DidResolutionHttpHost(WebApplication app, X509Certificate2 certificate, Uri baseAddress, HttpClient client)
         {
-            this.server = server;
+            this.app = app;
+            this.certificate = certificate;
             BaseAddress = baseAddress;
             Client = client;
         }
@@ -594,32 +599,39 @@ internal sealed class DidResolutionHttpBindingTests
         public static async Task<DidResolutionHttpHost> StartAsync(
             DidResolutionHttpApplication application, System.Threading.CancellationToken cancellationToken)
         {
-            KestrelServerOptions kestrelOptions = new();
-            kestrelOptions.Listen(IPAddress.Loopback, port: 0);
+            X509Certificate2 certificate = LoopbackTls.CreateServerCertificate("did-resolution-loopback-test-host");
 
-            SocketTransportOptions socketOptions = new();
-            SocketTransportFactory socketFactory = new(Options.Create(socketOptions), NullLoggerFactory.Instance);
+            WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
+            builder.Logging.ClearProviders();
 
-            KestrelServer kestrel = new(Options.Create(kestrelOptions), socketFactory, NullLoggerFactory.Instance);
-            await kestrel.StartAsync(application, cancellationToken).ConfigureAwait(false);
+            //A single explicit HTTPS Listen call — no UseUrls — so there is no plaintext fallback on
+            //this host at all.
+            builder.WebHost.ConfigureKestrel(options =>
+                options.Listen(IPAddress.Loopback, port: 0, listenOptions => listenOptions.UseHttps(certificate)));
 
-            var addresses = kestrel.Features.Get<global::Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>();
-            if(addresses is null || addresses.Addresses.Count == 0)
-            {
-                throw new InvalidOperationException("Kestrel started but exposed no server address.");
-            }
+            WebApplication app = builder.Build();
+            app.Run(application.ProcessRequestAsync);
 
-            Uri baseAddress = new(addresses.Addresses.First());
-            HttpClient client = new() { BaseAddress = baseAddress };
+            await app.StartAsync(cancellationToken).ConfigureAwait(false);
 
-            return new DidResolutionHttpHost(kestrel, baseAddress, client);
+            IServerAddressesFeature addresses = app.Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()
+                ?? throw new InvalidOperationException("Kestrel exposed no server addresses feature.");
+            string boundAddress = addresses.Addresses.FirstOrDefault()
+                ?? throw new InvalidOperationException("Kestrel bound no address.");
+
+            Uri baseAddress = new(boundAddress);
+            HttpClient client = LoopbackTls.CreatePinnedHttpClient(certificate, baseAddress);
+
+            return new DidResolutionHttpHost(app, certificate, baseAddress, client);
         }
 
         public async ValueTask DisposeAsync()
         {
             Client.Dispose();
-            await server.StopAsync(System.Threading.CancellationToken.None).ConfigureAwait(false);
-            server.Dispose();
+            await app.StopAsync(System.Threading.CancellationToken.None).ConfigureAwait(false);
+            await app.DisposeAsync().ConfigureAwait(false);
+            certificate.Dispose();
         }
     }
 }

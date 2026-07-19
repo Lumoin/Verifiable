@@ -62,6 +62,16 @@ public static class ValidationClaimIds
     public static ClaimId IssuerMatchesExpected { get; } = ClaimId.Create(720, "IssuerMatchesExpected");
 
     /// <summary>
+    /// A PRESENT <c>iss</c> value in the callback matches the expected authorization server
+    /// issuer; an absent <c>iss</c> passes vacuously. The profile-independent half of the
+    /// mix-up defense per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9207">RFC 9207</see> — applied even by
+    /// profiles that do not require <c>iss</c> presence, so a forged-but-present value is
+    /// still caught.
+    /// </summary>
+    public static ClaimId IssuerMatchesExpectedWhenPresent { get; } = ClaimId.Create(723, "IssuerMatchesExpectedWhenPresent");
+
+    /// <summary>
     /// The <c>state</c> value in the callback matches an active flow state.
     /// Failure indicates a CSRF attempt per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-4.7">RFC 9700 §4.7</see>.

@@ -3,6 +3,7 @@ using Verifiable.Cryptography;
 using Verifiable.JCose;
 
 using Verifiable.OAuth.Server.Metadata;
+using Verifiable.OAuth.Server.Pipeline;
 namespace Verifiable.OAuth.Server;
 
 /// <summary>
@@ -116,13 +117,32 @@ public delegate ValueTask<JwksDocument> BuildJwksDocumentDelegate(
 
 
 /// <summary>
-/// Fetches and validates a Client ID Metadata Document for CIMD clients.
+/// Resolves a Client ID Metadata Document (CIMD) for a Client Identifier URL per
+/// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html#section-5">
+/// draft-ietf-oauth-client-id-metadata-document-02 Section 5</see>: fetches the document at
+/// <paramref name="clientMetadataUri"/> through the guarded outbound-fetch chokepoint,
+/// validates it, and reports a typed <see cref="ClientIdMetadataResolution"/> outcome. The
+/// resolver never throws for a fetch or validation failure — only cancellation propagates —
+/// so every caller-visible failure is a value the caller inspects, not an exception to catch.
 /// </summary>
 /// <remarks>
-/// Return <see langword="null"/> when the document cannot be fetched or fails
-/// validation. Caching with appropriate TTL is the responsibility of the implementation.
+/// The library default, <see cref="ClientIdMetadataDocuments.BuildResolving"/>, composes the
+/// Section 5 fetch-validate-cache pipeline: Section 3 URL validation, the guarded fetch,
+/// status/content-type/size checks, parsing via <see cref="ClientIdMetadataDocumentReader"/>,
+/// the <c>client_id</c> match (Section 4), the CIMD-020 additional-validation hook, optional
+/// logo prefetch (Section 8.8), and caching per Section 5.2.
+/// <see cref="ClientIdMetadataMaterialization"/> invokes this delegate from
+/// <see cref="AuthorizationServerIntegration.ResolveClientMetadataAsync"/> for a matched CIMD
+/// client and maps a non-<see cref="ClientIdMetadataResolutionOutcome.Resolved"/> outcome to a
+/// request failure.
 /// </remarks>
-public delegate ValueTask<ClientRecord?> ResolveClientMetadataDelegate(
+/// <param name="clientMetadataUri">The Client Identifier URL to fetch the document from.</param>
+/// <param name="context">
+/// The per-request context; the guarded fetch reads its
+/// <see cref="Verifiable.Core.OutboundFetch.OutboundFetchPolicy"/> from here.
+/// </param>
+/// <param name="cancellationToken">Cancellation token.</param>
+public delegate ValueTask<ClientIdMetadataResolution> ResolveClientMetadataDelegate(
     Uri clientMetadataUri,
     ExchangeContext context,
     CancellationToken cancellationToken);

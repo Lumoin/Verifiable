@@ -58,6 +58,21 @@ namespace Verifiable.OAuth.Oidc;
 /// <see cref="UserInfoTarget"/>.
 /// </para>
 /// <para>
+/// <strong>The <c>openid</c> ⇒ authenticated-end-user invariant.</strong> This endpoint's
+/// <c>openid</c>-in-token-scope check is correct only because the token endpoint's scope
+/// source (<see cref="AuthCode.AuthCodeEndpoints"/>) guarantees that non-end-user grants —
+/// <c>client_credentials</c> (whose <c>sub</c> is the <c>client_id</c>, a machine, not an
+/// End-User) and <c>pre_authorized_code</c> — never carry <c>openid</c> in the granted scope
+/// that ends up on the access token: those grants drop it per
+/// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.3">RFC 6749 §3.3</see> at
+/// issuance. A <c>token_exchange</c> or <c>jwt_bearer</c> token that legitimately carries
+/// <c>openid</c> is correctly served here — the app opted in by granting it, vouching that
+/// the exchanged/asserted subject is an End-User. Absent the source-side guarantee, this
+/// check alone would be the exact defect <see cref="WellKnownScopes"/> warns against: "An
+/// access token issued without <c>openid</c> does not identify the user — it only authorizes
+/// actions. Do not use the access token's presence as proof of identity."
+/// </para>
+/// <para>
 /// <strong>Serialization firewall.</strong> Response bodies are written
 /// as JSON via <see cref="System.Text.StringBuilder"/> rather than through
 /// a serializer; the project's banned-symbol analyzer enforces that

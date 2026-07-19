@@ -85,6 +85,14 @@ env:
     s.symcb.com:80
     ocsp.digicert.com:80
 
+    # BouncyCastle's NuGet package signature chains to Sectigo/Comodo/UserTrust;
+    # its CRL/OCSP endpoints must be reachable to verify the signature's revocation.
+    crl.sectigo.com:443
+    ocsp.sectigo.com:443
+    crl.comodoca.com:443
+    ocsp.comodoca.com:443
+    crl.usertrust.com:443
+
     # Dotnet tools download CRL list from here.
     www.microsoft.com:80
 
@@ -112,9 +120,18 @@ jobs:
     steps:
     - name: Harden Runner
       if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm' }}
-      uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
+      uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920
       with:
         disable-sudo: true
+        egress-policy: block
+        allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
+
+    # Windows has no sudo to disable; otherwise the same block-mode allowlist so the
+    # workflow governs egress on the Windows host (package-signature revocation included).
+    - name: Harden Runner
+      if: ${{ matrix.os == 'windows-latest' }}
+      uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920
+      with:
         egress-policy: block
         allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
 
@@ -125,7 +142,7 @@ jobs:
         fetch-tags: true
 
     - name: Set up .NET SDK
-      uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+      uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
       with:
         cache: true
         cache-dependency-path: '**/packages.lock.json'
@@ -382,7 +399,7 @@ jobs:
       if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm' }}
       # Note: disable-sudo is intentionally omitted here because apt-get is
       # needed below to install native AOT prerequisites (clang, zlib1g-dev).
-      uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
+      uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920
       with:
         egress-policy: block
         allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
@@ -394,7 +411,7 @@ jobs:
         fetch-tags: true
 
     - name: Set up .NET SDK
-      uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+      uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
       with:
         cache: true
         cache-dependency-path: '**/packages.lock.json'
@@ -523,7 +540,7 @@ jobs:
 
     steps:
     - name: Harden Runner
-      uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
+      uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920
       with:
         disable-sudo: true
         egress-policy: block
@@ -536,7 +553,7 @@ jobs:
         fetch-tags: true
 
     - name: Set up .NET SDK
-      uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+      uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
       with:
         cache: true
         cache-dependency-path: '**/packages.lock.json'
@@ -672,7 +689,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920
         with:
           disable-sudo: true
           egress-policy: block
@@ -727,7 +744,7 @@ jobs:
     environment: Release
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920
         with:
           disable-sudo: true
           egress-policy: block
