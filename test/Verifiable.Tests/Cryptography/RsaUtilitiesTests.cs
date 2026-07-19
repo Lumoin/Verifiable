@@ -90,13 +90,13 @@ namespace Verifiable.Tests.Cryptography
             rawRsa2048[0] = 0xFF;
             byte[] decoded2048 = RsaUtilities.Decode(rawRsa2048);
             Assert.HasCount(RsaUtilities.Rsa2048ModulusLength, decoded2048);
-            CollectionAssert.AreEqual(rawRsa2048, decoded2048);
+            Assert.AreSequenceEqual(rawRsa2048, decoded2048);
 
             byte[] rawRsa4096 = new byte[RsaUtilities.Rsa4096ModulusLength];
             rawRsa4096[0] = 0xFF;
             byte[] decoded4096 = RsaUtilities.Decode(rawRsa4096);
             Assert.HasCount(RsaUtilities.Rsa4096ModulusLength, decoded4096);
-            CollectionAssert.AreEqual(rawRsa4096, decoded4096);
+            Assert.AreSequenceEqual(rawRsa4096, decoded4096);
         }
 
 
@@ -166,14 +166,14 @@ namespace Verifiable.Tests.Cryptography
 
                 var encodedModulus = RsaUtilities.Encode(rsaModulus);
                 var decodedModulus = RsaUtilities.Decode(encodedModulus);
-                CollectionAssert.AreEqual(rsaModulus, decodedModulus);
+                Assert.AreSequenceEqual(rsaModulus, decodedModulus);
 
                 //This is a bit of extra to show how to get the DER encoded public key from the platform.
                 var dotNetEncoded = ExportPublicKeyAsDerEncoded(rsaKey);
                 var dotNetDecoded = DecodeDerPublicKey(dotNetEncoded);
-                CollectionAssert.AreEqual(encodedModulus, dotNetEncoded);
-                CollectionAssert.AreEqual(rsaParameters.Modulus, dotNetDecoded.Modulus);
-                CollectionAssert.AreEqual(rsaParameters.Exponent, dotNetDecoded.Exponent);
+                Assert.AreSequenceEqual(encodedModulus, dotNetEncoded);
+                Assert.AreSequenceEqual(rsaParameters.Modulus, dotNetDecoded.Modulus);
+                Assert.AreSequenceEqual(rsaParameters.Exponent, dotNetDecoded.Exponent);
             }
         }
 

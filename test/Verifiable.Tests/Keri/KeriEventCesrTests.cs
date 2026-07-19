@@ -191,10 +191,10 @@ internal sealed class KeriEventCesrTests
         Assert.AreEqual("2", fields[KeriMessageFields.KeysSigningThreshold]);
         Assert.AreEqual("2", fields[KeriMessageFields.NextKeysSigningThreshold]);
         Assert.AreEqual("3", fields[KeriMessageFields.BackerThreshold]);
-        CollectionAssert.AreEqual(SigningKeys, (System.Collections.ICollection)fields[KeriMessageFields.SigningKeys]!);
-        CollectionAssert.AreEqual(NextKeyDigests, (System.Collections.ICollection)fields[KeriMessageFields.NextKeyDigests]!);
-        CollectionAssert.AreEqual(Backers, (System.Collections.ICollection)fields[KeriMessageFields.Backers]!);
-        CollectionAssert.AreEqual(ConfigurationTraits, (System.Collections.ICollection)fields[KeriMessageFields.ConfigurationTraits]!);
+        Assert.AreSequenceEqual(SigningKeys, (System.Collections.ICollection)fields[KeriMessageFields.SigningKeys]!);
+        Assert.AreSequenceEqual(NextKeyDigests, (System.Collections.ICollection)fields[KeriMessageFields.NextKeyDigests]!);
+        Assert.AreSequenceEqual(Backers, (System.Collections.ICollection)fields[KeriMessageFields.Backers]!);
+        Assert.AreSequenceEqual(ConfigurationTraits, (System.Collections.ICollection)fields[KeriMessageFields.ConfigurationTraits]!);
         Assert.IsEmpty((IReadOnlyList<object?>)fields[KeriMessageFields.Anchors]!);
     }
 
@@ -216,10 +216,10 @@ internal sealed class KeriEventCesrTests
         Assert.AreEqual(0, inception.SequenceNumber);
         Assert.AreEqual(KeriThreshold.Unweighted(2), inception.SigningThreshold);
         Assert.AreEqual(KeriThreshold.Unweighted(2), inception.NextThreshold);
-        CollectionAssert.AreEqual(SigningKeys, (System.Collections.ICollection)inception.SigningKeys);
-        CollectionAssert.AreEqual(NextKeyDigests, (System.Collections.ICollection)inception.NextKeyDigests);
-        CollectionAssert.AreEqual(Backers, (System.Collections.ICollection)inception.Backers);
-        CollectionAssert.AreEqual(ConfigurationTraits, (System.Collections.ICollection)inception.ConfigurationTraits);
+        Assert.AreSequenceEqual(SigningKeys, (System.Collections.ICollection)inception.SigningKeys);
+        Assert.AreSequenceEqual(NextKeyDigests, (System.Collections.ICollection)inception.NextKeyDigests);
+        Assert.AreSequenceEqual(Backers, (System.Collections.ICollection)inception.Backers);
+        Assert.AreSequenceEqual(ConfigurationTraits, (System.Collections.ICollection)inception.ConfigurationTraits);
     }
 
 
@@ -285,8 +285,8 @@ internal sealed class KeriEventCesrTests
         Assert.AreEqual("EDmgVuwPOXDjIW3reg4_k8SeJoQEKJKP24fGzeMV4uKD", rotation.PriorSaid);
         Assert.AreEqual(KeriThreshold.Unweighted(2), rotation.SigningThreshold);
         Assert.AreEqual(KeriThreshold.Unweighted(2), rotation.NextThreshold);
-        CollectionAssert.AreEqual(RotationBackersToRemove, (System.Collections.ICollection)rotation.BackersToRemove);
-        CollectionAssert.AreEqual(RotationBackersToAdd, (System.Collections.ICollection)rotation.BackersToAdd);
+        Assert.AreSequenceEqual(RotationBackersToRemove, (System.Collections.ICollection)rotation.BackersToRemove);
+        Assert.AreSequenceEqual(RotationBackersToAdd, (System.Collections.ICollection)rotation.BackersToAdd);
         Assert.IsEmpty((IReadOnlyList<string>)rotation.ConfigurationTraits);
 
         IReadOnlyList<KeriSeal> seals = KeriSealReader.ReadList(fields[KeriMessageFields.Anchors]);
@@ -311,8 +311,8 @@ internal sealed class KeriEventCesrTests
         MessageFieldMap fields = KeriEventCesr.DecodeFieldMap(native.Memory, BaseMemoryPool.Shared);
 
         Assert.AreEqual("KERICAACAACESRAAKM.", fields[KeriMessageFields.Version]);
-        CollectionAssert.AreEqual(WeightedThresholdWeights, (System.Collections.ICollection)fields[KeriMessageFields.KeysSigningThreshold]!);
-        CollectionAssert.AreEqual(WeightedThresholdWeights, (System.Collections.ICollection)fields[KeriMessageFields.NextKeysSigningThreshold]!);
+        Assert.AreSequenceEqual(WeightedThresholdWeights, (System.Collections.ICollection)fields[KeriMessageFields.KeysSigningThreshold]!);
+        Assert.AreSequenceEqual(WeightedThresholdWeights, (System.Collections.ICollection)fields[KeriMessageFields.NextKeysSigningThreshold]!);
 
         var dip = (KeriDelegatedInceptionEvent)KeriEventReader.Read(fields);
         Assert.AreEqual("EF-jViYoBr8p3vkpZuHlkvxAAY5GZkmQ0QaaHfiE0kg3", dip.Said);
@@ -322,8 +322,8 @@ internal sealed class KeriEventCesrTests
         Assert.AreEqual(HalfWeightThreshold, dip.SigningThreshold);
         Assert.AreEqual(HalfWeightThreshold, dip.NextThreshold);
         Assert.IsTrue(dip.SigningThreshold.IsWeighted);
-        CollectionAssert.AreEqual(DelegatedInceptionKeys, (System.Collections.ICollection)dip.SigningKeys);
-        CollectionAssert.AreEqual(DelegatedInceptionBackers, (System.Collections.ICollection)dip.Backers);
+        Assert.AreSequenceEqual(DelegatedInceptionKeys, (System.Collections.ICollection)dip.SigningKeys);
+        Assert.AreSequenceEqual(DelegatedInceptionBackers, (System.Collections.ICollection)dip.Backers);
         Assert.IsEmpty((IReadOnlyList<string>)dip.ConfigurationTraits);
 
         Assert.IsTrue(await KeriEventSaid.VerifyAsync(native.Memory, dip.Said, AgileDigest, BaseMemoryPool.Shared, CancellationToken.None));
@@ -349,9 +349,9 @@ internal sealed class KeriEventCesrTests
         Assert.AreEqual("EF-jViYoBr8p3vkpZuHlkvxAAY5GZkmQ0QaaHfiE0kg3", drt.PriorSaid);
         Assert.AreEqual(HalfWeightThreshold, drt.SigningThreshold);
         Assert.AreEqual(HalfWeightThreshold, drt.NextThreshold);
-        CollectionAssert.AreEqual(DelegatedRotationKeys, (System.Collections.ICollection)drt.SigningKeys);
-        CollectionAssert.AreEqual(DelegatedRotationBackersToRemove, (System.Collections.ICollection)drt.BackersToRemove);
-        CollectionAssert.AreEqual(DelegatedRotationBackersToAdd, (System.Collections.ICollection)drt.BackersToAdd);
+        Assert.AreSequenceEqual(DelegatedRotationKeys, (System.Collections.ICollection)drt.SigningKeys);
+        Assert.AreSequenceEqual(DelegatedRotationBackersToRemove, (System.Collections.ICollection)drt.BackersToRemove);
+        Assert.AreSequenceEqual(DelegatedRotationBackersToAdd, (System.Collections.ICollection)drt.BackersToAdd);
 
         Assert.IsTrue(await KeriEventSaid.VerifyAsync(native.Memory, drt.Said, AgileDigest, BaseMemoryPool.Shared, CancellationToken.None));
     }

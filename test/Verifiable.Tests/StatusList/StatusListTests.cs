@@ -303,7 +303,7 @@ internal sealed class StatusListTests
 
         ReadOnlySpan<byte> span = list.AsSpan();
 
-        Assert.AreEqual(2, span.Length);
+        Assert.HasCount(2, span);
         Assert.AreEqual((byte)0xB9, span[0]);
         Assert.AreEqual((byte)0xA3, span[1]);
     }

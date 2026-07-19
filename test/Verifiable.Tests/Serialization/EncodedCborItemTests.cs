@@ -75,7 +75,7 @@ internal sealed class EncodedCborItemTests
 
         //InnerBytes is a slice of WireBytes positioned at the byte-string
         //content offset.
-        Assert.AreEqual(1, item.InnerBytes.Length);
+        Assert.HasCount(1, item.InnerBytes);
         Assert.AreEqual(0xA0, item.InnerBytes.Span[0]);
     }
 

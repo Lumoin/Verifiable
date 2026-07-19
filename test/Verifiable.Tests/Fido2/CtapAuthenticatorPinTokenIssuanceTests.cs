@@ -67,7 +67,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
         CtapClientPinResponse response = await SendAsync(simulator, request, pool);
 
         Assert.IsNotNull(response.PinUvAuthToken);
-        Assert.AreEqual(expectedCiphertextLength, response.PinUvAuthToken!.Value.Length);
+        Assert.HasCount(expectedCiphertextLength, response.PinUvAuthToken!.Value);
 
         byte[] token = await session.DecryptTokenAsync(response.PinUvAuthToken.Value, TestContext.CancellationToken);
         Assert.HasCount(32, token, "the decrypted pinUvAuthToken itself must be 32 bytes for both protocols.");
@@ -739,7 +739,7 @@ internal sealed class CtapAuthenticatorPinTokenIssuanceTests
 
         CtapPinUvAuthTokenState currentProtocolTwoToken = trace.Received[^1].StateAfter.ProtocolTwoToken;
 
-        CollectionAssert.AreNotEqual(
+        Assert.AreNotSequenceEqual(
             firstToken, currentProtocolTwoToken.Token.AsReadOnlySpan().ToArray(),
             "each fresh getPinToken issuance must mint a genuinely new token value.");
 

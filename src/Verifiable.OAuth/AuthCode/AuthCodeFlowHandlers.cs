@@ -354,6 +354,29 @@ public static class AuthCodeFlowHandlers
             ? issValue
             : null;
 
+        //RFC 9207 §2.4 / §4 — when the application supplies a known-authorization-server
+        //resolver, a PRESENT iss must additionally resolve to a positively known,
+        //uniquely-configured authorization server that ordinally matches this
+        //registration's pinned issuer. This closes the mix-up case the per-flow issuer
+        //check cannot: an iss that string-matches the flow's expected issuer yet does not
+        //correspond to a known, uniquely-claimed authorization server in the application's
+        //own configuration. An absent iss is out of scope here — the callback profile
+        //governs whether iss presence is required — and a null resolver opts out entirely.
+        if(iss is not null
+            && infrastructure.IsKnownAuthorizationServerIssuer is not null
+            && !AuthorizationServerIssuerValidation.IsAuthorizationResponseIssuerValid(
+                iss, registration.AuthorizationServerIssuer, infrastructure.IsKnownAuthorizationServerIssuer))
+        {
+            return new AuthCodeFlowEndpointResult
+            {
+                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+                ErrorCode = "invalid_request",
+                ErrorDescription =
+                    "The iss parameter does not resolve to a known, uniquely-configured authorization " +
+                    "server matching this registration (RFC 9207 §2.4, §4)."
+            };
+        }
+
         DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
 
         AuthorizationCodeReceivedState codeReceived = new AuthorizationCodeReceivedState

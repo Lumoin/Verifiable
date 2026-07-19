@@ -60,7 +60,7 @@ internal sealed class AcdcReaderTests
         Assert.AreEqual(AcdcExampleVectors.AttributeSectionSaid, attributeSaid);
         Assert.IsTrue(attribute.Detail.TryGetString("name", out string? name));
         Assert.AreEqual("Sunspot College", name);
-        CollectionAssert.AreEqual(AttributeBlockFieldOrder, attribute.Detail.Keys.ToArray(), "The expanded block preserves field order.");
+        Assert.AreSequenceEqual(AttributeBlockFieldOrder, attribute.Detail.Keys.ToArray(), "The expanded block preserves field order.");
 
         var rule = acdc.Rule as ExpandedAcdcSection;
         Assert.IsNotNull(rule, "The expanded rule section is a block.");

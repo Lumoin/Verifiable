@@ -156,7 +156,7 @@ internal sealed class LargeBlobExtensionProcessorTests
         Claim readClaim = GetClaim(result, Fido2ClaimIds.Fido2AssertionLargeBlobRead);
         Assert.AreEqual(ClaimOutcome.Success, readClaim.Outcome);
         var readContext = (LargeBlobReadContext)readClaim.Context;
-        CollectionAssert.AreEqual(blobBytes, readContext.Blob.Span.ToArray());
+        Assert.AreSequenceEqual(blobBytes, readContext.Blob.Span.ToArray());
         Assert.AreEqual(Fido2BufferTags.LargeBlob, readContext.Blob.Tag);
 
         Assert.AreEqual(ClaimOutcome.NotApplicable, GetOutcome(result, Fido2ClaimIds.Fido2AssertionLargeBlobWritten));
@@ -255,7 +255,7 @@ internal sealed class LargeBlobExtensionProcessorTests
 
         Claim readClaim = GetClaim(result, Fido2ClaimIds.Fido2AssertionLargeBlobRead);
         Assert.AreEqual(ClaimOutcome.Success, readClaim.Outcome);
-        CollectionAssert.AreEqual(blobBytes, ((LargeBlobReadContext)readClaim.Context).Blob.Span.ToArray());
+        Assert.AreSequenceEqual(blobBytes, ((LargeBlobReadContext)readClaim.Context).Blob.Span.ToArray());
         Assert.AreEqual(ClaimOutcome.Success, GetOutcome(result, Fido2ClaimIds.Fido2AssertionExtensionOutputs));
     }
 

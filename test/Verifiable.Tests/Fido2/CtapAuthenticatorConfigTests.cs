@@ -223,7 +223,7 @@ internal sealed class CtapAuthenticatorConfigTests
         Array.Fill(expectedMessage, (byte)0xff, 0, 32);
         expectedMessage[32] = WellKnownCtapCommands.AuthenticatorConfig;
         expectedMessage[33] = (byte)WellKnownCtapAuthenticatorConfigSubCommands.EnableEnterpriseAttestation;
-        CollectionAssert.AreEqual(expectedMessage, message, "the verify message must be exactly 32x0xff || 0x0D || 0x01 with no subCommandParams segment.");
+        Assert.AreSequenceEqual(expectedMessage, message, "the verify message must be exactly 32x0xff || 0x0D || 0x01 with no subCommandParams segment.");
 
         byte[] param = await CtapWaveConfigFixtures.ComputeSignatureAsync(token, protocolId, message, pool, TestContext.CancellationToken);
         var request = new CtapAuthenticatorConfigRequest(

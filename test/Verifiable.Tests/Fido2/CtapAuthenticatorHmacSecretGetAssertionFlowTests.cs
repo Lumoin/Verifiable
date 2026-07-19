@@ -354,7 +354,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
         byte[] secondOutput = await RunOneSaltHmacSecretAsync(
             simulator, pool, RpId, CtapWave5AuthenticatorFixtures.BuildAllowList(credentialIdBytes, pool), cancellationToken).ConfigureAwait(false);
 
-        CollectionAssert.AreEqual(firstOutput, secondOutput, "the same credential, salt, and uv posture must decrypt to the identical output every time.");
+        Assert.AreSequenceEqual(firstOutput, secondOutput, "the same credential, salt, and uv posture must decrypt to the identical output every time.");
     }
 
 
@@ -391,7 +391,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
         byte[] nonUvOutput = await RunOneSaltHmacSecretAsync(
             simulator, pool, RpId, CtapWave5AuthenticatorFixtures.BuildAllowList(credentialIdBytes, pool), cancellationToken).ConfigureAwait(false);
 
-        CollectionAssert.AreNotEqual(nonUvOutput, uvOutput, "uv=0 and uv=1 must select different CredRandom values, producing different outputs.");
+        Assert.AreNotSequenceEqual(nonUvOutput, uvOutput, "uv=0 and uv=1 must select different CredRandom values, producing different outputs.");
     }
 
 
@@ -424,7 +424,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
             CtapWave2AuthenticatorFixtures.BuildFixedBytes(32, 0x66), cancellationToken).ConfigureAwait(false);
 
         byte[] twoSaltFirstHalf = twoSaltOutput[..32];
-        CollectionAssert.AreEqual(oneSaltOutput, twoSaltFirstHalf, "a two-salt output's first 32 bytes must equal the one-salt output for the same salt1.");
+        Assert.AreSequenceEqual(oneSaltOutput, twoSaltFirstHalf, "a two-salt output's first 32 bytes must equal the one-salt output for the same salt1.");
     }
 
 
@@ -450,7 +450,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
         byte[] secondOutput = await RunOneSaltHmacSecretAsync(
             simulator, pool, RpId, CtapWave5AuthenticatorFixtures.BuildAllowList(secondCredentialIdBytes, pool), cancellationToken).ConfigureAwait(false);
 
-        CollectionAssert.AreNotEqual(firstOutput, secondOutput, "the same salt against two different credentials must decrypt to different outputs.");
+        Assert.AreNotSequenceEqual(firstOutput, secondOutput, "the same salt against two different credentials must decrypt to different outputs.");
     }
 
 
@@ -481,8 +481,8 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
         (byte[] secondCiphertext, byte[] secondDecrypted) = await SendAndCaptureCiphertextAsync(
             simulator, pool, RpId, CtapWave5AuthenticatorFixtures.BuildAllowList(credentialIdBytes, pool), extensions, session, cancellationToken).ConfigureAwait(false);
 
-        CollectionAssert.AreNotEqual(firstCiphertext, secondCiphertext, "two identical protocol-two requests must produce different wire ciphertext (fresh IV per call).");
-        CollectionAssert.AreEqual(firstDecrypted, secondDecrypted, "both requests must decrypt to the identical output despite the different ciphertext.");
+        Assert.AreNotSequenceEqual(firstCiphertext, secondCiphertext, "two identical protocol-two requests must produce different wire ciphertext (fresh IV per call).");
+        Assert.AreSequenceEqual(firstDecrypted, secondDecrypted, "both requests must decrypt to the identical output despite the different ciphertext.");
     }
 
 

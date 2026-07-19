@@ -208,7 +208,7 @@ internal static class ContextTypeTestHelpers
         var list = collection.ToList();
         foreach(var expected in expectedValues)
         {
-            CollectionAssert.Contains(list, expected, $"Collection should contain {expected}.");
+            Assert.Contains(expected, list, $"Collection should contain {expected}.");
         }
     }
 

@@ -60,7 +60,7 @@ internal sealed class CtapLargeBlobsResponseCborWriterTests
         TaggedMemory<byte> encoded = CtapLargeBlobsResponseCborWriter.Write(written);
         CtapLargeBlobsResponse decoded = CtapLargeBlobsResponseCborReader.Read(encoded.Memory);
 
-        CollectionAssert.AreEqual(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 }, decoded.Config.ToArray());
+        Assert.AreSequenceEqual(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 }, decoded.Config.ToArray());
     }
 
 

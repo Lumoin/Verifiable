@@ -145,7 +145,7 @@ internal sealed class BrainpoolSignVerifyTests
                 cancellationToken).ConfigureAwait(false);
             try
             {
-                Assert.AreEqual(expectedSignatureLength, signature.AsReadOnlySpan().Length,
+                Assert.HasCount(expectedSignatureLength, signature.AsReadOnlySpan(),
                     "IEEE P1363 signature length must match 2× the curve field byte size.");
 
                 (bool valid, CryptoEvent? _) = await verifyAsync(

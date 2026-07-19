@@ -234,6 +234,25 @@ public sealed class OAuthClientInfrastructure
     public DpopNonceStoreDelegate? StoreDpopNonce { get; private init; }
 
 
+    //Client-side issuer validation — RFC 9207 §4 authorization-server
+    //issuer uniqueness. Opt-in.
+
+    /// <summary>
+    /// Resolves whether an authorization response's <c>iss</c> identifies a
+    /// known, uniquely-configured authorization server, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9207#section-4">RFC 9207
+    /// §4</see>. <see langword="null"/> when the application maintains no
+    /// multi-authorization-server store, in which case the AuthCode callback
+    /// handler applies only the per-flow issuer check. When wired, the callback
+    /// handler additionally requires a PRESENT <c>iss</c> to resolve through this
+    /// delegate to a known authorization server that ordinally matches the one
+    /// the flow targeted — the application owns the store and the §4 uniqueness
+    /// guarantee. Mirrors <see cref="ClientRegistration"/>: the library supplies
+    /// no store.
+    /// </summary>
+    public KnownAuthorizationServerIssuerResolver? IsKnownAuthorizationServerIssuer { get; private init; }
+
+
     /// <summary>
     /// Constructs a fully validated <see cref="OAuthClientInfrastructure"/>.
     /// Every mandatory delegate is checked for non-null at construction so
@@ -259,6 +278,7 @@ public sealed class OAuthClientInfrastructure
         SendJsonPutDelegate? sendJsonPutAsync = null,
         SendJsonDeleteDelegate? sendJsonDeleteAsync = null,
         ParseClientMetadataDelegate? parseClientMetadataAsync = null,
+        KnownAuthorizationServerIssuerResolver? isKnownAuthorizationServerIssuer = null,
         ConstructDpopProofDelegate? constructDpopProofAsync = null,
         DpopKey? dpopKey = null,
         DpopNonceLookupDelegate? lookupDpopNonce = null,
@@ -318,6 +338,7 @@ public sealed class OAuthClientInfrastructure
             SendJsonPutAsync = sendJsonPutAsync,
             SendJsonDeleteAsync = sendJsonDeleteAsync,
             ParseClientMetadataAsync = parseClientMetadataAsync,
+            IsKnownAuthorizationServerIssuer = isKnownAuthorizationServerIssuer,
             ConstructDpopProofAsync = constructDpopProofAsync,
             DpopKey = dpopKey,
             LookupDpopNonce = lookupDpopNonce,

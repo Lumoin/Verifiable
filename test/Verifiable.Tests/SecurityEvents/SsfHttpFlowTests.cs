@@ -155,6 +155,178 @@ internal sealed class SsfHttpFlowTests
 
 
     [TestMethod]
+    public async Task PushedSetWithWrongIssuerIsRejectedOverHttpWithInvalidIssuerError()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory transmitterPublic = keys.PublicKey;
+        using PrivateKeyMemory transmitterPrivate = keys.PrivateKey;
+
+        HashSet<string> seenJtis = new(StringComparer.Ordinal);
+        IsSecurityEventTokenJtiSeenDelegate isSeen =
+            (jti, _, _) => ValueTask.FromResult(!seenJtis.Add(jti));
+
+        async Task<MinimalHttpResponse> ReceiverPushHandler(MinimalHttpRequest request, CancellationToken ct)
+        {
+            SsfDeliveryDecision decision = await SecurityEventTokenReception.ReceiveAsync(
+                request.Body, transmitterPublic, TransmitterIssuer, ReceiverAudience,
+                SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
+                TestSetup.Base64UrlDecoder, isSeen, new ExchangeContext(), Pool, cancellationToken: ct).ConfigureAwait(false);
+
+            if(decision.Outcome is SsfDeliveryOutcome.Accepted or SsfDeliveryOutcome.AcceptedDuplicate)
+            {
+                return new MinimalHttpResponse { StatusCode = 202 };
+            }
+
+            return new MinimalHttpResponse
+            {
+                StatusCode = 400,
+                ContentType = WellKnownMediaTypes.Application.Json,
+                Body = $$"""{"err":"{{decision.Error!.Err}}"}"""
+            };
+        }
+
+        await using MinimalHttpHost receiver = await MinimalHttpHost.StartAsync(
+            ReceiverPushHandler, TestContext.CancellationToken).ConfigureAwait(false);
+
+        //Signed by the real Transmitter key, but the iss claim names a different Transmitter
+        //than the one this Receiver expects for this stream.
+        string compact = await IssueAsync(
+            transmitterPrivate, jwtId: Guid.NewGuid().ToString("N"), issuer: "https://impostor.example/").ConfigureAwait(false);
+
+        using HttpClient transmitterClient = LoopbackTls.CreatePinnedHttpClient(receiver.Certificate);
+        Uri pushUrl = new(receiver.BaseAddress, "/ssf/push");
+
+        using HttpResponseMessage rejected = await PushAsync(transmitterClient, pushUrl, compact).ConfigureAwait(false);
+        string rejectedBody = await rejected.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, (int)rejected.StatusCode, $"A wrong-issuer SET must not be acknowledged. Body: {rejectedBody}");
+
+        using JsonDocument errorDoc = JsonDocument.Parse(rejectedBody);
+        Assert.IsTrue(SsfDeliveryErrorCodes.IsInvalidIssuer(errorDoc.RootElement.GetProperty("err").GetString()!),
+            $"A SET whose iss does not match the expected Transmitter must be rejected with invalid_issuer. Body: {rejectedBody}");
+    }
+
+
+    [TestMethod]
+    public async Task PushedSetWithWrongAudienceIsRejectedOverHttpWithInvalidAudienceError()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory transmitterPublic = keys.PublicKey;
+        using PrivateKeyMemory transmitterPrivate = keys.PrivateKey;
+
+        HashSet<string> seenJtis = new(StringComparer.Ordinal);
+        IsSecurityEventTokenJtiSeenDelegate isSeen =
+            (jti, _, _) => ValueTask.FromResult(!seenJtis.Add(jti));
+
+        async Task<MinimalHttpResponse> ReceiverPushHandler(MinimalHttpRequest request, CancellationToken ct)
+        {
+            SsfDeliveryDecision decision = await SecurityEventTokenReception.ReceiveAsync(
+                request.Body, transmitterPublic, TransmitterIssuer, ReceiverAudience,
+                SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
+                TestSetup.Base64UrlDecoder, isSeen, new ExchangeContext(), Pool, cancellationToken: ct).ConfigureAwait(false);
+
+            if(decision.Outcome is SsfDeliveryOutcome.Accepted or SsfDeliveryOutcome.AcceptedDuplicate)
+            {
+                return new MinimalHttpResponse { StatusCode = 202 };
+            }
+
+            return new MinimalHttpResponse
+            {
+                StatusCode = 400,
+                ContentType = WellKnownMediaTypes.Application.Json,
+                Body = $$"""{"err":"{{decision.Error!.Err}}"}"""
+            };
+        }
+
+        await using MinimalHttpHost receiver = await MinimalHttpHost.StartAsync(
+            ReceiverPushHandler, TestContext.CancellationToken).ConfigureAwait(false);
+
+        //Correct issuer, but the aud claim names a Receiver other than this one.
+        string compact = await IssueAsync(
+            transmitterPrivate, jwtId: Guid.NewGuid().ToString("N"), audience: "https://other-receiver.example/ssf").ConfigureAwait(false);
+
+        using HttpClient transmitterClient = LoopbackTls.CreatePinnedHttpClient(receiver.Certificate);
+        Uri pushUrl = new(receiver.BaseAddress, "/ssf/push");
+
+        using HttpResponseMessage rejected = await PushAsync(transmitterClient, pushUrl, compact).ConfigureAwait(false);
+        string rejectedBody = await rejected.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, (int)rejected.StatusCode, $"A wrong-audience SET must not be acknowledged. Body: {rejectedBody}");
+
+        using JsonDocument errorDoc = JsonDocument.Parse(rejectedBody);
+        Assert.IsTrue(SsfDeliveryErrorCodes.IsInvalidAudience(errorDoc.RootElement.GetProperty("err").GetString()!),
+            $"A SET whose aud does not include this Receiver must be rejected with invalid_audience. Body: {rejectedBody}");
+    }
+
+
+    [TestMethod]
+    public async Task RejectedSetWithWrongIssuerDoesNotConsumeItsJtiSoAValidRedeliveryWithTheSameJtiIsAccepted()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory transmitterPublic = keys.PublicKey;
+        using PrivateKeyMemory transmitterPrivate = keys.PrivateKey;
+
+        HashSet<string> seenJtis = new(StringComparer.Ordinal);
+        IsSecurityEventTokenJtiSeenDelegate isSeen =
+            (jti, _, _) => ValueTask.FromResult(!seenJtis.Add(jti));
+
+        async Task<MinimalHttpResponse> ReceiverPushHandler(MinimalHttpRequest request, CancellationToken ct)
+        {
+            SsfDeliveryDecision decision = await SecurityEventTokenReception.ReceiveAsync(
+                request.Body, transmitterPublic, TransmitterIssuer, ReceiverAudience,
+                SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
+                TestSetup.Base64UrlDecoder, isSeen, new ExchangeContext(), Pool, cancellationToken: ct).ConfigureAwait(false);
+
+            if(decision.Outcome is SsfDeliveryOutcome.Accepted or SsfDeliveryOutcome.AcceptedDuplicate)
+            {
+                return new MinimalHttpResponse { StatusCode = 202 };
+            }
+
+            return new MinimalHttpResponse
+            {
+                StatusCode = 400,
+                ContentType = WellKnownMediaTypes.Application.Json,
+                Body = $$"""{"err":"{{decision.Error!.Err}}"}"""
+            };
+        }
+
+        await using MinimalHttpHost receiver = await MinimalHttpHost.StartAsync(
+            ReceiverPushHandler, TestContext.CancellationToken).ConfigureAwait(false);
+
+        using HttpClient transmitterClient = LoopbackTls.CreatePinnedHttpClient(receiver.Certificate);
+        Uri pushUrl = new(receiver.BaseAddress, "/ssf/push");
+
+        string jti = Guid.NewGuid().ToString("N");
+
+        //A wrong-issuer SET carrying jti J: rejected before the dedup check ever runs
+        //(SecurityEventTokenVerification validates iss/aud claims before consulting
+        //isJtiSeen), so J must not be recorded as seen.
+        string wrongIssuerSet = await IssueAsync(transmitterPrivate, jti, issuer: "https://impostor.example/").ConfigureAwait(false);
+
+        using HttpResponseMessage rejected = await PushAsync(transmitterClient, pushUrl, wrongIssuerSet).ConfigureAwait(false);
+        string rejectedBody = await rejected.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, (int)rejected.StatusCode, $"The wrong-issuer SET must not be acknowledged. Body: {rejectedBody}");
+
+        using(JsonDocument errorDoc = JsonDocument.Parse(rejectedBody))
+        {
+            Assert.IsTrue(SsfDeliveryErrorCodes.IsInvalidIssuer(errorDoc.RootElement.GetProperty("err").GetString()!),
+                $"The rejection must be invalid_issuer. Body: {rejectedBody}");
+        }
+
+        Assert.DoesNotContain(jti, seenJtis,
+            "A rejected SET's jti must not be recorded — dedup only runs after claim validation succeeds.");
+
+        //A correctly issued SET carrying the SAME jti must now be accepted: the earlier
+        //rejection did not burn J.
+        string validSet = await IssueAsync(transmitterPrivate, jti).ConfigureAwait(false);
+
+        Assert.AreEqual(202, (int)(await PushAsync(transmitterClient, pushUrl, validSet).ConfigureAwait(false)).StatusCode);
+        Assert.Contains(jti, seenJtis, "The valid redelivery must be processed and its jti recorded.");
+    }
+
+
+    [TestMethod]
     public async Task PollRoundTripDeliversVerifiesAndAcknowledgesOverHttp()
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
@@ -253,10 +425,11 @@ internal sealed class SsfHttpFlowTests
     }
 
 
-    private async Task<string> IssueAsync(PrivateKeyMemory signingKey, string jwtId) =>
+    private async Task<string> IssueAsync(
+        PrivateKeyMemory signingKey, string jwtId, string? issuer = null, string? audience = null) =>
         await SecurityEventTokenIssuance.IssueAsync(
-            TransmitterIssuer,
-            [ReceiverAudience],
+            issuer ?? TransmitterIssuer,
+            [audience ?? ReceiverAudience],
             jwtId,
             issuedAt: DateTimeOffset.UnixEpoch.AddSeconds(1615305159),
             [new SecurityEvent

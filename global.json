@@ -4,7 +4,7 @@
         "version": "10.0.302"
     },
     "msbuild-sdks": {
-        "MSTest.Sdk": "4.2.3"
+        "MSTest.Sdk": "4.3.2"
     },
     "test": {
         "runner": "Microsoft.Testing.Platform"

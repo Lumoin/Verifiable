@@ -59,7 +59,7 @@ internal class JwkThumbprintRfcVectorTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeEcdhThumbprint(crv, kty, x);
         
-        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "SHA-256 hash must be 32 bytes.");
+        Assert.HasCount(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory, "SHA-256 hash must be 32 bytes.");
     }
 
     /// <summary>
@@ -76,7 +76,7 @@ internal class JwkThumbprintRfcVectorTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeECThumbprint(crv, kty, x, y);
         
-        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "SHA-256 hash must be 32 bytes.");
+        Assert.HasCount(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory, "SHA-256 hash must be 32 bytes.");
     }
 
     /// <summary>
@@ -93,7 +93,7 @@ internal class JwkThumbprintRfcVectorTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeECThumbprint(crv, kty, x, y);
         
-        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "SHA-256 hash must be 32 bytes.");
+        Assert.HasCount(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory, "SHA-256 hash must be 32 bytes.");
     }
 
     /// <summary>
@@ -110,7 +110,7 @@ internal class JwkThumbprintRfcVectorTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeECThumbprint(crv, kty, x, y);
         
-        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "SHA-256 hash must be 32 bytes.");
+        Assert.HasCount(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory, "SHA-256 hash must be 32 bytes.");
     }
 
     /// <summary>
@@ -125,7 +125,7 @@ internal class JwkThumbprintRfcVectorTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeOctThumbprint(k, kty);
         
-        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "SHA-256 hash must be 32 bytes.");
+        Assert.HasCount(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory, "SHA-256 hash must be 32 bytes.");
     }
 
     /// <summary>
@@ -144,7 +144,7 @@ internal class JwkThumbprintRfcVectorTests
 
         using var thumbprint = JwkThumbprintUtilities.ComputeGenericThumbprint(jwkParams);
         
-        Assert.AreEqual(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory.Length, "SHA-256 hash must be 32 bytes.");
+        Assert.HasCount(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory, "SHA-256 hash must be 32 bytes.");
     }
 
     /// <summary>

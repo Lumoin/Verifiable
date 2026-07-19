@@ -274,7 +274,7 @@ internal sealed class TpmSimulatorLifecycleTests
         Assert.AreEqual(TpmRcConstants.TPM_RC_SUCCESS, (TpmRcConstants)header.Code);
 
         ReadOnlySpan<byte> outData = reader.ReadTpm2b();
-        Assert.AreEqual(0, outData.Length);
+        Assert.HasCount(0, outData);
         Assert.AreEqual(TpmRcConstants.TPM_RC_SUCCESS, (TpmRcConstants)reader.ReadUInt32());
     }
 

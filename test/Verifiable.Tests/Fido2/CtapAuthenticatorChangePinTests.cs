@@ -392,7 +392,7 @@ internal sealed class CtapAuthenticatorChangePinTests
         CtapAuthenticatorState postChangeState = trace.Received[^1].StateAfter;
         CtapPinUvAuthTokenState currentProtocolOneToken = postChangeState.ProtocolOneToken;
 
-        CollectionAssert.AreNotEqual(
+        Assert.AreNotSequenceEqual(
             issuedToken, currentProtocolOneToken.Token.AsReadOnlySpan().ToArray(),
             "changePIN must mint a fresh protocol-one token, distinct from the one issued before the change.");
 

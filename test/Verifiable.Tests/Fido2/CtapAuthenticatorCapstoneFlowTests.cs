@@ -376,7 +376,7 @@ internal sealed class CtapAuthenticatorCapstoneFlowTests
         Assert.AreEqual(2, firstResponse.NumberOfCredentials);
         Assert.IsNull(firstResponse.UserSelected);
         Assert.IsNotNull(firstResponse.User);
-        CollectionAssert.AreEqual(newerUserId, firstResponse.User!.Id.AsReadOnlySpan().ToArray());
+        Assert.AreSequenceEqual(newerUserId, firstResponse.User!.Id.AsReadOnlySpan().ToArray());
         Assert.IsNull(firstResponse.User.Name);
         Assert.IsNull(firstResponse.User.DisplayName);
 
@@ -389,7 +389,7 @@ internal sealed class CtapAuthenticatorCapstoneFlowTests
         Assert.IsNull(nextResponse.NumberOfCredentials);
         Assert.IsNull(nextResponse.UserSelected);
         Assert.IsNotNull(nextResponse.User);
-        CollectionAssert.AreEqual(olderUserId, nextResponse.User!.Id.AsReadOnlySpan().ToArray());
+        Assert.AreSequenceEqual(olderUserId, nextResponse.User!.Id.AsReadOnlySpan().ToArray());
         Assert.IsNull(nextResponse.User.Name);
         Assert.IsNull(nextResponse.User.DisplayName);
 

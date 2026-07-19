@@ -85,7 +85,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
         Assert.IsTrue(after.IsAlwaysUvEnabled, "alwaysUv survives a power cycle; only authenticatorReset reverts it.");
         Assert.AreEqual(6, after.MinPinCodePointLength, "the current minimum PIN length survives a power cycle; only authenticatorReset reverts it.");
         Assert.IsTrue(after.IsForcePinChangeRequired, "forcePINChange survives a power cycle; only authenticatorReset or a successful changePIN clears it.");
-        CollectionAssert.AreEqual(
+        Assert.AreSequenceEqual(
             (string[])[.. before.MinPinLengthRpIds], (string[])[.. after.MinPinLengthRpIds],
             "minPinLengthRPIDs (§7.4.3 line 8424) survives a power cycle; only authenticatorReset clears it.");
 

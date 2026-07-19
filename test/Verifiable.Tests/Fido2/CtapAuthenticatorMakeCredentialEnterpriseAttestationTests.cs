@@ -159,7 +159,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
                 Assert.AreEqual(WellKnownCoseAlgorithms.Es256, statement.Alg);
                 Assert.IsNotNull(statement.X5c, "a certified mint must carry x5c.");
                 Assert.HasCount(1, statement.X5c!);
-                CollectionAssert.AreEqual(
+                Assert.AreSequenceEqual(
                     provisioning.X5c[0].AsReadOnlySpan().ToArray(), statement.X5c![0].AsReadOnlySpan().ToArray(),
                     "the wire x5c entry must be the seeded chain's own bytes, verbatim.");
 

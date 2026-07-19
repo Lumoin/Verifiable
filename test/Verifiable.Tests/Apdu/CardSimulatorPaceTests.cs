@@ -108,8 +108,8 @@ internal sealed class CardSimulatorPaceTests
         {
             Assert.AreEqual(CardLifecyclePhase.SecureMessaging, card.Phase,
                 "PACE must leave the card in the Secure Messaging phase.");
-            Assert.AreEqual(16, encryptionKey.AsReadOnlySpan().Length, "KSenc is an AES-128 key.");
-            Assert.AreEqual(16, macKey.AsReadOnlySpan().Length, "KSmac is an AES-128 key.");
+            Assert.HasCount(16, encryptionKey.AsReadOnlySpan(), "KSenc is an AES-128 key.");
+            Assert.HasCount(16, macKey.AsReadOnlySpan(), "KSmac is an AES-128 key.");
         }
     }
 
@@ -131,8 +131,8 @@ internal sealed class CardSimulatorPaceTests
         {
             Assert.AreEqual(CardLifecyclePhase.SecureMessaging, card.Phase,
                 "PACE with Integrated Mapping must leave the card in the Secure Messaging phase.");
-            Assert.AreEqual(16, encryptionKey.AsReadOnlySpan().Length, "KSenc is an AES-128 key.");
-            Assert.AreEqual(16, macKey.AsReadOnlySpan().Length, "KSmac is an AES-128 key.");
+            Assert.HasCount(16, encryptionKey.AsReadOnlySpan(), "KSenc is an AES-128 key.");
+            Assert.HasCount(16, macKey.AsReadOnlySpan(), "KSmac is an AES-128 key.");
         }
     }
 
@@ -161,8 +161,8 @@ internal sealed class CardSimulatorPaceTests
             {
                 Assert.AreEqual(CardLifecyclePhase.SecureMessaging, card.Phase,
                     "PACE with Chip Authentication Mapping must leave the card in the Secure Messaging phase.");
-                Assert.AreEqual(16, encryptionKey.AsReadOnlySpan().Length, "KSenc is an AES-128 key.");
-                Assert.AreEqual(16, macKey.AsReadOnlySpan().Length, "KSmac is an AES-128 key.");
+                Assert.HasCount(16, encryptionKey.AsReadOnlySpan(), "KSenc is an AES-128 key.");
+                Assert.HasCount(16, macKey.AsReadOnlySpan(), "KSmac is an AES-128 key.");
             }
         }
     }

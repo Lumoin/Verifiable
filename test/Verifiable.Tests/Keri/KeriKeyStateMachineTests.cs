@@ -49,12 +49,12 @@ internal sealed class KeriKeyStateMachineTests
 
         Assert.AreEqual(Aid, state.Prefix);
         Assert.AreEqual(KeriThreshold.Unweighted(2), state.SigningThreshold);
-        CollectionAssert.AreEqual(SigningKeys, (System.Collections.ICollection)state.SigningKeys);
+        Assert.AreSequenceEqual(SigningKeys, (System.Collections.ICollection)state.SigningKeys);
         Assert.AreEqual(KeriThreshold.Unweighted(2), state.NextThreshold);
-        CollectionAssert.AreEqual(NextKeyDigests, (System.Collections.ICollection)state.NextKeyDigests);
+        Assert.AreSequenceEqual(NextKeyDigests, (System.Collections.ICollection)state.NextKeyDigests);
         Assert.AreEqual("3", state.BackerThreshold);
         Assert.HasCount(4, state.Backers);
-        CollectionAssert.AreEqual(ConfigurationTraits, (System.Collections.ICollection)state.ConfigurationTraits);
+        Assert.AreSequenceEqual(ConfigurationTraits, (System.Collections.ICollection)state.ConfigurationTraits);
         Assert.AreEqual(0, state.SequenceNumber);
         Assert.AreEqual(Aid, state.LastEventSaid, "The inception SAID becomes the last event SAID the next event chains to.");
     }
@@ -97,8 +97,8 @@ internal sealed class KeriKeyStateMachineTests
 
         Assert.AreEqual(1, advanced.SequenceNumber);
         Assert.AreEqual("EInteractionSaid000000000000000000000000000", advanced.LastEventSaid);
-        CollectionAssert.AreEqual(SigningKeys, (System.Collections.ICollection)advanced.SigningKeys, "An interaction does not change the signing keys.");
-        Assert.AreEqual(inception.NextKeyDigests, advanced.NextKeyDigests, "An interaction does not change the pre-rotation commitments.");
+        Assert.AreSequenceEqual(SigningKeys, (System.Collections.ICollection)advanced.SigningKeys, "An interaction does not change the signing keys.");
+        Assert.AreSequenceEqual(inception.NextKeyDigests, advanced.NextKeyDigests, "An interaction does not change the pre-rotation commitments.");
     }
 
 

@@ -36,9 +36,26 @@ public static class AuthorizationServerMetadataValidation
         ArgumentNullException.ThrowIfNull(metadata);
         ArgumentNullException.ThrowIfNull(expectedIssuerIdentifier);
 
-        return string.Equals(
-            metadata.Issuer.OriginalString,
-            expectedIssuerIdentifier.OriginalString,
-            StringComparison.Ordinal);
+        return IsIssuerIdentifierMatch(metadata.Issuer.OriginalString, expectedIssuerIdentifier);
+    }
+
+
+    /// <summary>
+    /// The code-point-by-code-point issuer-identifier comparison
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8414#section-3.3">RFC 8414 §3.3</see> /
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9207#section-2.4">RFC 9207 §2.4</see>
+    /// require — no Unicode normalization, no URI canonicalization. The single
+    /// comparison rule shared by <see cref="IsIssuerMatch"/> (the metadata-issuer
+    /// consistency gate) and <see cref="AuthorizationServerIssuerValidation.IsAuthorizationResponseIssuerValid"/>
+    /// (the RFC 9207 §2.4 mix-up defense), so both apply the identical rule rather
+    /// than each defining its own.
+    /// </summary>
+    /// <param name="issuerIdentifier">The issuer identifier under comparison.</param>
+    /// <param name="expectedIssuerIdentifier">The issuer identifier it must equal.</param>
+    internal static bool IsIssuerIdentifierMatch(string issuerIdentifier, Uri expectedIssuerIdentifier)
+    {
+        ArgumentNullException.ThrowIfNull(expectedIssuerIdentifier);
+
+        return string.Equals(issuerIdentifier, expectedIssuerIdentifier.OriginalString, StringComparison.Ordinal);
     }
 }

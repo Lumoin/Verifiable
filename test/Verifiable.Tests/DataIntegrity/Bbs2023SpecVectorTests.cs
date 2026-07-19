@@ -286,8 +286,8 @@ internal sealed class Bbs2023W3cVectorTests
             Assert.AreEqual(b, actual, $"Derived label for '{c14n}' must match W3C Example 25.");
         }
 
-        CollectionAssert.AreEqual(DerivedMandatoryIndexes, derivedProof.MandatoryIndexes.ToArray(), "Adjusted mandatory indexes must match W3C Example 24/25.");
-        CollectionAssert.AreEqual(DerivedSelectiveIndexes, derivedProof.SelectiveIndexes.ToArray(), "Adjusted selective indexes must match W3C Example 24/25.");
+        Assert.AreSequenceEqual(DerivedMandatoryIndexes, derivedProof.MandatoryIndexes.ToArray(), "Adjusted mandatory indexes must match W3C Example 24/25.");
+        Assert.AreSequenceEqual(DerivedSelectiveIndexes, derivedProof.SelectiveIndexes.ToArray(), "Adjusted selective indexes must match W3C Example 24/25.");
 
         //The serialized derived proof has the same structure and length as W3C Example 26, and its
         //randomness-independent tail (the CBOR-encoded label map, mandatory/selective indexes, and

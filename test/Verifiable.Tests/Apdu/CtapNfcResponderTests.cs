@@ -195,7 +195,7 @@ internal sealed class CtapNfcResponderTests
 
         Assert.IsTrue(response.AsReadOnlySpan().SequenceEqual(scriptedResponse));
         Assert.IsNotNull(capturedRequest);
-        CollectionAssert.AreEqual(request, capturedRequest,
+        Assert.AreSequenceEqual(request, capturedRequest,
             "The responder must deframe NFCCTAP_MSG down to exactly the opaque CTAP2 envelope.");
     }
 

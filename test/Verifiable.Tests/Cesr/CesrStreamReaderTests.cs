@@ -270,7 +270,7 @@ internal sealed class CesrStreamReaderTests
         Assert.HasCount(1, tokens);
         Assert.AreEqual(CesrTokenKind.NonNative, tokens[0].Kind);
         Assert.AreEqual(CesrSerializationKind.Json, tokens[0].Serialization);
-        CollectionAssert.AreEqual(json, tokens[0].Body, "The whole serialization is yielded as the body.");
+        Assert.AreSequenceEqual(json, tokens[0].Body, "The whole serialization is yielded as the body.");
     }
 
 
@@ -296,10 +296,10 @@ internal sealed class CesrStreamReaderTests
         Assert.AreEqual(CesrTokenKind.NonNative, tokens[1].Kind);
         Assert.AreEqual(CesrSerializationKind.Json, tokens[1].Serialization, "The interleaved body is JSON.");
         Assert.AreEqual(domain, tokens[1].Domain, "The non-native token records the surrounding stream's domain.");
-        CollectionAssert.AreEqual(expectedJson, tokens[1].Body, "The whole JSON serialization is yielded as the body.");
+        Assert.AreSequenceEqual(expectedJson, tokens[1].Body, "The whole JSON serialization is yielded as the body.");
 
         Assert.AreEqual(CesrTokenKind.CountGroup, tokens[2].Kind);
-        CollectionAssert.AreEqual(expectedGroupBody, tokens[2].Body, "The count group after the JSON body still parses.");
+        Assert.AreSequenceEqual(expectedGroupBody, tokens[2].Body, "The count group after the JSON body still parses.");
     }
 
 
@@ -316,7 +316,7 @@ internal sealed class CesrStreamReaderTests
         Assert.AreEqual(CesrDomain.Binary, tokens[1].Domain);
         Assert.AreEqual("-V", tokens[1].Code, "The group is an attachment group.");
         Assert.AreEqual(expectedBody.Length / 3, tokens[1].Count, "The count is the group body's triplet count.");
-        CollectionAssert.AreEqual(expectedBody, tokens[1].Body, "The framed body is exactly the concatenated primitives.");
+        Assert.AreSequenceEqual(expectedBody, tokens[1].Body, "The framed body is exactly the concatenated primitives.");
 
         //The body descends into the framed primitives (the test owns the per-primitive lengths).
         using(CesrParsedPrimitive key = CesrPrimitiveCodec.DecodeBinary(tokens[1].Body.AsSpan(0, firstPrimitiveLength), BaseMemoryPool.Shared))
@@ -346,7 +346,7 @@ internal sealed class CesrStreamReaderTests
         Assert.AreEqual(CesrDomain.Text, tokens[1].Domain);
         Assert.AreEqual("-V", tokens[1].Code, "The group is an attachment group.");
         Assert.AreEqual(expectedBody.Length / 4, tokens[1].Count, "The count is the group body's quadlet count.");
-        CollectionAssert.AreEqual(expectedBody, tokens[1].Body, "The framed body is exactly the concatenated primitives as qb64 characters.");
+        Assert.AreSequenceEqual(expectedBody, tokens[1].Body, "The framed body is exactly the concatenated primitives as qb64 characters.");
 
         //The body descends into the framed primitives, decoded from their qb64 text (the test owns the per-primitive lengths).
         string bodyText = Encoding.ASCII.GetString(tokens[1].Body);

@@ -69,7 +69,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
         (byte freshStatus, CtapLargeBlobsResponse? freshResponse) = await SendGetAsync(
             harness.Transceive, pool, CtapAuthenticatorState.InitialSerializedLargeBlobArray.Length, offset: 0, cancellationToken).ConfigureAwait(false);
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, freshStatus);
-        CollectionAssert.AreEqual(
+        Assert.AreSequenceEqual(
             CtapAuthenticatorState.InitialSerializedLargeBlobArray.ToArray(), freshResponse!.Config.ToArray(),
             "a fresh authenticator's get must return the 17-byte initial constant byte-exactly, on the wire.");
 
@@ -97,7 +97,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, thirdStatus, "the third and final fragment must commit the whole write.");
 
         byte[] readBack = await CtapWaveLargeBlobPlatformFixtures.ReadEntireSerializedArrayAsync(harness.Transceive, pool, cancellationToken).ConfigureAwait(false);
-        CollectionAssert.AreEqual(fullArray, readBack, "the read-back array must byte-exactly match the committed write.");
+        Assert.AreSequenceEqual(fullArray, readBack, "the read-back array must byte-exactly match the committed write.");
 
         byte throwawayFirstStatus = await CtapWaveLargeBlobPlatformFixtures.SendFragmentAsync(
             harness.Transceive, pool, new byte[] { 0x01, 0x02 }, offset: 0, length: 50, token: null, ProtocolId, cancellationToken).ConfigureAwait(false);
@@ -113,7 +113,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
 
         byte[] readBackAfterDiscard = await CtapWaveLargeBlobPlatformFixtures.ReadEntireSerializedArrayAsync(harness.Transceive, pool, cancellationToken)
             .ConfigureAwait(false);
-        CollectionAssert.AreEqual(
+        Assert.AreSequenceEqual(
             fullArray, readBackAfterDiscard, "the abandoned throwaway sequence must never have overwritten the previously committed array.");
     }
 
@@ -150,7 +150,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
 
         byte[] readBackAfterLbwWrite = await CtapWaveLargeBlobPlatformFixtures.ReadEntireSerializedArrayAsync(harness.Transceive, pool, cancellationToken)
             .ConfigureAwait(false);
-        CollectionAssert.AreEqual(firstEntry, readBackAfterLbwWrite, "the lbw-token-driven write must land on the wire exactly as sent.");
+        Assert.AreSequenceEqual(firstEntry, readBackAfterLbwWrite, "the lbw-token-driven write must land on the wire exactly as sent.");
 
         byte[] mcClientDataHash = CtapWave2AuthenticatorFixtures.BuildFixedBytes(32, 0x10);
         byte[] mcParam = await CtapWaveConfigFixtures.ComputeSignatureAsync(token, ProtocolId, mcClientDataHash, pool, cancellationToken).ConfigureAwait(false);
@@ -171,7 +171,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
 
         byte[] readBackAfterCarveOut = await CtapWaveLargeBlobPlatformFixtures.ReadEntireSerializedArrayAsync(harness.Transceive, pool, cancellationToken)
             .ConfigureAwait(false);
-        CollectionAssert.AreEqual(
+        Assert.AreSequenceEqual(
             secondEntry, readBackAfterCarveOut,
             "the SAME token -- stripped of mc but still carrying lbw (the line 5828 carve-out) -- must still drive a full set to completion, on the wire.");
     }
@@ -238,7 +238,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
 
         byte[] recovered = await CtapWaveLargeBlobPlatformFixtures.ReadAndDecryptEntryAsync(harness.Transceive, pool, largeBlobKey, cancellationToken)
             .ConfigureAwait(false);
-        CollectionAssert.AreEqual(opaqueData, recovered, "the real DEFLATE+AES-256-GCM round trip must recover the exact original opaque payload.");
+        Assert.AreSequenceEqual(opaqueData, recovered, "the real DEFLATE+AES-256-GCM round trip must recover the exact original opaque payload.");
 
         await EstablishPinAsync(harness.Transceive, pool, ProtocolId, Pin, cancellationToken).ConfigureAwait(false);
         byte[] cmToken = await IssueTokenAsync(
@@ -276,7 +276,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
 
         byte[] readBackBeforeReset = await CtapWaveLargeBlobPlatformFixtures.ReadEntireSerializedArrayAsync(harness.Transceive, pool, cancellationToken)
             .ConfigureAwait(false);
-        CollectionAssert.AreEqual(committed, readBackBeforeReset);
+        Assert.AreSequenceEqual(committed, readBackBeforeReset);
 
         byte[] resetRequest = [WellKnownCtapCommands.Reset];
         using(PooledMemory resetResponse = await harness.Transceive(resetRequest, pool, cancellationToken).ConfigureAwait(false))
@@ -287,7 +287,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
         (byte postResetStatus, CtapLargeBlobsResponse? postResetResponse) = await SendGetAsync(
             harness.Transceive, pool, CtapAuthenticatorState.InitialSerializedLargeBlobArray.Length, offset: 0, cancellationToken).ConfigureAwait(false);
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, postResetStatus);
-        CollectionAssert.AreEqual(
+        Assert.AreSequenceEqual(
             CtapAuthenticatorState.InitialSerializedLargeBlobArray.ToArray(), postResetResponse!.Config.ToArray(),
             "authenticatorReset must restore the initial serialized large-blob array byte-exactly, on the wire.");
 
@@ -303,7 +303,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
 
         byte[] readBackAfterCycle = await CtapWaveLargeBlobPlatformFixtures.ReadEntireSerializedArrayAsync(harness.Transceive, pool, cancellationToken)
             .ConfigureAwait(false);
-        CollectionAssert.AreEqual(
+        Assert.AreSequenceEqual(
             CtapAuthenticatorState.InitialSerializedLargeBlobArray.ToArray(), readBackAfterCycle,
             "the power cycle must preserve the reset-restored constant, discarding only the abandoned pending write.");
     }
@@ -337,7 +337,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
 
         byte[] readBackAfterFailure = await CtapWaveLargeBlobPlatformFixtures.ReadEntireSerializedArrayAsync(harness.Transceive, pool, cancellationToken)
             .ConfigureAwait(false);
-        CollectionAssert.AreEqual(
+        Assert.AreSequenceEqual(
             committed, readBackAfterFailure, "a commit-time integrity failure must leave the previously stored array byte-exact and unchanged, on the wire.");
     }
 

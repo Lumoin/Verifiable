@@ -130,7 +130,7 @@ internal sealed class CtapAuthenticatorResetFlowTests
         }
 
         byte[] postResetGetInfoBytes = await GetInfoBytesAsync(harness.Transceive, pool, cancellationToken).ConfigureAwait(false);
-        CollectionAssert.AreEqual(birthGetInfoBytes, postResetGetInfoBytes, "post-reset getInfo bytes must be byte-identical to the birth capture (R8).");
+        Assert.AreSequenceEqual(birthGetInfoBytes, postResetGetInfoBytes, "post-reset getInfo bytes must be byte-identical to the birth capture (R8).");
 
         Assert.AreEqual(
             CtapAuthenticatorState.MaxPinRetries, await GetPinRetriesAsync(harness.Transceive, pool, cancellationToken).ConfigureAwait(false),

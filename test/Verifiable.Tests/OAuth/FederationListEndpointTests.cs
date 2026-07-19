@@ -87,7 +87,7 @@ internal sealed class FederationListEndpointTests
 
         List<string> ids = ParseStringArray(body);
         Assert.HasCount(3, ids, "All three subordinates must be listed.");
-        CollectionAssert.AreEqual(
+        Assert.AreSequenceEqual(
             new[] { alice.Value, bob.Value, carol.Value },
             ids.ToArray(),
             "The §8.2 array must preserve the membership order the delegate returned.");

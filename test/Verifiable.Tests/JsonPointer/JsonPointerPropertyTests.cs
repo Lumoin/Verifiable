@@ -231,8 +231,12 @@ internal sealed class JsonPointerPropertyTests
     {
         GenPointer.Sample(pointer =>
         {
-            Assert.AreEqual(pointer, pointer);
-            Assert.AreEqual(pointer.GetHashCode(), pointer.GetHashCode());
+            //A distinct, independently parsed instance with the same value exercises the actual
+            //field-by-field comparison instead of trivially passing on reference identity.
+            var samePointer = Ptr.Parse(pointer.ToString());
+
+            Assert.AreEqual(pointer, samePointer);
+            Assert.AreEqual(pointer.GetHashCode(), samePointer.GetHashCode());
         });
     }
 

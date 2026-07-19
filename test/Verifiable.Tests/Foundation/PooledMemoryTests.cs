@@ -47,8 +47,8 @@ internal sealed class PooledMemoryTests
         using PooledMemory pooledMemory = PooledMemory.FromBytes(source, pool, TestTag);
 
         Assert.AreEqual(requestedLength, pooledMemory.Length);
-        Assert.AreEqual(requestedLength, pooledMemory.AsReadOnlySpan().Length);
-        Assert.AreEqual(requestedLength, pooledMemory.AsReadOnlyMemory().Length);
+        Assert.HasCount(requestedLength, pooledMemory.AsReadOnlySpan());
+        Assert.HasCount(requestedLength, pooledMemory.AsReadOnlyMemory());
         Assert.IsTrue(pooledMemory.AsReadOnlySpan().SequenceEqual(source));
     }
 

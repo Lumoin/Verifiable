@@ -128,7 +128,7 @@ internal sealed class SignatureTests
 
         ReadOnlySpan<byte> span = sig;
 
-        Assert.AreEqual(SignatureBytes1.Length, span.Length);
+        Assert.HasCount(SignatureBytes1.Length, span);
         Assert.IsTrue(span.SequenceEqual(SignatureBytes1), "Implicit span conversion should preserve all bytes.");
     }
 

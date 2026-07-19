@@ -110,7 +110,7 @@ namespace Verifiable.Tests.Cryptography
 
             byte[] evenCompressedPoint = EllipticCurveUtilities.Compress(td.PublicKeyMaterialX, td.PublicKeyMaterialY);
             byte[] evenUncompressedY = EllipticCurveUtilities.Decompress(evenCompressedPoint, curveType);
-            CollectionAssert.AreEqual(td.PublicKeyMaterialY, evenUncompressedY);
+            Assert.AreSequenceEqual(td.PublicKeyMaterialY, evenUncompressedY);
         }
 
 
@@ -147,7 +147,7 @@ namespace Verifiable.Tests.Cryptography
 
             ReadOnlySpan<byte> x = EllipticCurveUtilities.SliceXCoordinate(point);
 
-            Assert.AreEqual(EllipticCurveConstants.P256.PointArrayLength, x.Length,
+            Assert.HasCount(EllipticCurveConstants.P256.PointArrayLength, x,
                 "X coordinate length must match P-256 point array length.");
             Assert.IsTrue(x.SequenceEqual(point.AsSpan(1, EllipticCurveConstants.P256.PointArrayLength)),
                 "X coordinate bytes must match bytes 1 to 32.");
@@ -165,7 +165,7 @@ namespace Verifiable.Tests.Cryptography
 
             ReadOnlySpan<byte> y = EllipticCurveUtilities.SliceYCoordinate(point);
 
-            Assert.AreEqual(EllipticCurveConstants.P256.PointArrayLength, y.Length,
+            Assert.HasCount(EllipticCurveConstants.P256.PointArrayLength, y,
                 "Y coordinate length must match P-256 point array length.");
             Assert.IsTrue(y.SequenceEqual(point.AsSpan(1 + EllipticCurveConstants.P256.PointArrayLength, EllipticCurveConstants.P256.PointArrayLength)),
                 "Y coordinate bytes must match bytes 33 to 64.");
@@ -183,7 +183,7 @@ namespace Verifiable.Tests.Cryptography
 
             ReadOnlySpan<byte> x = EllipticCurveUtilities.SliceXCoordinate(point);
 
-            Assert.AreEqual(EllipticCurveConstants.P384.PointArrayLength, x.Length,
+            Assert.HasCount(EllipticCurveConstants.P384.PointArrayLength, x,
                 "X coordinate length must match P-384 point array length.");
             Assert.IsTrue(x.SequenceEqual(point.AsSpan(1, EllipticCurveConstants.P384.PointArrayLength)),
                 "X coordinate bytes must match bytes 1 to 48.");
@@ -201,7 +201,7 @@ namespace Verifiable.Tests.Cryptography
 
             ReadOnlySpan<byte> y = EllipticCurveUtilities.SliceYCoordinate(point);
 
-            Assert.AreEqual(EllipticCurveConstants.P384.PointArrayLength, y.Length,
+            Assert.HasCount(EllipticCurveConstants.P384.PointArrayLength, y,
                 "Y coordinate length must match P-384 point array length.");
             Assert.IsTrue(y.SequenceEqual(point.AsSpan(1 + EllipticCurveConstants.P384.PointArrayLength, EllipticCurveConstants.P384.PointArrayLength)),
                 "Y coordinate bytes must match bytes 49 to 96.");

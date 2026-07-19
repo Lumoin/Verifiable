@@ -46,7 +46,7 @@ internal sealed class AcrAmrClaimContributorTests
         Assert.AreEqual(authContextTime.ToUnixTimeSeconds(), emitted[WellKnownJwtClaimNames.AuthTime]);
 
         IReadOnlyList<string> amr = (IReadOnlyList<string>)emitted[WellKnownJwtClaimNames.Amr];
-        CollectionAssert.AreEqual(ExpectedAmrPwdMfa, (System.Collections.ICollection)amr);
+        Assert.AreSequenceEqual(ExpectedAmrPwdMfa, (System.Collections.ICollection)amr);
     }
 
 

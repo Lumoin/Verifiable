@@ -45,7 +45,7 @@ internal sealed class TpmSessionTests
         Assert.AreEqual(TpmSeConstants.TPM_SE_HMAC, input.SessionType, "Session type must be HMAC.");
         Assert.AreEqual(authHash, input.AuthHash, "AuthHash must be the requested algorithm.");
         Assert.IsTrue(input.EncryptedSalt.IsEmpty, "An unsalted session must carry an empty encryptedSalt.");
-        Assert.AreEqual(digestSize, input.NonceCaller.Length, "nonceCaller must be a full-digest-size caller nonce (>= 16 octets per Part 3 §11.1).");
+        Assert.HasCount(digestSize, input.NonceCaller, "nonceCaller must be a full-digest-size caller nonce (>= 16 octets per Part 3 §11.1).");
         Assert.AreEqual(TpmCcConstants.TPM_CC_StartAuthSession, input.CommandCode);
     }
 

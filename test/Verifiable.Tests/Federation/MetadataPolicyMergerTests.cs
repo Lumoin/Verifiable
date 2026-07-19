@@ -61,7 +61,7 @@ internal sealed class MetadataPolicyMergerTests
         Assert.IsTrue(result.IsSuccess);
         ParameterPolicy merged = result.MergedBlock!.ParameterPolicies["scope"];
         List<object> subsetOf = (List<object>)merged.Operators[WellKnownMetadataPolicyOperators.SubsetOf];
-        CollectionAssert.AreEquivalent(ProfileEmail, subsetOf);
+        Assert.AreSequenceEqual(ProfileEmail, subsetOf, SequenceOrder.InAnyOrder);
     }
 
 
@@ -101,7 +101,7 @@ internal sealed class MetadataPolicyMergerTests
         Assert.IsTrue(result.IsSuccess);
         ParameterPolicy merged = result.MergedBlock!.ParameterPolicies["scope"];
         List<object> add = (List<object>)merged.Operators[WellKnownMetadataPolicyOperators.Add];
-        CollectionAssert.AreEquivalent(OpenIdProfile, add);
+        Assert.AreSequenceEqual(OpenIdProfile, add, SequenceOrder.InAnyOrder);
     }
 
 

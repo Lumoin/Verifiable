@@ -48,7 +48,7 @@ internal sealed class SdCwtSerializerTests
         string value = reader.ReadTextString();
         reader.ReadEndArray();
 
-        CollectionAssert.AreEqual(TestSalt, salt);
+        Assert.AreSequenceEqual(TestSalt, salt);
         Assert.AreEqual("given_name", name);
         Assert.AreEqual("John", value);
     }
@@ -70,7 +70,7 @@ internal sealed class SdCwtSerializerTests
         string value = reader.ReadTextString();
         reader.ReadEndArray();
 
-        CollectionAssert.AreEqual(TestSalt, salt);
+        Assert.AreSequenceEqual(TestSalt, salt);
         Assert.AreEqual("US", value);
     }
 
@@ -202,7 +202,7 @@ internal sealed class SdCwtSerializerTests
         using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, BaseMemoryPool.Shared);
 
         Assert.AreEqual("binary", parsed.ClaimName);
-        CollectionAssert.AreEqual(binaryData, (byte[])parsed.ClaimValue!);
+        Assert.AreSequenceEqual(binaryData, (byte[])parsed.ClaimValue!);
     }
 
 
@@ -216,7 +216,7 @@ internal sealed class SdCwtSerializerTests
         byte[] digest1 = SdCwtSerializer.ComputeDisclosureDigest(cbor, WellKnownHashAlgorithms.Sha256Iana);
         byte[] digest2 = SdCwtSerializer.ComputeDisclosureDigest(cbor, WellKnownHashAlgorithms.Sha256Iana);
 
-        CollectionAssert.AreEqual(digest1, digest2, "Digest must be deterministic.");
+        Assert.AreSequenceEqual(digest1, digest2, "Digest must be deterministic.");
     }
 
 
@@ -323,7 +323,7 @@ internal sealed class SdCwtSerializerTests
         byte[] cbor1 = SdCwtSerializer.SerializeDisclosure(disclosure, CborConformanceMode.Canonical);
         byte[] cbor2 = SdCwtSerializer.SerializeDisclosure(disclosure, CborConformanceMode.Canonical);
 
-        CollectionAssert.AreEqual(cbor1, cbor2, "Canonical encoding must be deterministic.");
+        Assert.AreSequenceEqual(cbor1, cbor2, "Canonical encoding must be deterministic.");
     }
 
 
@@ -352,7 +352,7 @@ internal sealed class SdCwtSerializerTests
             byte[] hash1 = SdCwtSerializer.ComputeSdHash(sdClaimsCbor, WellKnownHashAlgorithms.Sha256Iana);
             byte[] hash2 = SdCwtSerializer.ComputeSdHash(sdClaimsCbor, WellKnownHashAlgorithms.Sha256Iana);
 
-            CollectionAssert.AreEqual(hash1, hash2, "SD hash must be deterministic.");
+            Assert.AreSequenceEqual(hash1, hash2, "SD hash must be deterministic.");
         }
         finally
         {

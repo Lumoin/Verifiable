@@ -76,7 +76,7 @@ internal sealed class WebVhDidUrlDereferencerTests
         Assert.IsTrue(result.IsSuccessful, $"A did:webvh path DID URL MUST dereference. Error: {result.DereferencingMetadata.Error?.Type}.");
 
         TaggedMemory<byte> body = (TaggedMemory<byte>)result.ContentStream!;
-        CollectionAssert.AreEqual(served, body.Span.ToArray(), "The dereferenced content bytes MUST equal the served bytes.");
+        Assert.AreSequenceEqual(served, body.Span.ToArray(), "The dereferenced content bytes MUST equal the served bytes.");
     }
 
 
@@ -266,7 +266,7 @@ internal sealed class WebVhDidUrlDereferencerTests
         Assert.IsTrue(result.IsSuccessful, $"An explicit #files override MUST be dereferenced. Error: {result.DereferencingMetadata.Error?.Type}.");
 
         TaggedMemory<byte> body = (TaggedMemory<byte>)result.ContentStream!;
-        CollectionAssert.AreEqual(served, body.Span.ToArray(), "The content MUST come from the explicit #files endpoint.");
+        Assert.AreSequenceEqual(served, body.Span.ToArray(), "The content MUST come from the explicit #files endpoint.");
     }
 
 
@@ -295,7 +295,7 @@ internal sealed class WebVhDidUrlDereferencerTests
         Assert.IsTrue(result.IsSuccessful, $"A serviceEndpoint map #files override MUST be dereferenced. Error: {result.DereferencingMetadata.Error?.Type}.");
 
         TaggedMemory<byte> body = (TaggedMemory<byte>)result.ContentStream!;
-        CollectionAssert.AreEqual(served, body.Span.ToArray(), "The content MUST come from the map-form #files endpoint.");
+        Assert.AreSequenceEqual(served, body.Span.ToArray(), "The content MUST come from the map-form #files endpoint.");
     }
 
 

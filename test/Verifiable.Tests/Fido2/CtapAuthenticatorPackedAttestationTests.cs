@@ -136,7 +136,7 @@ internal sealed class CtapAuthenticatorPackedAttestationTests
         CtapMakeCredentialResponse decoded = CtapMakeCredentialResponseCborReader.Read(response.AsReadOnlyMemory()[1..]);
         Assert.AreEqual(WellKnownWebAuthnAttestationFormats.None, decoded.Fmt);
         Assert.IsTrue(decoded.AttStmt.HasValue, "A multi-entry preference resolving to none must still carry the standard empty-map attStmt.");
-        Assert.AreEqual(1, decoded.AttStmt!.Value.Length);
+        Assert.HasCount(1, decoded.AttStmt!.Value);
         Assert.AreEqual(NoneAttestation.CanonicalEmptyMap, decoded.AttStmt.Value.Span[0]);
     }
 

@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Text;
+using Verifiable.Core;
+using Verifiable.Core.Assessment;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -13,6 +15,7 @@ using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Siop;
 using Verifiable.OAuth.Siop.Wallet;
+using Verifiable.OAuth.Validation;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -161,6 +164,55 @@ internal sealed class SiopCombinedResponseTests
             Assert.IsTrue(parsed.KbJwtSignatureValid);
             Assert.AreNotEqual(RequestNonce, parsed.KbJwtNonce,
                 "The verifier's §12 nonce comparison must detect the replayed presentation.");
+        }
+    }
+
+
+    [TestMethod]
+    public async Task MismatchedKbJwtAudienceFailsTheAudBindingCheck()
+    {
+        //RFC 9901 KB-JWT aud binds the presentation to ONE Verifier; a wallet that signs
+        //against a different Client ID must fail KbJwtAudMatchesClientId even though its
+        //signature, sd_hash, and nonce binding are all otherwise intact.
+        const string WrongAudience = "https://attacker.example.com";
+
+        (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
+            await IssuePidCredentialAsync("Alice", "Smith").ConfigureAwait(false);
+
+        using(holderPrivateKey)
+        using(issuerPublicKey)
+        {
+            string vpToken = await PresentWithKeyBindingAsync(
+                serializedSdJwt, holderPrivateKey, RequestNonce, WrongAudience)
+                .ConfigureAwait(false);
+
+            VpTokenParsed parsed = await VerifyPresentationAsync(vpToken, issuerPublicKey).ConfigureAwait(false);
+
+            //The rest of the pipeline verifies normally, so the failure asserted below is
+            //attributable solely to the aud check, not to a broken signature or a stale nonce.
+            Assert.IsTrue(parsed.CredentialSignatureValid, "The issuer-signed credential must verify.");
+            Assert.IsTrue(parsed.KbJwtSignatureValid, "The KB-JWT must verify against the cnf holder key.");
+            Assert.IsTrue(parsed.SdHashValid, "The KB-JWT sd_hash must match the presented disclosures.");
+            Assert.AreEqual(RequestNonce, parsed.KbJwtNonce);
+            Assert.AreEqual(WrongAudience, parsed.KbJwtAud);
+
+            ExchangeContext exchangeContext = new();
+            ValidationContext validationContext = new()
+            {
+                Context = exchangeContext,
+                Now = TimeProvider.GetUtcNow(),
+                ExpectedClientId = VerifierClientId,
+                KbJwtAud = parsed.KbJwtAud
+            };
+
+            List<Claim> claims = await ValidationChecks.CheckKbJwtAud(
+                validationContext, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.HasCount(1, claims);
+            Assert.AreEqual(ValidationClaimIds.KbJwtAudMatchesClientId, claims[0].Id);
+            Assert.AreEqual(ClaimOutcome.Failure, claims[0].Outcome,
+                "A KB-JWT aud that does not equal the Verifier's client_id must fail "
+                + "KbJwtAudMatchesClientId even though the rest of the presentation verifies.");
         }
     }
 

@@ -61,7 +61,7 @@ internal sealed class CesrStreamWriterTests
         Assert.AreEqual(CesrTokenKind.CountGroup, tokens[1].Kind);
         Assert.AreEqual("-V", tokens[1].Code);
         Assert.AreEqual(body.Length / 3, tokens[1].Count);
-        CollectionAssert.AreEqual(body, tokens[1].Body);
+        Assert.AreSequenceEqual(body, tokens[1].Body);
     }
 
 
@@ -99,7 +99,7 @@ internal sealed class CesrStreamWriterTests
         Assert.AreEqual(CesrDomain.Text, tokens[1].Domain);
         Assert.AreEqual("-V", tokens[1].Code);
         Assert.AreEqual(body.Length / 4, tokens[1].Count);
-        CollectionAssert.AreEqual(body, tokens[1].Body);
+        Assert.AreSequenceEqual(body, tokens[1].Body);
     }
 
 

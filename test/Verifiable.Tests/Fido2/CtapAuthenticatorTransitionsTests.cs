@@ -90,7 +90,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
         await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
 
         var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
-        CollectionAssert.AreEqual(extensions, new List<string>(intent.Response.Extensions!));
+        Assert.AreSequenceEqual(extensions, new List<string>(intent.Response.Extensions!));
     }
 
 
@@ -108,7 +108,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
         await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
 
         var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
-        CollectionAssert.AreEqual(
+        Assert.AreSequenceEqual(
             new List<string>
             {
                 WellKnownWebAuthnExtensionIdentifiers.CredProtect,
@@ -140,7 +140,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
         Assert.IsFalse(intent.Response.Options!.ClientPin);
         Assert.IsTrue(intent.Response.Options.PinUvAuthToken);
         Assert.IsNotNull(intent.Response.PinUvAuthProtocols);
-        CollectionAssert.AreEqual(new List<int> { 2, 1 }, new List<int>(intent.Response.PinUvAuthProtocols!));
+        Assert.AreSequenceEqual(new List<int> { 2, 1 }, new List<int>(intent.Response.PinUvAuthProtocols!));
     }
 
 
@@ -185,7 +185,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
         Assert.IsFalse(intent.Response.ForcePinChange);
         Assert.AreEqual(CtapAuthenticatorState.MaxRpIdsForSetMinPinLengthCapacity, intent.Response.MaxRpIdsForSetMinPinLength);
         Assert.AreEqual(initialState.ResidentCredentialCapacity, intent.Response.RemainingDiscoverableCredentials);
-        CollectionAssert.AreEqual(new List<int> { 2, 3 }, new List<int>(intent.Response.AuthenticatorConfigCommands!));
+        Assert.AreSequenceEqual(new List<int> { 2, 3 }, new List<int>(intent.Response.AuthenticatorConfigCommands!));
     }
 
 
@@ -208,7 +208,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
         var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
         Assert.IsNotNull(intent.Response.Options);
         Assert.IsNull(intent.Response.Options!.Ep, "ep must be absent for a non-capable authenticator.");
-        CollectionAssert.AreEqual(new List<int> { 2, 3 }, new List<int>(intent.Response.AuthenticatorConfigCommands!));
+        Assert.AreSequenceEqual(new List<int> { 2, 3 }, new List<int>(intent.Response.AuthenticatorConfigCommands!));
     }
 
 
@@ -241,7 +241,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
         Assert.IsNotNull(intent.Response.Options);
         Assert.IsNotNull(intent.Response.Options!.Ep, "ep must be present for a capable authenticator.");
         Assert.AreEqual(isEnterpriseAttestationEnabled, intent.Response.Options.Ep!.Value);
-        CollectionAssert.AreEqual(new List<int> { 1, 2, 3 }, new List<int>(intent.Response.AuthenticatorConfigCommands!));
+        Assert.AreSequenceEqual(new List<int> { 1, 2, 3 }, new List<int>(intent.Response.AuthenticatorConfigCommands!));
 
         provisioning.Dispose();
     }

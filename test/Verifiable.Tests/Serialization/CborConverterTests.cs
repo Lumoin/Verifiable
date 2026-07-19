@@ -134,7 +134,7 @@ internal sealed class CborConverterTests
 
         var reader = new CborReader(originalCbor);
         byte[] value = reader.ReadByteString();
-        CollectionAssert.AreEqual(new byte[] { 0x01, 0x02, 0x03 }, value);
+        Assert.AreSequenceEqual(new byte[] { 0x01, 0x02, 0x03 }, value);
 
         var writer = new CborWriter(CborConformanceMode.Canonical);
         writer.WriteByteString([0x01, 0x02, 0x03]);
@@ -182,8 +182,8 @@ internal sealed class CborConverterTests
         var values = reader.ReadByteStringArray();
 
         Assert.HasCount(2, values);
-        CollectionAssert.AreEqual(new byte[] { 0x01 }, values[0]);
-        CollectionAssert.AreEqual(new byte[] { 0x02, 0x03 }, values[1]);
+        Assert.AreSequenceEqual(new byte[] { 0x01 }, values[0]);
+        Assert.AreSequenceEqual(new byte[] { 0x02, 0x03 }, values[1]);
 
         var writer = new CborWriter(CborConformanceMode.Canonical);
         writer.WriteByteStringArray(values);
@@ -313,7 +313,7 @@ internal sealed class CborConverterTests
         byte[]? value = reader.ReadNullableByteString();
 
         Assert.IsNotNull(value);
-        CollectionAssert.AreEqual(new byte[] { 0x01, 0x02 }, value);
+        Assert.AreSequenceEqual(new byte[] { 0x01, 0x02 }, value);
     }
 
 

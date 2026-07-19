@@ -39,7 +39,7 @@ internal sealed class AuthenticatorDataReaderTests
         Assert.AreEqual((byte)0x00, parsed.Flags.Value);
         Assert.AreEqual(16909060u, parsed.SignCount);
         Assert.IsNull(parsed.AttestedCredentialData);
-        Assert.AreEqual(0, parsed.Extensions.Length);
+        Assert.HasCount(0, parsed.Extensions);
     }
 
 
@@ -67,7 +67,7 @@ internal sealed class AuthenticatorDataReaderTests
         Assert.IsTrue(parsed.AttestedCredentialData.CredentialId.AsReadOnlySpan().SequenceEqual(credentialId));
         Assert.AreEqual(CoseKeyTypes.Ec2, parsed.AttestedCredentialData.CredentialPublicKey.Kty);
         Assert.AreEqual(CoseKeyCurves.P256, parsed.AttestedCredentialData.CredentialPublicKey.Curve);
-        Assert.AreEqual(0, parsed.Extensions.Length);
+        Assert.HasCount(0, parsed.Extensions);
     }
 
 

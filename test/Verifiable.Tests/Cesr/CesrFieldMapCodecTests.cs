@@ -65,7 +65,7 @@ internal sealed class CesrFieldMapCodecTests
         }
 
         Assert.AreEqual(end, offset);
-        CollectionAssert.AreEqual(ExpectedFlatLabels, labels);
+        Assert.AreSequenceEqual(ExpectedFlatLabels, labels);
         Assert.HasCount(6, values);
         Assert.AreEqual(1, values[0]);
         Assert.IsTrue((bool)values[1]!);
@@ -229,7 +229,7 @@ internal sealed class CesrFieldMapCodecTests
 
         MessageFieldMap fields = CesrFieldMapCodec.DecodeFieldMap(native.Memory, BaseMemoryPool.Shared);
 
-        CollectionAssert.AreEqual(ExpectedFlatLabels, new List<string>(fields.Keys));
+        Assert.AreSequenceEqual(ExpectedFlatLabels, new List<string>(fields.Keys));
         Assert.AreEqual(1, fields["a"]);
         Assert.IsTrue((bool)fields["b"]!);
         Assert.AreEqual("hello", fields["c"]);

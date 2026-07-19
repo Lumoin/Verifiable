@@ -115,7 +115,7 @@ internal sealed class AuthenticatorDataWriterTests
         Assert.IsTrue(parsed.AttestedCredentialData.CredentialId.AsReadOnlySpan().SequenceEqual(credentialId.AsReadOnlySpan()));
         Assert.AreEqual(CoseKeyTypes.Ec2, parsed.AttestedCredentialData.CredentialPublicKey.Kty);
         Assert.AreEqual(CoseKeyCurves.P256, parsed.AttestedCredentialData.CredentialPublicKey.Curve);
-        Assert.AreEqual(0, parsed.Extensions.Length);
+        Assert.HasCount(0, parsed.Extensions);
     }
 
 
@@ -135,7 +135,7 @@ internal sealed class AuthenticatorDataWriterTests
         Assert.IsTrue(parsed.RpIdHash.AsReadOnlySpan().SequenceEqual(rpIdHash.AsReadOnlySpan()));
         Assert.AreEqual(0u, parsed.SignCount);
         Assert.IsNull(parsed.AttestedCredentialData);
-        Assert.AreEqual(0, parsed.Extensions.Length);
+        Assert.HasCount(0, parsed.Extensions);
     }
 
 

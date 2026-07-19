@@ -38,7 +38,7 @@ namespace Verifiable.Tests
                 byte[] ourDecoded = decodedOwner.Memory.ToArray();
                 
                 //Verify roundtrip works.
-                CollectionAssert.AreEqual(originalData, ourDecoded, "Our Base64Url roundtrip failed");
+                Assert.AreSequenceEqual(originalData, ourDecoded, "Our Base64Url roundtrip failed");
 
                 //Compare with .NET Base64 reference implementation.
                 string netBase64 = Convert.ToBase64String(originalData);
@@ -52,7 +52,7 @@ namespace Verifiable.Tests
                 byte[] netDecoded = netDecodedOwner.Memory.ToArray();
 
                 //Should decode .NET Base64Url correctly.
-                CollectionAssert.AreEqual(originalData, netDecoded, "Failed to decode .NET Base64Url");                
+                Assert.AreSequenceEqual(originalData, netDecoded, "Failed to decode .NET Base64Url");                
             }
         }
 

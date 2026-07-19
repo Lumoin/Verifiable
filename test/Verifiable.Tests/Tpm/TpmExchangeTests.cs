@@ -32,8 +32,8 @@ internal class TpmExchangeTests
 
         var exchange = new TpmExchange(0, 100, command, response);
 
-        Assert.AreEqual(command.Length, exchange.Command.Length);
-        Assert.AreEqual(response.Length, exchange.Response.Length);
+        Assert.HasCount(command.Length, exchange.Command);
+        Assert.HasCount(response.Length, exchange.Response);
         Assert.IsTrue(command.AsSpan().SequenceEqual(exchange.Command.Span));
         Assert.IsTrue(response.AsSpan().SequenceEqual(exchange.Response.Span));
     }

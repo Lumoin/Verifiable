@@ -97,8 +97,8 @@ internal sealed class Fido2CoseRfcVectorTests
     {
         (byte[] x, byte[] y) = DeriveEcPublicKeyCoordinates(Es256PrivateScalarBase64Url, "secp256r1");
 
-        CollectionAssert.AreEqual(DecodeBase64Url(Es256PublicXBase64Url), x);
-        CollectionAssert.AreEqual(DecodeBase64Url(Es256PublicYBase64Url), y);
+        Assert.AreSequenceEqual(DecodeBase64Url(Es256PublicXBase64Url), x);
+        Assert.AreSequenceEqual(DecodeBase64Url(Es256PublicYBase64Url), y);
     }
 
 
@@ -111,8 +111,8 @@ internal sealed class Fido2CoseRfcVectorTests
     {
         (byte[] x, byte[] y) = DeriveEcPublicKeyCoordinates(Es512PrivateScalarBase64Url, "secp521r1");
 
-        CollectionAssert.AreEqual(DecodeBase64Url(Es512PublicXBase64Url), x);
-        CollectionAssert.AreEqual(DecodeBase64Url(Es512PublicYBase64Url), y);
+        Assert.AreSequenceEqual(DecodeBase64Url(Es512PublicXBase64Url), x);
+        Assert.AreSequenceEqual(DecodeBase64Url(Es512PublicYBase64Url), y);
     }
 
 
@@ -127,7 +127,7 @@ internal sealed class Fido2CoseRfcVectorTests
 
         byte[] derivedPublicKey = DeriveEd25519PublicKey(seed);
 
-        CollectionAssert.AreEqual(DecodeBase64Url(EdDsaPublicKeyBase64Url), derivedPublicKey);
+        Assert.AreSequenceEqual(DecodeBase64Url(EdDsaPublicKeyBase64Url), derivedPublicKey);
     }
 
 

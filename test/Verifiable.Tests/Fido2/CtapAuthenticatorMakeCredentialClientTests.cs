@@ -52,9 +52,9 @@ internal sealed class CtapAuthenticatorMakeCredentialClientTests
         CtapMakeCredentialResponse decoded = await CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
             Transceive, CtapMakeCredentialRequestCborWriter.Write, request, CtapMakeCredentialResponseCborReader.Read, pool, TestContext.CancellationToken);
 
-        CollectionAssert.AreEqual(expectedRequestBytes, capturedRequest);
+        Assert.AreSequenceEqual(expectedRequestBytes, capturedRequest);
         Assert.AreEqual(WellKnownWebAuthnAttestationFormats.None, decoded.Fmt);
-        CollectionAssert.AreEqual(scriptedResponse.AuthData.ToArray(), decoded.AuthData.ToArray());
+        Assert.AreSequenceEqual(scriptedResponse.AuthData.ToArray(), decoded.AuthData.ToArray());
 
         CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(request);
     }
@@ -114,8 +114,8 @@ internal sealed class CtapAuthenticatorMakeCredentialClientTests
         AttestationObjectParts parts = AttestationObjectCborReader.Parse(attestationObject.Memory);
 
         Assert.AreEqual(WellKnownWebAuthnAttestationFormats.None, parts.Format);
-        CollectionAssert.AreEqual(authData, parts.AuthenticatorData.ToArray());
-        Assert.AreEqual(1, parts.AttestationStatement.Length);
+        Assert.AreSequenceEqual(authData, parts.AuthenticatorData.ToArray());
+        Assert.HasCount(1, parts.AttestationStatement);
         Assert.AreEqual(NoneAttestation.CanonicalEmptyMap, parts.AttestationStatement.Span[0]);
     }
 
@@ -138,8 +138,8 @@ internal sealed class CtapAuthenticatorMakeCredentialClientTests
         AttestationObjectParts parts = AttestationObjectCborReader.Parse(attestationObject.Memory);
 
         Assert.AreEqual(WellKnownWebAuthnAttestationFormats.None, parts.Format);
-        CollectionAssert.AreEqual(authData, parts.AuthenticatorData.ToArray());
-        Assert.AreEqual(1, parts.AttestationStatement.Length);
+        Assert.AreSequenceEqual(authData, parts.AuthenticatorData.ToArray());
+        Assert.HasCount(1, parts.AttestationStatement);
         Assert.AreEqual(NoneAttestation.CanonicalEmptyMap, parts.AttestationStatement.Span[0]);
     }
 }

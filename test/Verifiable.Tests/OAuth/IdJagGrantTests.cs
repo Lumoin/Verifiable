@@ -1190,7 +1190,7 @@ internal sealed class IdJagGrantTests
         using JsonDocument payload = DecodePayload(jag);
         string[] resourceClaim = [.. payload.RootElement.GetProperty(OAuthRequestParameterNames.Resource)
             .EnumerateArray().Select(static e => e.GetString()!)];
-        CollectionAssert.AreEqual(grantedResources, resourceClaim);
+        Assert.AreSequenceEqual(grantedResources, resourceClaim);
     }
 
 
@@ -2714,7 +2714,7 @@ internal sealed class IdJagGrantTests
         Assert.AreEqual("urn:mace:incommon:iap:silver", claims.GetProperty(WellKnownJwtClaimNames.Acr).GetString());
         string[] expectedAmr = ["mfa", "hwk"];
         string[] amr = [.. claims.GetProperty(WellKnownJwtClaimNames.Amr).EnumerateArray().Select(static e => e.GetString()!)];
-        CollectionAssert.AreEqual(expectedAmr, amr);
+        Assert.AreSequenceEqual(expectedAmr, amr);
     }
 
 

@@ -84,7 +84,7 @@ internal class TpmReaderTests
 
         ReadOnlySpan<byte> bytes = reader.ReadBytes(3);
 
-        Assert.AreEqual(3, bytes.Length);
+        Assert.HasCount(3, bytes);
         Assert.AreEqual((byte)0x01, bytes[0]);
         Assert.AreEqual((byte)0x02, bytes[1]);
         Assert.AreEqual((byte)0x03, bytes[2]);
@@ -100,7 +100,7 @@ internal class TpmReaderTests
 
         ReadOnlySpan<byte> data = reader.ReadTpm2b();
 
-        Assert.AreEqual(3, data.Length);
+        Assert.HasCount(3, data);
         Assert.AreEqual((byte)0xAA, data[0]);
         Assert.AreEqual((byte)0xBB, data[1]);
         Assert.AreEqual((byte)0xCC, data[2]);
@@ -115,7 +115,7 @@ internal class TpmReaderTests
 
         ReadOnlySpan<byte> peeked = reader.PeekBytes(2);
 
-        Assert.AreEqual(2, peeked.Length);
+        Assert.HasCount(2, peeked);
         Assert.AreEqual(0, reader.Consumed);
         Assert.AreEqual(3, reader.Remaining);
     }

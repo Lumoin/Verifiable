@@ -65,7 +65,7 @@ internal sealed class MetadataPolicyApplicatorTests
 
         Assert.IsTrue(result.IsSuccess);
         List<object> scope = (List<object>)result.EffectiveMetadata!["scope"];
-        CollectionAssert.AreEquivalent(ExpectedAddedScope, scope);
+        Assert.AreSequenceEqual(ExpectedAddedScope, scope, SequenceOrder.InAnyOrder);
     }
 
 
@@ -80,7 +80,7 @@ internal sealed class MetadataPolicyApplicatorTests
 
         Assert.IsTrue(result.IsSuccess);
         List<object> scope = (List<object>)result.EffectiveMetadata!["scope"];
-        CollectionAssert.AreEquivalent(ExpectedDefaultScope, scope);
+        Assert.AreSequenceEqual(ExpectedDefaultScope, scope, SequenceOrder.InAnyOrder);
     }
 
 
@@ -137,7 +137,7 @@ internal sealed class MetadataPolicyApplicatorTests
 
         Assert.IsTrue(result.IsSuccess);
         List<object> grantTypes = (List<object>)result.EffectiveMetadata!["grant_types"];
-        CollectionAssert.AreEqual(ExpectedTrimmedGrantTypes, grantTypes);
+        Assert.AreSequenceEqual(ExpectedTrimmedGrantTypes, grantTypes);
     }
 
 

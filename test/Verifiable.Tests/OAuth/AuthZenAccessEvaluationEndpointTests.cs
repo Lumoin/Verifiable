@@ -590,7 +590,7 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
         }
 
         Assert.AreEqual(3, pages, "5 items at limit 2 paginate as 2 + 2 + 1.");
-        CollectionAssert.AreEqual(dataset, collected,
+        Assert.AreSequenceEqual(dataset, collected,
             "Every item is returned exactly once, in order, across the pages (empty next_token signals the end).");
     }
 

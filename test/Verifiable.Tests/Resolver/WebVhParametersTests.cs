@@ -130,8 +130,8 @@ internal sealed class WebVhParametersTests
         Assert.IsNotNull(next);
         Assert.AreEqual(prior.Method, next!.Method);
         Assert.AreEqual(prior.Scid, next.Scid);
-        CollectionAssert.AreEqual(prior.UpdateKeys, next.UpdateKeys);
-        CollectionAssert.AreEqual(prior.NextKeyHashes, next.NextKeyHashes);
+        Assert.AreSequenceEqual(prior.UpdateKeys, next.UpdateKeys);
+        Assert.AreSequenceEqual(prior.NextKeyHashes, next.NextKeyHashes);
         Assert.AreEqual(60, next.Ttl);
     }
 
@@ -408,7 +408,7 @@ internal sealed class WebVhParametersTests
 
         Assert.IsNull(error);
         Assert.IsNotNull(next);
-        CollectionAssert.AreEqual(prior.Watchers, next!.Watchers);
+        Assert.AreSequenceEqual(prior.Watchers, next!.Watchers);
     }
 
 

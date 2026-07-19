@@ -145,9 +145,9 @@ internal sealed class AesCbcHmacSha384Tests
         using AeadEncryptResult encrypted = await MicrosoftKeyAgreementFunctions.AesCbcHmacSha384EncryptAsync(
             plaintext, encryptKey, encryptAad, Pool, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(16, encrypted.Iv.AsReadOnlySpan().Length, "A192CBC-HS384 IV must be one AES block.");
-        Assert.AreEqual(24, encrypted.Tag.AsReadOnlySpan().Length, "A192CBC-HS384 tag must be half the HMAC-SHA-384 output.");
-        Assert.AreEqual(32, encrypted.Ciphertext.AsReadOnlySpan().Length,
+        Assert.HasCount(16, encrypted.Iv.AsReadOnlySpan(), "A192CBC-HS384 IV must be one AES block.");
+        Assert.HasCount(24, encrypted.Tag.AsReadOnlySpan(), "A192CBC-HS384 tag must be half the HMAC-SHA-384 output.");
+        Assert.HasCount(32, encrypted.Ciphertext.AsReadOnlySpan(),
             "PKCS#7 must pad the 24-byte plaintext to two full AES blocks.");
 
         using AdditionalData decryptAad = AadFromHex(VectorAad);

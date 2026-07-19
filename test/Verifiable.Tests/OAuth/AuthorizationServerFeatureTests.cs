@@ -123,8 +123,13 @@ internal sealed class AuthorizationServerFeatureTests
     public void PolicyProfileEqualityIsByCode()
     {
         //Round 4.8 — built-in values are equal to themselves, distinct from
-        //each other; the dynamic-enum pattern's contract.
-        Assert.AreEqual(PolicyProfile.Fapi20, PolicyProfile.Fapi20,
+        //each other; the dynamic-enum pattern's contract. The self-comparison
+        //is against an independently retrieved copy (via the Profiles registry)
+        //rather than the same expression twice, so the check exercises the
+        //Code == other.Code comparison instead of a compile-time tautology.
+        PolicyProfile fapi20FromRegistry = PolicyProfile.Profiles.First(profile => profile.Code == PolicyProfile.Fapi20.Code);
+
+        Assert.AreEqual(PolicyProfile.Fapi20, fapi20FromRegistry,
             "Strict equals Strict.");
         Assert.AreNotEqual(PolicyProfile.Fapi20, PolicyProfile.Haip10,
             "Strict and Haip have different codes; they must not be equal.");

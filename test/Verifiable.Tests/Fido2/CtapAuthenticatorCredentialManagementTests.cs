@@ -551,7 +551,7 @@ internal sealed class CtapAuthenticatorCredentialManagementTests
         CtapCredentialManagementResponse begin = CtapCredentialManagementResponseCborReader.Read(beginResponse.AsReadOnlyMemory()[1..], pool);
         Assert.AreEqual(rpB, begin.Rp!.Id);
         Assert.AreEqual(2, begin.TotalRps);
-        CollectionAssert.AreEqual(ComputeRpIdHashOracle(rpB).ToArray(), begin.RpIdHash!.Value.ToArray());
+        Assert.AreSequenceEqual(ComputeRpIdHashOracle(rpB).ToArray(), begin.RpIdHash!.Value.ToArray());
 
         var nextRequest = new CtapCredentialManagementRequest(SubCommand: WellKnownCtapCredentialManagementSubCommands.EnumerateRpsGetNextRp);
         using PooledMemory nextResponse = await SendCredentialManagementAsync(simulator, nextRequest, pool, TestContext.CancellationToken);
@@ -559,7 +559,7 @@ internal sealed class CtapAuthenticatorCredentialManagementTests
         CtapCredentialManagementResponse next = CtapCredentialManagementResponseCborReader.Read(nextResponse.AsReadOnlyMemory()[1..], pool);
         Assert.AreEqual(rpA, next.Rp!.Id);
         Assert.IsNull(next.TotalRps, "enumerateRPsGetNextRP never reports totalRPs.");
-        CollectionAssert.AreEqual(ComputeRpIdHashOracle(rpA).ToArray(), next.RpIdHash!.Value.ToArray());
+        Assert.AreSequenceEqual(ComputeRpIdHashOracle(rpA).ToArray(), next.RpIdHash!.Value.ToArray());
     }
 
 
@@ -620,8 +620,8 @@ internal sealed class CtapAuthenticatorCredentialManagementTests
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, beginResponse.AsReadOnlySpan()[0]);
         CtapCredentialManagementResponse begin = CtapCredentialManagementResponseCborReader.Read(beginResponse.AsReadOnlyMemory()[1..], pool);
         Assert.AreEqual(2, begin.TotalCredentials);
-        CollectionAssert.AreEqual(firstUserId, begin.User!.Id.AsReadOnlySpan().ToArray());
-        CollectionAssert.AreEqual(first.CredentialId.AsReadOnlySpan().ToArray(), begin.CredentialId!.Id.AsReadOnlySpan().ToArray());
+        Assert.AreSequenceEqual(firstUserId, begin.User!.Id.AsReadOnlySpan().ToArray());
+        Assert.AreSequenceEqual(first.CredentialId.AsReadOnlySpan().ToArray(), begin.CredentialId!.Id.AsReadOnlySpan().ToArray());
         Assert.AreEqual(first.PublicKey, begin.PublicKey);
         begin.CredentialId.Id.Dispose();
         begin.User.Id.Dispose();
@@ -631,7 +631,7 @@ internal sealed class CtapAuthenticatorCredentialManagementTests
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, nextResponse.AsReadOnlySpan()[0]);
         CtapCredentialManagementResponse next = CtapCredentialManagementResponseCborReader.Read(nextResponse.AsReadOnlyMemory()[1..], pool);
         Assert.IsNull(next.TotalCredentials, "enumerateCredentialsGetNextCredential never reports totalCredentials.");
-        CollectionAssert.AreEqual(secondUserId, next.User!.Id.AsReadOnlySpan().ToArray());
+        Assert.AreSequenceEqual(secondUserId, next.User!.Id.AsReadOnlySpan().ToArray());
         Assert.AreEqual(second.PublicKey, next.PublicKey);
         next.CredentialId!.Id.Dispose();
         next.User.Id.Dispose();
@@ -667,7 +667,7 @@ internal sealed class CtapAuthenticatorCredentialManagementTests
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, beginResponse.AsReadOnlySpan()[0]);
 
         List<int> keys = ReadTopLevelIntegerKeys(beginResponse.AsReadOnlyMemory()[1..]);
-        CollectionAssert.DoesNotContain(keys, WellKnownCtapCredentialManagementResponseKeys.ThirdPartyPayment);
+        Assert.DoesNotContain(WellKnownCtapCredentialManagementResponseKeys.ThirdPartyPayment, keys);
 
         using CredentialId disposeId = CredentialId.Create(credentialIdBytes, pool);
     }

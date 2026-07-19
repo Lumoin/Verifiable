@@ -168,7 +168,7 @@ internal sealed class WebVhCrossWireFlowTests
         //The wired resolve verified every entry (and witness) proof, and those verifications surfaced as OTel spans.
         List<string> cryptoSpans = [.. cryptoSpanNames];
         Assert.IsNotEmpty(cryptoSpans, "The wired resolve MUST emit OpenTelemetry crypto spans (the per-entry proof verifications).");
-        CollectionAssert.Contains(cryptoSpans, CryptoTelemetry.ActivityNames.Verify,
+        Assert.Contains(CryptoTelemetry.ActivityNames.Verify, cryptoSpans,
             "Resolving the multi-entry did:webvh log MUST emit a crypto.verify span for the entry-proof verification.");
 
         Assert.IsTrue(nodeA.WasRequested("/.well-known/did.jsonl"), "The DID Log MUST have been fetched over the socket.");
@@ -202,7 +202,7 @@ internal sealed class WebVhCrossWireFlowTests
         Assert.IsTrue(filesResult.IsSuccessful, $"The path DID URL MUST dereference across the wire. Error: {filesResult.DereferencingMetadata.Error?.Type}.");
 
         TaggedMemory<byte> filesBody = (TaggedMemory<byte>)filesResult.ContentStream!;
-        CollectionAssert.AreEqual(issuersFile, filesBody.Span.ToArray(), "The dereferenced content bytes MUST equal the served file.");
+        Assert.AreSequenceEqual(issuersFile, filesBody.Span.ToArray(), "The dereferenced content bytes MUST equal the served file.");
 
         Assert.IsTrue(nodeA.WasRequested("/governance/issuers.json"), "The path file MUST have been fetched over the socket.");
 

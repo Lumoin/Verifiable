@@ -229,7 +229,7 @@ internal sealed class TpmInHouseSimulatorSignTests
         Assert.AreEqual(TpmStConstants.TPM_ST_CREATION, primary.CreationTicket.Tag, "The ticket tag must be TPM_ST_CREATION.");
         Assert.AreEqual(TpmRh.TPM_RH_OWNER, primary.CreationTicket.Hierarchy, "The ticket hierarchy must be the owner hierarchy.");
         Assert.IsFalse(primary.CreationTicket.IsNull, "The creation ticket must be a real HMAC, not a NULL ticket.");
-        Assert.AreEqual(P256ComponentSize, primary.CreationTicket.Digest.Length, "The creation ticket digest is a SHA-256 HMAC.");
+        Assert.HasCount(P256ComponentSize, primary.CreationTicket.Digest, "The creation ticket digest is a SHA-256 HMAC.");
     }
 
     [TestMethod]

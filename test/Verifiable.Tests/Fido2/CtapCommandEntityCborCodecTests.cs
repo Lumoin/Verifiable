@@ -149,7 +149,7 @@ internal sealed class CtapCommandEntityCborCodecTests
             new CborReader(userWriter.Encode(), CborConformanceMode.Ctap2Canonical), BaseMemoryPool.Shared);
         try
         {
-            Assert.AreEqual(3, user.Id.AsReadOnlySpan().Length);
+            Assert.HasCount(3, user.Id.AsReadOnlySpan());
         }
         finally
         {

@@ -27,7 +27,7 @@ internal sealed class CtapPinUvAuthTokenStateTests
     {
         using CtapPinUvAuthTokenState state = CtapPinUvAuthTokenState.Initial(BaseMemoryPool.Shared);
 
-        Assert.AreEqual(TokenLength, state.Token.AsReadOnlySpan().Length, "The pinUvAuthToken must be 32 bytes for both PIN/UV auth protocols.");
+        Assert.HasCount(TokenLength, state.Token.AsReadOnlySpan(), "The pinUvAuthToken must be 32 bytes for both PIN/UV auth protocols.");
         Assert.IsNull(state.PermissionsRpId, "The permissions RP ID is initially null (line 5019).");
         Assert.AreEqual(0, state.Permissions, "The permissions set is initially empty (line 5021).");
         Assert.IsFalse(state.IsInUse, "The in use flag is initially false (line 5026).");
@@ -58,7 +58,7 @@ internal sealed class CtapPinUvAuthTokenStateTests
 
         using CtapPinUvAuthTokenState reset = mutated.ResetToken(BaseMemoryPool.Shared);
 
-        Assert.AreEqual(TokenLength, reset.Token.AsReadOnlySpan().Length);
+        Assert.HasCount(TokenLength, reset.Token.AsReadOnlySpan());
         Assert.IsFalse(originalTokenBytes.AsSpan().SequenceEqual(reset.Token.AsReadOnlySpan()), "resetPinUvAuthToken() must mint a NEW random token value, not reuse the old bytes.");
         Assert.IsNull(reset.PermissionsRpId);
         Assert.AreEqual(0, reset.Permissions);

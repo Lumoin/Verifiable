@@ -79,7 +79,7 @@ internal sealed class KeriKeyEventStreamTests
             Assert.IsNotNull(result.KeyState, "A verified log yields a key state.");
             Assert.AreEqual(2, result.KeyState!.SequenceNumber, "The log advances to sequence two.");
             Assert.AreEqual(rotation.Said, result.KeyState.LastEventSaid, "The last event SAID is the rotation's.");
-            CollectionAssert.AreEqual(
+            Assert.AreSequenceEqual(
                 (System.Collections.ICollection)rotation.SigningKeys,
                 (System.Collections.ICollection)result.KeyState.SigningKeys,
                 "The final keys are the rotation's revealed keys.");

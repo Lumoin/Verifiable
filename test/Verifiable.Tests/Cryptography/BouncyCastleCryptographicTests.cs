@@ -152,7 +152,7 @@ namespace Verifiable.Tests.Cryptography
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
-            Assert.AreEqual(1312, publicKey.AsReadOnlySpan().Length);
+            Assert.HasCount(1312, publicKey.AsReadOnlySpan());
             Assert.IsGreaterThan(0, privateKey.AsReadOnlySpan().Length);
         }
 
@@ -188,7 +188,7 @@ namespace Verifiable.Tests.Cryptography
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
-            Assert.AreEqual(1952, publicKey.AsReadOnlySpan().Length);
+            Assert.HasCount(1952, publicKey.AsReadOnlySpan());
             Assert.IsGreaterThan(0, privateKey.AsReadOnlySpan().Length);
         }
 
@@ -237,7 +237,7 @@ namespace Verifiable.Tests.Cryptography
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
-            Assert.AreEqual(2592, publicKey.AsReadOnlySpan().Length);
+            Assert.HasCount(2592, publicKey.AsReadOnlySpan());
             Assert.IsGreaterThan(0, privateKey.AsReadOnlySpan().Length);
         }
 
@@ -261,7 +261,7 @@ namespace Verifiable.Tests.Cryptography
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
-            Assert.AreEqual(800, publicKey.AsReadOnlySpan().Length);
+            Assert.HasCount(800, publicKey.AsReadOnlySpan());
             Assert.IsGreaterThan(0, privateKey.AsReadOnlySpan().Length);
         }
 
@@ -283,7 +283,7 @@ namespace Verifiable.Tests.Cryptography
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
-            Assert.AreEqual(1184, publicKey.AsReadOnlySpan().Length);
+            Assert.HasCount(1184, publicKey.AsReadOnlySpan());
             Assert.IsGreaterThan(0, privateKey.AsReadOnlySpan().Length);
         }
 
@@ -328,7 +328,7 @@ namespace Verifiable.Tests.Cryptography
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
-            Assert.AreEqual(1568, publicKey.AsReadOnlySpan().Length);
+            Assert.HasCount(1568, publicKey.AsReadOnlySpan());
             Assert.IsGreaterThan(0, privateKey.AsReadOnlySpan().Length);
         }
 
@@ -398,8 +398,8 @@ namespace Verifiable.Tests.Cryptography
 
             using var receiverSecret = decapsulate(privateKey.AsReadOnlyMemory(), ct.Memory, BaseMemoryPool.Shared);
 
-            Assert.AreEqual(32, ss.Memory.Length);
-            Assert.AreEqual(32, receiverSecret.Memory.Length);
+            Assert.HasCount(32, ss.Memory);
+            Assert.HasCount(32, receiverSecret.Memory);
             Assert.IsTrue(ss.Memory.Span.SequenceEqual(receiverSecret.Memory.Span));
         }
     }
