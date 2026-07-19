@@ -2,9 +2,7 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO.Pipelines;
-using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Features;
 using StringValues = Microsoft.Extensions.Primitives.StringValues;
 using Verifiable.Core;
 using Verifiable.JCose;
@@ -15,18 +13,18 @@ using Verifiable.OAuth.Server;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
-/// Bridges minimal Kestrel hosting to
-/// <see cref="EndpointServer.DispatchAsync"/>. Maps inbound HTTP
-/// requests to the library's <see cref="IncomingRequest"/> and
-/// <see cref="ExchangeContext"/>, and maps the outbound
-/// <see cref="ServerHttpResponse"/> back to HTTP response bytes.
+/// Bridges a <see cref="Microsoft.AspNetCore.Builder.WebApplication"/>'s HTTPS pipeline to
+/// <see cref="EndpointServer.DispatchAsync"/>. <see cref="ProcessRequestAsync"/> is mounted directly as
+/// the pipeline's <c>RequestDelegate</c> (<c>app.Run(application.ProcessRequestAsync)</c>): it maps
+/// inbound HTTP requests to the library's <see cref="IncomingRequest"/> and
+/// <see cref="ExchangeContext"/>, and maps the outbound <see cref="ServerHttpResponse"/> back to HTTP
+/// response bytes.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Test-only construct. The library itself does not reference Kestrel.
-/// A production deployment writes its own host adapter; the shape of
-/// this mapping layer is a useful reference but not part of the
-/// library's public surface.
+/// Test-only construct. The library itself does not reference Kestrel or ASP.NET Core. A production
+/// deployment writes its own host adapter; the shape of this mapping layer is a useful reference but
+/// not part of the library's public surface.
 /// </para>
 /// <para>
 /// Three behaviours worth flagging for any reader:
@@ -55,7 +53,7 @@ namespace Verifiable.Tests.OAuth;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("AuthorizationServerHttpApplication")]
-internal sealed class AuthorizationServerHttpApplication: IHttpApplication<HttpContext>
+internal sealed class AuthorizationServerHttpApplication
 {
     /// <summary>
     /// A request header carrying the authenticated end-user identifier for real-wire capstones that
@@ -77,11 +75,6 @@ internal sealed class AuthorizationServerHttpApplication: IHttpApplication<HttpC
         ArgumentNullException.ThrowIfNull(server);
         this.server = server;
     }
-
-
-    /// <summary>Creates the per-request <see cref="HttpContext"/> Kestrel dispatches through.</summary>
-    public HttpContext CreateContext(IFeatureCollection contextFeatures) =>
-        new DefaultHttpContext(contextFeatures);
 
 
     /// <summary>
@@ -135,10 +128,6 @@ internal sealed class AuthorizationServerHttpApplication: IHttpApplication<HttpC
         await WriteResponseAsync(response, context.Response, context.RequestAborted)
             .ConfigureAwait(false);
     }
-
-
-    /// <summary>No per-request disposable state is held; this is a no-op.</summary>
-    public void DisposeContext(HttpContext context, Exception? exception) { }
 
 
     /// <summary>

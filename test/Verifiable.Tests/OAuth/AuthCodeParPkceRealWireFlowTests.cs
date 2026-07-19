@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Net.Http;
+using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
@@ -104,7 +105,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         string segment = material.Registration.TenantId.Value;
 
         string flowId = await DriveParAuthorizeAndCallbackAsync(
-            hosted, client, registration, clientFlowStore, segment, TestContext.CancellationToken)
+            hosted, client, registration, clientFlowStore, segment, host.ServerCertificate, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult tokenResult = await client.AuthCode.ExchangeTokenAsync(
@@ -163,7 +164,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         string segment = material.Registration.TenantId.Value;
 
         string flowId = await DriveParAuthorizeAndCallbackAsync(
-            hosted, client, registration, clientFlowStore, segment, TestContext.CancellationToken)
+            hosted, client, registration, clientFlowStore, segment, host.ServerCertificate, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         //Tamper the persisted verifier so token exchange presents a code_verifier that does not hash
@@ -199,6 +200,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         ClientRegistration registration,
         Dictionary<string, FlowState> clientFlowStore,
         string segment,
+        X509Certificate2 pinnedCertificate,
         CancellationToken cancellationToken)
     {
         AuthCodeFlowEndpointResult parResult = await client.AuthCode.StartParAsync(
@@ -216,13 +218,11 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             $"?{OAuthRequestParameterNames.ClientId}={Uri.EscapeDataString(ClientId)}" +
             $"&{OAuthRequestParameterNames.RequestUri}={Uri.EscapeDataString(parState.Par.RequestUri.ToString())}");
 
-        //CheckCertificateRevocationList is set for CA5399, though this leg is plain HTTP to
-        //loopback — no certificate is ever presented, so the flag has no observable effect here.
-        using HttpClientHandler noRedirectHandler = new()
-        {
-            AllowAutoRedirect = false,
-            CheckCertificateRevocationList = true
-        };
+        //A fresh pinned, no-redirect client for the browser leg: the same certificate the shell's
+        //SharedHttpClient pins, so this genuine HTTPS GET succeeds without trusting a CA, and with
+        //auto-redirect disabled so the 302 Location is read off the wire instead of being followed.
+        using HttpClientHandler noRedirectHandler = LoopbackTls.CreatePinnedHandler(pinnedCertificate);
+        noRedirectHandler.AllowAutoRedirect = false;
         using HttpClient browserClient = new(noRedirectHandler) { BaseAddress = hosted.HttpBaseAddress };
         using HttpRequestMessage authorizeRequest = new(HttpMethod.Get, authorizeUrl);
         authorizeRequest.Headers.Add(AuthorizationServerHttpApplication.TestSubjectHeaderName, SubjectId);

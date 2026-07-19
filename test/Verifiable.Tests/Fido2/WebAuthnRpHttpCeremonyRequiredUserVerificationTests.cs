@@ -68,7 +68,7 @@ internal sealed class WebAuthnRpHttpCeremonyRequiredUserVerificationTests
             RpId, Origin, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xF0), "erin", "Erin Example", pool,
             userVerification: UserVerificationRequirement.Required);
         await using MinimalHttpHost host = await MinimalHttpHost.StartAsync(skin.HandleAsync, cancellationToken).ConfigureAwait(false);
-        using HttpClient httpClient = new() { BaseAddress = host.BaseAddress };
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(host.Certificate, host.BaseAddress);
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("webauthn-rp-http-required-authenticator");
         using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
@@ -105,7 +105,7 @@ internal sealed class WebAuthnRpHttpCeremonyRequiredUserVerificationTests
             NegativeRpId, Origin, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xF1), "frank", "Frank Example", pool,
             userVerification: UserVerificationRequirement.Required);
         await using MinimalHttpHost host = await MinimalHttpHost.StartAsync(skin.HandleAsync, cancellationToken).ConfigureAwait(false);
-        using HttpClient httpClient = new() { BaseAddress = host.BaseAddress };
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(host.Certificate, host.BaseAddress);
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("webauthn-rp-http-required-negative-authenticator");
         using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);

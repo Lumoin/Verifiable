@@ -59,7 +59,7 @@ internal sealed class AcdcIpexExchangeFlowTests
             discloser.Publish("/ipex/grant", grant.Serialization, "application/json");
             discloser.Publish("/kel", AcdcFlowKit.SerializeKel(kel), "application/json");
 
-            using HttpClient httpClient = new();
+            using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient([discloser.Certificate, disclosee.Certificate]);
 
             //The Disclosee fetches and verifies the grant envelope, then proves the credential it embeds.
             string grantSaid = await VerifyGrantAndProveCredentialAsync(httpClient, discloser.BaseAddress, credentialSaid, issuerAid, disposables, cancellationToken).ConfigureAwait(false);
@@ -115,7 +115,7 @@ internal sealed class AcdcIpexExchangeFlowTests
             await using StaticContentHost discloser = await StaticContentHost.StartAsync(cancellationToken).ConfigureAwait(false);
             discloser.Publish("/ipex/grant", Encoding.UTF8.GetBytes(tampered), "application/json");
 
-            using HttpClient httpClient = new();
+            using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(discloser.Certificate);
             string fetched = await httpClient.GetStringAsync(new Uri(discloser.BaseAddress, "/ipex/grant"), cancellationToken).ConfigureAwait(false);
             using AcdcTestSupport.EncodedSerialization grantBytes = AcdcTestSupport.Encode(fetched);
 

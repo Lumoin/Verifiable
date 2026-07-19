@@ -302,16 +302,30 @@ public static class AuthCodeEndpoints
                 }
 
                 //RFC 9700 §2.1 + OAuth 2.1 §2.3.1 — redirect_uri exact-match
-                //against the registered set. Parallel to the JAR-PAR check
-                //around line 988; this matcher's MatchesRequest already
-                //asserts context.ClientRegistration is non-null, so the read is
-                //unconditional here.
+                //against the registered set, per RedirectUriMatching (simple
+                //string comparison, not Uri equality). Parallel to the
+                //JAR-PAR check around line 988; this matcher's
+                //MatchesRequest already asserts context.ClientRegistration is
+                //non-null, so the read is unconditional here.
                 ClientRecord registration = context.ClientRegistration!;
-                if(!registration.AllowedRedirectUris.Contains(redirectUri))
+                if(!RedirectUriMatching.IsRegisteredExact(registration.AllowedRedirectUris, redirectUri))
                 {
                     return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest,
                         $"redirect_uri '{redirectUri}' is not among the registered redirect URIs."));
+                }
+
+                //RFC 6749 §4.1.1 — response_type selects which grant the request is
+                //for; RFC 9126 §2.3 error responses at the PAR endpoint use the same
+                //error registry as the authorization endpoint, returned directly (PAR
+                //has no redirect leg of its own).
+                fields.TryGetValue(OAuthRequestParameterNames.ResponseType, out string? responseType);
+                if(IsUnsupportedResponseType(responseType))
+                {
+                    return ((FlowInput?)null, (ServerHttpResponse?)ServerHttpResponse.BadRequest(
+                        UnsupportedResponseTypeError,
+                        $"response_type '{responseType}' is not supported; this authorization "
+                        + $"server issues '{WellKnownResponseTypes.Code}' only."));
                 }
 
                 fields.TryGetValue(OAuthRequestParameterNames.Scope, out string? scope);
@@ -714,6 +728,20 @@ public static class AuthCodeEndpoints
                     return ((FlowInput?)null, (ServerHttpResponse?)responseModeFailure);
                 }
 
+                //RFC 6749 §4.1.1 / §4.1.2.1 — response_type selects which grant the
+                //request is for. redirect_uri is already parsed at this point, so an
+                //unsupported response_type is reported as an Authorization Error
+                //Response redirect rather than a bare 400, per §4.1.2.1.
+                fields.TryGetValue(OAuthRequestParameterNames.ResponseType, out string? responseType);
+                if(IsUnsupportedResponseType(responseType))
+                {
+                    return ((FlowInput?)null, (ServerHttpResponse?)await BuildAuthorizeErrorResponseAsync(
+                        server, context, redirectUri, UnsupportedResponseTypeError,
+                        $"response_type '{responseType}' is not supported; this authorization "
+                        + $"server issues '{WellKnownResponseTypes.Code}' only.",
+                        requestState, responseMode, clientId, ct).ConfigureAwait(false));
+                }
+
                 //RFC 9396 / OID4VCI 1.0 §5.1.1 — same shape-validation as the PAR path; on the
                 //direct authorization request the parameter arrives on the front channel itself.
                 string? authorizationDetails = ReadAuthorizationDetails(fields);
@@ -938,6 +966,18 @@ public static class AuthCodeEndpoints
                 }
 
                 AuthCodeRequestObject ro = requestObject!;
+
+                //RFC 6749 §4.1.1 — same response_type gate as the bare PAR path; the
+                //JAR-PAR endpoint returns a JSON error directly, like PAR, rather than
+                //a redirect (there is no front channel at this leg).
+                if(IsUnsupportedResponseType(ro.ResponseType))
+                {
+                    return ((FlowInput?)null, ServerHttpResponse.BadRequest(
+                        UnsupportedResponseTypeError,
+                        $"response_type '{ro.ResponseType}' is not supported; this authorization "
+                        + $"server issues '{WellKnownResponseTypes.Code}' only."));
+                }
+
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
 
                 string flowId = context.FlowId!;
@@ -1066,6 +1106,18 @@ public static class AuthCodeEndpoints
                 }
 
                 AuthCodeRequestObject ro = requestObject!;
+
+                //RFC 6749 §4.1.1 / §4.1.2.1 — same response_type gate as the direct PKCE
+                //path. ro.RedirectUri is already registration-validated inside
+                //VerifyAndValidateAuthCodeJarAsync, so the error is safe to redirect.
+                if(IsUnsupportedResponseType(ro.ResponseType))
+                {
+                    return ((FlowInput?)null, await BuildAuthorizeErrorResponseAsync(
+                        server, context, ro.RedirectUri, UnsupportedResponseTypeError,
+                        $"response_type '{ro.ResponseType}' is not supported; this authorization "
+                        + $"server issues '{WellKnownResponseTypes.Code}' only.",
+                        ro.State, ro.ResponseMode, ro.ClientId, ct).ConfigureAwait(false));
+                }
 
                 //FAPI 2.0 §5.2.2 — when the profile mandates PAR, the JAR-by-value path
                 //is refused; the client must push the request first.
@@ -1377,8 +1429,9 @@ public static class AuthCodeEndpoints
             return (null, audFailure);
         }
 
-        //RFC 9700 §4.1 — redirect_uri exact-match against the registered set.
-        if(!registration.AllowedRedirectUris.Contains(requestObject.RedirectUri))
+        //RFC 9700 §4.1 — redirect_uri exact-match against the registered set, per
+        //RedirectUriMatching (simple string comparison, not Uri equality).
+        if(!RedirectUriMatching.IsRegisteredExact(registration.AllowedRedirectUris, requestObject.RedirectUri))
         {
             return (null, ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidRequestObject,
@@ -1537,13 +1590,22 @@ public static class AuthCodeEndpoints
     /// request, before the producer loop. The resolved value flows through every
     /// <see cref="IdTokenTarget"/> and <see cref="UserInfoTarget"/> the
     /// contributor walk constructs in this request, so per-rule contributors
-    /// don't each re-issue the resolver call.
+    /// don't each re-issue the resolver call. Gated on <c>openid</c> being in
+    /// <see cref="IssuanceContext.Scope"/>: the app's OIDC-claims resolver carries
+    /// end-user identity data, so it must not run for a request that never asked
+    /// for identity, per the data-minimization principle in
+    /// <see cref="WellKnownScopes"/>.
     /// </summary>
     private static async ValueTask<OidcClaims?> PreResolveOidcClaimsAsync(
         EndpointServer server,
         IssuanceContext issuance,
         CancellationToken cancellationToken)
     {
+        if(!WellKnownScopes.ContainsOpenId(issuance.Scope))
+        {
+            return null;
+        }
+
         var oauth = server.OAuth();
         ResolveOidcClaimsDelegate? resolve = oauth.ResolveOidcClaimsAsync;
         if(resolve is null)
@@ -1620,6 +1682,209 @@ public static class AuthCodeEndpoints
                 payload[ctx.ClaimName] = ctx.ClaimValue;
             }
         }
+    }
+
+
+    /// <summary>
+    /// The result of a successful <see cref="IssueTokensAsync"/> walk: every token minted for
+    /// the request, keyed by <see cref="TokenProducer.ResponseField"/>, alongside the matching
+    /// per-token audit record and the latest <c>exp</c> across all issued tokens.
+    /// </summary>
+    private sealed record TokenIssuanceResult
+    {
+        /// <summary>The compact JWS of each issued token, keyed by response field name.</summary>
+        public required Dictionary<string, string> IssuedTokens { get; init; }
+
+        /// <summary>The <see cref="IssuedTokenAudit"/> of each issued token, keyed by response field name.</summary>
+        public required Dictionary<string, IssuedTokenAudit> IssuedAudits { get; init; }
+
+        /// <summary>The latest <c>exp</c> among every token issued in this walk.</summary>
+        public required DateTimeOffset LatestExpiry { get; init; }
+    }
+
+
+    /// <summary>
+    /// Walks <paramref name="producers"/> and mints every applicable token for
+    /// <paramref name="issuance"/>: the per-producer optional-capability feature gate and
+    /// <see cref="TokenProducer.IsApplicable"/> filter, key resolution
+    /// (<see cref="SigningKeySelection.ResolveSigningKeyIdAsync"/> +
+    /// <see cref="AuthorizationServerCryptography.SigningKeyResolver"/>), algorithm derivation,
+    /// <see cref="TokenProducer.BuildAsync"/>, the claim-contributor merge
+    /// (<see cref="BuildTargetForProducer"/> + <see cref="MergeContributedClaimsAsync"/>),
+    /// <see cref="UnsignedJwt.SignAsync"/>, and compact serialization. Shared by all six grants
+    /// that mint tokens through the producer set — the walk is identical across grants; only
+    /// the <see cref="IssuanceContext"/> construction before it and the response shaping after
+    /// it are grant-specific.
+    /// </summary>
+    /// <returns>
+    /// The <see cref="TokenIssuanceResult"/> on success; a <see cref="ServerHttpResponse"/>
+    /// <c>server_error</c> failure when a producer's signing key could not be resolved.
+    /// </returns>
+    private static async ValueTask<(TokenIssuanceResult? Result, ServerHttpResponse? Failure)> IssueTokensAsync(
+        EndpointServer server,
+        ClientRecord registration,
+        ExchangeContext context,
+        IssuanceContext issuance,
+        IReadOnlyList<TokenProducer> producers,
+        OidcClaims? preResolvedOidcClaims,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var oauth = server.OAuth();
+
+        Dictionary<string, string> issuedTokens = new(producers.Count);
+        Dictionary<string, IssuedTokenAudit> issuedAudits = new(producers.Count);
+        DateTimeOffset latestExpiry = now;
+
+        foreach(TokenProducer producer in producers)
+        {
+            //RequiredCapability is an optional coarse tenant-feature gate (null = every tenant
+            //may run this producer); when set, the resolver's per-request ResolvedCapabilities
+            //output must allow it — CAEP/RISC attenuation between issuance steps applies here,
+            //not just the registration's static AllowedCapabilities. IsApplicable is the
+            //producer's own grant/scope-aware decision (for example the ID Token producer's
+            //openid + end-user-authenticating-grant check). Together these replace the single
+            //endpoint-level capability match, which only gated the grant itself.
+            IReadOnlySet<CapabilityIdentifier>? resolved = context.ResolvedCapabilities;
+            if(producer.RequiredCapability is { } requiredCapability
+                && (resolved is null || !resolved.Contains(requiredCapability)))
+            {
+                continue;
+            }
+
+            if(!await producer.IsApplicable(issuance, cancellationToken).ConfigureAwait(false))
+            {
+                continue;
+            }
+
+            KeyId signingKeyId = await SigningKeySelection.ResolveSigningKeyIdAsync(
+                server, registration, producer.KeyUsage, context, cancellationToken)
+                .ConfigureAwait(false);
+
+            PrivateKeyMemory? signingKey = await oauth.Cryptography.SigningKeyResolver!(
+                signingKeyId, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
+
+            if(signingKey is null)
+            {
+                return (null, ServerHttpResponse.ServerError(
+                    OAuthErrors.ServerError,
+                    $"Signing key unavailable for producer '{producer.Name}'."));
+            }
+
+            string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
+
+            TokenProducerOutput output = await producer.BuildAsync(
+                issuance, signingKeyId, algorithm, cancellationToken).ConfigureAwait(false);
+
+            JwtPayload payload = output.Payload;
+
+            ClaimContributionTarget? contributionTarget =
+                BuildTargetForProducer(producer, issuance, preResolvedOidcClaims);
+            await MergeContributedClaimsAsync(
+                server, contributionTarget, payload, cancellationToken).ConfigureAwait(false);
+
+            UnsignedJwt unsigned = new(output.Header, payload);
+
+            using JwsMessage jws = await unsigned.SignAsync(
+                signingKey,
+                oauth.Codecs.JwtHeaderSerializer!,
+                oauth.Codecs.JwtPayloadSerializer!,
+                oauth.Codecs.Encoder!,
+                BaseMemoryPool.Shared,
+                cancellationToken).ConfigureAwait(false);
+
+            string compactJws = JwsSerialization.SerializeCompact(jws, oauth.Codecs.Encoder!);
+
+            issuedTokens[producer.ResponseField] = compactJws;
+
+            string jti = ExtractJti(payload);
+            DateTimeOffset issuedAt = ExtractInstant(payload, WellKnownJwtClaimNames.Iat, now);
+            DateTimeOffset expiresAt = ExtractInstant(payload, WellKnownJwtClaimNames.Exp, now);
+
+            issuedAudits[producer.ResponseField] = new IssuedTokenAudit
+            {
+                Jti = jti,
+                SigningKeyId = signingKeyId.Value,
+                IssuedAt = issuedAt,
+                ExpiresAt = expiresAt
+            };
+
+            if(expiresAt > latestExpiry)
+            {
+                latestExpiry = expiresAt;
+            }
+        }
+
+        return (new TokenIssuanceResult
+        {
+            IssuedTokens = issuedTokens,
+            IssuedAudits = issuedAudits,
+            LatestExpiry = latestExpiry
+        }, null);
+    }
+
+
+    /// <summary>
+    /// RFC 6749 §3.3 scope narrowing for the library's non-end-user grants —
+    /// <c>client_credentials</c> (subject is the client itself) and <c>pre_authorized_code</c>
+    /// (no established End-User session). Drops <c>openid</c> and the OIDC Core §5.4 identity
+    /// scopes (<c>profile</c> / <c>email</c> / <c>address</c> / <c>phone</c>) from
+    /// <paramref name="grantedScope"/> so the source enforces the <c>openid</c> ⇒
+    /// authenticated-end-user invariant; <see cref="Oidc10IdTokenProducer"/> and
+    /// <see cref="Oidc.UserInfoEndpoints"/> are the two independent consumer-side layers of the
+    /// same invariant. <c>token_exchange</c> and <c>jwt_bearer</c> do not call this — their
+    /// authorization seams (<see cref="AuthorizationServerIntegration.AuthorizeTokenExchangeAsync"/>,
+    /// <see cref="AuthorizationServerIntegration.ValidateJwtBearerAssertionAsync"/>) own whether
+    /// the subject is an End-User, and the app opts in by granting <c>openid</c> itself.
+    /// </summary>
+    /// <returns>
+    /// <paramref name="grantedScope"/> unchanged when it carries none of the dropped scopes;
+    /// otherwise the narrowed scope string with those tokens removed. Emits
+    /// <see cref="OAuthEventNames.IdentityScopesDroppedForNonEndUserGrant"/> naming the dropped
+    /// scopes when narrowing occurred.
+    /// </returns>
+    private static string DropIdentityScopesForNonEndUserGrant(string grantedScope)
+    {
+        if(string.IsNullOrEmpty(grantedScope))
+        {
+            return grantedScope;
+        }
+
+        string[] tokens = grantedScope.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        List<string> retained = new(tokens.Length);
+        List<string>? dropped = null;
+
+        foreach(string token in tokens)
+        {
+            bool isIdentityScope = WellKnownScopes.IsOpenId(token)
+                || WellKnownScopes.IsProfile(token)
+                || WellKnownScopes.IsEmail(token)
+                || WellKnownScopes.IsAddress(token)
+                || WellKnownScopes.IsPhone(token);
+
+            if(isIdentityScope)
+            {
+                (dropped ??= []).Add(token);
+                continue;
+            }
+
+            retained.Add(token);
+        }
+
+        if(dropped is null)
+        {
+            return grantedScope;
+        }
+
+        System.Diagnostics.Activity.Current?.AddEvent(
+            new System.Diagnostics.ActivityEvent(
+                OAuthEventNames.IdentityScopesDroppedForNonEndUserGrant,
+                tags: new System.Diagnostics.ActivityTagsCollection
+                {
+                    [OAuthEventNames.DroppedScopesTagName] = string.Join(' ', dropped)
+                }));
+
+        return string.Join(' ', retained);
     }
 
 
@@ -1728,6 +1993,18 @@ public static class AuthCodeEndpoints
                         OAuthErrors.InvalidClient, "Unknown client."));
                 }
 
+                //draft-ietf-oauth-client-id-metadata-document-02 §8.2 (CIMD-049/050): a
+                //registration that declares a non-None token_endpoint_auth_method is a
+                //confidential client, and every token-endpoint communication MUST include
+                //client authentication of that type. Null/None is the PKCE-only public
+                //client shape and keeps today's behavior unchanged.
+                ServerHttpResponse? clientAuthFailure = await RequireClientAuthenticationIfDeclaredAsync(
+                    oauth, context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
+                if(clientAuthFailure is not null)
+                {
+                    return (null, clientAuthFailure);
+                }
+
                 Uri issuerUri;
                 try
                 {
@@ -1814,6 +2091,7 @@ public static class AuthCodeEndpoints
                     Subject = codeState.SubjectId,
                     Scope = codeState.Scope,
                     ClientId = codeState.ClientId,
+                    GrantType = WellKnownGrantTypes.AuthorizationCode,
                     IssuedAt = now,
                     Nonce = string.IsNullOrEmpty(codeState.Nonce) ? null : codeState.Nonce,
                     AuthTime = codeState.AuthTime,
@@ -1832,96 +2110,19 @@ public static class AuthCodeEndpoints
                 OidcClaims? preResolvedOidcClaims = await PreResolveOidcClaimsAsync(
                     server, issuance, ct).ConfigureAwait(false);
 
-                Dictionary<string, string> issuedTokens = new(producers.Count);
-                Dictionary<string, IssuedTokenAudit> issuedAudits = new(producers.Count);
-                DateTimeOffset latestExpiry = now;
-
-                foreach(TokenProducer producer in producers)
-                {
-                    //Per-producer capability filter. The chain-level filter via
-                    //ResolveCapabilitiesAsync gated the token *endpoint* itself
-                    //on the AuthorizationCode capability; the producer loop here
-                    //gates each individual token producer (access token, ID
-                    //token, refresh token) on its own RequiredCapability so the
-                    //response contains only the token shapes this request is
-                    //allowed to issue. Reads the resolver's per-request output
-                    //(stashed by EndpointChain.BuildForRequestAsync) rather
-                    //than the registration's static AllowedCapabilities — CAEP/
-                    //RISC attenuation between issuance steps applies here.
-                    IReadOnlySet<CapabilityIdentifier>? resolved =
-                        context.ResolvedCapabilities;
-                    if(resolved is null || !resolved.Contains(producer.RequiredCapability))
-                    {
-                        continue;
-                    }
-
-                    if(!await producer.IsApplicable(issuance, ct).ConfigureAwait(false))
-                    {
-                        continue;
-                    }
-
-                    KeyId signingKeyId = await SigningKeySelection.ResolveSigningKeyIdAsync(
-                        server, registration, producer.KeyUsage, context, ct)
+                (TokenIssuanceResult? issuanceResult, ServerHttpResponse? issuanceFailure) =
+                    await IssueTokensAsync(
+                        server, registration, context, issuance, producers, preResolvedOidcClaims, now, ct)
                         .ConfigureAwait(false);
-
-                    PrivateKeyMemory? signingKey = await oauth.Cryptography.SigningKeyResolver!(
-                        signingKeyId, registration.TenantId, context, ct).ConfigureAwait(false);
-
-                    if(signingKey is null)
-                    {
-                        return (null, ServerHttpResponse.ServerError(
-                            OAuthErrors.ServerError,
-                            $"Signing key unavailable for producer '{producer.Name}'."));
-                    }
-
-                    string algorithm =
-                        CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
-
-                    TokenProducerOutput output = await producer.BuildAsync(
-                        issuance, signingKeyId, algorithm, ct).ConfigureAwait(false);
-
-                    JwtPayload payload = output.Payload;
-
-                    //Composed contributor walk via AuthorizationServerIntegration.ClaimIssuer.
-                    //Emits scope-driven extension claims (profile / email /
-                    //address / phone / cnf / acr / amr) after the producer
-                    //returned its spec-mandated baseline.
-                    ClaimContributionTarget? contributionTarget =
-                        BuildTargetForProducer(producer, issuance, preResolvedOidcClaims);
-                    await MergeContributedClaimsAsync(
-                        server, contributionTarget, payload, ct).ConfigureAwait(false);
-
-                    UnsignedJwt unsigned = new(output.Header, payload);
-
-                    using JwsMessage jws = await unsigned.SignAsync(
-                        signingKey,
-                        oauth.Codecs.JwtHeaderSerializer!,
-                        oauth.Codecs.JwtPayloadSerializer!,
-                        oauth.Codecs.Encoder!,
-                        BaseMemoryPool.Shared,
-                        ct).ConfigureAwait(false);
-
-                    string compactJws = JwsSerialization.SerializeCompact(jws, oauth.Codecs.Encoder!);
-
-                    issuedTokens[producer.ResponseField] = compactJws;
-
-                    string jti = ExtractJti(payload);
-                    DateTimeOffset issuedAt = ExtractInstant(payload, WellKnownJwtClaimNames.Iat, now);
-                    DateTimeOffset expiresAt = ExtractInstant(payload, WellKnownJwtClaimNames.Exp, now);
-
-                    issuedAudits[producer.ResponseField] = new IssuedTokenAudit
-                    {
-                        Jti = jti,
-                        SigningKeyId = signingKeyId.Value,
-                        IssuedAt = issuedAt,
-                        ExpiresAt = expiresAt
-                    };
-
-                    if(expiresAt > latestExpiry)
-                    {
-                        latestExpiry = expiresAt;
-                    }
+                if(issuanceFailure is not null)
+                {
+                    return (null, issuanceFailure);
                 }
+
+                TokenIssuanceResult issued = issuanceResult!;
+                Dictionary<string, string> issuedTokens = issued.IssuedTokens;
+                Dictionary<string, IssuedTokenAudit> issuedAudits = issued.IssuedAudits;
+                DateTimeOffset latestExpiry = issued.LatestExpiry;
 
                 if(issuedTokens.Count == 0)
                 {
@@ -1963,7 +2164,9 @@ public static class AuthCodeEndpoints
                         Scope = codeState.Scope,
                         Confirmation = confirmation,
                         AuthTime = codeState.AuthTime,
+                        SessionId = codeState.SessionId,
                         Acr = codeState.Acr,
+                        OriginatingGrantType = WellKnownGrantTypes.AuthorizationCode,
                         //RFC 9396 §11.2: granted authorization_details are stored as part of the
                         //grant so the refresh exchange can re-emit the §7 echo and §9.1 claim. The
                         //baseline a later refresh narrows against is the resource owner's
@@ -2193,6 +2396,11 @@ public static class AuthCodeEndpoints
                     grantedScope = string.Join(' ', registration.AllowedScopes);
                 }
 
+                //RFC 6749 §3.3 narrowing — client_credentials has no authenticated End-User (the
+                //subject is the client itself), so openid and the identity scopes never reach the
+                //granted set. See DropIdentityScopesForNonEndUserGrant's remarks for the invariant.
+                grantedScope = DropIdentityScopesForNonEndUserGrant(grantedScope);
+
                 //RFC 9396 §6: "The AS checks whether ... the client's policy (in case of grant
                 //type client_credentials) allows the issuance of an access token with the
                 //requested authorization details. Otherwise, the AS refuses the request with the
@@ -2250,6 +2458,7 @@ public static class AuthCodeEndpoints
                     Subject = registration.ClientId,
                     Scope = grantedScope,
                     ClientId = registration.ClientId,
+                    GrantType = WellKnownGrantTypes.ClientCredentials,
                     IssuedAt = now
                 };
 
@@ -2261,66 +2470,17 @@ public static class AuthCodeEndpoints
                 OidcClaims? preResolvedOidcClaims = await PreResolveOidcClaimsAsync(
                     server, issuance, ct).ConfigureAwait(false);
 
-                Dictionary<string, string> issuedTokens = new(producers.Count);
-                int expiresIn = 0;
-
-                foreach(TokenProducer producer in producers)
+                (TokenIssuanceResult? issuanceResult, ServerHttpResponse? issuanceFailure) =
+                    await IssueTokensAsync(
+                        server, registration, context, issuance, producers, preResolvedOidcClaims, now, ct)
+                        .ConfigureAwait(false);
+                if(issuanceFailure is not null)
                 {
-                    //Per-producer capability filter — see BuildToken for the
-                    //rationale; reads the resolver's per-request output so
-                    //capability attenuation applies to this grant too.
-                    IReadOnlySet<CapabilityIdentifier>? resolved =
-                        context.ResolvedCapabilities;
-                    if(resolved is null || !resolved.Contains(producer.RequiredCapability))
-                    {
-                        continue;
-                    }
-
-                    if(!await producer.IsApplicable(issuance, ct).ConfigureAwait(false))
-                    {
-                        continue;
-                    }
-
-                    KeyId signingKeyId = await SigningKeySelection.ResolveSigningKeyIdAsync(
-                        server, registration, producer.KeyUsage, context, ct).ConfigureAwait(false);
-                    PrivateKeyMemory? signingKey = await oauth.Cryptography.SigningKeyResolver!(
-                        signingKeyId, registration.TenantId, context, ct).ConfigureAwait(false);
-                    if(signingKey is null)
-                    {
-                        return (null, ServerHttpResponse.ServerError(
-                            OAuthErrors.ServerError,
-                            $"Signing key unavailable for producer '{producer.Name}'."));
-                    }
-
-                    string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
-                    TokenProducerOutput output = await producer.BuildAsync(
-                        issuance, signingKeyId, algorithm, ct).ConfigureAwait(false);
-                    JwtPayload payload = output.Payload;
-
-                    ClaimContributionTarget? contributionTarget =
-                        BuildTargetForProducer(producer, issuance, preResolvedOidcClaims);
-                    await MergeContributedClaimsAsync(
-                        server, contributionTarget, payload, ct).ConfigureAwait(false);
-
-                    UnsignedJwt unsigned = new(output.Header, payload);
-                    using JwsMessage jws = await unsigned.SignAsync(
-                        signingKey,
-                        oauth.Codecs.JwtHeaderSerializer!,
-                        oauth.Codecs.JwtPayloadSerializer!,
-                        oauth.Codecs.Encoder!,
-                        BaseMemoryPool.Shared,
-                        ct).ConfigureAwait(false);
-
-                    string compactJws = JwsSerialization.SerializeCompact(jws, oauth.Codecs.Encoder!);
-                    issuedTokens[producer.ResponseField] = compactJws;
-
-                    if(WellKnownTokenTypes.IsAccessToken(producer.ResponseField))
-                    {
-                        DateTimeOffset issuedAtClaim = ExtractInstant(payload, WellKnownJwtClaimNames.Iat, now);
-                        DateTimeOffset expiresAtClaim = ExtractInstant(payload, WellKnownJwtClaimNames.Exp, now);
-                        expiresIn = (int)(expiresAtClaim - issuedAtClaim).TotalSeconds;
-                    }
+                    return (null, issuanceFailure);
                 }
+
+                TokenIssuanceResult issued = issuanceResult!;
+                Dictionary<string, string> issuedTokens = issued.IssuedTokens;
 
                 if(!issuedTokens.TryGetValue(WellKnownTokenTypes.AccessToken, out string? accessToken))
                 {
@@ -2328,6 +2488,11 @@ public static class AuthCodeEndpoints
                         OAuthErrors.ServerError,
                         "No access token was produced for the client_credentials grant."));
                 }
+
+                int expiresIn = issued.IssuedAudits.TryGetValue(
+                    WellKnownTokenTypes.AccessToken, out IssuedTokenAudit? accessAudit)
+                    ? (int)(accessAudit.ExpiresAt - accessAudit.IssuedAt).TotalSeconds
+                    : 0;
 
                 //RFC 6749 §4.4.3/§5.1: access_token, token_type, expires_in, and
                 //the granted scope; the response is stateless and uncacheable.
@@ -2749,6 +2914,7 @@ public static class AuthCodeEndpoints
                     Subject = authorization.Subject,
                     Scope = authorization.Scope,
                     ClientId = registration.ClientId,
+                    GrantType = WellKnownGrantTypes.TokenExchange,
                     IssuedAt = now,
                     Act = act,
 
@@ -2766,66 +2932,17 @@ public static class AuthCodeEndpoints
                 OidcClaims? preResolvedOidcClaims = await PreResolveOidcClaimsAsync(
                     server, issuance, ct).ConfigureAwait(false);
 
-                Dictionary<string, string> issuedTokens = new(producers.Count);
-                int expiresIn = 0;
-
-                foreach(TokenProducer producer in producers)
+                (TokenIssuanceResult? issuanceResult, ServerHttpResponse? issuanceFailure) =
+                    await IssueTokensAsync(
+                        server, registration, context, issuance, producers, preResolvedOidcClaims, now, ct)
+                        .ConfigureAwait(false);
+                if(issuanceFailure is not null)
                 {
-                    //Per-producer capability filter — see BuildToken for the
-                    //rationale; reads the resolver's per-request output so
-                    //capability attenuation applies to this grant too.
-                    IReadOnlySet<CapabilityIdentifier>? resolved =
-                        context.ResolvedCapabilities;
-                    if(resolved is null || !resolved.Contains(producer.RequiredCapability))
-                    {
-                        continue;
-                    }
-
-                    if(!await producer.IsApplicable(issuance, ct).ConfigureAwait(false))
-                    {
-                        continue;
-                    }
-
-                    KeyId signingKeyId = await SigningKeySelection.ResolveSigningKeyIdAsync(
-                        server, registration, producer.KeyUsage, context, ct).ConfigureAwait(false);
-                    PrivateKeyMemory? signingKey = await oauth.Cryptography.SigningKeyResolver!(
-                        signingKeyId, registration.TenantId, context, ct).ConfigureAwait(false);
-                    if(signingKey is null)
-                    {
-                        return (null, ServerHttpResponse.ServerError(
-                            OAuthErrors.ServerError,
-                            $"Signing key unavailable for producer '{producer.Name}'."));
-                    }
-
-                    string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
-                    TokenProducerOutput output = await producer.BuildAsync(
-                        issuance, signingKeyId, algorithm, ct).ConfigureAwait(false);
-                    JwtPayload payload = output.Payload;
-
-                    ClaimContributionTarget? contributionTarget =
-                        BuildTargetForProducer(producer, issuance, preResolvedOidcClaims);
-                    await MergeContributedClaimsAsync(
-                        server, contributionTarget, payload, ct).ConfigureAwait(false);
-
-                    UnsignedJwt unsigned = new(output.Header, payload);
-                    using JwsMessage jws = await unsigned.SignAsync(
-                        signingKey,
-                        oauth.Codecs.JwtHeaderSerializer!,
-                        oauth.Codecs.JwtPayloadSerializer!,
-                        oauth.Codecs.Encoder!,
-                        BaseMemoryPool.Shared,
-                        ct).ConfigureAwait(false);
-
-                    string compactJws = JwsSerialization.SerializeCompact(jws, oauth.Codecs.Encoder!);
-                    issuedTokens[producer.ResponseField] = compactJws;
-
-                    if(WellKnownTokenTypes.IsAccessToken(producer.ResponseField))
-                    {
-                        DateTimeOffset issuedAtClaim = ExtractInstant(payload, WellKnownJwtClaimNames.Iat, now);
-                        DateTimeOffset expiresAtClaim = ExtractInstant(payload, WellKnownJwtClaimNames.Exp, now);
-                        expiresIn = (int)(expiresAtClaim - issuedAtClaim).TotalSeconds;
-                    }
+                    return (null, issuanceFailure);
                 }
+
+                TokenIssuanceResult issued = issuanceResult!;
+                Dictionary<string, string> issuedTokens = issued.IssuedTokens;
 
                 if(!issuedTokens.TryGetValue(WellKnownTokenTypes.AccessToken, out string? accessToken))
                 {
@@ -2833,6 +2950,11 @@ public static class AuthCodeEndpoints
                         OAuthErrors.ServerError,
                         "No access token was produced for the token-exchange grant."));
                 }
+
+                int expiresIn = issued.IssuedAudits.TryGetValue(
+                    WellKnownTokenTypes.AccessToken, out IssuedTokenAudit? accessAudit)
+                    ? (int)(accessAudit.ExpiresAt - accessAudit.IssuedAt).TotalSeconds
+                    : 0;
 
                 //RFC 8693 §2.2.1: access_token, issued_token_type, token_type, expires_in, scope.
                 //token_type is Bearer (RFC 6750); issued_token_type is the wire URI of the type the
@@ -2954,7 +3076,8 @@ public static class AuthCodeEndpoints
                 RefreshToken = refreshToken,
                 IssuedAt = now,
                 SubjectId = authorization.Subject,
-                Scope = authorization.Scope
+                Scope = authorization.Scope,
+                OriginatingGrantType = WellKnownGrantTypes.TokenExchange
             };
             await oauth.SaveFlowStateAsync(
                 registration.TenantId, refreshFlowId, refreshState, stepCount: 0, context, cancellationToken).ConfigureAwait(false);
@@ -3328,15 +3451,23 @@ public static class AuthCodeEndpoints
                         OAuthErrors.InvalidClient, "Client identification is required for the jwt-bearer grant."));
                 }
 
-                //RFC 7523 §3.1: "if client credentials are present in the request, the authorization
+                //RFC 7523 §3.1 composed with draft-ietf-oauth-client-id-metadata-document-02 §8.2
+                //(CIMD-049): "if client credentials are present in the request, the authorization
                 //server MUST validate them." Client authentication is OPTIONAL for this grant (the
-                //assertion is the grant), so credentials are validated only when present — an
-                //anonymous request proceeds. Presence is an Authorization header (client_secret_basic /
+                //assertion is the grant), so a credential-less request from a client whose effective
+                //registration declares no token_endpoint_auth_method (or declares None) proceeds as
+                //anonymous. Presence is an Authorization header (client_secret_basic /
                 //private_key_jwt / mTLS) OR a client_secret / client_assertion form field; the seam owns
                 //the method and the comparison. When credentials ARE present they MUST be validated:
                 //if the client-authentication seam is not configured, the request cannot proceed as
                 //anonymous (that would silently ignore presented credentials, a §3.1 MUST bypass), so it
                 //is refused with 401 invalid_client. A present-but-invalid credential is 401 invalid_client.
+                //When credentials are ABSENT and the effective (possibly CIMD-materialized) registration
+                //declares a non-None token_endpoint_auth_method, the client is confidential and CIMD-049's
+                //"any communication with the authorization server MUST include client authentication of
+                //the registered type" governs: RequireClientAuthenticationIfDeclaredAsync refuses the
+                //request with 401 invalid_client, fail-closed. The two branches are disjoint, so
+                //credentials are never validated twice.
                 if(HasClientCredentials(context.IncomingRequest, fields))
                 {
                     if(oauth.ValidateClientCredentialsAsync is null)
@@ -3352,6 +3483,15 @@ public static class AuthCodeEndpoints
                     {
                         return (null, ServerHttpResponse.Unauthorized(
                             OAuthErrors.InvalidClient, "Client authentication failed."));
+                    }
+                }
+                else
+                {
+                    ServerHttpResponse? declaredAuthFailure = await RequireClientAuthenticationIfDeclaredAsync(
+                        oauth, context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
+                    if(declaredAuthFailure is not null)
+                    {
+                        return (null, declaredAuthFailure);
                     }
                 }
 
@@ -3485,6 +3625,7 @@ public static class AuthCodeEndpoints
                     Subject = grant.Subject,
                     Scope = grant.Scope,
                     ClientId = registration.ClientId,
+                    GrantType = WellKnownGrantTypes.JwtBearer,
                     IssuedAt = now,
                     Audience = grant.Audience is { Count: > 0 } ? grant.Audience : null,
                     Confirmation = tokenConfirmation
@@ -3498,65 +3639,17 @@ public static class AuthCodeEndpoints
                 OidcClaims? preResolvedOidcClaims = await PreResolveOidcClaimsAsync(
                     server, issuance, ct).ConfigureAwait(false);
 
-                Dictionary<string, string> issuedTokens = new(producers.Count);
-                int expiresIn = 0;
-
-                foreach(TokenProducer producer in producers)
+                (TokenIssuanceResult? issuanceResult, ServerHttpResponse? issuanceFailure) =
+                    await IssueTokensAsync(
+                        server, registration, context, issuance, producers, preResolvedOidcClaims, now, ct)
+                        .ConfigureAwait(false);
+                if(issuanceFailure is not null)
                 {
-                    //Per-producer capability filter — see BuildToken for the rationale; reads the
-                    //resolver's per-request output so capability attenuation applies to this grant too.
-                    IReadOnlySet<CapabilityIdentifier>? resolved =
-                        context.ResolvedCapabilities;
-                    if(resolved is null || !resolved.Contains(producer.RequiredCapability))
-                    {
-                        continue;
-                    }
-
-                    if(!await producer.IsApplicable(issuance, ct).ConfigureAwait(false))
-                    {
-                        continue;
-                    }
-
-                    KeyId signingKeyId = await SigningKeySelection.ResolveSigningKeyIdAsync(
-                        server, registration, producer.KeyUsage, context, ct).ConfigureAwait(false);
-                    PrivateKeyMemory? signingKey = await oauth.Cryptography.SigningKeyResolver!(
-                        signingKeyId, registration.TenantId, context, ct).ConfigureAwait(false);
-                    if(signingKey is null)
-                    {
-                        return (null, ServerHttpResponse.ServerError(
-                            OAuthErrors.ServerError,
-                            $"Signing key unavailable for producer '{producer.Name}'."));
-                    }
-
-                    string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
-                    TokenProducerOutput output = await producer.BuildAsync(
-                        issuance, signingKeyId, algorithm, ct).ConfigureAwait(false);
-                    JwtPayload payload = output.Payload;
-
-                    ClaimContributionTarget? contributionTarget =
-                        BuildTargetForProducer(producer, issuance, preResolvedOidcClaims);
-                    await MergeContributedClaimsAsync(
-                        server, contributionTarget, payload, ct).ConfigureAwait(false);
-
-                    UnsignedJwt unsigned = new(output.Header, payload);
-                    using JwsMessage jws = await unsigned.SignAsync(
-                        signingKey,
-                        oauth.Codecs.JwtHeaderSerializer!,
-                        oauth.Codecs.JwtPayloadSerializer!,
-                        oauth.Codecs.Encoder!,
-                        BaseMemoryPool.Shared,
-                        ct).ConfigureAwait(false);
-
-                    string compactJws = JwsSerialization.SerializeCompact(jws, oauth.Codecs.Encoder!);
-                    issuedTokens[producer.ResponseField] = compactJws;
-
-                    if(WellKnownTokenTypes.IsAccessToken(producer.ResponseField))
-                    {
-                        DateTimeOffset issuedAtClaim = ExtractInstant(payload, WellKnownJwtClaimNames.Iat, now);
-                        DateTimeOffset expiresAtClaim = ExtractInstant(payload, WellKnownJwtClaimNames.Exp, now);
-                        expiresIn = (int)(expiresAtClaim - issuedAtClaim).TotalSeconds;
-                    }
+                    return (null, issuanceFailure);
                 }
+
+                TokenIssuanceResult issued = issuanceResult!;
+                Dictionary<string, string> issuedTokens = issued.IssuedTokens;
 
                 if(!issuedTokens.TryGetValue(WellKnownTokenTypes.AccessToken, out string? accessToken))
                 {
@@ -3564,6 +3657,11 @@ public static class AuthCodeEndpoints
                         OAuthErrors.ServerError,
                         "No access token was produced for the jwt-bearer grant."));
                 }
+
+                int expiresIn = issued.IssuedAudits.TryGetValue(
+                    WellKnownTokenTypes.AccessToken, out IssuedTokenAudit? accessAudit)
+                    ? (int)(accessAudit.ExpiresAt - accessAudit.IssuedAt).TotalSeconds
+                    : 0;
 
                 //RFC 6749 §5.1: a plain access-token response — access_token, token_type Bearer,
                 //expires_in, scope. No issued_token_type (that is the token-exchange §2.2.1 field).
@@ -3633,6 +3731,54 @@ public static class AuthCodeEndpoints
                 && !string.IsNullOrEmpty(secret))
             || (fields.TryGetValue(OAuthRequestParameterNames.ClientAssertion, out string? assertion)
                 && !string.IsNullOrEmpty(assertion));
+    }
+
+
+    /// <summary>
+    /// Enforces draft-ietf-oauth-client-id-metadata-document-02 §8.2 (CIMD-049/050) at the
+    /// authorization_code, refresh_token, and jwt-bearer grants: when the effective registration
+    /// declares a non-<see cref="ClientAuthenticationMethod.None"/> <c>token_endpoint_auth_method</c>,
+    /// this is a confidential client and "any communication with the authorization server MUST include
+    /// client authentication of the registered type." <see cref="AuthorizationServerIntegration.ValidateClientCredentialsAsync"/>
+    /// must be wired AND must return <see langword="true"/>; an unwired seam is a fail-closed
+    /// <c>401 invalid_client</c>, never silent passthrough. A <see langword="null"/> or
+    /// <see cref="ClientAuthenticationMethod.None"/> method leaves the PKCE-only public-client
+    /// behavior byte-identical — this method returns <see langword="null"/> immediately. The
+    /// jwt-bearer grant invokes this only when the request carries no credentials: RFC 7523 §3.1's
+    /// validate-if-present rule authenticates a credential-bearing request on its own path, so the
+    /// declared-method requirement composes with it without validating the same credentials twice.
+    /// </summary>
+    private static async ValueTask<ServerHttpResponse?> RequireClientAuthenticationIfDeclaredAsync(
+        AuthorizationServerIntegration oauth,
+        IncomingRequest? request,
+        RequestFields fields,
+        ClientRecord registration,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        if(registration.TokenEndpointAuthMethod is not { } authMethod
+            || authMethod == ClientAuthenticationMethod.None)
+        {
+            return null;
+        }
+
+        if(oauth.ValidateClientCredentialsAsync is null)
+        {
+            return ServerHttpResponse.Unauthorized(
+                OAuthErrors.InvalidClient,
+                "This client declared a confidential token_endpoint_auth_method but client "
+                + "authentication is not configured for this authorization server.");
+        }
+
+        bool clientAuthenticated = await oauth.ValidateClientCredentialsAsync(
+            request, fields, registration, context, cancellationToken).ConfigureAwait(false);
+        if(!clientAuthenticated)
+        {
+            return ServerHttpResponse.Unauthorized(
+                OAuthErrors.InvalidClient, "Client authentication failed.");
+        }
+
+        return null;
     }
 
 
@@ -3796,7 +3942,12 @@ public static class AuthCodeEndpoints
                 //seam-resolved subject), not to the Wallet. An absent scope is the
                 //authorization_details path (§6.1.1); the granted scope, when present,
                 //is echoed in the response.
-                string grantedScope = decision.Scope ?? string.Empty;
+                //
+                //RFC 6749 §3.3 narrowing — the Pre-Authorized Code grant establishes no
+                //authenticated End-User session (there is no prior Authorization Request), so
+                //openid and the identity scopes never reach the granted set. See
+                //DropIdentityScopesForNonEndUserGrant's remarks for the invariant.
+                string grantedScope = DropIdentityScopesForNonEndUserGrant(decision.Scope ?? string.Empty);
 
                 IssuanceContext issuance = new()
                 {
@@ -3806,6 +3957,7 @@ public static class AuthCodeEndpoints
                     Subject = subject,
                     Scope = grantedScope,
                     ClientId = clientId ?? registration.ClientId,
+                    GrantType = WellKnownGrantTypes.PreAuthorizedCode,
                     IssuedAt = now
                 };
 
@@ -3817,66 +3969,17 @@ public static class AuthCodeEndpoints
                 OidcClaims? preResolvedOidcClaims = await PreResolveOidcClaimsAsync(
                     server, issuance, ct).ConfigureAwait(false);
 
-                Dictionary<string, string> issuedTokens = new(producers.Count);
-                int expiresIn = 0;
-
-                foreach(TokenProducer producer in producers)
+                (TokenIssuanceResult? issuanceResult, ServerHttpResponse? issuanceFailure) =
+                    await IssueTokensAsync(
+                        server, registration, context, issuance, producers, preResolvedOidcClaims, now, ct)
+                        .ConfigureAwait(false);
+                if(issuanceFailure is not null)
                 {
-                    //Per-producer capability filter — see BuildToken for the rationale;
-                    //reads the resolver's per-request output so capability attenuation
-                    //applies to this grant too.
-                    IReadOnlySet<CapabilityIdentifier>? resolved =
-                        context.ResolvedCapabilities;
-                    if(resolved is null || !resolved.Contains(producer.RequiredCapability))
-                    {
-                        continue;
-                    }
-
-                    if(!await producer.IsApplicable(issuance, ct).ConfigureAwait(false))
-                    {
-                        continue;
-                    }
-
-                    KeyId signingKeyId = await SigningKeySelection.ResolveSigningKeyIdAsync(
-                        server, registration, producer.KeyUsage, context, ct).ConfigureAwait(false);
-                    PrivateKeyMemory? signingKey = await oauth.Cryptography.SigningKeyResolver!(
-                        signingKeyId, registration.TenantId, context, ct).ConfigureAwait(false);
-                    if(signingKey is null)
-                    {
-                        return (null, ServerHttpResponse.ServerError(
-                            OAuthErrors.ServerError,
-                            $"Signing key unavailable for producer '{producer.Name}'."));
-                    }
-
-                    string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
-                    TokenProducerOutput output = await producer.BuildAsync(
-                        issuance, signingKeyId, algorithm, ct).ConfigureAwait(false);
-                    JwtPayload payload = output.Payload;
-
-                    ClaimContributionTarget? contributionTarget =
-                        BuildTargetForProducer(producer, issuance, preResolvedOidcClaims);
-                    await MergeContributedClaimsAsync(
-                        server, contributionTarget, payload, ct).ConfigureAwait(false);
-
-                    UnsignedJwt unsigned = new(output.Header, payload);
-                    using JwsMessage jws = await unsigned.SignAsync(
-                        signingKey,
-                        oauth.Codecs.JwtHeaderSerializer!,
-                        oauth.Codecs.JwtPayloadSerializer!,
-                        oauth.Codecs.Encoder!,
-                        BaseMemoryPool.Shared,
-                        ct).ConfigureAwait(false);
-
-                    string compactJws = JwsSerialization.SerializeCompact(jws, oauth.Codecs.Encoder!);
-                    issuedTokens[producer.ResponseField] = compactJws;
-
-                    if(WellKnownTokenTypes.IsAccessToken(producer.ResponseField))
-                    {
-                        DateTimeOffset issuedAtClaim = ExtractInstant(payload, WellKnownJwtClaimNames.Iat, now);
-                        DateTimeOffset expiresAtClaim = ExtractInstant(payload, WellKnownJwtClaimNames.Exp, now);
-                        expiresIn = (int)(expiresAtClaim - issuedAtClaim).TotalSeconds;
-                    }
+                    return (null, issuanceFailure);
                 }
+
+                TokenIssuanceResult issued = issuanceResult!;
+                Dictionary<string, string> issuedTokens = issued.IssuedTokens;
 
                 if(!issuedTokens.TryGetValue(WellKnownTokenTypes.AccessToken, out string? accessToken))
                 {
@@ -3884,6 +3987,11 @@ public static class AuthCodeEndpoints
                         OAuthErrors.ServerError,
                         "No access token was produced for the pre-authorized_code grant."));
                 }
+
+                int expiresIn = issued.IssuedAudits.TryGetValue(
+                    WellKnownTokenTypes.AccessToken, out IssuedTokenAudit? accessAudit)
+                    ? (int)(accessAudit.ExpiresAt - accessAudit.IssuedAt).TotalSeconds
+                    : 0;
 
                 //§6.2/RFC 6749 §5.1: access_token, token_type, expires_in, and the granted
                 //scope when one was requested. The c_nonce is deliberately absent — OID4VCI
@@ -4582,6 +4690,15 @@ public static class AuthCodeEndpoints
                         "client_id does not match the refresh token's bound client."));
                 }
 
+                //draft-ietf-oauth-client-id-metadata-document-02 §8.2 (CIMD-049/050) — see
+                //RequireClientAuthenticationIfDeclaredAsync's remarks on BuildToken.
+                ServerHttpResponse? clientAuthFailure = await RequireClientAuthenticationIfDeclaredAsync(
+                    oauth, context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
+                if(clientAuthFailure is not null)
+                {
+                    return (null, clientAuthFailure);
+                }
+
                 Uri issuerUri;
                 try
                 {
@@ -4676,10 +4793,13 @@ public static class AuthCodeEndpoints
                     Subject = storedRefresh.SubjectId,
                     Scope = storedRefresh.Scope,
                     ClientId = storedRefresh.ClientId,
+                    GrantType = WellKnownGrantTypes.RefreshToken,
                     IssuedAt = now,
                     AuthTime = storedRefresh.AuthTime,
+                    SessionId = storedRefresh.SessionId,
                     Acr = storedRefresh.Acr,
-                    Confirmation = confirmation
+                    Confirmation = confirmation,
+                    RefreshTokenOriginatingGrantType = storedRefresh.OriginatingGrantType
                 };
 
                 IReadOnlyList<TokenProducer> producers =
@@ -4692,80 +4812,19 @@ public static class AuthCodeEndpoints
                 OidcClaims? preResolvedOidcClaims = await PreResolveOidcClaimsAsync(
                     server, issuance, ct).ConfigureAwait(false);
 
-                Dictionary<string, string> issuedTokens = new(producers.Count);
-                Dictionary<string, IssuedTokenAudit> issuedAudits = new(producers.Count);
-                DateTimeOffset latestExpiry = now;
-
-                foreach(TokenProducer producer in producers)
+                (TokenIssuanceResult? issuanceResult, ServerHttpResponse? issuanceFailure) =
+                    await IssueTokensAsync(
+                        server, registration, context, issuance, producers, preResolvedOidcClaims, now, ct)
+                        .ConfigureAwait(false);
+                if(issuanceFailure is not null)
                 {
-                    //Per-producer capability filter — see BuildToken for the
-                    //rationale on filtering producers (not the endpoint) here.
-                    //Reads the resolver's per-request output rather than the
-                    //registration's static set, so CAEP/RISC attenuation
-                    //applies to refresh-exchange just as to code-exchange.
-                    IReadOnlySet<CapabilityIdentifier>? resolved =
-                        context.ResolvedCapabilities;
-                    if(resolved is null || !resolved.Contains(producer.RequiredCapability))
-                    {
-                        continue;
-                    }
-                    if(!await producer.IsApplicable(issuance, ct).ConfigureAwait(false))
-                    {
-                        continue;
-                    }
-
-                    KeyId signingKeyId = await SigningKeySelection.ResolveSigningKeyIdAsync(
-                        server, registration, producer.KeyUsage, context, ct).ConfigureAwait(false);
-                    PrivateKeyMemory? signingKey = await oauth.Cryptography.SigningKeyResolver!(
-                        signingKeyId, registration.TenantId, context, ct).ConfigureAwait(false);
-                    if(signingKey is null)
-                    {
-                        return (null, ServerHttpResponse.ServerError(
-                            OAuthErrors.ServerError,
-                            $"Signing key unavailable for producer '{producer.Name}'."));
-                    }
-
-                    string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
-                    TokenProducerOutput output = await producer.BuildAsync(
-                        issuance, signingKeyId, algorithm, ct).ConfigureAwait(false);
-                    JwtPayload payload = output.Payload;
-
-                    //Composed contributor walk via AuthorizationServerIntegration.ClaimIssuer.
-                    //See BuildToken for rationale.
-                    ClaimContributionTarget? contributionTarget =
-                        BuildTargetForProducer(producer, issuance, preResolvedOidcClaims);
-                    await MergeContributedClaimsAsync(
-                        server, contributionTarget, payload, ct).ConfigureAwait(false);
-
-                    UnsignedJwt unsigned = new(output.Header, payload);
-                    using JwsMessage jws = await unsigned.SignAsync(
-                        signingKey,
-                        oauth.Codecs.JwtHeaderSerializer!,
-                        oauth.Codecs.JwtPayloadSerializer!,
-                        oauth.Codecs.Encoder!,
-                        BaseMemoryPool.Shared,
-                        ct).ConfigureAwait(false);
-
-                    string compactJws = JwsSerialization.SerializeCompact(jws, oauth.Codecs.Encoder!);
-                    issuedTokens[producer.ResponseField] = compactJws;
-
-                    string jti = ExtractJti(payload);
-                    DateTimeOffset issuedAt = ExtractInstant(payload, WellKnownJwtClaimNames.Iat, now);
-                    DateTimeOffset expiresAt = ExtractInstant(payload, WellKnownJwtClaimNames.Exp, now);
-
-                    issuedAudits[producer.ResponseField] = new IssuedTokenAudit
-                    {
-                        Jti = jti,
-                        SigningKeyId = signingKeyId.Value,
-                        IssuedAt = issuedAt,
-                        ExpiresAt = expiresAt
-                    };
-
-                    if(expiresAt > latestExpiry)
-                    {
-                        latestExpiry = expiresAt;
-                    }
+                    return (null, issuanceFailure);
                 }
+
+                TokenIssuanceResult issued = issuanceResult!;
+                Dictionary<string, string> issuedTokens = issued.IssuedTokens;
+                Dictionary<string, IssuedTokenAudit> issuedAudits = issued.IssuedAudits;
+                DateTimeOffset latestExpiry = issued.LatestExpiry;
 
                 if(issuedTokens.Count == 0)
                 {
@@ -4804,7 +4863,14 @@ public static class AuthCodeEndpoints
                         Scope = storedRefresh.Scope,
                         Confirmation = confirmation,
                         AuthTime = storedRefresh.AuthTime,
+                        SessionId = storedRefresh.SessionId,
                         Acr = storedRefresh.Acr,
+
+                        //Propagated verbatim, never re-stamped to refresh_token — the field
+                        //tracks the chain's originating grant across every rotation so a later
+                        //redemption can still tell whether an End-User authentication backs it.
+                        OriginatingGrantType = storedRefresh.OriginatingGrantType,
+
                         //RFC 9396 §6.1: the authorization details ride rotation unchanged — a
                         //narrowing refresh reduces only the access token it mints, "but the
                         //resource owner's previous authorization is unchanged by such requests" —
@@ -4886,6 +4952,13 @@ public static class AuthCodeEndpoints
                         tokenTypeWireName, ref first);
                     JsonAppender.AppendInt64Field(sb, "expires_in",
                         expiresIn, ref first);
+
+                    string? idToken = tokenSet.IdToken;
+                    if(idToken is not null)
+                    {
+                        JsonAppender.AppendStringField(sb, "id_token",
+                            idToken, ref first);
+                    }
 
                     string? refreshToken = tokenSet.RefreshToken;
                     if(refreshToken is not null)
@@ -5426,12 +5499,14 @@ public static class AuthCodeEndpoints
     /// 1 (missing <c>iss</c> on Authorize redirect).
     /// </summary>
     /// <remarks>
-    /// The issuer URL source order mirrors <c>DefaultIssuerResolver</c>:
-    /// <see cref="ClientRecord.IssuerUri"/> first, then the per-request
-    /// <see cref="ExchangeContextServerExtensions.Issuer"/>. When neither is
-    /// populated the parameter is omitted rather than failing the redirect —
-    /// the strict-default deployment populates one of the two and the
-    /// permissive deployment opts out via <c>policy.EmitIssOnRedirect</c>.
+    /// Reads <see cref="ExchangeContextServerExtensions.ResolvedIssuer"/>, populated by
+    /// <see cref="TryResolveRedirectIssuerAsync"/> during
+    /// <c>EvaluateAuthenticationRequirementsAsync</c> — the same resolution path
+    /// <c>MetadataEndpoints</c> uses for the discovery <c>issuer</c> field
+    /// (RFC 9207 §2.3). When resolution found no usable issuer the parameter is omitted
+    /// rather than failing the redirect — the strict-default deployment populates
+    /// <see cref="ClientRecord.IssuerUri"/> or <see cref="ExchangeContextServerExtensions.Issuer"/>
+    /// and the permissive deployment opts out via <c>policy.EmitIssOnRedirect</c>.
     /// </remarks>
     private static ServerHttpResponse BuildAuthorizeRedirect(
         ServerCodeIssuedState code, ExchangeContext context) =>
@@ -5471,10 +5546,11 @@ public static class AuthCodeEndpoints
     /// when a query is already present and <c>?</c> otherwise. The <c>state</c> is echoed
     /// verbatim on both the success and error responses per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see> so
-    /// the client can bind the redirect to its pending request. The issuer URL source order
-    /// mirrors <c>DefaultIssuerResolver</c>: <see cref="ClientRecord.IssuerUri"/> first, then
-    /// the per-request <see cref="ExchangeContextServerExtensions.Issuer"/>; the parameter is
-    /// omitted when neither is populated.
+    /// the client can bind the redirect to its pending request. The <c>iss</c> value is
+    /// <see cref="ExchangeContextServerExtensions.ResolvedIssuer"/>, resolved once ahead of
+    /// both this success path and the error-redirect path by
+    /// <see cref="TryResolveRedirectIssuerAsync"/>; the parameter is omitted when resolution
+    /// found no usable issuer.
     /// </summary>
     private static ServerHttpResponse BuildAuthorizeRedirectWithParameters(
         Uri redirectUri, string parameters, string? state, ExchangeContext context)
@@ -5490,10 +5566,16 @@ public static class AuthCodeEndpoints
 
         if(context.EmitIssOnRedirect)
         {
-            Uri? issuer = context.ClientRegistration?.IssuerUri ?? context.Issuer;
+            Uri? issuer = context.ResolvedIssuer;
             if(issuer is not null)
             {
-                location += $"&iss={Uri.EscapeDataString(issuer.ToString())}";
+                //RFC 9207 §2.3: the iss parameter MUST be identical to the issuer value
+                //in the server's metadata document. Discovery emits Uri.OriginalString
+                //(see MetadataEndpoints), so the redirect emits the same member —
+                //Uri.ToString() re-canonicalizes (e.g. appends a trailing slash to an
+                //authority-only URL) and would break the byte-identity a client's
+                //RFC 3986 §6.2.1 simple string comparison requires.
+                location += $"&iss={Uri.EscapeDataString(issuer.OriginalString)}";
             }
         }
 
@@ -5852,6 +5934,42 @@ public static class AuthCodeEndpoints
     }
 
 
+    /// <summary>
+    /// Resolves the issuer URI for the RFC 9207 §2 Authorize-redirect <c>iss</c> parameter
+    /// through the identical resolution path
+    /// <c>MetadataEndpoints</c> uses for the discovery <c>issuer</c> field —
+    /// the application's <see cref="AuthorizationServerIntegration.ResolveIssuerAsync"/>
+    /// delegate when configured, otherwise <see cref="DefaultIssuerResolver"/> — so RFC 9207
+    /// §2.3's "the issuer identifier included in the server's metadata value issuer MUST be
+    /// identical to the iss parameter's value" holds by construction rather than by two
+    /// independently maintained code paths agreeing coincidentally. Returns
+    /// <see langword="null"/> when resolution fails — no issuer configured, or the configured
+    /// value fails the RFC 9207 §2 https/no-query/no-fragment shape
+    /// (<see cref="IssuerIdentifierValidation.IsValidIssuerShape"/>) — so the caller omits the
+    /// <c>iss</c> parameter rather than failing the redirect.
+    /// </summary>
+    private static async ValueTask<Uri?> TryResolveRedirectIssuerAsync(
+        EndpointServer server,
+        ClientRecord registration,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        var oauth = server.OAuth();
+        try
+        {
+            Uri issuer = oauth.ResolveIssuerAsync is not null
+                ? (await oauth.ResolveIssuerAsync(registration, context, cancellationToken).ConfigureAwait(false))!
+                : await DefaultIssuerResolver.ResolveAsync(registration, context, cancellationToken).ConfigureAwait(false);
+
+            return issuer;
+        }
+        catch(InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+
     private static async ValueTask<ServerHttpResponse?> EvaluateAuthenticationRequirementsAsync(
         EndpointServer server,
         ExchangeContext context,
@@ -5870,6 +5988,21 @@ public static class AuthCodeEndpoints
         CancellationToken cancellationToken = default)
     {
         var oauth = server.OAuth();
+
+        //Resolved once, ahead of both the requirement checks below and the eventual
+        //success redirect, so BuildAuthorizeRedirectWithParameters (read from the sync
+        //BuildResponse for the success path, and from the async error path below) sees
+        //the identical value regardless of which path emits the RFC 9207 iss parameter.
+        if(context.ClientRegistration is { } registrationForIssuer)
+        {
+            Uri? resolvedIssuer = await TryResolveRedirectIssuerAsync(
+                server, registrationForIssuer, context, cancellationToken).ConfigureAwait(false);
+            if(resolvedIssuer is not null)
+            {
+                context.SetResolvedIssuer(resolvedIssuer);
+            }
+        }
+
         if(requestedMaxAge is int maxAge)
         {
             //RFC 9470 §5 / OIDC Core §3.1.2.1 — max_age bounds the elapsed seconds since the
@@ -5915,7 +6048,16 @@ public static class AuthCodeEndpoints
                     RequestedResource = ParseResourceIndicators(requestedResource),
                     Subject = subjectId,
                     EstablishedAcr = context.Acr,
-                    EstablishedAuthTime = context.AuthTime
+                    EstablishedAuthTime = context.AuthTime,
+                    //draft-ietf-oauth-client-id-metadata-document-02 §8.5 (CIMD-051/052/053) display
+                    //seam: the hostname is populated for any URL-shaped client_id regardless of
+                    //whether its document was fetched; the document-derived fields are populated
+                    //exactly when the materialized registration overlaid at least one of them.
+                    ClientIdHost = ResolveClientIdHost(registration.ClientId),
+                    HasFetchedClientMetadata = HasDocumentDerivedMetadata(registration),
+                    ClientName = registration.ClientName,
+                    ClientUri = registration.ClientUri,
+                    LogoUri = registration.LogoUri
                 },
                 registration, context, cancellationToken).ConfigureAwait(false);
 
@@ -5936,6 +6078,57 @@ public static class AuthCodeEndpoints
 
         return null;
     }
+
+
+    /// <summary>
+    /// Returns the host component of <paramref name="clientId"/> when it parses as an absolute
+    /// <c>https</c> URI — draft-ietf-oauth-client-id-metadata-document-02 §8.5's hostname-display
+    /// SHOULD applies to any URL-shaped <c>client_id</c>, whether or not it carries a Client ID
+    /// Metadata Document (a vanity <c>https://</c> client_id per §7.1 still has a hostname worth
+    /// showing). Returns <see langword="null"/> for an opaque (non-URL) client_id.
+    /// </summary>
+    private static string? ResolveClientIdHost(string clientId) =>
+        Uri.TryCreate(clientId, UriKind.Absolute, out Uri? clientIdUri)
+            && clientIdUri.Scheme == Uri.UriSchemeHttps
+                ? clientIdUri.Host
+                : null;
+
+
+    /// <summary>
+    /// Returns whether <paramref name="registration"/> carries at least one client-display field a
+    /// Client ID Metadata Document overlays — draft-ietf-oauth-client-id-metadata-document-02 §5
+    /// materialization sets <see cref="ClientRecord.IsClientMetadataMaterialized"/> when it overlays a
+    /// successfully fetched document — true even for a minimal public-client document that declares only
+    /// <c>client_id</c> and <c>redirect_uris</c>. A CIMD-shaped registration whose overlay never ran
+    /// (fetch failure, policy denial, a pre-registered client whose document is not fetched at request
+    /// time, or a request that never triggered materialization) leaves the flag false — exactly the
+    /// §8.5 ¶2 "did not fetch" case.
+    /// </summary>
+    private static bool HasDocumentDerivedMetadata(ClientRecord registration) =>
+        registration.IsClientMetadataMaterialized;
+
+
+    /// <summary>
+    /// RFC 6749 §4.1.2.1 wire error value returned when a request's
+    /// <c>response_type</c> requests a grant this authorization server does not
+    /// implement. This server issues <see cref="WellKnownResponseTypes.Code"/>
+    /// only — the OIDC Core 1.0 §3 implicit (<c>id_token</c>, <c>token</c>,
+    /// <c>id_token token</c>) and hybrid (<c>code id_token</c>, <c>code token</c>,
+    /// <c>code id_token token</c>) response types are all unsupported.
+    /// </summary>
+    private const string UnsupportedResponseTypeError = "unsupported_response_type";
+
+
+    /// <summary>
+    /// Returns whether <paramref name="responseType"/> names an OAuth 2.0
+    /// <c>response_type</c> other than <see cref="WellKnownResponseTypes.Code"/>.
+    /// <see langword="false"/> for <see langword="null"/> — a request that omits
+    /// <c>response_type</c> falls through to this endpoint's implicit
+    /// <c>code</c> default rather than being rejected, matching the endpoint's
+    /// established behavior for the parameter.
+    /// </summary>
+    private static bool IsUnsupportedResponseType(string? responseType) =>
+        responseType is not null && !WellKnownResponseTypes.IsCode(responseType);
 
 
     /// <summary>

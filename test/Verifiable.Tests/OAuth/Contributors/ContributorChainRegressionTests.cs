@@ -179,6 +179,7 @@ internal sealed class ContributorChainRegressionTests
             Subject = "subject-baseline",
             Scope = "openid profile email address phone",
             ClientId = "client-baseline",
+            GrantType = WellKnownGrantTypes.AuthorizationCode,
             IssuedAt = fixedIssuedAt,
             Confirmation = new ConfirmationMethod { JwkThumbprint = FixedThumbprint }
         };

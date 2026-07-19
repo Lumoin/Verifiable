@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Http;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -124,10 +125,10 @@ internal sealed class FederatedBackChannelLogoutHttpTests
         List<RegisteredRelyingParty> session = [];
         string rp1IdToken = await IssueIdTokenAsync(op, rp1Material, SsoSessionId).ConfigureAwait(false);
         session.Add(new RegisteredRelyingParty(
-            rp1Material.Registration.ClientId, rp1Material.Registration.BackchannelLogoutUri!));
+            rp1Material.Registration.ClientId, rp1Material.Registration.BackchannelLogoutUri!, rp1.Certificate));
         _ = await IssueIdTokenAsync(op, rp2Material, SsoSessionId).ConfigureAwait(false);
         session.Add(new RegisteredRelyingParty(
-            rp2Material.Registration.ClientId, rp2Material.Registration.BackchannelLogoutUri!));
+            rp2Material.Registration.ClientId, rp2Material.Registration.BackchannelLogoutUri!, rp2.Certificate));
 
         //Each RP now holds a live session keyed by the OP sid.
         rp1.SeedSession(SsoSessionId);
@@ -135,7 +136,6 @@ internal sealed class FederatedBackChannelLogoutHttpTests
 
         //Wire the OP seams: terminate the local session, then build and POST a Logout
         //Token (aud = that RP's client_id) to every RP in the session over real HTTP.
-        using HttpClient deliveryClient = new();
         op.Server.OAuth().TerminateSessionAsync = (_, _, _, _, _) => ValueTask.CompletedTask;
         op.Server.OAuth().DeliverBackChannelLogoutAsync = async (subject, sessionId, _, _, ct) =>
         {
@@ -158,6 +158,7 @@ internal sealed class FederatedBackChannelLogoutHttpTests
 
                 using FormUrlEncodedContent content = new(
                     [new KeyValuePair<string, string>(WellKnownTokenTypes.LogoutToken, logoutToken)]);
+                using HttpClient deliveryClient = LoopbackTls.CreatePinnedHttpClient(relyingParty.Certificate);
                 using HttpResponseMessage delivery = await deliveryClient.PostAsync(
                     relyingParty.BackChannelLogoutUri, content, cancellationToken: ct).ConfigureAwait(false);
 
@@ -279,7 +280,8 @@ internal sealed class FederatedBackChannelLogoutHttpTests
 /// </summary>
 /// <param name="ClientId">The RP's OAuth client identifier.</param>
 /// <param name="BackChannelLogoutUri">The RP's back-channel logout receiver URL.</param>
-internal readonly record struct RegisteredRelyingParty(string ClientId, Uri BackChannelLogoutUri);
+/// <param name="Certificate">The self-signed leaf certificate this RP's HTTPS listener presents; the OP-side delivery client pins to this exact certificate (<see cref="LoopbackTls.CreatePinnedHttpClient"/>) rather than trusting a CA — each RP mints its own certificate, so a single shared delivery client cannot pin across RPs.</param>
+internal readonly record struct RegisteredRelyingParty(string ClientId, Uri BackChannelLogoutUri, X509Certificate2 Certificate);
 
 
 /// <summary>
@@ -317,6 +319,9 @@ internal sealed class RelyingPartyReceiver: IAsyncDisposable
 
     /// <summary>The absolute receiver URL the OP delivers this RP's <c>logout_token</c> to.</summary>
     public Uri BackChannelLogoutUri { get; }
+
+    /// <summary>The self-signed leaf certificate this RP's HTTPS listener presents; the OP-side delivery client pins to this exact certificate rather than trusting a CA.</summary>
+    public X509Certificate2 Certificate => host.Certificate;
 
     /// <summary>The <c>sid</c> values this RP has verified and dropped, in arrival order.</summary>
     public IReadOnlyList<string> VerifiedSessionIds => verifiedSessionIds;

@@ -2,40 +2,43 @@ using System;
 using System.Collections.Concurrent;
 using System.Linq;
 using System.Net;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Features;
-using Microsoft.AspNetCore.Server.Kestrel.Core;
-using Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Verifiable.Tests.TestInfrastructure;
 
 /// <summary>
-/// A reusable in-process Kestrel listener bound to the IPv4 loopback socket on an OS-assigned ephemeral port that
+/// A reusable in-process HTTPS listener bound to the IPv4 loopback socket on an OS-assigned ephemeral port that
 /// serves published static content by path and records every requested path, so an end-to-end test can prove a hop
 /// crossed the wire. This is the party-server primitive a multi-server, over-the-wire flow test stands up for each
 /// firewalled party (for example an ACDC Issuer that publishes its KEL, its credential, and its registry, or a DID
 /// publisher node) — bytes move over a real socket, and the verifier reconstructs only from what it fetched.
 /// </summary>
 /// <remarks>
-/// Modeled on the proven publisher-node shape used by the did:webvh cross-wire flow test: a raw
-/// <see cref="KestrelServer"/> plus a hand-written <see cref="IHttpApplication{TContext}"/> skin (the test projects
-/// never use a full server stack), serving GET requests from a published-content map, 404 for an unknown path and
-/// 405 for a non-GET method, with per-path request counts the firewall assertions read.
+/// Binds through <see cref="WebApplication.CreateSlimBuilder()"/> with a single explicit HTTPS
+/// <c>Listen</c> call presenting <see cref="Certificate"/> — there is no plaintext fallback — serving GET
+/// requests from a published-content map, 404 for an unknown path and 405 for a non-GET method, with
+/// per-path request counts the firewall assertions read. Callers pin their
+/// <see cref="System.Net.Http.HttpClient"/> to <see cref="Certificate"/> via
+/// <see cref="LoopbackTls.CreatePinnedHttpClient"/>.
 /// </remarks>
 internal sealed class StaticContentHost: IAsyncDisposable
 {
-    private readonly KestrelServer server;
+    private readonly WebApplication app;
 
 
-    private StaticContentHost(KestrelServer server, Uri baseAddress, StaticContentApplication application)
+    private StaticContentHost(WebApplication app, X509Certificate2 certificate, Uri baseAddress, StaticContentApplication application)
     {
-        this.server = server;
+        this.app = app;
+        Certificate = certificate;
         BaseAddress = baseAddress;
         Application = application;
     }
@@ -43,6 +46,9 @@ internal sealed class StaticContentHost: IAsyncDisposable
 
     /// <summary>The loopback base address Kestrel bound (ephemeral port).</summary>
     public Uri BaseAddress { get; }
+
+    /// <summary>The self-signed leaf certificate this host's HTTPS listener presents; callers pin to this via <see cref="LoopbackTls.CreatePinnedHttpClient"/>.</summary>
+    public X509Certificate2 Certificate { get; }
 
     private StaticContentApplication Application { get; }
 
@@ -75,41 +81,49 @@ internal sealed class StaticContentHost: IAsyncDisposable
     /// <returns>The started host.</returns>
     public static async Task<StaticContentHost> StartAsync(CancellationToken cancellationToken)
     {
-        KestrelServerOptions kestrelOptions = new();
-        kestrelOptions.Listen(IPAddress.Loopback, port: 0);
+        X509Certificate2 certificate = LoopbackTls.CreateServerCertificate("static-content-loopback-test-host");
 
-        SocketTransportOptions socketOptions = new();
-        SocketTransportFactory socketFactory = new(Options.Create(socketOptions), NullLoggerFactory.Instance);
+        WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
+        builder.Logging.ClearProviders();
 
-        KestrelServer kestrel = new(Options.Create(kestrelOptions), socketFactory, NullLoggerFactory.Instance);
+        //A single explicit HTTPS Listen call — no UseUrls — so there is no plaintext fallback on
+        //this host at all.
+        builder.WebHost.ConfigureKestrel(options =>
+            options.Listen(IPAddress.Loopback, port: 0, listenOptions => listenOptions.UseHttps(certificate)));
+
+        WebApplication app = builder.Build();
+
         StaticContentApplication application = new();
-        await kestrel.StartAsync(application, cancellationToken).ConfigureAwait(false);
+        app.Run(application.ProcessRequestAsync);
 
-        IServerAddressesFeature? addresses = kestrel.Features.Get<IServerAddressesFeature>();
-        if(addresses is null || addresses.Addresses.Count == 0)
-        {
-            kestrel.Dispose();
-            throw new InvalidOperationException("Kestrel started but exposed no server address.");
-        }
+        await app.StartAsync(cancellationToken).ConfigureAwait(false);
 
-        return new StaticContentHost(kestrel, new Uri(addresses.Addresses.First()), application);
+        IServerAddressesFeature addresses = app.Services.GetRequiredService<IServer>()
+            .Features.Get<IServerAddressesFeature>()
+            ?? throw new InvalidOperationException("Kestrel exposed no server addresses feature.");
+        string boundAddress = addresses.Addresses.FirstOrDefault()
+            ?? throw new InvalidOperationException("Kestrel bound no address.");
+
+        return new StaticContentHost(app, certificate, new Uri(boundAddress), application);
     }
 
 
     /// <summary>Stops and disposes the host.</summary>
     public async ValueTask DisposeAsync()
     {
-        await server.StopAsync(CancellationToken.None).ConfigureAwait(false);
-        server.Dispose();
+        await app.StopAsync(CancellationToken.None).ConfigureAwait(false);
+        await app.DisposeAsync().ConfigureAwait(false);
+        Certificate.Dispose();
     }
 
 
     /// <summary>
-    /// The <see cref="IHttpApplication{TContext}"/> skin serving GET <c>{path}</c> from a published-content map: 404
+    /// The request-handler skin serving GET <c>{path}</c> from a published-content map — mounted as the
+    /// host pipeline's <c>RequestDelegate</c> via <c>app.Run(application.ProcessRequestAsync)</c>: 404
     /// for an unknown path, 405 for a non-GET method. Every requested path is recorded so the cross-wire assertions
     /// can prove the socket was hit.
     /// </summary>
-    private sealed class StaticContentApplication: IHttpApplication<HttpContext>
+    private sealed class StaticContentApplication
     {
         private readonly ConcurrentDictionary<string, (byte[] Body, string ContentType)> content = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, int> requestCounts = new(StringComparer.Ordinal);
@@ -134,12 +148,6 @@ internal sealed class StaticContentHost: IAsyncDisposable
         /// <param name="path">The request path to test.</param>
         /// <returns><see langword="true"/> when the path was requested.</returns>
         public bool WasRequested(string path) => requestCounts.ContainsKey(path);
-
-
-        /// <summary>Creates the per-request context.</summary>
-        /// <param name="contextFeatures">The request features.</param>
-        /// <returns>The HTTP context.</returns>
-        public HttpContext CreateContext(IFeatureCollection contextFeatures) => new DefaultHttpContext(contextFeatures);
 
 
         /// <summary>Serves a GET request from the published-content map, recording the requested path.</summary>
@@ -171,11 +179,5 @@ internal sealed class StaticContentHost: IAsyncDisposable
             httpResponse.ContentType = served.ContentType;
             await httpResponse.Body.WriteAsync(served.Body, context.RequestAborted).ConfigureAwait(false);
         }
-
-
-        /// <summary>Disposes the per-request context.</summary>
-        /// <param name="context">The HTTP context.</param>
-        /// <param name="exception">The exception that aborted the request, if any.</param>
-        public void DisposeContext(HttpContext context, Exception? exception) { }
     }
 }

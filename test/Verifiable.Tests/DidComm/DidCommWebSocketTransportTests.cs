@@ -33,7 +33,7 @@ internal sealed class DidCommWebSocketTransportTests
     private static readonly MemoryPool<byte> Pool = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter (the WebSocket path
-    //does not route through OutboundFetch, so no scheme/host policy applies to the loopback ws:// endpoint).
+    //does not route through OutboundFetch, so no scheme/host policy applies to the loopback wss:// endpoint).
     private static readonly ExchangeContext Context = new();
 
     //A non-nested anoncrypt message never triggers nested-signature resolution; this satisfies the parameter.
@@ -99,7 +99,7 @@ internal sealed class DidCommWebSocketTransportTests
         //Deliver over a real WebSocket through the transport-neutral send seam — the SAME message.TransmitAsync the
         //HTTPS path uses, handed a WebSocket DidCommSendDelegate instead of the HTTPS one.
         await using DidCommWebSocketInbox inbox = await DidCommWebSocketInbox.StartAsync(cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-        DidCommSendDelegate send = DidCommWebSocketInbox.CreateSendDelegate();
+        DidCommSendDelegate send = DidCommWebSocketInbox.CreateSendDelegate(inbox.Certificate);
 
         DidCommTransmitResult transmit = await encrypted.TransmitAsync(inbox.Endpoint, Context, send, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 

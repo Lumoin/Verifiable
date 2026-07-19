@@ -58,4 +58,13 @@ internal static class AuthorizationServerHandlers
     /// for the current request (typically the DPoP <c>jkt</c> thumbprint per RFC 9449 §6.1).
     /// </summary>
     public const string ConfirmationKey = "server.confirmation";
+
+    /// <summary>
+    /// Context-bag key for the issuer URI resolved for the current Authorize request's
+    /// <c>iss</c> redirect parameter (RFC 9207 §2), computed once during
+    /// <c>BuildInputAsync</c>'s authentication-requirements evaluation so both the success
+    /// and error redirect paths read the identical value the discovery endpoint would
+    /// resolve. Transient — never persisted.
+    /// </summary>
+    public const string ResolvedIssuerKey = "server.resolvedIssuer";
 }

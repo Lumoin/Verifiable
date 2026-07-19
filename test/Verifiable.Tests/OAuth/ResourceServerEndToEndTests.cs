@@ -60,7 +60,7 @@ internal sealed class ResourceServerEndToEndTests
             audience: [Audience]);
         string token = await BuildAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
-        using HttpClient client = new() { BaseAddress = rs.HttpBaseAddress };
+        using HttpClient client = LoopbackTls.CreatePinnedHttpClient(rs.HttpCertificate!, rs.HttpBaseAddress);
         using HttpRequestMessage request = new(HttpMethod.Get, "/protected");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
@@ -92,7 +92,7 @@ internal sealed class ResourceServerEndToEndTests
             timeProvider: time);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        using HttpClient client = new() { BaseAddress = rs.HttpBaseAddress };
+        using HttpClient client = LoopbackTls.CreatePinnedHttpClient(rs.HttpCertificate!, rs.HttpBaseAddress);
         using HttpResponseMessage response = await client.GetAsync(new Uri("/protected", UriKind.Relative), TestContext.CancellationToken)
             .ConfigureAwait(false);
 
@@ -129,7 +129,7 @@ internal sealed class ResourceServerEndToEndTests
             audience: ["other-rs"]);
         string token = await BuildAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
-        using HttpClient client = new() { BaseAddress = rs.HttpBaseAddress };
+        using HttpClient client = LoopbackTls.CreatePinnedHttpClient(rs.HttpCertificate!, rs.HttpBaseAddress);
         using HttpRequestMessage request = new(HttpMethod.Get, "/protected");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
@@ -169,7 +169,7 @@ internal sealed class ResourceServerEndToEndTests
         };
         string token = await BuildAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
-        using HttpClient client = new() { BaseAddress = rs.HttpBaseAddress };
+        using HttpClient client = LoopbackTls.CreatePinnedHttpClient(rs.HttpCertificate!, rs.HttpBaseAddress);
         using HttpRequestMessage request = new(HttpMethod.Get, "/protected");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
@@ -242,7 +242,7 @@ internal sealed class ResourceServerEndToEndTests
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        using HttpClient client = new() { BaseAddress = rs.HttpBaseAddress };
+        using HttpClient client = LoopbackTls.CreatePinnedHttpClient(rs.HttpCertificate!, rs.HttpBaseAddress);
         using HttpRequestMessage request = new(HttpMethod.Get, "/protected");
         request.Headers.Authorization = new AuthenticationHeaderValue("DPoP", token);
         request.Headers.Add("DPoP", proof);
@@ -314,7 +314,7 @@ internal sealed class ResourceServerEndToEndTests
             DpopTestSupport.Serializer, MicrosoftCryptographicFunctions.SignP256Async,
             BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
-        using HttpClient client = new() { BaseAddress = rs.HttpBaseAddress };
+        using HttpClient client = LoopbackTls.CreatePinnedHttpClient(rs.HttpCertificate!, rs.HttpBaseAddress);
 
         //First call: should succeed and seed the replay tracker.
         using HttpRequestMessage firstRequest = new(HttpMethod.Get, "/protected");

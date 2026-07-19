@@ -17,10 +17,11 @@ namespace Verifiable.OAuth.Server;
 /// <para>
 /// Both the OIDC Core §5.3 UserInfo endpoint and the OID4VCI 1.0 §8 Credential Endpoint are
 /// protected resources that accept an AS-issued access token on the <c>Authorization</c>
-/// header; the structural-parse → <c>alg</c>/<c>kid</c> → key-resolve → signature-verify →
-/// <c>iss</c> → <c>exp</c> sequence is identical and lives here once so the security-critical
-/// validation cannot drift between call sites. Scope and subject-claim requirements are
-/// endpoint-specific and stay at the caller (UserInfo enforces <c>openid</c> per §5.3.1).
+/// header; the structural-parse → <c>alg</c>/<c>typ</c>/<c>kid</c> → key-resolve →
+/// signature-verify → <c>iss</c> → <c>exp</c> sequence is identical and lives here once so the
+/// security-critical validation cannot drift between call sites. Scope and subject-claim
+/// requirements are endpoint-specific and stay at the caller (UserInfo enforces <c>openid</c>
+/// per §5.3.1).
 /// </para>
 /// <para>
 /// Audience is deliberately not validated — a protected resource accepts any AS-issued access
@@ -199,6 +200,21 @@ public static class BearerTokenValidation
                 return (null, ServerHttpResponse.Unauthorized(
                     OAuthErrors.InvalidToken,
                     "Access token header is missing kid."));
+            }
+
+            //RFC 9068 §4 requires the resource server to verify the header's typ is explicitly
+            //"at+jwt" or "application/at+jwt" and reject any other value, distinguishing an
+            //access token from an ID Token or other JWT profile presented at this endpoint.
+            //Comparison is case-insensitive per RFC 7515 §4.1.9 (media type values are case
+            //insensitive per RFC 2045), matching the existing WellKnownMediaTypes helpers.
+            if(!header.TryGetValue(WellKnownJoseHeaderNames.Typ, out object? typObj)
+                || typObj is not string typ
+                || string.IsNullOrEmpty(typ)
+                || !(WellKnownMediaTypes.Jwt.IsAtJwt(typ) || WellKnownMediaTypes.Application.IsAtJwt(typ)))
+            {
+                return (null, ServerHttpResponse.Unauthorized(
+                    OAuthErrors.InvalidToken,
+                    "Access token header typ must be 'at+jwt' or 'application/at+jwt' per RFC 9068 §4."));
             }
 
             //3. Resolve the verification key.

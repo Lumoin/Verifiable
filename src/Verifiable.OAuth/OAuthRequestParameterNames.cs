@@ -189,6 +189,34 @@ public static class OAuthRequestParameterNames
     /// </summary>
     public static readonly string Iss = Utf8Constants.ToInternedString(IssUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="Error"/>.</summary>
+    public static ReadOnlySpan<byte> ErrorUtf8 => "error"u8;
+
+    /// <summary>
+    /// The <c>error</c> parameter.
+    /// A single ASCII error code returned instead of <see cref="Code"/> when the
+    /// authorization request fails per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>.
+    /// Its presence on a callback identifies an OAuth 2.0 Authorization Error Response;
+    /// per <see href="https://www.rfc-editor.org/rfc/rfc9207#section-2.4">RFC 9207 §2.4</see>
+    /// "clients MUST NOT assume that the error originates from the intended authorization
+    /// server," so a present <see cref="Iss"/> on an error response is validated exactly like
+    /// on a success response before the error is treated as authoritative.
+    /// </summary>
+    public static readonly string Error = Utf8Constants.ToInternedString(ErrorUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ErrorDescription"/>.</summary>
+    public static ReadOnlySpan<byte> ErrorDescriptionUtf8 => "error_description"u8;
+
+    /// <summary>
+    /// The <c>error_description</c> parameter.
+    /// A human-readable ASCII text providing additional information about the error, used
+    /// to assist the client developer in understanding the error that occurred per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>.
+    /// OPTIONAL.
+    /// </summary>
+    public static readonly string ErrorDescription = Utf8Constants.ToInternedString(ErrorDescriptionUtf8);
+
     //Token request parameters — RFC 6749 §4.1.3.
 
     /// <summary>The UTF-8 source literal of <see cref="GrantType"/>.</summary>

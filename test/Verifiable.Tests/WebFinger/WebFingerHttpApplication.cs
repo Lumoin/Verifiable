@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
-using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Microsoft.AspNetCore.Builder;
@@ -303,7 +302,7 @@ internal sealed class WebFingerHttpApplication
         {
             ArgumentNullException.ThrowIfNull(server);
 
-            X509Certificate2 certificate = CreateLoopbackTestCertificate();
+            X509Certificate2 certificate = LoopbackTls.CreateServerCertificate("webfinger-loopback-test-node");
 
             WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
             builder.Logging.ClearProviders();
@@ -327,47 +326,6 @@ internal sealed class WebFingerHttpApplication
                 ?? throw new InvalidOperationException("Kestrel bound no address.");
 
             return new Host(app, application, new Uri(boundAddress), certificate);
-        }
-
-
-        /// <summary>
-        /// Mints a fresh, minimal self-signed leaf certificate for the loopback TLS listener. No CA
-        /// chain is minted because this topology's client pins the leaf directly (RFC 7033 §9.1) rather
-        /// than validating a chain to a trust anchor.
-        /// </summary>
-        /// <remarks>
-        /// <see cref="CertificateRequest.CreateSelfSigned"/> returns a certificate whose private key is
-        /// an EPHEMERAL, in-memory CNG key — sufficient for chain/PKI assertions elsewhere in this
-        /// repository, but the platform TLS stack refuses to use an ephemeral key as a SERVER
-        /// credential ("the platform does not support ephemeral keys"). Round-tripping through a
-        /// PKCS#12 export/reload gives the certificate a persisted key container Kestrel's
-        /// <c>SslStream</c> server authentication can actually use.
-        /// </remarks>
-        private static X509Certificate2 CreateLoopbackTestCertificate()
-        {
-            //Cert-factory carve-out: CertificateRequest requires a framework AsymmetricAlgorithm
-            //to sign the self-signed leaf certificate; this key is never converted to library
-            //PrivateKeyMemory, so it stays framework-native for its whole lifetime.
-            using ECDsa key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-            CertificateRequest request = new("CN=webfinger-loopback-test-node", key, HashAlgorithmName.SHA256);
-
-            SubjectAlternativeNameBuilder sanBuilder = new();
-            sanBuilder.AddDnsName("localhost");
-            sanBuilder.AddIpAddress(IPAddress.Loopback);
-            request.CertificateExtensions.Add(sanBuilder.Build(critical: false));
-
-            request.CertificateExtensions.Add(
-                new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, critical: true));
-
-            OidCollection serverAuthEku = new() { new Oid("1.3.6.1.5.5.7.3.1") };
-            request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(serverAuthEku, critical: false));
-
-            DateTimeOffset now = TestClock.CanonicalEpoch;
-
-            using X509Certificate2 ephemeral = request.CreateSelfSigned(now.AddMinutes(-5), now.AddDays(1));
-            byte[] pfxBytes = ephemeral.Export(X509ContentType.Pfx);
-
-            return X509CertificateLoader.LoadPkcs12(pfxBytes, password: null, X509KeyStorageFlags.Exportable);
         }
 
 

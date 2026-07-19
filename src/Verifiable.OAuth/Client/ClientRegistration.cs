@@ -214,6 +214,15 @@ public sealed record ClientRegistration
     /// <see cref="ClientId"/>. <see langword="null"/> for non-CIMD
     /// lifecycles.
     /// </summary>
+    /// <remarks>
+    /// A short URL is RECOMMENDED, since the URI may be displayed to the end user in
+    /// authorization or management interfaces, and a stable URL that does not change
+    /// frequently is RECOMMENDED as well — authorization servers compare Client
+    /// Identifier URLs by simple string comparison, so a changed URL is an entirely
+    /// different client with no relationship to the previous one
+    /// (draft-ietf-oauth-client-id-metadata-document-02 §3, §8.3). See
+    /// <see cref="ClientIdentifierUrl"/> for the URL shape rules.
+    /// </remarks>
     public Uri? ClientMetadataUri { get; init; }
 
 

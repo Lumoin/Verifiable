@@ -52,7 +52,7 @@ internal sealed class AcdcRegistryFlowTests
             issuer.Publish("/registry", AcdcFlowKit.SerializeRegistry(registry), "application/json");
             discloser.Publish("/acdc", acdc.Serialization, "application/json");
 
-            using HttpClient httpClient = new();
+            using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient([issuer.Certificate, discloser.Certificate]);
 
             //Proof of Disclosure, and the credential's registry reference.
             string credentialJson = await httpClient.GetStringAsync(new Uri(discloser.BaseAddress, "/acdc"), cancellationToken).ConfigureAwait(false);
@@ -101,7 +101,7 @@ internal sealed class AcdcRegistryFlowTests
             await using StaticContentHost issuer = await StaticContentHost.StartAsync(cancellationToken).ConfigureAwait(false);
             issuer.Publish("/registry", AcdcFlowKit.SerializeRegistry(registry), "application/json");
 
-            using HttpClient httpClient = new();
+            using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(issuer.Certificate);
             AcdcMessage message = AcdcReader.Read(AcdcJson.DecodeFieldMap(acdc.Serialization));
 
             (string registrySaid, string? state) = await VerifyRegistryStateAsync(httpClient, issuer.BaseAddress, message, cancellationToken).ConfigureAwait(false);

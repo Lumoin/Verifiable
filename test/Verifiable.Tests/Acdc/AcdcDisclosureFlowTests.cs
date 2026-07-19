@@ -58,7 +58,7 @@ internal sealed class AcdcDisclosureFlowTests
             issuer.Publish("/kel", AcdcFlowKit.SerializeKel(kel), "application/json");
             discloser.Publish("/acdc", acdc.Serialization, "application/json");
 
-            using HttpClient httpClient = new();
+            using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient([issuer.Certificate, discloser.Certificate]);
 
             //Proof of Disclosure: fetch the credential from the Discloser and verify its SAID over the received bytes.
             string credentialJson = await httpClient.GetStringAsync(new Uri(discloser.BaseAddress, "/acdc"), cancellationToken).ConfigureAwait(false);
@@ -107,7 +107,7 @@ internal sealed class AcdcDisclosureFlowTests
             Assert.AreNotEqual(original, tampered, "The tamper must alter the served bytes.");
             discloser.Publish("/acdc", Encoding.UTF8.GetBytes(tampered), "application/json");
 
-            using HttpClient httpClient = new();
+            using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(discloser.Certificate);
             string credentialJson = await httpClient.GetStringAsync(new Uri(discloser.BaseAddress, "/acdc"), cancellationToken).ConfigureAwait(false);
             using AcdcTestSupport.EncodedSerialization credential = AcdcTestSupport.Encode(credentialJson);
 
@@ -141,7 +141,7 @@ internal sealed class AcdcDisclosureFlowTests
             await using StaticContentHost issuer = await StaticContentHost.StartAsync(cancellationToken).ConfigureAwait(false);
             issuer.Publish("/kel", AcdcFlowKit.SerializeKel(otherKel), "application/json");
 
-            using HttpClient httpClient = new();
+            using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(issuer.Certificate);
             AcdcMessage message = AcdcReader.Read(AcdcJson.DecodeFieldMap(acdc.Serialization));
 
             KeriDigestSeal? issuanceSeal = await VerifyIssuanceAsync(httpClient, issuer.BaseAddress, message, disposables, cancellationToken).ConfigureAwait(false);

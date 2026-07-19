@@ -104,6 +104,7 @@ internal sealed class SubjectIdentifierContributorTests
             Subject = subject,
             Scope = WellKnownScopes.OpenId,
             ClientId = registration.ClientId,
+            GrantType = WellKnownGrantTypes.AuthorizationCode,
             IssuedAt = ContributorTestFixtures.FixedIssuedAt,
             Nonce = null,
             AuthTime = null

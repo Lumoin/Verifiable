@@ -67,7 +67,7 @@ internal sealed class WebAuthnRpHttpCeremonyAlwaysUvTests
             RpId, Origin, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xF2), "gerd", "Gerd Example", pool,
             userVerification: UserVerificationRequirement.Discouraged);
         await using MinimalHttpHost host = await MinimalHttpHost.StartAsync(skin.HandleAsync, cancellationToken).ConfigureAwait(false);
-        using HttpClient httpClient = new() { BaseAddress = host.BaseAddress };
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(host.Certificate, host.BaseAddress);
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("webauthn-rp-http-alwaysuv-authenticator");
         using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);

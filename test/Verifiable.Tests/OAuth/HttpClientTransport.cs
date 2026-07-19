@@ -33,6 +33,21 @@ namespace Verifiable.Tests.OAuth;
 /// </remarks>
 internal static class HttpClientTransport
 {
+    /// <summary>
+    /// The W3C Trace Context response header whose value is copied into
+    /// <see cref="HttpResponseData.TransportMetadata"/> under
+    /// <see cref="HttpResponseDataKeys.TraceParent"/>.
+    /// </summary>
+    private const string TraceParentHeaderName = "traceparent";
+
+    /// <summary>
+    /// The W3C Trace Context response header whose value is copied into
+    /// <see cref="HttpResponseData.TransportMetadata"/> under
+    /// <see cref="HttpResponseDataKeys.TraceState"/>.
+    /// </summary>
+    private const string TraceStateHeaderName = "tracestate";
+
+
     public static async ValueTask<HttpResponseData> SendFormPostAsync(
         HttpClient httpClient,
         Uri endpoint,
@@ -202,10 +217,32 @@ internal static class HttpClientTransport
             headerBuilder[header.Key] = string.Join(", ", header.Value);
         }
 
+        //W3C Trace Context response headers are lifted into TransportMetadata under
+        //the documented HttpResponseDataKeys constants so that
+        //OAuthParseError.WithTransportMetadata can surface the server's trace
+        //identity as the DecisionSupport correlation id. A server sends these
+        //headers only when its deployment chooses to echo trace context on
+        //responses; when absent, TransportMetadata stays null.
+        Dictionary<string, string>? transportMetadata = null;
+        if(headerBuilder.TryGetValue(TraceParentHeaderName, out string? traceParent))
+        {
+            transportMetadata = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [HttpResponseDataKeys.TraceParent] = traceParent
+            };
+        }
+
+        if(headerBuilder.TryGetValue(TraceStateHeaderName, out string? traceState))
+        {
+            transportMetadata ??= new Dictionary<string, string>(StringComparer.Ordinal);
+            transportMetadata[HttpResponseDataKeys.TraceState] = traceState;
+        }
+
         return new HttpResponseData
         {
             Body = body,
             StatusCode = (int)response.StatusCode,
+            TransportMetadata = transportMetadata,
             Headers = new ResponseHeaders { Values = headerBuilder.ToImmutable() }
         };
     }

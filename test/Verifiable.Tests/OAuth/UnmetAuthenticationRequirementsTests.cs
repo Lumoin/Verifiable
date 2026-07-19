@@ -63,6 +63,37 @@ internal sealed class UnmetAuthenticationRequirementsTests
 
 
     /// <summary>
+    /// RFC 9207 §2 / R9207-001 / R9207-012: "an authorization server supporting this
+    /// specification MUST indicate its identity by including the iss parameter in the
+    /// response" applies to error responses too, not only the success redirect. Drives
+    /// the same stale-authentication failure as
+    /// <see cref="StaleAuthenticationBeyondMaxAgeFailsWithUnmetRequirement"/> under a
+    /// profile that emits <c>iss</c> (<see cref="PolicyProfile.Haip10"/>, unlike that
+    /// test's <see cref="PolicyProfile.Rfc6749WithPkce"/>) and asserts <c>iss</c> is
+    /// present on the resulting <c>error=unmet_authentication_requirements</c> redirect.
+    /// </summary>
+    [TestMethod]
+    public async Task ErrorRedirectCarriesIssParameter()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Haip10);
+
+        ServerHttpResponse authorizeResponse = await DriveToAuthorizeAsync(
+            host, material, maxAge: "300",
+            authTime: TimeProvider.GetUtcNow() - TimeSpan.FromSeconds(600)).ConfigureAwait(false);
+
+        Assert.AreEqual(302, authorizeResponse.StatusCode, authorizeResponse.Body);
+        Assert.Contains(
+            $"error={OAuthErrors.UnmetAuthenticationRequirements}", authorizeResponse.Location!,
+            StringComparison.Ordinal);
+        Assert.Contains("iss=", authorizeResponse.Location!, StringComparison.Ordinal,
+            $"RFC 9207 §2 requires iss on an Authorization Error Response, not only on success. Location: {authorizeResponse.Location}");
+    }
+
+
+    /// <summary>
     /// <c>max_age=300</c> with an authentication 60 s old satisfies the requirement: the
     /// authorize response redirects with a <c>code</c> and no error.
     /// </summary>

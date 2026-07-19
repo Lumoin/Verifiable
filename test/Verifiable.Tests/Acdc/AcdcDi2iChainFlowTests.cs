@@ -90,7 +90,7 @@ internal sealed class AcdcDi2iChainFlowTests
             delegatorHost.Publish("/acdc", delegator.Acdc.Serialization, "application/json");
             delegatorHost.Publish("/kel", AcdcFlowKit.SerializeKel(delegator.Kel), "application/json");
 
-            using HttpClient httpClient = new();
+            using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient([delegateHost.Certificate, delegatorHost.Certificate]);
 
             //Verify the far credential (the delegator's) and capture the delegator's verified KEL anchors. The
             //delegator self-issues, so its KEL carries no delegated event and needs no delegating-seal resolver.

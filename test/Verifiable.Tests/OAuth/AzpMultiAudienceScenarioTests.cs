@@ -74,7 +74,7 @@ internal sealed class AzpMultiAudienceScenarioTests
 
         //The relying party validates from wire bytes only, supplying its own
         //client_id as the expected authorized party (rule 5).
-        JwsAccessTokenValidationResult result = await ValidateAsRelyingPartyAsync(
+        Oidc10IdTokenValidationResult result = await ValidateAsRelyingPartyAsync(
             idToken, material, expectedAuthorizedParty: ClientId).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess,
@@ -85,7 +85,7 @@ internal sealed class AzpMultiAudienceScenarioTests
 
         //The same wire token presented to a DIFFERENT relying party fails
         //rule 5 — azp names the party the token was issued to, not them.
-        JwsAccessTokenValidationResult otherParty = await ValidateAsRelyingPartyAsync(
+        Oidc10IdTokenValidationResult otherParty = await ValidateAsRelyingPartyAsync(
             idToken, material, expectedAuthorizedParty: "https://other-client.example.com").ConfigureAwait(false);
 
         Assert.IsFalse(otherParty.IsSuccess);
@@ -108,7 +108,7 @@ internal sealed class AzpMultiAudienceScenarioTests
         string idToken = await DriveCodeExchangeForIdTokenAsync(host, material).ConfigureAwait(false);
 
         //An enforcing relying party rejects the shape (rule 4)…
-        JwsAccessTokenValidationResult enforced = await ValidateAsRelyingPartyAsync(
+        Oidc10IdTokenValidationResult enforced = await ValidateAsRelyingPartyAsync(
             idToken, material, expectedAuthorizedParty: ClientId).ConfigureAwait(false);
 
         Assert.IsFalse(enforced.IsSuccess);
@@ -117,7 +117,7 @@ internal sealed class AzpMultiAudienceScenarioTests
 
         //…and a non-enforcing one accepts it — the rules are SHOULDs, so
         //enforcement is the relying party's opt-in, not a hard issuance gate.
-        JwsAccessTokenValidationResult lenient = await ValidateAsRelyingPartyAsync(
+        Oidc10IdTokenValidationResult lenient = await ValidateAsRelyingPartyAsync(
             idToken, material, expectedAuthorizedParty: null).ConfigureAwait(false);
 
         Assert.IsTrue(lenient.IsSuccess,
@@ -139,7 +139,7 @@ internal sealed class AzpMultiAudienceScenarioTests
         //rule 4 conditions on MULTIPLE audiences).
         string idToken = await DriveCodeExchangeForIdTokenAsync(host, material).ConfigureAwait(false);
 
-        JwsAccessTokenValidationResult result = await ValidateAsRelyingPartyAsync(
+        Oidc10IdTokenValidationResult result = await ValidateAsRelyingPartyAsync(
             idToken, material, expectedAuthorizedParty: ClientId).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess,
@@ -282,7 +282,7 @@ internal sealed class AzpMultiAudienceScenarioTests
     /// verification key resolves by the token's kid, the way a deployment
     /// resolves against the fetched JWKS.
     /// </summary>
-    private async Task<JwsAccessTokenValidationResult> ValidateAsRelyingPartyAsync(
+    private async Task<Oidc10IdTokenValidationResult> ValidateAsRelyingPartyAsync(
         string idToken, VerifierKeyMaterial material, string? expectedAuthorizedParty)
     {
         ServerVerificationKeyResolverDelegate resolveKey = (kid, tenant, ctx, ct) =>
@@ -290,7 +290,7 @@ internal sealed class AzpMultiAudienceScenarioTests
                 string.Equals(kid.Value, material.SigningKeyId.Value, StringComparison.Ordinal)
                     ? material.SigningPublicKey : null);
 
-        return await JwsAccessTokenValidator.ValidateAsync(
+        return await Oidc10IdTokenValidator.ValidateAsync(
             idToken,
             material.Registration.IssuerUri!.OriginalString,
             ClientId,
@@ -304,6 +304,8 @@ internal sealed class AzpMultiAudienceScenarioTests
             tenantId: default,
             new ExchangeContext(),
             expectedAuthorizedParty,
+            expectedNonce: null,
+            trustedAudiences: null,
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 

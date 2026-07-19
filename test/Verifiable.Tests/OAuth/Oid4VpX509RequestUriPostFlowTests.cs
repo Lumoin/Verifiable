@@ -109,7 +109,7 @@ internal sealed class Oid4VpX509RequestUriPostFlowTests
         scheme.PlaceTrustMaterial(exchangeContext);
 
         //The wallet's sends route through the guarded chokepoint; the test
-        //deployment's listener is loopback http, so the policy is relaxed for
+        //deployment's listener is loopback https, so the policy is relaxed for
         //exactly that — the deployment's explicit per-call choice.
         exchangeContext.SetOutboundFetchPolicy(TestHostShell.LoopbackOutboundFetchPolicy);
 
@@ -133,6 +133,6 @@ internal sealed class Oid4VpX509RequestUriPostFlowTests
         PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
         Assert.IsTrue(verified.Claims.ContainsKey("pid"),
             "Verifier must reach PresentationVerified for the x509 + request_uri_method=post + " +
-            "encrypted-JAR flow driven entirely over HTTP.");
+            "encrypted-JAR flow driven entirely over HTTPS.");
     }
 }

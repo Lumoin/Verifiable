@@ -58,7 +58,10 @@ internal static class DefaultIssuerResolver
     /// <returns>The authoritative issuer URI for this request.</returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown when neither <see cref="ClientRecord.IssuerUri"/> nor
-    /// <see cref="ExchangeContextServerExtensions.Issuer"/> is set.
+    /// <see cref="ExchangeContextServerExtensions.Issuer"/> is set, or when the
+    /// resolved value fails the RFC 9207 §2 / RFC 8414 §2 issuer-identifier shape
+    /// (<see cref="IssuerIdentifierValidation.IsValidIssuerShape"/>) — an https URL
+    /// with no query or fragment component.
     /// </exception>
     public static ValueTask<Uri> ResolveAsync(
         ClientRecord registration,
@@ -70,13 +73,13 @@ internal static class DefaultIssuerResolver
 
         if(registration.IssuerUri is not null)
         {
-            return ValueTask.FromResult(registration.IssuerUri);
+            return ValueTask.FromResult(ValidatedIssuerShape(registration.IssuerUri, registration));
         }
 
         Uri? contextIssuer = context.Issuer;
         if(contextIssuer is not null)
         {
-            return ValueTask.FromResult(contextIssuer);
+            return ValueTask.FromResult(ValidatedIssuerShape(contextIssuer, registration));
         }
 
         throw new InvalidOperationException(
@@ -85,5 +88,27 @@ internal static class DefaultIssuerResolver
             "carry an Issuer URI. Either declare the canonical URL on the registration, or " +
             "have the ASP.NET skin populate the issuer on every request, or supply a custom " +
             $"{nameof(ResolveIssuerDelegate)} via {nameof(EndpointServer)}.{nameof(EndpointServer.Integration)}.{nameof(AuthorizationServerIntegration.ResolveIssuerAsync)}.");
+    }
+
+
+    /// <summary>
+    /// Enforces <see cref="IssuerIdentifierValidation.IsValidIssuerShape"/> on a
+    /// candidate issuer before it becomes the value this resolver returns. Applied
+    /// to both the <see cref="ClientRecord.IssuerUri"/> and
+    /// <see cref="ExchangeContextServerExtensions.Issuer"/> sources so every caller
+    /// of this default resolver — discovery metadata and the RFC 9207 <c>iss</c>
+    /// redirect parameter alike — emits a conformant issuer identifier.
+    /// </summary>
+    private static Uri ValidatedIssuerShape(Uri issuer, ClientRecord registration)
+    {
+        if(!IssuerIdentifierValidation.IsValidIssuerShape(issuer))
+        {
+            throw new InvalidOperationException(
+                $"Issuer identifier '{issuer}' configured for registration '{registration.ClientId}' does " +
+                "not satisfy RFC 9207 §2 / RFC 8414 §2: it MUST be a URL using the https scheme with no " +
+                "query or fragment component.");
+        }
+
+        return issuer;
     }
 }

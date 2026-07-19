@@ -57,7 +57,7 @@ internal sealed class WebAuthnRpHttpCeremonyTests
         var skin = new WebAuthnRelyingPartyCeremonySkin(
             RpId, Origin, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xE0), "alice", "Alice Example", pool);
         await using MinimalHttpHost host = await MinimalHttpHost.StartAsync(skin.HandleAsync, cancellationToken).ConfigureAwait(false);
-        using HttpClient httpClient = new() { BaseAddress = host.BaseAddress };
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(host.Certificate, host.BaseAddress);
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("webauthn-rp-http-authenticator");
         using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
@@ -87,7 +87,7 @@ internal sealed class WebAuthnRpHttpCeremonyTests
         var skin = new WebAuthnRelyingPartyCeremonySkin(
             RpId, Origin, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xE1), "bob", "Bob Example", pool);
         await using MinimalHttpHost host = await MinimalHttpHost.StartAsync(skin.HandleAsync, cancellationToken).ConfigureAwait(false);
-        using HttpClient httpClient = new() { BaseAddress = host.BaseAddress };
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(host.Certificate, host.BaseAddress);
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("webauthn-rp-http-tamper-authenticator");
         using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
@@ -116,7 +116,7 @@ internal sealed class WebAuthnRpHttpCeremonyTests
         var skin = new WebAuthnRelyingPartyCeremonySkin(
             RpId, Origin, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xE2), "carol", "Carol Example", pool);
         await using MinimalHttpHost host = await MinimalHttpHost.StartAsync(skin.HandleAsync, cancellationToken).ConfigureAwait(false);
-        using HttpClient httpClient = new() { BaseAddress = host.BaseAddress };
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(host.Certificate, host.BaseAddress);
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("webauthn-rp-http-malformed-authenticator");
         using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
@@ -152,15 +152,17 @@ internal sealed class WebAuthnRpHttpCeremonyTests
             RpId, Origin, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xE3), "dave", "Dave Example", pool);
 
         Uri baseAddress;
+        System.Security.Cryptography.X509Certificates.X509Certificate2 certificate;
         await using(MinimalHttpHost host = await MinimalHttpHost.StartAsync(skin.HandleAsync, cancellationToken).ConfigureAwait(false))
         {
             baseAddress = host.BaseAddress;
-            using HttpClient warmupClient = new() { BaseAddress = baseAddress };
+            certificate = host.Certificate;
+            using HttpClient warmupClient = LoopbackTls.CreatePinnedHttpClient(certificate, baseAddress);
             using HttpResponseMessage warmup = await PostAsync(warmupClient, WebAuthnRelyingPartyCeremonySkin.AttestationOptionsPath, jsonBody: null, cancellationToken).ConfigureAwait(false);
             Assert.AreEqual(HttpStatusCode.OK, warmup.StatusCode, "The endpoint MUST answer while the host is running.");
         }
 
-        using HttpClient httpClient = new() { BaseAddress = baseAddress };
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(certificate, baseAddress);
         await Assert.ThrowsExactlyAsync<HttpRequestException>(
             () => PostAsync(httpClient, WebAuthnRelyingPartyCeremonySkin.AttestationOptionsPath, jsonBody: null, cancellationToken));
     }

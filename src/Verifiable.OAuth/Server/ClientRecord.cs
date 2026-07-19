@@ -4,6 +4,7 @@ using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Oid4Vp;
 
 namespace Verifiable.OAuth.Server;
@@ -210,6 +211,73 @@ public sealed record ClientRecord: IRegistrationRecord
     /// When non-null, <see cref="ClientId"/> equals this URI's string representation.
     /// </summary>
     public Uri? ClientMetadataUri { get; init; }
+
+    /// <summary>
+    /// Whether this registration is the product of a request-time Client ID Metadata Document fetch —
+    /// set by <see cref="Pipeline.ClientIdMetadataMaterialization"/> when it overlays a successfully
+    /// fetched document onto the stub. Distinguishes a genuinely fetched CIMD client (even one whose
+    /// document declares only <c>client_id</c> and <c>redirect_uris</c>, leaving every display and
+    /// authentication field null) from a pre-registered CIMD client whose document is never fetched at
+    /// request time — the <c>SHOULD fetch</c> / <c>did not fetch</c> distinction of
+    /// draft-ietf-oauth-client-id-metadata-document-02 §8.5.
+    /// </summary>
+    public bool IsClientMetadataMaterialized { get; init; }
+
+    /// <summary>
+    /// The client authentication method this registration declared, the server-side mirror of
+    /// <see cref="Verifiable.OAuth.Client.ClientMetadata.TokenEndpointAuthMethod"/> (RFC 7591 §2
+    /// <c>token_endpoint_auth_method</c>). Carries RFC 7591 registry semantics — <see langword="null"/>
+    /// means the client declared none (public client behavior). For a client that uses a Client ID
+    /// Metadata Document this is populated from the fetched document by
+    /// <see cref="Pipeline.ClientIdMetadataDocumentReader"/>, which refuses to return a symmetric-secret
+    /// method (draft-ietf-oauth-client-id-metadata-document-02 §4.1).
+    /// </summary>
+    public ClientAuthenticationMethod? TokenEndpointAuthMethod { get; init; }
+
+    /// <summary>
+    /// The client's inline JSON Web Key Set as opaque JSON text, the server-side mirror of
+    /// <see cref="Verifiable.OAuth.Client.ClientMetadata.Jwks"/> (RFC 7591 §2 <c>jwks</c>). Kept opaque
+    /// because <c>System.Text.Json</c> is banned in this assembly; a caller resolving a client
+    /// authentication key parses it at the call site. Mutually exclusive with <see cref="ClientJwksUri"/>.
+    /// </summary>
+    public string? ClientJwks { get; init; }
+
+    /// <summary>
+    /// The URL of the client's JSON Web Key Set document, the server-side mirror of
+    /// <see cref="Verifiable.OAuth.Client.ClientMetadata.JwksUri"/> (RFC 7591 §2 <c>jwks_uri</c>).
+    /// Mutually exclusive with <see cref="ClientJwks"/>.
+    /// </summary>
+    public Uri? ClientJwksUri { get; init; }
+
+    /// <summary>
+    /// The client's human-readable name, the server-side mirror of
+    /// <see cref="Verifiable.OAuth.Client.ClientMetadata.ClientName"/> (RFC 7591 §2 <c>client_name</c>).
+    /// <see langword="null"/> when the client declared none.
+    /// </summary>
+    public string? ClientName { get; init; }
+
+    /// <summary>
+    /// The client's web page, the server-side mirror of
+    /// <see cref="Verifiable.OAuth.Client.ClientMetadata.ClientUri"/> (RFC 7591 §2 <c>client_uri</c>).
+    /// <see langword="null"/> when the client declared none.
+    /// </summary>
+    public Uri? ClientUri { get; init; }
+
+    /// <summary>
+    /// The client's logo image URL, the server-side mirror of
+    /// <see cref="Verifiable.OAuth.Client.ClientMetadata.LogoUri"/> (RFC 7591 §2 <c>logo_uri</c>).
+    /// draft-ietf-oauth-client-id-metadata-document-02 §8.5/§8.8 consult this field when presenting the
+    /// authorization request to the end user and when prefetching the client's logo image.
+    /// </summary>
+    public Uri? LogoUri { get; init; }
+
+    /// <summary>
+    /// The client's software statement, the server-side mirror of
+    /// <see cref="Verifiable.OAuth.Client.ClientMetadata.SoftwareStatement"/> (RFC 7591 §2.3
+    /// <c>software_statement</c>). Carried opaque and unverified; see
+    /// <see cref="Verifiable.OAuth.Client.ClientMetadata.SoftwareStatement"/> for the scope note.
+    /// </summary>
+    public string? SoftwareStatement { get; init; }
 
     /// <summary>
     /// The OpenID Federation entity identifier when this client participates in federation.

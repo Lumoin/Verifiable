@@ -142,7 +142,14 @@ public readonly struct AuthCodeClient
 
     /// <summary>
     /// Exchanges the authorization code and PKCE verifier for tokens at the
-    /// token endpoint.
+    /// token endpoint, attaching confidential-client authentication per
+    /// <see cref="ClientRegistration.AuthenticationMethod"/> (RFC 6749 §3.2.1). Covers
+    /// <see cref="ClientAuthenticationMethod.None"/>, <see cref="ClientAuthenticationMethod.ClientSecretPost"/>,
+    /// and <see cref="ClientAuthenticationMethod.ClientSecretBasic"/> — none of which need a signed
+    /// assertion. A <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> registration needs the
+    /// <see cref="ExchangeTokenAsync(ClientRegistration, string, ExchangeContext, ClientAssertionOptions?, CancellationToken)"/>
+    /// overload instead, so the caller can supply the client-assertion signing inputs
+    /// (RFC 7523 §2.2) the AS-declared method requires.
     /// </summary>
     /// <param name="registration">The registration identifying the authorization server.</param>
     /// <param name="flowId">
@@ -163,6 +170,43 @@ public readonly struct AuthCodeClient
         ClientRegistration registration,
         string flowId,
         ExchangeContext context,
+        CancellationToken cancellationToken) =>
+        ExchangeTokenAsync(registration, flowId, context, clientAssertionOptions: null, cancellationToken);
+
+
+    /// <summary>
+    /// Exchanges the authorization code and PKCE verifier for tokens at the
+    /// token endpoint, attaching confidential-client authentication per
+    /// <see cref="ClientRegistration.AuthenticationMethod"/> (RFC 6749 §3.2.1 / RFC 7523 §2.2) —
+    /// the overload that reaches <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/>.
+    /// </summary>
+    /// <remarks>
+    /// The signed <c>client_assertion</c>'s <c>iss</c>/<c>sub</c> (the client identifier), <c>aud</c>
+    /// (the resolved token endpoint), <c>iat</c>/<c>exp</c> (<see cref="OAuthClientInfrastructure.TimeProvider"/>),
+    /// and <c>jti</c> (<see cref="OAuthClientInfrastructure.GenerateIdentifierAsync"/> — the same
+    /// generator the <see cref="Verifiable.OAuth.IdJag.IdJagFlowHandlers"/> client path uses) all come
+    /// from <paramref name="registration"/> and <see cref="Infrastructure"/>; the signing key comes from
+    /// <see cref="ClientRegistration.AuthenticationKeyMaterial"/>. <paramref name="clientAssertionOptions"/>
+    /// supplies only what the application must still choose: the <c>kid</c> and the header/payload
+    /// serialisers.
+    /// </remarks>
+    /// <param name="registration">The registration identifying the authorization server.</param>
+    /// <param name="flowId">
+    /// The flow identifier (the <c>state</c> value) that correlates this token
+    /// request with the original PAR.
+    /// </param>
+    /// <param name="context">The per-operation exchange context threaded into the transport and flow-state delegates.</param>
+    /// <param name="clientAssertionOptions">
+    /// The <c>private_key_jwt</c> client-assertion signing inputs (RFC 7523 §2.2). Required when
+    /// <see cref="ClientRegistration.AuthenticationMethod"/> is
+    /// <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/>; ignored for every other method.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public ValueTask<AuthCodeFlowEndpointResult> ExchangeTokenAsync(
+        ClientRegistration registration,
+        string flowId,
+        ExchangeContext context,
+        ClientAssertionOptions? clientAssertionOptions,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(registration);
@@ -174,12 +218,20 @@ public readonly struct AuthCodeClient
             Infrastructure,
             registration,
             context,
+            clientAssertionOptions,
             cancellationToken);
     }
 
 
     /// <summary>
-    /// Refreshes an access token using a refresh token.
+    /// Refreshes an access token using a refresh token, attaching confidential-client
+    /// authentication per <see cref="ClientRegistration.AuthenticationMethod"/> (RFC 6749 §6, §3.2.1). Covers
+    /// <see cref="ClientAuthenticationMethod.None"/>, <see cref="ClientAuthenticationMethod.ClientSecretPost"/>,
+    /// and <see cref="ClientAuthenticationMethod.ClientSecretBasic"/> — none of which need a signed
+    /// assertion. A <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> registration needs the
+    /// <see cref="RefreshAsync(ClientRegistration, RefreshTokenRequest, ExchangeContext, ClientAssertionOptions?, CancellationToken)"/>
+    /// overload instead, so the caller can supply the client-assertion signing inputs
+    /// (RFC 7523 §2.2) the AS-declared method requires.
     /// </summary>
     /// <param name="registration">The registration identifying the authorization server.</param>
     /// <param name="request">The refresh token request.</param>
@@ -197,13 +249,37 @@ public readonly struct AuthCodeClient
         ClientRegistration registration,
         RefreshTokenRequest request,
         ExchangeContext context,
+        CancellationToken cancellationToken) =>
+        RefreshAsync(registration, request, context, clientAssertionOptions: null, cancellationToken);
+
+
+    /// <summary>
+    /// Refreshes an access token using a refresh token, attaching confidential-client
+    /// authentication per <see cref="ClientRegistration.AuthenticationMethod"/> (RFC 6749 §6 /
+    /// RFC 7523 §2.2) — the overload that reaches <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/>.
+    /// </summary>
+    /// <param name="registration">The registration identifying the authorization server.</param>
+    /// <param name="request">The refresh token request.</param>
+    /// <param name="context">The per-operation exchange context threaded into the transport and flow-state delegates.</param>
+    /// <param name="clientAssertionOptions">
+    /// The <c>private_key_jwt</c> client-assertion signing inputs (RFC 7523 §2.2). Required when
+    /// <see cref="ClientRegistration.AuthenticationMethod"/> is
+    /// <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/>; ignored for every other method.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public ValueTask<AuthCodeFlowEndpointResult> RefreshAsync(
+        ClientRegistration registration,
+        RefreshTokenRequest request,
+        ExchangeContext context,
+        ClientAssertionOptions? clientAssertionOptions,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(context);
 
-        return AuthCodeFlowHandlers.RefreshAsync(request, Infrastructure, registration, context, cancellationToken);
+        return AuthCodeFlowHandlers.RefreshAsync(
+            request, Infrastructure, registration, context, clientAssertionOptions, cancellationToken);
     }
 
 

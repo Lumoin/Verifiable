@@ -6,20 +6,20 @@ using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
-using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
-using Microsoft.AspNetCore.Server.Kestrel.Core;
-using Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods;
@@ -39,13 +39,14 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Resolver;
 
 /// <summary>
-/// A REAL two-node cross-wire did:webvh flow: node A is an in-process Kestrel host that PUBLISHES a minted
+/// A REAL two-node cross-wire did:webvh flow: node A is an in-process HTTPS host that PUBLISHES a minted
 /// did:webvh log (the <c>did.jsonl</c>, the <c>did-witness.json</c>, the <c>whois.vp</c> and a path file) over
-/// a plain-http loopback socket, and node B is a composed <see cref="DidResolver"/> that RESOLVES the DID and
-/// DEREFERENCES its <c>/whois</c> and <c>/governance/issuers.json</c> URLs over that same socket through a real
-/// <see cref="HttpClient"/>. The cross-node hops are genuine socket traffic — node A's request log is asserted
-/// to prove every fetch (the log, the witness file, the whois.vp, the path file) crossed the wire, so no hop is
-/// secretly served by an in-memory transport.
+/// a genuine loopback socket with a pinned ephemeral certificate, and node B is a composed
+/// <see cref="DidResolver"/> that RESOLVES the DID and DEREFERENCES its <c>/whois</c> and
+/// <c>/governance/issuers.json</c> URLs over that same socket through a real <see cref="HttpClient"/>. The
+/// cross-node hops are genuine socket traffic — node A's request log is asserted to prove every fetch (the log,
+/// the witness file, the whois.vp, the path file) crossed the wire, so no hop is secretly served by an
+/// in-memory transport.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -57,13 +58,13 @@ namespace Verifiable.Tests.Resolver;
 /// <c>https://localhost:{port}/governance/issuers.json</c>).
 /// </para>
 /// <para>
-/// Node A listens on plain http (the repo convention for real-socket binding tests; TLS is the deployment
-/// transport's responsibility). Node B's resolver computes the genuine <c>https://localhost:{port}/...</c> URL,
-/// the policy on the threaded <see cref="ExchangeContext"/> gates it (loopback explicitly allowed, exactly like
-/// <c>TestHostShell.LoopbackOutboundFetchPolicy</c>), and the single-hop transport rebases that URL's authority
-/// (scheme, host and port) onto node A's real loopback socket before dialing, standing in for the DNS + network
-/// hop a deployment would make. A raw IP-literal host is rejected by the transform (the shared did:web-family host
-/// rule), so the DID uses the <c>localhost</c> registered name.
+/// Node A listens on HTTPS with a fresh self-signed leaf certificate (<see cref="LoopbackTls"/>); node B's
+/// <see cref="HttpClient"/> pins to that exact certificate rather than trusting a CA. Node B's resolver computes
+/// the genuine <c>https://localhost:{port}/...</c> URL, the policy on the threaded <see cref="ExchangeContext"/>
+/// gates it (loopback explicitly allowed, exactly like <c>TestHostShell.LoopbackOutboundFetchPolicy</c>), and the
+/// single-hop transport rebases that URL's authority (host and port) onto node A's real loopback socket before
+/// dialing, standing in for the DNS + network hop a deployment would make. A raw IP-literal host is rejected by
+/// the transform (the shared did:web-family host rule), so the DID uses the <c>localhost</c> registered name.
 /// </para>
 /// </remarks>
 [TestClass]
@@ -138,7 +139,7 @@ internal sealed class WebVhCrossWireFlowTests
         nodeA.Publish("/whois.vp", Encoding.UTF8.GetBytes(whois), WellKnownWebVhValues.WhoisMediaType);
         nodeA.Publish("/governance/issuers.json", issuersFile, "application/json");
 
-        using HttpClient httpClient = new();
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(nodeA.Certificate);
         DidResolver composed = BuildCrossWireResolver(httpClient, nodeA.BaseAddress);
 
         //OTel double-check: each log entry's eddsa-jcs-2022 proof is verified through the registered Ed25519
@@ -225,7 +226,7 @@ internal sealed class WebVhCrossWireFlowTests
         using WebVhController controller = WebVhController.Create();
         WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(domain, controller, GenesisTime).ConfigureAwait(false);
 
-        using HttpClient httpClient = new();
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(nodeA.Certificate);
         DidResolver composed = BuildCrossWireResolver(httpClient, nodeA.BaseAddress);
 
         ExchangeContext context = NewLoopbackContext();
@@ -271,7 +272,7 @@ internal sealed class WebVhCrossWireFlowTests
 
         nodeA.Publish("/moved/did.jsonl", Encoding.UTF8.GetBytes(string.Join('\n', log.Lines)), "application/jsonl");
 
-        using HttpClient httpClient = new();
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(nodeA.Certificate);
         DidResolver composed = BuildCrossWireResolver(httpClient, nodeA.BaseAddress);
 
         ExchangeContext context = NewLoopbackContext();
@@ -293,7 +294,6 @@ internal sealed class WebVhCrossWireFlowTests
         ExchangeContext context = new();
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault with
         {
-            AllowedSchemes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "http", "https" },
             BlockPrivateAndLoopback = false
         });
 
@@ -302,8 +302,8 @@ internal sealed class WebVhCrossWireFlowTests
 
 
     //Composes node B's resolver: the did:webvh resolver + dereferencer backed by a REAL HttpClient single-hop
-    //transport, wrapped to rewrite only the scheme (https -> http) so the genuine https URL the resolver computes
-    //dials node A's plain-http loopback socket. The chokepoint has already evaluated the genuine https URL.
+    //transport (pinned to node A's certificate), wrapped to rebase the resolved URL's host and port onto node A's
+    //real loopback socket. The chokepoint has already evaluated the genuine https URL.
     private static DidResolver BuildCrossWireResolver(HttpClient httpClient, Uri loopbackBase)
     {
         OutboundTransportDelegate singleHop = GuardedHttpClientTransport.BuildSingleHopTransport(httpClient);
@@ -311,10 +311,10 @@ internal sealed class WebVhCrossWireFlowTests
         OutboundTransportDelegate transport = async (request, context, cancellationToken) =>
         {
             //The DID's domain is a registered name (localhost), which the transform maps to a genuine https URL;
-            //this transport plays DNS + network by rebasing that URL's authority (scheme, host and port) onto node
-            //A's real loopback socket, preserving the path and query. The dial is deterministic (it does not depend
-            //on how 'localhost' resolves across the IPv4/IPv6 loopback stacks) and still crosses the real socket —
-            //node A's request-path log proves each hop.
+            //this transport plays DNS + network by rebasing that URL's authority (host and port; the scheme is
+            //already https on both sides) onto node A's real loopback socket, preserving the path and query. The
+            //dial is deterministic (it does not depend on how 'localhost' resolves across the IPv4/IPv6 loopback
+            //stacks) and still crosses the real socket — node A's request-path log proves each hop.
             UriBuilder rebased = new(request.Target)
             {
                 Scheme = loopbackBase.Scheme,
@@ -380,21 +380,26 @@ internal sealed class WebVhCrossWireFlowTests
     }
 
 
-    //An in-process Kestrel listener bound to the http loopback socket on an OS-assigned ephemeral port, serving
-    //published static content by path and recording every requested path so the test can prove a hop crossed the
-    //wire. This is node A — the publisher half of the cross-wire flow.
+    //An in-process HTTPS listener bound to the loopback socket on an OS-assigned ephemeral port with a fresh
+    //self-signed leaf certificate, serving published static content by path and recording every requested path
+    //so the test can prove a hop crossed the wire. This is node A — the publisher half of the cross-wire flow.
     private sealed class StaticContentHttpHost: IAsyncDisposable
     {
-        private readonly KestrelServer server;
+        private readonly WebApplication app;
 
-        private StaticContentHttpHost(KestrelServer server, Uri baseAddress, StaticContentApplication application)
+        private StaticContentHttpHost(WebApplication app, X509Certificate2 certificate, Uri baseAddress, StaticContentApplication application)
         {
-            this.server = server;
+            this.app = app;
+            Certificate = certificate;
             BaseAddress = baseAddress;
             Application = application;
         }
 
         public Uri BaseAddress { get; }
+
+        //The self-signed leaf certificate this node's HTTPS listener presents; node B pins to this exact
+        //certificate via LoopbackTls.CreatePinnedHttpClient rather than trusting a CA.
+        public X509Certificate2 Certificate { get; }
 
         private StaticContentApplication Application { get; }
 
@@ -406,31 +411,37 @@ internal sealed class WebVhCrossWireFlowTests
 
         public static async Task<StaticContentHttpHost> StartAsync(CancellationToken cancellationToken)
         {
-            KestrelServerOptions kestrelOptions = new();
-            kestrelOptions.Listen(IPAddress.Loopback, port: 0);
+            X509Certificate2 certificate = LoopbackTls.CreateServerCertificate("webvh-cross-wire-loopback-test-host");
 
-            SocketTransportOptions socketOptions = new();
-            SocketTransportFactory socketFactory = new(Options.Create(socketOptions), NullLoggerFactory.Instance);
+            WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
+            builder.Logging.ClearProviders();
 
-            KestrelServer kestrel = new(Options.Create(kestrelOptions), socketFactory, NullLoggerFactory.Instance);
+            //A single explicit HTTPS Listen call — no UseUrls — so there is no plaintext fallback on
+            //this host at all.
+            builder.WebHost.ConfigureKestrel(options =>
+                options.Listen(IPAddress.Loopback, port: 0, listenOptions => listenOptions.UseHttps(certificate)));
+
+            WebApplication app = builder.Build();
+
             StaticContentApplication application = new();
-            await kestrel.StartAsync(application, cancellationToken).ConfigureAwait(false);
+            app.Run(application.ProcessRequestAsync);
 
-            IServerAddressesFeature? addresses = kestrel.Features.Get<IServerAddressesFeature>();
-            if(addresses is null || addresses.Addresses.Count == 0)
-            {
-                throw new InvalidOperationException("Kestrel started but exposed no server address.");
-            }
+            await app.StartAsync(cancellationToken).ConfigureAwait(false);
 
-            Uri baseAddress = new(addresses.Addresses.First());
+            IServerAddressesFeature addresses = app.Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()
+                ?? throw new InvalidOperationException("Kestrel exposed no server addresses feature.");
+            string boundAddress = addresses.Addresses.FirstOrDefault()
+                ?? throw new InvalidOperationException("Kestrel bound no address.");
 
-            return new StaticContentHttpHost(kestrel, baseAddress, application);
+            return new StaticContentHttpHost(app, certificate, new Uri(boundAddress), application);
         }
 
         public async ValueTask DisposeAsync()
         {
-            await server.StopAsync(CancellationToken.None).ConfigureAwait(false);
-            server.Dispose();
+            await app.StopAsync(CancellationToken.None).ConfigureAwait(false);
+            await app.DisposeAsync().ConfigureAwait(false);
+            Certificate.Dispose();
         }
     }
 

@@ -12,7 +12,11 @@ namespace Verifiable.OAuth.Server;
 /// <para>
 /// The producer always applies — every token-endpoint request emits an access
 /// token unless an application replaces the producer list with one that
-/// excludes it. Signs with <see cref="KeyUsageContext.AccessTokenIssuance"/>.
+/// excludes it. <see cref="TokenProducer.RequiredCapability"/> is
+/// <see langword="null"/>: the grant's own endpoint match (for example
+/// <see cref="WellKnownCapabilityIdentifiers.OAuthClientCredentials"/>) already gated the
+/// request before the producer walk runs, so this producer needs no separate tenant-feature
+/// gate. Signs with <see cref="KeyUsageContext.AccessTokenIssuance"/>.
 /// </para>
 /// <para>
 /// Consumed indirectly via <see cref="TokenProducer.Rfc9068AccessToken"/>.
@@ -59,7 +63,7 @@ internal static class Rfc9068AccessTokenProducer
     {
         Name = "rfc9068-access-token",
         ResponseField = WellKnownTokenTypes.AccessToken,
-        RequiredCapability = WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+        RequiredCapability = null,
         KeyUsage = KeyUsageContext.AccessTokenIssuance,
         IsApplicable = static (_, _) => ValueTask.FromResult(true),
         BuildAsync = BuildAsync

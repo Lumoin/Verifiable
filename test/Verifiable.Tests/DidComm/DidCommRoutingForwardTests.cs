@@ -597,10 +597,10 @@ internal sealed class DidCommRoutingForwardTests
 
 
     /// <summary>
-    /// The §3 sender→receiver flow over a REAL HTTP socket: Alice packs an authcrypt message for Bob, transmits it as
-    /// an HTTPS-shaped POST (chunk H) over a genuine HttpClient/Kestrel hop to Bob's inbox, and Bob decrypts exactly
-    /// what crossed the wire — the message types, the encryption layer, the transport convention, and the Verified&lt;T&gt;
-    /// authenticity proof all exercised end to end on a real socket (loopback, plain HTTP — verification is over the
+    /// The §3 sender→receiver flow over a REAL HTTPS socket: Alice packs an authcrypt message for Bob, transmits it as
+    /// an HTTPS POST over a genuine HttpClient/Kestrel hop (pinned to the inbox's certificate) to Bob's inbox, and Bob
+    /// decrypts exactly what crossed the wire — the message types, the encryption layer, the transport convention, and
+    /// the Verified&lt;T&gt; authenticity proof all exercised end to end on a real socket (verification is over the
     /// envelope, not the transport).
     /// </summary>
     [TestMethod]
@@ -622,8 +622,8 @@ internal sealed class DidCommRoutingForwardTests
         DidResolver resolver = CreateResolver(out PeerParty alice, out PeerParty bob, out _, out _, withService: false);
         using DidCommEncryptedMessage packed = await PackAuthcryptForBobAsync(resolver, alice, bob).ConfigureAwait(false);
 
-        //Transmit over a genuine socket to Bob's loopback inbox (the policy allows http loopback for the test host).
-        using HttpClient httpClient = new();
+        //Transmit over a genuine socket to Bob's loopback inbox (the policy allows loopback for the test host).
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(inbox.Certificate);
         ExchangeContext loopbackContext = NewLoopbackContext();
         DidCommTransmitResult transmit = await packed.TransmitAsync(
             inbox.BaseAddress, loopbackContext, DidCommHttpTransport.CreateSendDelegate(BuildPostTransport(httpClient)), TestContext.CancellationToken).ConfigureAwait(false);
@@ -649,14 +649,13 @@ internal sealed class DidCommRoutingForwardTests
     }
 
 
-    //A fresh context whose policy permits http loopback so the genuine http://127.0.0.1:{port}/ inbox URL is allowed;
+    //A fresh context whose policy permits loopback so the genuine https://127.0.0.1:{port}/ inbox URL is allowed;
     //production keeps SecureDefault, which denies a loopback target before any network contact.
     private static ExchangeContext NewLoopbackContext()
     {
         var context = new ExchangeContext();
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault with
         {
-            AllowedSchemes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "http", "https" },
             BlockPrivateAndLoopback = false
         });
 

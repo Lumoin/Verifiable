@@ -80,7 +80,7 @@ internal sealed class StatusListAggregationHttpFlowTests
         ReadOnlyMemory<byte> aggregationBytes = JsonSerializerExtensions.SerializeToUtf8Bytes(aggregation, TestSetup.DefaultSerializationOptions);
         host.Publish("/aggregation", aggregationBytes, "application/json");
 
-        using HttpClient httpClient = new();
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(host.Certificate);
         Uri aggregationUri = new(host.BaseAddress, "/aggregation");
 
         using HttpResponseMessage aggregationResponse = await httpClient.GetAsync(aggregationUri, TestContext.CancellationToken).ConfigureAwait(false);

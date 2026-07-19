@@ -82,7 +82,7 @@ internal sealed class AcdcEdgeChainFlowTests
             farIssuer.Publish("/acdc", far.Acdc.Serialization, "application/json");
             farIssuer.Publish("/kel", AcdcFlowKit.SerializeKel(far.Kel), "application/json");
 
-            using HttpClient httpClient = new();
+            using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient([nearIssuer.Certificate, farIssuer.Certificate]);
 
             //Verify the near credential and read its edge section.
             AcdcMessage? nearMessage = await VerifyAcdcAsync(httpClient, BaseOf(nearIssuer, "/acdc"), BaseOf(nearIssuer, "/kel"), disposables, cancellationToken).ConfigureAwait(false);

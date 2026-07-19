@@ -91,6 +91,21 @@ public sealed record IssuanceContext
     public required string ClientId { get; init; }
 
     /// <summary>
+    /// The wire <c>grant_type</c> value for this token-endpoint request — one of the
+    /// <see cref="WellKnownGrantTypes"/> constants (<c>authorization_code</c>,
+    /// <c>refresh_token</c>, <c>client_credentials</c>, the RFC 8693 token-exchange URN, the
+    /// RFC 7523 jwt-bearer URN, or the OID4VCI <c>pre-authorized_code</c> URN). Producers use
+    /// it for grant-identity decisions independent of scope — for example
+    /// <see cref="Server.Oidc10IdTokenProducer"/> issues an ID Token only when
+    /// <see cref="GrantType"/> is <c>authorization_code</c>, or <c>refresh_token</c> with
+    /// <see cref="RefreshTokenOriginatingGrantType"/> itself <c>authorization_code</c>, so a
+    /// defect that left <c>openid</c> on a <c>client_credentials</c> or <c>token_exchange</c>
+    /// token's scope — or on a refresh token minted alongside one — cannot alone produce an
+    /// identity assertion for a non-end-user subject.
+    /// </summary>
+    public required string GrantType { get; init; }
+
+    /// <summary>
     /// The instant the request started processing. Used for <c>iat</c> claims on
     /// every token in this response and as the base for per-token <c>exp</c> values.
     /// </summary>
@@ -162,4 +177,15 @@ public sealed record IssuanceContext
     /// non-token-exchange issuance.
     /// </summary>
     public IReadOnlyList<string>? Audience { get; init; }
+
+    /// <summary>
+    /// On a <c>refresh_token</c> grant, the redeemed refresh token's
+    /// <see cref="AuthCode.Server.States.ServerRefreshTokenIssuedState.OriginatingGrantType"/> — the
+    /// wire <c>grant_type</c> that first minted the refresh-token chain. <see cref="Server.Oidc10IdTokenProducer"/>
+    /// requires this to be <c>authorization_code</c> before minting a default ID Token on redemption, so a
+    /// refresh token minted alongside a non-End-User grant (<c>client_credentials</c>, <c>token_exchange</c>,
+    /// <c>jwt_bearer</c>, <c>pre_authorized_code</c>) never yields one. <see langword="null"/> for every
+    /// non-refresh grant.
+    /// </summary>
+    public string? RefreshTokenOriginatingGrantType { get; init; }
 }

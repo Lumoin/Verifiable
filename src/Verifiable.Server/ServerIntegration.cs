@@ -105,6 +105,13 @@ public class ServerIntegration
     /// </summary>
     public ResolveServerPolicyDelegate? ResolvePolicyAsync { get; set; }
 
+    /// <summary>
+    /// Materializes the client-data-dependent fields of a matched request's registration
+    /// after routing has matched an endpoint, before that endpoint runs. Optional; when
+    /// <see langword="null"/> dispatch proceeds with the loaded registration unchanged.
+    /// </summary>
+    public MaterializeRegistrationDelegate? MaterializeRegistrationAsync { get; set; }
+
 
     /// <summary>
     /// Whether <see cref="Validate"/> has been called successfully on this group.

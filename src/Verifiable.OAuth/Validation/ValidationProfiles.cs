@@ -28,7 +28,15 @@ namespace Verifiable.OAuth.Validation;
 public static class ValidationProfiles
 {
     /// <summary>
-    /// RFC 6749 with PKCE callback validation rules.
+    /// RFC 6749 with PKCE callback validation rules. Includes the
+    /// profile-independent <see cref="ValidationChecks.CheckCallbackIssuerMatchesWhenPresent"/>
+    /// mix-up defense per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9207">RFC 9207</see> §2.4: this
+    /// profile does not assume the authorization server supports the <c>iss</c>
+    /// parameter, so an absent value is accepted (unlike
+    /// <see cref="CallbackHaip10Rules"/>'s <c>CheckCallbackIssPresent</c>), but a
+    /// PRESENT value is still required to match the expected issuer — a present,
+    /// forged <c>iss</c> is rejected before the callback can persist state.
     /// </summary>
     /// <returns>A mutable list the application can extend.</returns>
     public static IList<ClaimDelegate<ValidationContext>> CallbackRfc6749WithPkceRules() =>
@@ -39,6 +47,9 @@ public static class ValidationProfiles
 
             new(ValidationChecks.CheckCallbackStatePresent,
                 [ValidationClaimIds.CallbackStatePresent]),
+
+            new(ValidationChecks.CheckCallbackIssuerMatchesWhenPresent,
+                [ValidationClaimIds.IssuerMatchesExpectedWhenPresent]),
 
             new(ValidationChecks.CheckCallbackStateMatchesFlow,
                 [ValidationClaimIds.StateMatchesActiveFlow]),

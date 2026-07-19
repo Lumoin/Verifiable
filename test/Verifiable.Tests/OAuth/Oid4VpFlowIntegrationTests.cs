@@ -2510,9 +2510,9 @@ internal sealed class Oid4VpFlowIntegrationTests
     //The interim test scope (full §3c gets two real Kestrels once §3e ships
     //the /.well-known/openid-federation endpoint):
     //  - TestHostShell owns two HostedAuthorizationServers via AddHost; only
-    //    the Verifier serves HTTP for now. The anchor host scaffolds the
+    //    the Verifier serves HTTPS for now. The anchor host scaffolds the
     //    multi-host shape for §3e.
-    //  - PAR + JAR-fetch + direct_post all over real HTTP via the Kestrel
+    //  - PAR + JAR-fetch + direct_post all over real HTTPS via the Kestrel
     //    listener.
     //  - The Wallet validates the inline trust_chain via
     //    FederationBoundJarKeyResolver and asserts the chain-resolved key
@@ -2527,7 +2527,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         await using TestHostShell app = new(TimeProvider);
 
         //Scaffolding-only for §3c-interim — the anchor host has its own
-        //per-host state container but does not serve HTTP yet (its Kestrel
+        //per-host state container but does not serve HTTPS yet (its listener
         //starts once §3e wires /.well-known/openid-federation). Adding the
         //host here proves the multi-host orchestration extracted in §3a.
         HostedAuthorizationServer anchorHost = app.AddHost("anchor");

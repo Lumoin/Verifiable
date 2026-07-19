@@ -11,10 +11,24 @@ namespace Verifiable.OAuth.Server;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The producer applies only when <c>openid</c> is in the granted scope.
-/// Signs with <see cref="KeyUsageContext.IdTokenIssuance"/>, allowing
-/// deployments to use different key material for ID Tokens than for access
-/// tokens via the per-usage <see cref="ClientRecord.SigningKeys"/> map.
+/// The producer applies only when <c>openid</c> is in the granted scope AND the request's
+/// <see cref="IssuanceContext.GrantType"/> is <c>authorization_code</c>, or <c>refresh_token</c>
+/// whose <see cref="IssuanceContext.RefreshTokenOriginatingGrantType"/> is itself
+/// <c>authorization_code</c> — the only shapes where the library knows an End-User was
+/// authenticated. A refresh token minted alongside a non-End-User grant
+/// (<c>client_credentials</c>, <c>token_exchange</c>, <c>jwt_bearer</c>,
+/// <c>pre_authorized_code</c>) carries that origin verbatim across rotation via
+/// <see cref="AuthCode.Server.States.ServerRefreshTokenIssuedState.OriginatingGrantType"/>, so its
+/// redemption never satisfies this gate. This is one of three defense-in-depth layers enforcing
+/// the <c>openid</c> ⇒ authenticated-end-user invariant, alongside the granted-scope narrowing in
+/// <see cref="AuthCode.AuthCodeEndpoints"/> for non-end-user grants and the consumer-side check in
+/// <see cref="Oidc.UserInfoEndpoints"/>: even if a defect ever left <c>openid</c> on a
+/// <c>client_credentials</c> or <c>token_exchange</c> token's scope — or on the refresh token
+/// minted alongside one — this grant-identity check independently keeps this producer from
+/// synthesizing an ID Token for that non-end-user subject. Signs with
+/// <see cref="KeyUsageContext.IdTokenIssuance"/>, allowing deployments to use different key
+/// material for ID Tokens than for access tokens via the per-usage
+/// <see cref="ClientRecord.SigningKeys"/> map.
 /// </para>
 /// <para>
 /// Composes the JWT structural baseline only: <c>iss</c>, <c>aud</c>,
@@ -56,7 +70,17 @@ internal static class Oidc10IdTokenProducer
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        return ValueTask.FromResult(WellKnownScopes.ContainsOpenId(context.Scope));
+
+        static bool IsEndUserAuthenticatingGrant(IssuanceContext context) => context switch
+        {
+            _ when WellKnownGrantTypes.IsAuthorizationCode(context.GrantType) => true,
+            { RefreshTokenOriginatingGrantType: { } origin } when WellKnownGrantTypes.IsRefreshToken(context.GrantType) =>
+                WellKnownGrantTypes.IsAuthorizationCode(origin),
+            _ => false
+        };
+
+        return ValueTask.FromResult(
+            WellKnownScopes.ContainsOpenId(context.Scope) && IsEndUserAuthenticatingGrant(context));
     }
 
 

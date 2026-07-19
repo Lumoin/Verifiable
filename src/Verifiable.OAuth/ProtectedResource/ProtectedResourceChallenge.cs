@@ -42,10 +42,23 @@ public static class ProtectedResourceChallenge
     /// </summary>
     /// <param name="scheme">The authentication scheme, e.g. <see cref="WellKnownAuthenticationSchemes.Bearer"/>.</param>
     /// <param name="metadataUrl">The protected resource metadata URL (§3).</param>
+    /// <exception cref="ArgumentException">
+    /// The URL's <see cref="Uri.OriginalString"/> carries a control character
+    /// (a header-field-value MUST NOT contain CR, LF, or other CTLs per RFC 9110
+    /// §5.5) — a quoted-string cannot represent it, and emitting it verbatim
+    /// would split the header.
+    /// </exception>
     public static string BuildChallenge(string scheme, Uri metadataUrl)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(scheme);
         ArgumentNullException.ThrowIfNull(metadataUrl);
+
+        if(ContainsControlCharacter(metadataUrl.OriginalString))
+        {
+            throw new ArgumentException(
+                "The metadata URL carries a control character and cannot be represented in a header field value (RFC 9110 §5.5).",
+                nameof(metadataUrl));
+        }
 
         //Quoted-string per RFC 9110 §5.6.4 — URLs do not ordinarily carry
         //'"' or '\', but escape faithfully rather than assume.
@@ -54,6 +67,24 @@ public static class ProtectedResourceChallenge
             .Replace("\"", "\\\"", StringComparison.Ordinal);
 
         return $"{scheme} {ResourceMetadataParameter}=\"{url}\"";
+    }
+
+
+    /// <summary>
+    /// Whether the value carries a C0 control character or DEL — RFC 9110 §5.5
+    /// forbids these in a field value, and CR/LF would split the header.
+    /// </summary>
+    private static bool ContainsControlCharacter(string value)
+    {
+        foreach(char c in value)
+        {
+            if(c is (< ' ') or '\x7f')
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
 

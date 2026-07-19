@@ -89,14 +89,57 @@ public static class ValidationChecks
         ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
 
-        bool issPresent = context.Fields!.TryGetValue(OAuthRequestParameterNames.Iss, out string? iss);
-        ClaimOutcome outcome = issPresent
-            && string.Equals(iss, context.FlowState!.ExpectedIssuer, StringComparison.Ordinal)
+        ClaimOutcome outcome = IssuerMatchesWhenPresent(context, out bool issPresent) && issPresent
             ? ClaimOutcome.Success
             : ClaimOutcome.Failure;
 
         return ValueTask.FromResult<List<Claim>>(
             [new Claim(ValidationClaimIds.IssuerMatchesExpected, outcome)]);
+    }
+
+
+    /// <summary>
+    /// Checks that a PRESENT <c>iss</c> value matches the expected issuer; an absent
+    /// <c>iss</c> passes this check. The mix-up defense a profile applies when it does
+    /// not know whether the authorization server supports
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9207">RFC 9207</see>: unlike
+    /// <see cref="CheckCallbackIssuerMatches"/> (paired with
+    /// <see cref="CheckCallbackIssPresent"/> under profiles that require the
+    /// parameter), this check alone lets a profile that does not assume RFC 9207
+    /// support still reject a callback whose <c>iss</c> was supplied but forged.
+    /// </summary>
+    public static ValueTask<List<Claim>> CheckCallbackIssuerMatchesWhenPresent(
+        ValidationContext context,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        ClaimOutcome outcome = IssuerMatchesWhenPresent(context, out _)
+            ? ClaimOutcome.Success
+            : ClaimOutcome.Failure;
+
+        return ValueTask.FromResult<List<Claim>>(
+            [new Claim(ValidationClaimIds.IssuerMatchesExpectedWhenPresent, outcome)]);
+    }
+
+
+    /// <summary>
+    /// Shared comparison behind <see cref="CheckCallbackIssuerMatches"/> and
+    /// <see cref="CheckCallbackIssuerMatchesWhenPresent"/>: an absent <c>iss</c>
+    /// reports <see langword="true"/> (vacuously matched — the presence
+    /// requirement, if any, is a separate check) and <paramref name="issPresent"/>
+    /// distinguishes that case for callers that must additionally require presence.
+    /// A present <c>iss</c> is compared to <see cref="ValidationContext.FlowState"/>'s
+    /// <see cref="FlowState.ExpectedIssuer"/> by ordinal string comparison per
+    /// RFC 8414 §3.3.
+    /// </summary>
+    private static bool IssuerMatchesWhenPresent(ValidationContext context, out bool issPresent)
+    {
+        issPresent = context.Fields!.TryGetValue(OAuthRequestParameterNames.Iss, out string? iss);
+
+        return !issPresent
+            || string.Equals(iss, context.FlowState!.ExpectedIssuer, StringComparison.Ordinal);
     }
 
 

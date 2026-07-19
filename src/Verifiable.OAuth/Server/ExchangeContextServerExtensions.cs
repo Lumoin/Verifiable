@@ -148,5 +148,26 @@ public static class ExchangeContextServerExtensions
             ArgumentNullException.ThrowIfNull(confirmation);
             context[Pipeline.AuthorizationServerHandlers.ConfirmationKey] = confirmation;
         }
+
+
+        /// <summary>
+        /// Gets the issuer URI resolved for the current Authorize request's RFC 9207 §2
+        /// <c>iss</c> redirect parameter, set by
+        /// <c>AuthCodeEndpoints.EvaluateAuthenticationRequirementsAsync</c> during
+        /// <c>BuildInputAsync</c> for consumption by <c>BuildResponse</c> and by the
+        /// authentication-requirements error redirect alike. <see langword="null"/> when
+        /// resolution has not run yet or no usable, shape-valid issuer was found.
+        /// </summary>
+        public Uri? ResolvedIssuer =>
+            context.TryGetValue(Pipeline.AuthorizationServerHandlers.ResolvedIssuerKey, out object? v)
+                && v is Uri issuer ? issuer : null;
+
+        /// <summary>Sets the issuer URI resolved for the current Authorize request's <c>iss</c> redirect parameter.</summary>
+        /// <param name="issuer">The resolved, shape-valid issuer URI.</param>
+        public void SetResolvedIssuer(Uri issuer)
+        {
+            ArgumentNullException.ThrowIfNull(issuer);
+            context[Pipeline.AuthorizationServerHandlers.ResolvedIssuerKey] = issuer;
+        }
     }
 }

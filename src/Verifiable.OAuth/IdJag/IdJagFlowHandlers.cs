@@ -1,10 +1,7 @@
 using System.Diagnostics;
 using Verifiable.Core;
-using Verifiable.Cryptography;
-using Verifiable.JCose;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Client;
-using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.IdJag;
 
@@ -66,7 +63,7 @@ public static class IdJagFlowHandlers
             form[OAuthRequestParameterNames.AuthorizationDetails] = options.AuthorizationDetails;
         }
 
-        await AttachClientAssertionAsync(
+        await ClientTokenEndpointAuthentication.AttachClientAssertionAsync(
             form, registration, tokenEndpoint, options.SigningKey, options.SigningKeyId,
             options.HeaderSerializer, options.PayloadSerializer, options.ClientAssertionLifetime,
             infrastructure, now, context, cancellationToken).ConfigureAwait(false);
@@ -107,7 +104,7 @@ public static class IdJagFlowHandlers
             [OAuthRequestParameterNames.Assertion] = options.Assertion
         };
 
-        await AttachClientAssertionAsync(
+        await ClientTokenEndpointAuthentication.AttachClientAssertionAsync(
             form, registration, tokenEndpoint, options.SigningKey, options.SigningKeyId,
             options.HeaderSerializer, options.PayloadSerializer, options.ClientAssertionLifetime,
             infrastructure, now, context, cancellationToken).ConfigureAwait(false);
@@ -116,47 +113,5 @@ public static class IdJagFlowHandlers
             tokenEndpoint, form, OutgoingHeaders.Empty, context, cancellationToken).ConfigureAwait(false);
 
         return infrastructure.ParseTokenResponseAsync(response, now);
-    }
-
-
-    /// <summary>
-    /// Adds the confidential-client authentication parameters — <c>client_id</c>,
-    /// <c>client_assertion_type</c>, and a freshly-signed <c>private_key_jwt</c> <c>client_assertion</c>
-    /// (RFC 7523 §2.2) bound to the token endpoint — to a token-endpoint request form.
-    /// </summary>
-    private static async ValueTask AttachClientAssertionAsync(
-        OutgoingFormFields form,
-        ClientRegistration registration,
-        Uri tokenEndpoint,
-        PrivateKeyMemory signingKey,
-        string signingKeyId,
-        JwtHeaderSerializer headerSerializer,
-        JwtPayloadSerializer payloadSerializer,
-        TimeSpan clientAssertionLifetime,
-        OAuthClientInfrastructure infrastructure,
-        DateTimeOffset now,
-        ExchangeContext context,
-        CancellationToken cancellationToken)
-    {
-        string jti = await infrastructure.GenerateIdentifierAsync(
-            WellKnownIdentifierPurposes.OAuthJti, context, cancellationToken).ConfigureAwait(false);
-
-        string clientAssertion = await ClientAssertionSigning.SignAsync(
-            registration.ClientId.Value,
-            tokenEndpoint.OriginalString,
-            jti,
-            now,
-            now.Add(clientAssertionLifetime),
-            signingKey,
-            signingKeyId,
-            headerSerializer,
-            payloadSerializer,
-            infrastructure.Base64UrlEncoder,
-            infrastructure.MemoryPool,
-            cancellationToken).ConfigureAwait(false);
-
-        form[OAuthRequestParameterNames.ClientId] = registration.ClientId.Value;
-        form[OAuthRequestParameterNames.ClientAssertionType] = WellKnownClientAssertionTypes.JwtBearer;
-        form[OAuthRequestParameterNames.ClientAssertion] = clientAssertion;
     }
 }

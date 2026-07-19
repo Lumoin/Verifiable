@@ -31,9 +31,9 @@ namespace Verifiable.OAuth.Client;
 /// </para>
 /// <para>
 /// Fields not yet modelled here (the human-facing localised fields like
-/// <c>logo_uri</c>, <c>tos_uri</c>, <c>policy_uri</c>, <c>contacts</c>,
-/// <c>client_name#xx</c> locale variants) land when their flows arrive.
-/// The fields below cover the protocol-significant set.
+/// <c>tos_uri</c>, <c>policy_uri</c>, <c>contacts</c>, <c>client_name#xx</c>
+/// locale variants) land when their flows arrive. The fields below cover
+/// the protocol-significant set.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ClientMetadata ClientName={ClientName}")]
@@ -48,6 +48,13 @@ public sealed record ClientMetadata
     /// Web page describing the client. RFC 7591 §2 <c>client_uri</c>.
     /// </summary>
     public Uri? ClientUri { get; init; }
+
+    /// <summary>
+    /// URL that references a logo for the client. When present, the server
+    /// SHOULD display this image to the end user during authorization.
+    /// RFC 7591 §2 <c>logo_uri</c>.
+    /// </summary>
+    public Uri? LogoUri { get; init; }
 
     /// <summary>
     /// Redirect URIs registered for this client. RFC 7591 §2 <c>redirect_uris</c>.
@@ -123,6 +130,18 @@ public sealed record ClientMetadata
     /// <c>Verifiable.OAuth.Json</c> boundary.
     /// </remarks>
     public string? Jwks { get; init; }
+
+    /// <summary>
+    /// A software statement containing client metadata values about the
+    /// client software as claims, carried as the entire signed JWT in
+    /// compact serialization. RFC 7591 §2.3 <c>software_statement</c>.
+    /// </summary>
+    /// <remarks>
+    /// Verifying the statement's signature and evaluating its claims is out
+    /// of scope for this type — it is carried opaque so callers that need a
+    /// trust decision from it validate the JWT separately.
+    /// </remarks>
+    public string? SoftwareStatement { get; init; }
 
 
     //OIDC Dynamic Registration 1.0 fields (extends RFC 7591).

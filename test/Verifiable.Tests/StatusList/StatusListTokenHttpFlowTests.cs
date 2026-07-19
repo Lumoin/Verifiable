@@ -69,7 +69,7 @@ internal sealed class StatusListTokenHttpFlowTests
         string compactJwt = await StatusListTokenJwtFixtures.IssueJwtAsync(token, issuerPrivate, KeyId, TestContext.CancellationToken).ConfigureAwait(false);
         host.Publish("/statuslist/1", Encoding.ASCII.GetBytes(compactJwt), StatusListMediaTypes.StatusListJwtContentType);
 
-        using HttpClient httpClient = new();
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(host.Certificate);
         var fetchedTokens = new List<StatusListToken>();
 
         ResolveVerifiedStatusListTokenDelegate resolve = async (uri, cancellationToken) =>
@@ -129,7 +129,7 @@ internal sealed class StatusListTokenHttpFlowTests
         ReadOnlyMemory<byte> cwtBytes = await StatusListTokenCwtFixtures.IssueCwtAsync(token, issuerPrivate, TestContext.CancellationToken).ConfigureAwait(false);
         host.Publish("/statuslist/1", cwtBytes, StatusListMediaTypes.StatusListCwt);
 
-        using HttpClient httpClient = new();
+        using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(host.Certificate);
         StatusListToken? fetchedToken = null;
 
         try

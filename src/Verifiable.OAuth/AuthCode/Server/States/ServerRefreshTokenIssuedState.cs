@@ -35,8 +35,28 @@ public sealed record ServerRefreshTokenIssuedState: FlowState
     /// <summary>The opaque refresh-token string. Wire form.</summary>
     public required string RefreshToken { get; init; }
 
+    /// <summary>
+    /// The wire <c>grant_type</c> that first minted this refresh-token chain, carried
+    /// verbatim across rotation. Only <c>authorization_code</c> marks the chain as
+    /// continuing a genuine End-User authentication event; every other origin
+    /// (<c>client_credentials</c>, <c>token_exchange</c>, <c>jwt_bearer</c>,
+    /// <c>pre_authorized_code</c>) is non-End-User and MUST NOT yield a default
+    /// id_token on redemption. Values are the <see cref="WellKnownGrantTypes"/> constants.
+    /// </summary>
+    public required string OriginatingGrantType { get; init; }
+
     /// <summary>The UTC instant the refresh token was issued.</summary>
     public required DateTimeOffset IssuedAt { get; init; }
+
+    /// <summary>
+    /// The OP session identifier (<c>sid</c>) established at the original authentication,
+    /// carried verbatim across rotation so a refreshed ID Token keeps the same <c>sid</c> claim,
+    /// per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#RefreshTokenResponse">OIDC
+    /// Core §12.2</see>, which requires the same rules to apply as at original authentication.
+    /// <see langword="null"/> when no session was established.
+    /// </summary>
+    public string? SessionId { get; init; }
 
     /// <summary>
     /// The subject identifier the refresh token was issued for. Becomes

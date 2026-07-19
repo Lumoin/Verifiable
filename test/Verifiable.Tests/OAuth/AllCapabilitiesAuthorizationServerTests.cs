@@ -90,7 +90,8 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
             WellKnownCapabilityIdentifiers.OAuthGlobalTokenRevocation,
             WellKnownCapabilityIdentifiers.OidcRpInitiatedLogout,
             WellKnownCapabilityIdentifiers.OidcBackChannelLogout,
-            WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata);
+            WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata,
+            WellKnownCapabilityIdentifiers.OAuthClientIdMetadataDocument);
 
     /// <summary>The token-AS capabilities plus the OID4VP-verifier and Federation roles, all co-registered.</summary>
     private static ImmutableHashSet<CapabilityIdentifier> TokenServerWithPresentationAndFederation { get; } =
@@ -137,6 +138,13 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
         host.Server.OAuth().DeliverBackChannelLogoutAsync = static (_, _, _, _, _) =>
             ValueTask.CompletedTask;
 
+        //CIMD: capability + the resolver seam advertise client_id_metadata_document_supported.
+        //Discovery emission only checks the seam for non-null-ness (privacy §9.1 — discovery
+        //requests never trigger a client-document fetch), so a throwing lambda proves that.
+        host.Server.OAuth().ResolveClientMetadataAsync = (uri, context, ct) =>
+            throw new NotImplementedException(
+                "Discovery emission only checks ResolveClientMetadataAsync for non-null-ness; it must never invoke it.");
+
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.MetadataDiscovery,
@@ -176,6 +184,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
             "scopes_supported",
             "claims_supported",
             "claim_types_supported",
+            "client_id_metadata_document_supported",
         ];
         foreach(string field in expectedPresent)
         {
@@ -219,6 +228,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
             "scopes_supported",
             "claims_supported",
             "claim_types_supported",
+            "client_id_metadata_document_supported",
         };
         foreach(JsonProperty prop in root.EnumerateObject())
         {
@@ -376,6 +386,18 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
         using JsonDocument refreshDoc = JsonDocument.Parse(refreshResponse.Body);
         Assert.IsTrue(refreshDoc.RootElement.TryGetProperty("access_token", out _),
             $"The refresh_token grant must return a fresh access_token. Body: {refreshResponse.Body}");
+
+        //Positive control for the wave-4 grant-identity invariant: this refresh token
+        //originates from the authorization_code grant (not token_exchange), so per
+        //Oidc10IdTokenProducer.IsApplicableAsync the redemption must still mint an
+        //id_token — contrast TokenExchangeGrantTests
+        //.RefreshTokenMintedByTokenExchangeNeverYieldsIdTokenOnRedemption, where a
+        //token_exchange-originated refresh must NOT. Without this assertion, a
+        //regression that drops id_token issuance from the authorization_code-origin
+        //refresh walk would go undetected.
+        Assert.IsTrue(refreshDoc.RootElement.TryGetProperty("id_token", out _),
+            $"The refresh token originates from the authorization_code grant and openid was requested, " +
+            $"so the refresh_token grant must still return an id_token. Body: {refreshResponse.Body}");
     }
 
 
