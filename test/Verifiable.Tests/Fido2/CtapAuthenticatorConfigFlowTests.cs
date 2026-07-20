@@ -70,8 +70,9 @@ internal sealed class CtapAuthenticatorConfigFlowTests
 
         //Unprotected, alwaysUv currently false: the shared prologue's gate never applies at all (neither
         //protected nor alwaysUv) -- a completely tokenless enable.
-        await SendAuthenticatorConfigAsync(
-            harness.Transceive, new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.ToggleAlwaysUv), pool, cancellationToken)
+        await CtapAuthenticatorConfigClient.AuthenticatorConfigAsync(
+            harness.Transceive, CtapAuthenticatorConfigRequestCborWriter.Write,
+            new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.ToggleAlwaysUv), pool, cancellationToken)
             .ConfigureAwait(false);
 
         CtapGetInfoResponse infoAfterEnable = await GetInfoAsync(harness.Transceive, pool, cancellationToken).ConfigureAwait(false);
@@ -116,8 +117,8 @@ internal sealed class CtapAuthenticatorConfigFlowTests
         byte[] disableMessage = CtapWaveConfigFixtures.BuildMessage(WellKnownCtapAuthenticatorConfigSubCommands.ToggleAlwaysUv, ReadOnlyMemory<byte>.Empty);
         byte[] disableParam = await CtapWaveConfigFixtures.ComputeSignatureAsync(token, CtapPinUvAuthProtocolId.Two, disableMessage, pool, cancellationToken)
             .ConfigureAwait(false);
-        await SendAuthenticatorConfigAsync(
-            harness.Transceive,
+        await CtapAuthenticatorConfigClient.AuthenticatorConfigAsync(
+            harness.Transceive, CtapAuthenticatorConfigRequestCborWriter.Write,
             new CtapAuthenticatorConfigRequest(
                 SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.ToggleAlwaysUv, PinUvAuthProtocol: (int)CtapPinUvAuthProtocolId.Two,
                 PinUvAuthParam: disableParam),
@@ -353,25 +354,6 @@ internal sealed class CtapAuthenticatorConfigFlowTests
 
 
     /// <summary>
-    /// Sends an <c>authenticatorConfig</c> request over <paramref name="transceive"/>'s real transport,
-    /// throwing <see cref="CtapCommandException"/> for a non-success status -- reaching the caller's next
-    /// line is itself the wire proof of <c>CTAP2_OK</c>.
-    /// </summary>
-    private static async Task SendAuthenticatorConfigAsync(
-        Ctap2TransceiveDelegate transceive, CtapAuthenticatorConfigRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
-    {
-        byte[] envelope = CtapWaveConfigFixtures.BuildAuthenticatorConfigEnvelope(request);
-        using PooledMemory response = await transceive(envelope, pool, cancellationToken).ConfigureAwait(false);
-
-        byte statusCode = response.AsReadOnlySpan()[0];
-        if(!WellKnownCtapStatusCodes.IsOk(statusCode))
-        {
-            throw new CtapCommandException(statusCode);
-        }
-    }
-
-
-    /// <summary>
     /// Builds and sends a <c>setMinPINLength</c> request over <paramref name="transceive"/>'s real
     /// transport, computing the platform-side <c>pinUvAuthParam</c> over the SAME <c>subCommandParams</c>
     /// bytes the request will carry.
@@ -390,6 +372,7 @@ internal sealed class CtapAuthenticatorConfigFlowTests
             SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.SetMinPinLength, NewMinPinLength: newMinPinLength,
             PinUvAuthProtocol: (int)protocolId, PinUvAuthParam: param);
 
-        await SendAuthenticatorConfigAsync(transceive, request, pool, cancellationToken).ConfigureAwait(false);
+        await CtapAuthenticatorConfigClient.AuthenticatorConfigAsync(
+            transceive, CtapAuthenticatorConfigRequestCborWriter.Write, request, pool, cancellationToken).ConfigureAwait(false);
     }
 }

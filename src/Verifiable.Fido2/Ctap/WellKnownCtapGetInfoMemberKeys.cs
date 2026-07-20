@@ -37,6 +37,22 @@ public static class WellKnownCtapGetInfoMemberKeys
     public const int PinUvAuthProtocols = 0x06;
 
     /// <summary>
+    /// The <c>maxCredentialCountInList</c> member (<c>0x07</c>, Optional): the maximum number of
+    /// credentials supported in a <c>credentialID</c> list (<c>excludeList</c>/<c>allowList</c>) at a
+    /// time by this authenticator. MUST be greater than zero if present (CTAP 2.3, snapshot lines
+    /// 4405-4409).
+    /// </summary>
+    public const int MaxCredentialCountInList = 0x07;
+
+    /// <summary>
+    /// The <c>algorithms</c> member (<c>0x0A</c>, Optional): the list of supported algorithms for
+    /// credential generation, an array of <c>PublicKeyCredentialParameters</c> ordered from most
+    /// preferred to least preferred. MUST NOT include duplicate entries nor be empty if present (CTAP
+    /// 2.3, snapshot lines 4424-4427).
+    /// </summary>
+    public const int Algorithms = 0x0A;
+
+    /// <summary>
     /// The <c>maxSerializedLargeBlobArray</c> member (<c>0x0B</c>, Optional): the maximum size, in
     /// bytes, of the serialized large-blob array this authenticator can store. MUST be specified iff
     /// <c>authenticatorLargeBlobs</c> is supported (line 4434), and MUST be ≥ 1024 when present (line
@@ -56,6 +72,14 @@ public static class WellKnownCtapGetInfoMemberKeys
     /// Unicode code points, enforced for ClientPIN.
     /// </summary>
     public const int MinPinLength = 0x0D;
+
+    /// <summary>
+    /// The <c>firmwareVersion</c> member (<c>0x0E</c>, Optional): the firmware version of the
+    /// authenticator model identified by <c>aaguid</c>. Whenever releasing any code change to the
+    /// authenticator firmware, the authenticator MUST increase this version (CTAP 2.3, snapshot lines
+    /// 4469-4475).
+    /// </summary>
+    public const int FirmwareVersion = 0x0E;
 
     /// <summary>
     /// The <c>maxRPIDsForSetMinPINLength</c> member (<c>0x10</c>, Optional): the maximum number of RP
@@ -117,6 +141,16 @@ public static class WellKnownCtapGetInfoMemberKeys
     /// <returns><see langword="true"/> if <paramref name="key"/> is the <c>pinUvAuthProtocols</c> key.</returns>
     public static bool IsPinUvAuthProtocols(int key) => key == PinUvAuthProtocols;
 
+    /// <summary>Gets a value indicating whether <paramref name="key"/> is <see cref="MaxCredentialCountInList"/>.</summary>
+    /// <param name="key">The response map key to check.</param>
+    /// <returns><see langword="true"/> if <paramref name="key"/> is the <c>maxCredentialCountInList</c> key.</returns>
+    public static bool IsMaxCredentialCountInList(int key) => key == MaxCredentialCountInList;
+
+    /// <summary>Gets a value indicating whether <paramref name="key"/> is <see cref="Algorithms"/>.</summary>
+    /// <param name="key">The response map key to check.</param>
+    /// <returns><see langword="true"/> if <paramref name="key"/> is the <c>algorithms</c> key.</returns>
+    public static bool IsAlgorithms(int key) => key == Algorithms;
+
     /// <summary>Gets a value indicating whether <paramref name="key"/> is <see cref="MaxSerializedLargeBlobArray"/>.</summary>
     /// <param name="key">The response map key to check.</param>
     /// <returns><see langword="true"/> if <paramref name="key"/> is the <c>maxSerializedLargeBlobArray</c> key.</returns>
@@ -131,6 +165,11 @@ public static class WellKnownCtapGetInfoMemberKeys
     /// <param name="key">The response map key to check.</param>
     /// <returns><see langword="true"/> if <paramref name="key"/> is the <c>minPINLength</c> key.</returns>
     public static bool IsMinPinLength(int key) => key == MinPinLength;
+
+    /// <summary>Gets a value indicating whether <paramref name="key"/> is <see cref="FirmwareVersion"/>.</summary>
+    /// <param name="key">The response map key to check.</param>
+    /// <returns><see langword="true"/> if <paramref name="key"/> is the <c>firmwareVersion</c> key.</returns>
+    public static bool IsFirmwareVersion(int key) => key == FirmwareVersion;
 
     /// <summary>Gets a value indicating whether <paramref name="key"/> is <see cref="MaxRpIdsForSetMinPinLength"/>.</summary>
     /// <param name="key">The response map key to check.</param>

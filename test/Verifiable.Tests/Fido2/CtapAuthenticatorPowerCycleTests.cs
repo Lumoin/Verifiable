@@ -35,8 +35,9 @@ internal sealed class CtapAuthenticatorPowerCycleTests
     /// 2.3 §7.2.3/§7.4.3 revert these only "after an authenticator reset",
     /// <see cref="CtapAuthenticatorState.FactoryReset"/>'s own concern) while clearing the
     /// consecutive-mismatch counter and the power-cycle latch, refreshing both PIN/UV auth protocols'
-    /// key-agreement key pairs and pinUvAuthTokens, and leaving the AAGUID, advertised extensions,
-    /// resident-credential capacity, credential store, and credential sequence counter untouched.
+    /// key-agreement key pairs and pinUvAuthTokens, and leaving the AAGUID, <c>firmwareVersion</c> (R7:
+    /// device identity, the AAGUID analogy), advertised extensions, resident-credential capacity,
+    /// credential store, and credential sequence counter untouched.
     /// </summary>
     [TestMethod]
     public void PowerCyclePreservesPinConfigurationClearsTheLatchAndRefreshesKeyMaterial()
@@ -47,7 +48,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
         DigestValue storedPin = BuildFixedDigest(0x77, 16, pool);
 
         CtapAuthenticatorState before = CtapAuthenticatorState.Initial(
-            aaguid, now, supportedExtensions: ["hmac-secret"], residentCredentialCapacity: 5, keyAgreementPool: pool) with
+            aaguid, now, supportedExtensions: ["hmac-secret"], residentCredentialCapacity: 5, keyAgreementPool: pool, firmwareVersion: 7) with
         {
             CurrentStoredPin = storedPin,
             PinCodePointLength = 6,
@@ -69,6 +70,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
         CtapAuthenticatorState after = before.PowerCycle(now, pool);
 
         Assert.AreEqual(aaguid, after.Aaguid, "AAGUID must never change across a power cycle.");
+        Assert.AreEqual(7, after.FirmwareVersion, "firmwareVersion is device identity, like the AAGUID, and survives a power cycle unchanged.");
         Assert.AreSame(before.SupportedExtensions, after.SupportedExtensions, "Advertised extensions are a personalization knob, unaffected by a power cycle.");
         Assert.AreEqual(5, after.ResidentCredentialCapacity);
         Assert.AreSame(before.CredentialsByCredentialId, after.CredentialsByCredentialId, "The credential store must be untouched by a power cycle.");

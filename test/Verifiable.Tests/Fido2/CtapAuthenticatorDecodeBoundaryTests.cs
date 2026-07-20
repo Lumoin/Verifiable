@@ -339,10 +339,13 @@ internal sealed class CtapAuthenticatorDecodeBoundaryTests
     /// <summary>
     /// TORN row 8760: "By default, authenticators MUST support messages of at least 1024 bytes"
     /// (snapshot line 8760). A single <c>authenticatorMakeCredential</c> request whose <c>excludeList</c>
-    /// carries 25 credential descriptors pushes the TOTAL encoded CTAP message (command byte + CBOR
-    /// parameters, measured directly from the writer's own output, not a per-fragment size) past 1024
-    /// bytes; driven end to end over <see cref="CtapWave2TransportHarness"/>'s real, unmodified APDU
-    /// transport, the request succeeds (a fresh, non-excluded credential mints normally).
+    /// carries exactly 8 credential descriptors — <see cref="CtapAuthenticatorState.MaxCredentialCountInListCapacity"/>,
+    /// never above it (R5's <c>LimitExceeded</c> enforcement caps <c>excludeList</c> at that count) —
+    /// each with a 128-byte credential ID (legal: <c>AuthenticatorDataWriter</c>'s own credential-ID
+    /// ceiling is 1023 bytes) pushes the TOTAL encoded CTAP message (command byte + CBOR parameters,
+    /// measured directly from the writer's own output, not a per-fragment size) past 1024 bytes; driven
+    /// end to end over <see cref="CtapWave2TransportHarness"/>'s real, unmodified APDU transport, the
+    /// request succeeds (a fresh, non-excluded credential mints normally).
     /// </summary>
     [TestMethod]
     public async Task MakeCredentialWithAtLeast1024ByteTotalMessageSucceedsOverRealApduTransport()
@@ -354,12 +357,12 @@ internal sealed class CtapAuthenticatorDecodeBoundaryTests
         using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken);
 
         var excludeList = new System.Collections.Generic.List<PublicKeyCredentialDescriptor>();
-        for(int i = 0; i < 25; i++)
+        for(int i = 0; i < CtapAuthenticatorState.MaxCredentialCountInListCapacity; i++)
         {
             excludeList.Add(new PublicKeyCredentialDescriptor
             {
                 Type = WellKnownPublicKeyCredentialTypes.PublicKey,
-                Id = CredentialId.Create(CtapWave2AuthenticatorFixtures.BuildFixedBytes(32, (byte)i), pool)
+                Id = CredentialId.Create(CtapWave2AuthenticatorFixtures.BuildFixedBytes(128, (byte)i), pool)
             });
         }
 

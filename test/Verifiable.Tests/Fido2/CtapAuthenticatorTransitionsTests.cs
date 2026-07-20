@@ -299,6 +299,125 @@ internal sealed class CtapAuthenticatorTransitionsTests
     }
 
 
+    /// <summary>
+    /// <c>maxCredentialCountInList</c> (member <c>0x07</c>, R5's surface half) is populated
+    /// UNCONDITIONALLY with <see cref="CtapAuthenticatorState.MaxCredentialCountInListCapacity"/> — the
+    /// same fixed constant mc's excludeList/ga's allowList bound check enforces (PKG-A) — and is
+    /// strictly greater than zero, satisfying CTAP 2.3 snapshot lines 4405-4409's "MUST be greater than
+    /// zero if present".
+    /// </summary>
+    [TestMethod]
+    public async Task GetInfoRequestedAdvertisesMaxCredentialCountInListUnconditionallyAndGreaterThanZero()
+    {
+        var automaton = BuildAutomaton(Guid.NewGuid());
+
+        await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
+
+        var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
+        Assert.AreEqual(CtapAuthenticatorState.MaxCredentialCountInListCapacity, intent.Response.MaxCredentialCountInList);
+        Assert.IsTrue(intent.Response.MaxCredentialCountInList > 0);
+    }
+
+
+    /// <summary>
+    /// The <c>algorithms</c> member (<c>0x0A</c>, R6) advertises exactly <c>[{alg: ES256, type:
+    /// "public-key"}]</c> when <see cref="GetInfoRequested.SupportedAlgorithms"/> carries the ES256-only
+    /// default backend's supported set — the population path
+    /// <see cref="Verifiable.Fido2.Ctap.Authenticator.Automata.CtapAuthenticatorSimulator"/> threads from
+    /// <c>CredentialSigningBackend?.SupportedAlgorithms</c> at decode time (the :672 precedent).
+    /// </summary>
+    [TestMethod]
+    public async Task GetInfoRequestedAdvertisesAlgorithmsFromDefaultEs256Backend()
+    {
+        var automaton = BuildAutomaton(Guid.NewGuid());
+
+        await automaton.StepAsync(new GetInfoRequested(SupportedAlgorithms: [WellKnownCoseAlgorithms.Es256]), TestContext.CancellationToken);
+
+        var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
+        Assert.IsNotNull(intent.Response.Algorithms);
+        Assert.HasCount(1, intent.Response.Algorithms!);
+        Assert.AreEqual(WellKnownCoseAlgorithms.Es256, intent.Response.Algorithms![0].Alg);
+        Assert.AreEqual(WellKnownPublicKeyCredentialTypes.PublicKey, intent.Response.Algorithms![0].Type);
+    }
+
+
+    /// <summary>
+    /// A backend advertising a duplicate algorithm identifier is de-duplicated while PRESERVING
+    /// first-occurrence (most-to-least-preferred) order — CTAP 2.3, snapshot lines 4424-4427: "MUST NOT
+    /// include duplicate entries". <c>[ES256, ES384, ES256]</c> advertises <c>[ES256, ES384]</c>, not
+    /// three entries and not <c>[ES384, ES256]</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task GetInfoRequestedDeduplicatesAlgorithmsPreservingFirstOccurrenceOrder()
+    {
+        var automaton = BuildAutomaton(Guid.NewGuid());
+
+        await automaton.StepAsync(
+            new GetInfoRequested(SupportedAlgorithms: [WellKnownCoseAlgorithms.Es256, WellKnownCoseAlgorithms.Es384, WellKnownCoseAlgorithms.Es256]),
+            TestContext.CancellationToken);
+
+        var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
+        Assert.IsNotNull(intent.Response.Algorithms);
+        Assert.HasCount(2, intent.Response.Algorithms!);
+        Assert.AreEqual(WellKnownCoseAlgorithms.Es256, intent.Response.Algorithms![0].Alg);
+        Assert.AreEqual(WellKnownCoseAlgorithms.Es384, intent.Response.Algorithms![1].Alg);
+    }
+
+
+    /// <summary>
+    /// The <c>algorithms</c> member is OMITTED entirely — <see langword="null"/>, never an empty array —
+    /// when no credential-signing backend is injected (<see cref="GetInfoRequested.SupportedAlgorithms"/>
+    /// is <see langword="null"/>, the default): CTAP 2.3, snapshot lines 4424-4427's "MUST NOT... be
+    /// empty if present" is satisfied by never presenting an empty array.
+    /// </summary>
+    [TestMethod]
+    public async Task GetInfoRequestedOmitsAlgorithmsWhenNoSupportedAlgorithmsSupplied()
+    {
+        var automaton = BuildAutomaton(Guid.NewGuid());
+
+        await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
+
+        var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
+        Assert.IsNull(intent.Response.Algorithms);
+    }
+
+
+    /// <summary>
+    /// <c>firmwareVersion</c> (member <c>0x0E</c>, R7) is populated unconditionally: a default-constructed
+    /// state (<see cref="CtapAuthenticatorState.Initial"/>'s own <c>firmwareVersion = 1</c> seed default)
+    /// reports exactly <c>1</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task GetInfoRequestedAdvertisesFirmwareVersionSeedDefault()
+    {
+        var automaton = BuildAutomaton(Guid.NewGuid());
+
+        await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
+
+        var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
+        Assert.AreEqual(1, intent.Response.FirmwareVersion);
+    }
+
+
+    /// <summary>
+    /// A non-default <c>firmwareVersion</c> seeded at construction (<see cref="CtapAuthenticatorState.Initial"/>'s
+    /// own <c>firmwareVersion</c> parameter) appears verbatim in the getInfo response — proving the value
+    /// genuinely flows from state rather than a hardcoded literal.
+    /// </summary>
+    [TestMethod]
+    public async Task GetInfoRequestedAdvertisesConfiguredFirmwareVersion()
+    {
+        Guid aaguid = Guid.NewGuid();
+        CtapAuthenticatorState initialState = CtapAuthenticatorState.Initial(aaguid, TestClock.CanonicalEpoch, firmwareVersion: 42);
+        var automaton = BuildAutomaton(aaguid, initialState: initialState);
+
+        await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
+
+        var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
+        Assert.AreEqual(42, intent.Response.FirmwareVersion);
+    }
+
+
     /// <summary>Builds a 16-byte identifier with a fixed, iteration-distinguishable pattern seeded by <paramref name="seed"/>.</summary>
     private static byte[] BuildFixedIdentifierBytes(byte seed, int iteration)
     {

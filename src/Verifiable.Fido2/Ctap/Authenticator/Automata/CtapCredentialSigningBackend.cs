@@ -67,9 +67,14 @@ public sealed record CtapCredentialKeyPair(CoseKey PublicKey, PrivateKey Private
 /// injected.
 /// </remarks>
 /// <param name="SupportedAlgorithms">
-/// The COSE algorithm identifiers this backend can mint a credential key for, in no particular
-/// preference order (the request's own <c>pubKeyCredParams</c> ordering decides "first-supported-wins" —
-/// this list only decides membership).
+/// The COSE algorithm identifiers this backend can mint a credential key for. For
+/// <c>authenticatorMakeCredential</c>'s own pubKeyCredParams algorithm-selection loop, this list only
+/// decides MEMBERSHIP — the request's own <c>pubKeyCredParams</c> ordering decides "first-supported-
+/// wins", this list's order is irrelevant there. For <c>authenticatorGetInfo</c>'s <c>algorithms</c>
+/// (<c>0x0A</c>) member (R6), this list's own order ALSO becomes the advertised most-preferred-to-
+/// least-preferred order (CTAP 2.3, snapshot lines 4424-4427) — a caller composing a backend with more
+/// than one supported algorithm is choosing the getInfo advertisement order by the order it lists them
+/// here.
 /// </param>
 /// <param name="GenerateCredentialKeyPair">Generates a fresh credential key pair for a chosen algorithm.</param>
 public sealed record CtapCredentialSigningBackend(

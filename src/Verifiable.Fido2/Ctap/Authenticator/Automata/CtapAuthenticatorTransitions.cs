@@ -2,9 +2,11 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
+using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Foundation.Automata;
 using Verifiable.JCose;
@@ -45,6 +47,16 @@ public static class CtapAuthenticatorTransitions
     /// strictest honest reading available to a transport-agnostic authenticator.
     /// </remarks>
     private static TimeSpan GetNextAssertionTimerDuration => TimeSpan.FromSeconds(30);
+
+
+    /// <summary>
+    /// The user action timeout (CTAP 2.3 :2840): "This refers to a timeout that occurs when the
+    /// authenticator is waiting for direct action from the user, like a touch. (I.e. not a command from
+    /// the platform.) The duration of this timeout is chosen by the authenticator but MUST be at least
+    /// 10 seconds. Thirty seconds is a reasonable value." Checked against a parked
+    /// <see cref="CtapPendingUserPresenceState.ArmedAt"/> on every <see cref="UserPresencePollRequested"/>.
+    /// </summary>
+    private static TimeSpan UserActionTimeoutDuration => TimeSpan.FromSeconds(30);
 
 
     /// <summary>
@@ -107,9 +119,21 @@ public static class CtapAuthenticatorTransitions
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            //Supersede discipline (R2): ANY new command input arriving while a user-presence wait is
+            //parked discards it first (disposing its parked request's carriers), then processes
+            //normally. The three inputs that legitimately RESUME a parked wait are exempted — every
+            //other input type only ever reaches this dispatch with a non-null PendingUserPresenceWait
+            //when it is genuinely superseding one (a wait armed earlier in THIS call would already have
+            //exited the effectful loop before any other input could be fed in).
+            if(state.PendingUserPresenceWait is not null
+                && input is not (UserPresenceDecisionCollected or UserPresencePollRequested or UserPresenceCancelRequested))
+            {
+                state = DiscardPendingUserPresenceWait(state);
+            }
+
             TransitionResult<CtapAuthenticatorState, CtapAuthenticatorStackSymbol> result = input switch
             {
-                GetInfoRequested => Respond(
+                GetInfoRequested requested => Respond(
                     DiscardAllRememberedSequences(state),
                     new GetInfoResponseReady(BuildGetInfoResponse(
                         state.Aaguid,
@@ -121,7 +145,9 @@ public static class CtapAuthenticatorTransitions
                         remainingDiscoverableCredentials: state.ResidentCredentialCapacity - CountResidentCredentials(state.CredentialsByCredentialId),
                         hasProvisionedBioEnrollments: state.HasProvisionedBioEnrollments,
                         isEnterpriseAttestationCapable: state.IsEnterpriseAttestationCapable,
-                        isEnterpriseAttestationEnabled: state.IsEnterpriseAttestationEnabled)),
+                        isEnterpriseAttestationEnabled: state.IsEnterpriseAttestationEnabled,
+                        supportedAlgorithms: requested.SupportedAlgorithms,
+                        firmwareVersion: state.FirmwareVersion)),
                     "GetInfo"),
                 MakeCredentialRequested requested => OnMakeCredentialRequested(state, requested),
                 GetAssertionRequested requested => OnGetAssertionRequested(state, requested),
@@ -151,6 +177,9 @@ public static class CtapAuthenticatorTransitions
                 LargeBlobsRequested requested => OnLargeBlobsRequested(state, requested),
                 CtapLargeBlobArrayCommitAttempted attempted => OnLargeBlobArrayCommitAttempted(state, attempted),
                 UnsupportedCtapCommandReceived unsupported => Respond(DiscardAllRememberedSequences(state), new UnsupportedCommandResponse(unsupported.CommandByte), "UnsupportedCommand"),
+                UserPresenceDecisionCollected collected => OnUserPresenceDecisionCollected(state, collected),
+                UserPresencePollRequested polled => OnUserPresencePollRequested(state, polled),
+                UserPresenceCancelRequested => Reject(DiscardPendingUserPresenceWait(state), WellKnownCtapStatusCodes.KeepaliveCancel, "UserPresence:Cancel"),
                 _ => throw new NotSupportedException($"No transition is defined for input '{input.GetType().Name}'.")
             };
 
@@ -276,6 +305,38 @@ public static class CtapAuthenticatorTransitions
 
 
     /// <summary>
+    /// Discards a parked <c>authenticatorMakeCredential</c>/<c>authenticatorGetAssertion</c>
+    /// user-presence wait, if any, disposing its parked request's carriers (R2) — the choke point every
+    /// TERMINAL discard path (denied, poll timeout, cancel, supersede, <see cref="CtapAuthenticatorState.PowerCycle"/>,
+    /// <see cref="CtapAuthenticatorState.FactoryReset"/>) shares. Never called on a
+    /// <see cref="CtapUserPresenceDecision.Granted"/> resume — see <see cref="ClearPendingUserPresenceWait"/>.
+    /// </summary>
+    private static CtapAuthenticatorState DiscardPendingUserPresenceWait(CtapAuthenticatorState state)
+    {
+        if(state.PendingUserPresenceWait is null)
+        {
+            return state;
+        }
+
+        state.PendingUserPresenceWait.Dispose();
+
+        return state with { PendingUserPresenceWait = null };
+    }
+
+
+    /// <summary>
+    /// Clears a resolved user-presence wait WITHOUT disposing its parked request's carriers (R2, trap
+    /// 2): a <see cref="CtapUserPresenceDecision.Granted"/> decision resumes <c>ContinueMakeCredential</c>/
+    /// <c>ContinueGetAssertion</c> using those SAME still-live carriers (and the credential-generation/
+    /// assertion-signing effect that follows reads them again later in the same effectful loop) — disposing
+    /// them here would be a use-after-dispose. The simulator's own deferred entry points dispose them once
+    /// the resumed command's own effectful loop finally completes.
+    /// </summary>
+    private static CtapAuthenticatorState ClearPendingUserPresenceWait(CtapAuthenticatorState state) =>
+        state with { PendingUserPresenceWait = null };
+
+
+    /// <summary>
     /// Discards an in-progress <c>authenticatorBioEnrollment</c> enrollment, if any, disposing its
     /// not-yet-persisted template identifier. UNLIKE <see cref="DiscardAllRememberedSequences"/>'s own
     /// three slots, this is NOT called at the entry of every other command — CTAP 2.3 §6.7 names no
@@ -357,7 +418,13 @@ public static class CtapAuthenticatorTransitions
     /// 4434, is always satisfied since this command is always supported). <c>preferredPlatformUvAttempts</c> =
     /// <see cref="CtapAuthenticatorState.PreferredPlatformUvAttempts"/>; <c>uvModality</c> =
     /// <see cref="CtapAuthenticatorState.UvModality"/> — both single-sourced static getters, always
-    /// present.
+    /// present. <c>maxCredentialCountInList</c> (<c>0x07</c>) =
+    /// <see cref="CtapAuthenticatorState.MaxCredentialCountInListCapacity"/>, ALWAYS emitted (8 &gt; 0
+    /// satisfies the "MUST be greater than zero if present" — the same fixed constant mc's excludeList/
+    /// ga's allowList bound check consumes, single-sourced). <c>algorithms</c> (<c>0x0A</c>) =
+    /// <see cref="BuildAdvertisedAlgorithms(IReadOnlyList{int}?)"/>'s de-duplicated, first-occurrence-order
+    /// view of <paramref name="supportedAlgorithms"/>, omitted when that view is empty. <c>firmwareVersion</c>
+    /// (<c>0x0E</c>) = <paramref name="firmwareVersion"/>, ALWAYS emitted.
     /// </summary>
     /// <param name="aaguid">The authenticator's claimed AAGUID.</param>
     /// <param name="supportedExtensions">The authenticator model's advertised extension identifiers, or <see langword="null"/> to omit the member.</param>
@@ -387,6 +454,18 @@ public static class CtapAuthenticatorTransitions
     /// <paramref name="isEnterpriseAttestationCapable"/>; <c>ep</c>'s tri-state value is
     /// <c>capable ? enabled : null</c> (R9's getInfo half).
     /// </param>
+    /// <param name="supportedAlgorithms">
+    /// The credential-signing backend's supported COSE algorithm identifiers
+    /// (<see cref="GetInfoRequested.SupportedAlgorithms"/>), or <see langword="null"/> when no backend
+    /// is injected. Builds the <c>algorithms</c> (<c>0x0A</c>) member, de-duplicated while preserving
+    /// first-occurrence (most-to-least-preferred) order, and omitted entirely when the effective set is
+    /// empty — CTAP 2.3, snapshot lines 4424-4427: "MUST NOT include duplicate entries nor be empty if
+    /// present."
+    /// </param>
+    /// <param name="firmwareVersion">
+    /// The authenticator's firmware version (<see cref="CtapAuthenticatorState.FirmwareVersion"/>),
+    /// always emitted as the <c>firmwareVersion</c> (<c>0x0E</c>) member.
+    /// </param>
     /// <remarks>
     /// This closes CTAP 2.3 §9's full mandatory-feature set for a <c>FIDO_2_3</c> claimant: <c>hmac-secret</c>
     /// (item 1 — the LAST item to close) is processed end to end (§12.7's mc annotation and ga
@@ -409,7 +488,9 @@ public static class CtapAuthenticatorTransitions
         int remainingDiscoverableCredentials,
         bool hasProvisionedBioEnrollments,
         bool isEnterpriseAttestationCapable,
-        bool isEnterpriseAttestationEnabled) =>
+        bool isEnterpriseAttestationEnabled,
+        IReadOnlyList<int>? supportedAlgorithms,
+        int firmwareVersion) =>
         new(
             Versions: [WellKnownCtapVersions.Fido23],
             Aaguid: aaguid,
@@ -436,7 +517,43 @@ public static class CtapAuthenticatorTransitions
             PreferredPlatformUvAttempts: CtapAuthenticatorState.PreferredPlatformUvAttempts,
             UvModality: CtapAuthenticatorState.UvModality,
             RemainingDiscoverableCredentials: remainingDiscoverableCredentials,
-            AuthenticatorConfigCommands: SupportedAuthenticatorConfigCommands(isEnterpriseAttestationCapable));
+            AuthenticatorConfigCommands: SupportedAuthenticatorConfigCommands(isEnterpriseAttestationCapable),
+            MaxCredentialCountInList: CtapAuthenticatorState.MaxCredentialCountInListCapacity,
+            Algorithms: BuildAdvertisedAlgorithms(supportedAlgorithms),
+            FirmwareVersion: firmwareVersion);
+
+
+    /// <summary>
+    /// Builds the <c>algorithms</c> (<c>0x0A</c>) getInfo member from a credential-signing backend's
+    /// supported COSE algorithm identifiers: each id paired with
+    /// <see cref="WellKnownPublicKeyCredentialTypes.PublicKey"/>, de-duplicated while PRESERVING
+    /// first-occurrence order (the backend's own list order becomes the advertised most-to-least-
+    /// preferred order), and <see langword="null"/> when the effective set is empty — either
+    /// <paramref name="supportedAlgorithms"/> itself is <see langword="null"/> (no credential-signing
+    /// backend injected) or it carries no entries. CTAP 2.3, snapshot lines 4424-4427: "MUST NOT include
+    /// duplicate entries nor be empty if present."
+    /// </summary>
+    /// <param name="supportedAlgorithms">The backend's supported COSE algorithm identifiers, or <see langword="null"/>.</param>
+    /// <returns>The de-duplicated <c>PublicKeyCredentialParameters</c> list, or <see langword="null"/> to omit the member.</returns>
+    private static List<PublicKeyCredentialParameters>? BuildAdvertisedAlgorithms(IReadOnlyList<int>? supportedAlgorithms)
+    {
+        if(supportedAlgorithms is null || supportedAlgorithms.Count == 0)
+        {
+            return null;
+        }
+
+        List<PublicKeyCredentialParameters> advertised = [];
+        HashSet<int> seen = [];
+        foreach(int coseAlgorithm in supportedAlgorithms)
+        {
+            if(seen.Add(coseAlgorithm))
+            {
+                advertised.Add(new PublicKeyCredentialParameters { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Alg = coseAlgorithm });
+            }
+        }
+
+        return advertised;
+    }
 
 
     /// <summary>
@@ -568,6 +685,17 @@ public static class CtapAuthenticatorTransitions
             return Reject(state, WellKnownCtapStatusCodes.InvalidOption, "MakeCredential:UpFalseRejected");
         }
 
+        //R5 (getInfo 0x07, snapshot lines 4405-4409, "Maximum number of credentials supported in
+        //credentialID list at a time by the authenticator. MUST be greater than zero if present."): an
+        //excludeList carrying more entries than MaxCredentialCountInListCapacity is a capability
+        //precondition, rejected with LimitExceeded (0x15, snapshot lines 8897-8899, "Limit for number of
+        //items exceeded.") BEFORE the alwaysUv/pinUvAuth branching and before any user-presence
+        //collection — a real authenticator rejects before ever prompting for a gesture.
+        if(request.ExcludeList is { Count: > 0 } excludeList && excludeList.Count > CtapAuthenticatorState.MaxCredentialCountInListCapacity)
+        {
+            return Reject(state, WellKnownCtapStatusCodes.LimitExceeded, "MakeCredential:ExcludeListLimitExceeded");
+        }
+
         bool residentKey = request.Options?.ResidentKey ?? false;
         bool isProtectedByUserVerification = IsProtectedByUserVerification(state);
 
@@ -650,7 +778,7 @@ public static class CtapAuthenticatorTransitions
         //not present — skip step 11 entirely; the "uv" bit stays false (step 4 already initialized it).
         if(!residentKey && !effectiveUserVerification && !pinUvAuthParamPresent)
         {
-            return ContinueMakeCredential(state, requested, request, userVerified: false, userPresent: true, enterpriseAttestationGranted);
+            return CollectUserPresenceForMakeCredential(state, requested, userVerified: false, enterpriseAttestationGranted);
         }
 
         if(isProtectedByUserVerification && pinUvAuthParamPresent)
@@ -696,7 +824,7 @@ public static class CtapAuthenticatorTransitions
 
         //Not protected, or protected-but-neither-param-nor-uv-present: proceed with the "uv" bit false
         //(line 3440's note — any junk pinUvAuthParam is ignored when not protected).
-        return ContinueMakeCredential(state, requested, request, userVerified: false, userPresent: true, enterpriseAttestationGranted);
+        return CollectUserPresenceForMakeCredential(state, requested, userVerified: false, enterpriseAttestationGranted);
     }
 
 
@@ -745,7 +873,7 @@ public static class CtapAuthenticatorTransitions
         token = token with { LastUsedAt = requested.Now };
         state = WithPinUvAuthTokenState(state, protocolId, token);
 
-        return ContinueMakeCredential(state, requested, request, userVerified: true, userPresent: true, enterpriseAttestationGranted);
+        return CollectUserPresenceForMakeCredential(state, requested, userVerified: true, enterpriseAttestationGranted);
     }
 
 
@@ -1069,6 +1197,18 @@ public static class CtapAuthenticatorTransitions
         }
 
         bool userPresent = request.Options?.UserPresence ?? true;
+
+        //R5 (getInfo 0x07, snapshot lines 4405-4409, "Maximum number of credentials supported in
+        //credentialID list at a time by the authenticator. MUST be greater than zero if present."): an
+        //allowList carrying more entries than MaxCredentialCountInListCapacity is a capability
+        //precondition, rejected with LimitExceeded (0x15, snapshot lines 8897-8899, "Limit for number of
+        //items exceeded.") BEFORE the alwaysUv/pinUvAuth branching and before any user-presence
+        //collection — a real authenticator rejects before ever prompting for a gesture.
+        if(request.AllowList is { Count: > 0 } allowList && allowList.Count > CtapAuthenticatorState.MaxCredentialCountInListCapacity)
+        {
+            return Reject(state, WellKnownCtapStatusCodes.LimitExceeded, "GetAssertion:AllowListLimitExceeded");
+        }
+
         bool isProtectedByUserVerification = IsProtectedByUserVerification(state);
 
         //Step 5 (lines 3916-3960, R11 LIVE): gated additionally on the effective "up" value (absent ⇒
@@ -1137,8 +1277,11 @@ public static class CtapAuthenticatorTransitions
         }
 
         //Not protected, or protected-but-neither-param-nor-uv-present: proceed with the "uv" bit false
-        //(line 4025's note — any junk pinUvAuthParam is ignored when not protected).
-        return ContinueGetAssertion(state, requested, request, userVerified: false, userPresent, authenticatingProtocol: null);
+        //(line 4025's note — any junk pinUvAuthParam is ignored when not protected). userPresent gates
+        //the seam (trap 6): up:false is a pre-flight that must never consult the provider.
+        return userPresent
+            ? CollectUserPresenceForGetAssertion(state, requested, userVerified: false, authenticatingProtocol: null)
+            : ContinueGetAssertion(state, requested, request, userVerified: false, userPresent, authenticatingProtocol: null);
     }
 
 
@@ -1190,7 +1333,10 @@ public static class CtapAuthenticatorTransitions
 
         bool userPresent = request.Options?.UserPresence ?? true;
 
-        return ContinueGetAssertion(state, requested, request, userVerified: true, userPresent, authenticatingProtocol: protocolId);
+        //userPresent gates the seam (trap 6): up:false is a pre-flight that must never consult the provider.
+        return userPresent
+            ? CollectUserPresenceForGetAssertion(state, requested, userVerified: true, authenticatingProtocol: protocolId)
+            : ContinueGetAssertion(state, requested, request, userVerified: true, userPresent, authenticatingProtocol: protocolId);
     }
 
 
@@ -1319,6 +1465,134 @@ public static class CtapAuthenticatorTransitions
         return DeclareSignAssertion(
             state, mostRecent, request.ClientDataHash, userPresent, userVerified, responseUser, applicable.Count, rememberOnCompletion,
             largeBlobKeyRequested: largeBlobKeyRequested, hmacSecretInput: request.HmacSecret, hmacSecretProtocol: hmacSecretProtocol);
+    }
+
+
+    /// <summary>
+    /// Arms a user-presence wait for an interrupted <c>authenticatorMakeCredential</c> (CTAP 2.3 :2840,
+    /// R1) and declares the <see cref="CtapCollectUserPresenceAction"/> that consults the injected
+    /// <see cref="SimulateUserPresenceDelegate"/>. Replaces every <c>ContinueMakeCredential</c> call site
+    /// that used to hardcode <c>userPresent: true</c> — the actual call to
+    /// <see cref="ContinueMakeCredential"/> now happens only once a <see cref="CtapUserPresenceDecision.Granted"/>
+    /// decision resumes it (<see cref="ResumeAfterUserPresenceGranted"/>).
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the CtapMakeCredentialUserPresenceContinuation transfers to the CtapPendingUserPresenceState stored on the returned state's PendingUserPresenceWait; it is disposed when that wait is resumed, denied, times out, or is discarded by PowerCycle/FactoryReset.")]
+    private static TransitionResult<CtapAuthenticatorState, CtapAuthenticatorStackSymbol> CollectUserPresenceForMakeCredential(
+        CtapAuthenticatorState state, MakeCredentialRequested requested, bool userVerified, bool enterpriseAttestationGranted)
+    {
+        CtapPendingUserPresenceState pending = new(
+            requested.Now, requested.IsUserPresenceDeferralAllowed,
+            new CtapMakeCredentialUserPresenceContinuation(requested, userVerified, enterpriseAttestationGranted));
+
+        CtapAuthenticatorState nextState = state with
+        {
+            PendingUserPresenceWait = pending,
+            NextAction = new CtapCollectUserPresenceAction(),
+            ResponseIntent = null
+        };
+
+        return Transition(nextState, "MakeCredential:CollectUserPresence");
+    }
+
+
+    /// <summary>
+    /// Arms a user-presence wait for an interrupted <c>authenticatorGetAssertion</c> (CTAP 2.3 :2840, R1)
+    /// and declares the <see cref="CtapCollectUserPresenceAction"/> that consults the injected
+    /// <see cref="SimulateUserPresenceDelegate"/> — see <see cref="CollectUserPresenceForMakeCredential"/>'s
+    /// identical shape. Callers gate this on the request's own resolved <c>up</c> value: <c>up:false</c>
+    /// (a pre-flight) must NOT reach here at all (trap 6), so no such gate lives inside this method.
+    /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the CtapGetAssertionUserPresenceContinuation transfers to the CtapPendingUserPresenceState stored on the returned state's PendingUserPresenceWait; it is disposed when that wait is resumed, denied, times out, or is discarded by PowerCycle/FactoryReset.")]
+    private static TransitionResult<CtapAuthenticatorState, CtapAuthenticatorStackSymbol> CollectUserPresenceForGetAssertion(
+        CtapAuthenticatorState state, GetAssertionRequested requested, bool userVerified, CtapPinUvAuthProtocolId? authenticatingProtocol)
+    {
+        CtapPendingUserPresenceState pending = new(
+            requested.Now, requested.IsUserPresenceDeferralAllowed,
+            new CtapGetAssertionUserPresenceContinuation(requested, userVerified, authenticatingProtocol));
+
+        CtapAuthenticatorState nextState = state with
+        {
+            PendingUserPresenceWait = pending,
+            NextAction = new CtapCollectUserPresenceAction(),
+            ResponseIntent = null
+        };
+
+        return Transition(nextState, "GetAssertion:CollectUserPresence");
+    }
+
+
+    /// <summary>
+    /// Completes a <see cref="CtapCollectUserPresenceAction"/> once the injected
+    /// <see cref="SimulateUserPresenceDelegate"/> has answered (CTAP 2.3 :2840, R1/R2): resumes the
+    /// parked continuation on <see cref="CtapUserPresenceDecision.Granted"/> (byte-identical to today's
+    /// hardcoded-<c>true</c> path); rejects with <see cref="WellKnownCtapStatusCodes.OperationDenied"/> on
+    /// <see cref="CtapUserPresenceDecision.Denied"/>; on <see cref="CtapUserPresenceDecision.Pending"/>,
+    /// either keeps the wait parked (<see cref="CtapPendingUserPresenceState.IsDeferralAllowed"/>) or —
+    /// on a non-deferring path — resolves it to <see cref="WellKnownCtapStatusCodes.UserActionTimeout"/>.
+    /// A non-deferring transport (plain <see cref="CtapAuthenticatorSimulator.TransceiveAsync"/>, or NFC
+    /// without the platform's <c>0x80</c> P1 bit) has no way to defer at all: a real, non-deferring
+    /// authenticator would BLOCK for up to the :2840 timeout and then answer <c>UserActionTimeout</c>; a
+    /// deterministic simulator has no wall-clock wait to block on, so the provider's own
+    /// <see cref="CtapUserPresenceDecision.Pending"/> answer is treated as standing in for that elapsed
+    /// wait — the OBSERVABLE status byte is identical either way.
+    /// </summary>
+    private static TransitionResult<CtapAuthenticatorState, CtapAuthenticatorStackSymbol> OnUserPresenceDecisionCollected(
+        CtapAuthenticatorState state, UserPresenceDecisionCollected collected)
+    {
+        CtapPendingUserPresenceState pending = state.PendingUserPresenceWait!;
+
+        return collected.Decision switch
+        {
+            CtapUserPresenceDecision.Granted => ResumeAfterUserPresenceGranted(ClearPendingUserPresenceWait(state), pending.Continuation),
+            CtapUserPresenceDecision.Denied => Reject(DiscardPendingUserPresenceWait(state), WellKnownCtapStatusCodes.OperationDenied, "UserPresence:Denied"),
+            CtapUserPresenceDecision.Pending => pending.IsDeferralAllowed
+                ? Respond(state, new UserPresencePending(), "UserPresence:Pending")
+                : Reject(DiscardPendingUserPresenceWait(state), WellKnownCtapStatusCodes.UserActionTimeout, "UserPresence:PendingNotDeferrable"),
+            _ => throw new NotSupportedException($"No disposition is defined for user-presence decision '{collected.Decision}'.")
+        };
+    }
+
+
+    /// <summary>
+    /// Resumes the command a <see cref="CtapUserPresenceDecision.Granted"/> decision unparked, dispatching
+    /// on which command <paramref name="continuation"/> belongs to. <paramref name="state"/> has already
+    /// had its <see cref="CtapAuthenticatorState.PendingUserPresenceWait"/> discarded by the caller.
+    /// </summary>
+    private static TransitionResult<CtapAuthenticatorState, CtapAuthenticatorStackSymbol> ResumeAfterUserPresenceGranted(
+        CtapAuthenticatorState state, CtapUserPresenceContinuation continuation) => continuation switch
+    {
+        CtapMakeCredentialUserPresenceContinuation mc =>
+            ContinueMakeCredential(state, mc.Requested, mc.Requested.Request, mc.UserVerified, userPresent: true, mc.EnterpriseAttestationGranted),
+        CtapGetAssertionUserPresenceContinuation ga =>
+            ContinueGetAssertion(state, ga.Requested, ga.Requested.Request, ga.UserVerified, userPresent: true, ga.AuthenticatingPinUvAuthProtocol),
+        _ => throw new NotSupportedException($"No resume handling is defined for user-presence continuation '{continuation.GetType().Name}'.")
+    };
+
+
+    /// <summary>
+    /// Polls a parked user-presence wait (CTAP 2.3 :2840, R2): discards it with
+    /// <see cref="WellKnownCtapStatusCodes.UserActionTimeout"/> once <see cref="UserActionTimeoutDuration"/>
+    /// has elapsed since it was armed; otherwise declares the SAME <see cref="CtapCollectUserPresenceAction"/>
+    /// again — <see cref="OnUserPresenceDecisionCollected"/>'s own handling resumes it identically whether
+    /// this is the first collection or a later poll. Fed only when
+    /// <see cref="CtapAuthenticatorState.PendingUserPresenceWait"/> is non-null (the simulator layer
+    /// guards this before ever building the input), so the null-forgiving read below is safe.
+    /// </summary>
+    private static TransitionResult<CtapAuthenticatorState, CtapAuthenticatorStackSymbol> OnUserPresencePollRequested(
+        CtapAuthenticatorState state, UserPresencePollRequested polled)
+    {
+        CtapPendingUserPresenceState pending = state.PendingUserPresenceWait!;
+
+        if(polled.Now - pending.ArmedAt >= UserActionTimeoutDuration)
+        {
+            return Reject(DiscardPendingUserPresenceWait(state), WellKnownCtapStatusCodes.UserActionTimeout, "UserPresence:PollTimedOut");
+        }
+
+        CtapAuthenticatorState nextState = state with { NextAction = new CtapCollectUserPresenceAction(), ResponseIntent = null };
+
+        return Transition(nextState, "UserPresence:Poll");
     }
 
 
@@ -2128,9 +2402,13 @@ public static class CtapAuthenticatorTransitions
             return attempted.Continuation switch
             {
                 CtapMakeCredentialBuiltInUvContinuation mc =>
-                    ContinueMakeCredential(nextState, mc.Requested, mc.Requested.Request, userVerified: true, userPresent: true, mc.EnterpriseAttestationGranted),
-                CtapGetAssertionBuiltInUvContinuation ga =>
-                    ContinueGetAssertion(nextState, ga.Requested, ga.Requested.Request, userVerified: true, ga.UserPresent, authenticatingProtocol: null),
+                    CollectUserPresenceForMakeCredential(nextState, mc.Requested, userVerified: true, mc.EnterpriseAttestationGranted),
+                //ga.UserPresent gates the seam (trap 6): a built-in-UV attempt can conclude while the
+                //request's own "up" resolved false, and a never-granting provider must not affect that
+                //up:false path.
+                CtapGetAssertionBuiltInUvContinuation ga => ga.UserPresent
+                    ? CollectUserPresenceForGetAssertion(nextState, ga.Requested, userVerified: true, authenticatingProtocol: null)
+                    : ContinueGetAssertion(nextState, ga.Requested, ga.Requested.Request, userVerified: true, ga.UserPresent, authenticatingProtocol: null),
                 _ => throw new NotSupportedException($"No built-in-UV continuation is defined for '{attempted.Continuation.GetType().Name}'.")
             };
         }

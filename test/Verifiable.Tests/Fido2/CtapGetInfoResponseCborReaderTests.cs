@@ -4,6 +4,7 @@ using System.Formats.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
+using Verifiable.JCose;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -30,6 +31,9 @@ internal sealed class CtapGetInfoResponseCborReaderTests
         Assert.AreEqual(aaguid, decoded.Aaguid);
         Assert.IsNull(decoded.Extensions);
         Assert.IsNull(decoded.Options);
+        Assert.IsNull(decoded.MaxCredentialCountInList);
+        Assert.IsNull(decoded.Algorithms);
+        Assert.IsNull(decoded.FirmwareVersion);
     }
 
 
@@ -289,5 +293,37 @@ internal sealed class CtapGetInfoResponseCborReaderTests
         Assert.IsTrue(decoded.Options!.UvBioEnroll!.Value);
         Assert.AreEqual(3, decoded.PreferredPlatformUvAttempts!.Value);
         Assert.AreEqual(0x00000002, decoded.UvModality!.Value);
+    }
+
+
+    /// <summary>
+    /// Round-tripping a response carrying <c>maxCredentialCountInList</c> (0x07), <c>algorithms</c>
+    /// (0x0A, reusing <see cref="Verifiable.Cbor.Ctap.CtapCommandEntityCborCodec.ReadParametersArray"/>),
+    /// and <c>firmwareVersion</c> (0x0E) recovers every value exactly — R5/R6/R7's three new members.
+    /// A distinct <c>firmwareVersion</c> (7, not the
+    /// <see cref="Verifiable.Fido2.Ctap.Authenticator.Automata.CtapAuthenticatorState.Initial"/> seed
+    /// default of 1) proves the value genuinely round-trips rather than coincidentally matching a
+    /// default.
+    /// </summary>
+    [TestMethod]
+    public void RoundTripsMaxCredentialCountInListAlgorithmsAndFirmwareVersion()
+    {
+        Guid aaguid = Guid.NewGuid();
+        var written = new CtapGetInfoResponse(
+            Versions: [WellKnownCtapVersions.Fido23],
+            Aaguid: aaguid,
+            MaxCredentialCountInList: 8,
+            Algorithms: [new PublicKeyCredentialParameters { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Alg = WellKnownCoseAlgorithms.Es256 }],
+            FirmwareVersion: 7);
+
+        TaggedMemory<byte> encoded = CtapGetInfoResponseCborWriter.Write(written);
+        CtapGetInfoResponse decoded = CtapGetInfoResponseCborReader.Read(encoded.Memory);
+
+        Assert.AreEqual(8, decoded.MaxCredentialCountInList!.Value);
+        Assert.IsNotNull(decoded.Algorithms);
+        Assert.HasCount(1, decoded.Algorithms!);
+        Assert.AreEqual(WellKnownCoseAlgorithms.Es256, decoded.Algorithms![0].Alg);
+        Assert.AreEqual(WellKnownPublicKeyCredentialTypes.PublicKey, decoded.Algorithms![0].Type);
+        Assert.AreEqual(7, decoded.FirmwareVersion!.Value);
     }
 }

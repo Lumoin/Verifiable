@@ -121,5 +121,14 @@ internal sealed class CtapAuthenticatorGetInfoFlowTests
         Assert.AreSequenceEqual(supportedExtensions, new List<string>(response.Extensions!));
         Assert.IsNotNull(response.Options);
         Assert.IsTrue(response.Options!.ResidentKey);
+
+        //R5/R6/R7 over the real wire: maxCredentialCountInList (0x07) is always present and matches
+        //the same fixed capacity mc/ga's own excludeList/allowList bound check enforces; algorithms
+        //(0x0A) is OMITTED entirely since this simulator was constructed with no credentialSigningBackend
+        //(a genuinely backendless authenticator, not merely an ES256-only one); firmwareVersion (0x0E)
+        //reports the CtapAuthenticatorState.Initial seed default.
+        Assert.AreEqual(CtapAuthenticatorState.MaxCredentialCountInListCapacity, response.MaxCredentialCountInList);
+        Assert.IsNull(response.Algorithms);
+        Assert.AreEqual(1, response.FirmwareVersion);
     }
 }

@@ -23,13 +23,18 @@ namespace Verifiable.Cbor.Ctap;
 /// </para>
 /// <para>
 /// The outer response map's keys (<c>versions</c>=1, <c>extensions</c>=2, <c>aaguid</c>=3,
-/// <c>options</c>=4, <c>pinUvAuthProtocols</c>=6, <c>maxSerializedLargeBlobArray</c>=0x0B,
-/// <c>forcePINChange</c>=0x0C, <c>minPINLength</c>=0x0D,
-/// <c>maxRPIDsForSetMinPINLength</c>=0x10, <c>preferredPlatformUvAttempts</c>=0x11,
-/// <c>uvModality</c>=0x12, <c>remainingDiscoverableCredentials</c>=0x14,
-/// <c>authenticatorConfigCommands</c>=0x1F) are already in ascending numeric order, so writing the
-/// Required members first, then any present Optional member, in that fixed order, is sufficient — no
-/// run-time sort is needed. The nested <c>options</c> map uses text-string keys instead, which the
+/// <c>options</c>=4, <c>pinUvAuthProtocols</c>=6, <c>maxCredentialCountInList</c>=0x07,
+/// <c>algorithms</c>=0x0A, <c>maxSerializedLargeBlobArray</c>=0x0B, <c>forcePINChange</c>=0x0C,
+/// <c>minPINLength</c>=0x0D, <c>firmwareVersion</c>=0x0E, <c>maxRPIDsForSetMinPINLength</c>=0x10,
+/// <c>preferredPlatformUvAttempts</c>=0x11, <c>uvModality</c>=0x12,
+/// <c>remainingDiscoverableCredentials</c>=0x14, <c>authenticatorConfigCommands</c>=0x1F) are already
+/// in ascending numeric order, so writing the Required members first, then any present Optional
+/// member, in that fixed order, is sufficient — no run-time sort is needed. The <c>algorithms</c>
+/// member's own elements (<see cref="Verifiable.Cbor.Ctap.CtapCommandEntityCborCodec.WriteParametersArray"/>)
+/// carry no canonical-order rule of their own — a CBOR array's element order is caller-supplied wire
+/// order, here the most-to-least-preferred advertisement order; only the element MAPS' own <c>"alg"</c>/
+/// <c>"type"</c> keys are text-keyed canonical (length-first: <c>"alg"</c> (3) before <c>"type"</c> (4)).
+/// The nested <c>options</c> map uses text-string keys instead, which the
 /// canonical sort rule orders by LENGTH first, then byte-wise LEXICALLY for equal-length keys:
 /// <c>"ep"</c> (2) precedes <c>"rk"</c> (2) precedes <c>"uv"</c> (2) — a length-2 THREE-WAY tie, broken
 /// lexically since <c>'e'</c> (0x65) precedes <c>'r'</c> (0x72) precedes <c>'u'</c> (0x75) — precedes
@@ -62,9 +67,12 @@ public static class CtapGetInfoResponseCborWriter
             + (response.Extensions is not null ? 1 : 0)
             + (response.Options is not null ? 1 : 0)
             + (response.PinUvAuthProtocols is not null ? 1 : 0)
+            + (response.MaxCredentialCountInList is not null ? 1 : 0)
+            + (response.Algorithms is not null ? 1 : 0)
             + (response.MaxSerializedLargeBlobArray is not null ? 1 : 0)
             + (response.ForcePinChange is not null ? 1 : 0)
             + (response.MinPinLength is not null ? 1 : 0)
+            + (response.FirmwareVersion is not null ? 1 : 0)
             + (response.MaxRpIdsForSetMinPinLength is not null ? 1 : 0)
             + (response.PreferredPlatformUvAttempts is not null ? 1 : 0)
             + (response.UvModality is not null ? 1 : 0)
@@ -103,6 +111,18 @@ public static class CtapGetInfoResponseCborWriter
             writer.WriteEndArray();
         }
 
+        if(response.MaxCredentialCountInList is int maxCredentialCountInList)
+        {
+            writer.WriteInt32(WellKnownCtapGetInfoMemberKeys.MaxCredentialCountInList);
+            writer.WriteInt32(maxCredentialCountInList);
+        }
+
+        if(response.Algorithms is IReadOnlyList<PublicKeyCredentialParameters> algorithms)
+        {
+            writer.WriteInt32(WellKnownCtapGetInfoMemberKeys.Algorithms);
+            CtapCommandEntityCborCodec.WriteParametersArray(writer, algorithms);
+        }
+
         if(response.MaxSerializedLargeBlobArray is int maxSerializedLargeBlobArray)
         {
             writer.WriteInt32(WellKnownCtapGetInfoMemberKeys.MaxSerializedLargeBlobArray);
@@ -119,6 +139,12 @@ public static class CtapGetInfoResponseCborWriter
         {
             writer.WriteInt32(WellKnownCtapGetInfoMemberKeys.MinPinLength);
             writer.WriteInt32(minPinLength);
+        }
+
+        if(response.FirmwareVersion is int firmwareVersion)
+        {
+            writer.WriteInt32(WellKnownCtapGetInfoMemberKeys.FirmwareVersion);
+            writer.WriteInt32(firmwareVersion);
         }
 
         if(response.MaxRpIdsForSetMinPinLength is int maxRpIdsForSetMinPinLength)

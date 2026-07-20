@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using Verifiable.Fido2;
 
 namespace Verifiable.Fido2.Ctap;
 
@@ -10,8 +11,9 @@ namespace Verifiable.Fido2.Ctap;
 /// exercise, including the <c>authenticatorConfig</c>-adjacent surface (<see cref="ForcePinChange"/>,
 /// <see cref="MinPinLength"/>, <see cref="MaxRpIdsForSetMinPinLength"/>,
 /// <see cref="AuthenticatorConfigCommands"/>), the <c>authenticatorCredentialManagement</c>-adjacent
-/// <see cref="RemainingDiscoverableCredentials"/>, and the <c>authenticatorLargeBlobs</c>-adjacent
-/// <see cref="MaxSerializedLargeBlobArray"/>.
+/// <see cref="RemainingDiscoverableCredentials"/>, the <c>authenticatorLargeBlobs</c>-adjacent
+/// <see cref="MaxSerializedLargeBlobArray"/>, and the credential-generation-capability surface
+/// (<see cref="MaxCredentialCountInList"/>, <see cref="Algorithms"/>, <see cref="FirmwareVersion"/>).
 /// </summary>
 /// <remarks>
 /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorGetInfo">
@@ -22,12 +24,12 @@ namespace Verifiable.Fido2.Ctap;
 /// <c>credMgmt</c>/<c>largeBlobs</c> themselves are reported on <see cref="CtapGetInfoOptions"/> rather
 /// than as members of this type, and <c>authenticatorBioEnrollment</c>/
 /// <c>authenticatorCredentialManagement</c>/<c>authenticatorLargeBlobs</c> are all fully implemented
-/// commands; members such as <c>firmwareVersion</c> (<c>0x0E</c>), <c>attestationFormats</c>
-/// (<c>0x16</c>), <c>vendorPrototypeConfigCommands</c>, <c>maxPINLength</c>, <c>transports</c>,
-/// <c>algorithms</c>, and <c>certifications</c> are omitted because no shipped client reads them yet,
-/// independent of whether the underlying capability exists. A CBOR reader decoding a response that
-/// carries unmodeled members ignores them, per section 8's forward-compatibility rule (<c>"If map keys
-/// are present that an implementation does not understand, they MUST be ignored"</c>).
+/// commands; members such as <c>attestationFormats</c> (<c>0x16</c>),
+/// <c>vendorPrototypeConfigCommands</c>, <c>maxPINLength</c>, <c>transports</c>, and
+/// <c>certifications</c> are omitted because no shipped client reads them yet, independent of whether
+/// the underlying capability exists. A CBOR reader decoding a response that carries unmodeled members
+/// ignores them, per section 8's forward-compatibility rule (<c>"If map keys are present that an
+/// implementation does not understand, they MUST be ignored"</c>).
 /// </remarks>
 /// <param name="Versions">
 /// Required. The supported CTAP/U2F version strings (<see cref="WellKnownCtapVersions"/>). MUST
@@ -91,6 +93,23 @@ namespace Verifiable.Fido2.Ctap;
 /// subCommand values this authenticator implements (which MAY be empty). <see langword="null"/> when
 /// omitted.
 /// </param>
+/// <param name="MaxCredentialCountInList">
+/// Optional (member <c>0x07</c>). The maximum number of credentials supported in a
+/// <c>credentialID</c> list (<c>excludeList</c>/<c>allowList</c>) at a time by this authenticator —
+/// MUST be greater than zero if present. This authenticator always reports this member,
+/// <c>CtapAuthenticatorState.MaxCredentialCountInListCapacity</c>. <see langword="null"/> when
+/// omitted.
+/// </param>
+/// <param name="Algorithms">
+/// Optional (member <c>0x0A</c>). The supported algorithms for credential generation, ordered from
+/// most preferred to least preferred — MUST NOT include duplicate entries nor be empty if present.
+/// <see langword="null"/> when the credential-signing backend is absent or advertises no algorithms
+/// at all, never an empty list.
+/// </param>
+/// <param name="FirmwareVersion">
+/// Optional (member <c>0x0E</c>). The firmware version of the authenticator model identified by
+/// <see cref="Aaguid"/>. <see langword="null"/> when omitted.
+/// </param>
 [DebuggerDisplay("CtapGetInfoResponse(Versions={Versions.Count}, Aaguid={Aaguid})")]
 public sealed record CtapGetInfoResponse(
     IReadOnlyList<string> Versions,
@@ -105,4 +124,7 @@ public sealed record CtapGetInfoResponse(
     int? PreferredPlatformUvAttempts = null,
     int? UvModality = null,
     int? RemainingDiscoverableCredentials = null,
-    IReadOnlyList<int>? AuthenticatorConfigCommands = null);
+    IReadOnlyList<int>? AuthenticatorConfigCommands = null,
+    int? MaxCredentialCountInList = null,
+    IReadOnlyList<PublicKeyCredentialParameters>? Algorithms = null,
+    int? FirmwareVersion = null);

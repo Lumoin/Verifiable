@@ -44,9 +44,12 @@ public static class CtapGetInfoResponseCborReader
             Guid? aaguid = null;
             CtapGetInfoOptions? options = null;
             List<int>? pinUvAuthProtocols = null;
+            int? maxCredentialCountInList = null;
+            List<PublicKeyCredentialParameters>? algorithms = null;
             int? maxSerializedLargeBlobArray = null;
             bool? forcePinChange = null;
             int? minPinLength = null;
+            int? firmwareVersion = null;
             int? maxRpIdsForSetMinPinLength = null;
             int? preferredPlatformUvAttempts = null;
             int? uvModality = null;
@@ -66,9 +69,12 @@ public static class CtapGetInfoResponseCborReader
                     WellKnownCtapGetInfoMemberKeys.Aaguid => AssignAaguid(reader, ref aaguid),
                     WellKnownCtapGetInfoMemberKeys.Options => AssignOptions(reader, ref options),
                     WellKnownCtapGetInfoMemberKeys.PinUvAuthProtocols => AssignPinUvAuthProtocols(reader, ref pinUvAuthProtocols),
+                    WellKnownCtapGetInfoMemberKeys.MaxCredentialCountInList => AssignMaxCredentialCountInList(reader, ref maxCredentialCountInList),
+                    WellKnownCtapGetInfoMemberKeys.Algorithms => AssignAlgorithms(reader, ref algorithms),
                     WellKnownCtapGetInfoMemberKeys.MaxSerializedLargeBlobArray => AssignMaxSerializedLargeBlobArray(reader, ref maxSerializedLargeBlobArray),
                     WellKnownCtapGetInfoMemberKeys.ForcePinChange => AssignForcePinChange(reader, ref forcePinChange),
                     WellKnownCtapGetInfoMemberKeys.MinPinLength => AssignMinPinLength(reader, ref minPinLength),
+                    WellKnownCtapGetInfoMemberKeys.FirmwareVersion => AssignFirmwareVersion(reader, ref firmwareVersion),
                     WellKnownCtapGetInfoMemberKeys.MaxRpIdsForSetMinPinLength => AssignMaxRpIdsForSetMinPinLength(reader, ref maxRpIdsForSetMinPinLength),
                     WellKnownCtapGetInfoMemberKeys.PreferredPlatformUvAttempts => AssignPreferredPlatformUvAttempts(reader, ref preferredPlatformUvAttempts),
                     WellKnownCtapGetInfoMemberKeys.UvModality => AssignUvModality(reader, ref uvModality),
@@ -93,7 +99,8 @@ public static class CtapGetInfoResponseCborReader
             return new CtapGetInfoResponse(
                 versions, resolvedAaguid, extensions, options, pinUvAuthProtocols, maxSerializedLargeBlobArray,
                 forcePinChange, minPinLength, maxRpIdsForSetMinPinLength, preferredPlatformUvAttempts, uvModality,
-                remainingDiscoverableCredentials, authenticatorConfigCommands);
+                remainingDiscoverableCredentials, authenticatorConfigCommands, maxCredentialCountInList, algorithms,
+                firmwareVersion);
         }
         catch(Exception exception) when(exception is CborContentException or InvalidOperationException or OverflowException)
         {
@@ -230,6 +237,24 @@ public static class CtapGetInfoResponseCborReader
             return true;
         }
 
+        //Assigns the decoded maximum credential-list count to maxCredentialCountInList.
+        static bool AssignMaxCredentialCountInList(CborReader reader, ref int? maxCredentialCountInList)
+        {
+            maxCredentialCountInList = checked((int)reader.ReadInt64());
+
+            return true;
+        }
+
+        //Assigns the decoded PublicKeyCredentialParameters array to algorithms, reusing
+        //CtapCommandEntityCborCodec's own PublicKeyCredentialParameters array reader (the same one
+        //authenticatorMakeCredential's pubKeyCredParams member uses).
+        static bool AssignAlgorithms(CborReader reader, ref List<PublicKeyCredentialParameters>? algorithms)
+        {
+            algorithms = CtapCommandEntityCborCodec.ReadParametersArray(reader);
+
+            return true;
+        }
+
         //Assigns the decoded maximum serialized large-blob array size to maxSerializedLargeBlobArray.
         static bool AssignMaxSerializedLargeBlobArray(CborReader reader, ref int? maxSerializedLargeBlobArray)
         {
@@ -250,6 +275,14 @@ public static class CtapGetInfoResponseCborReader
         static bool AssignMinPinLength(CborReader reader, ref int? minPinLength)
         {
             minPinLength = checked((int)reader.ReadInt64());
+
+            return true;
+        }
+
+        //Assigns the decoded firmware version to firmwareVersion.
+        static bool AssignFirmwareVersion(CborReader reader, ref int? firmwareVersion)
+        {
+            firmwareVersion = checked((int)reader.ReadInt64());
 
             return true;
         }

@@ -262,8 +262,9 @@ internal sealed class CtapAuthenticatorResetTests
     /// <see cref="CtapAuthenticatorState.FactoryReset"/>'s exact clear/keep field set, mirroring
     /// <see cref="CtapAuthenticatorPowerCycleTests"/>'s own field-by-field shape: every field the R1
     /// clear table names reverts to its factory value, and every kept field (identity/personalization/boot
-    /// facts, plus both PIN/UV auth protocols' key-agreement key pairs and tokens — the effectful
-    /// executor's own business, not this pure transform's) survives unchanged. Also proves contract R2's
+    /// facts — including R7's <c>firmwareVersion</c> — plus both PIN/UV auth protocols' key-agreement key
+    /// pairs and tokens — the effectful executor's own business, not this pure transform's) survives
+    /// unchanged. Also proves contract R2's
     /// FactoryReset-disposes half: both records' <see cref="CtapCredentialRecord.CredRandomWithUV"/>/
     /// <see cref="CtapCredentialRecord.CredRandomWithoutUV"/> are rented from a
     /// <see cref="ZeroOnDisposeTrackingMemoryPool"/> at their exact 32-byte length, so the credential-store
@@ -317,7 +318,7 @@ internal sealed class CtapAuthenticatorResetTests
         var rememberedBioEnrollment = new CtapRememberedBioEnrollmentState(inProgressTemplateId, RemainingSamples: 2);
 
         CtapAuthenticatorState initial = CtapAuthenticatorState.Initial(
-            aaguid, poweredOnAt, supportedExtensions: ["hmac-secret"], residentCredentialCapacity: 5, keyAgreementPool: pool);
+            aaguid, poweredOnAt, supportedExtensions: ["hmac-secret"], residentCredentialCapacity: 5, keyAgreementPool: pool, firmwareVersion: 7);
         initial.SerializedLargeBlobArray.Dispose();
         PooledMemory grownLargeBlobArray = PooledMemory.FromBytes(BuildFixedBytes(40, 0x60), pool, Fido2BufferTags.CtapSerializedLargeBlobArrayPayload);
 
@@ -379,6 +380,7 @@ internal sealed class CtapAuthenticatorResetTests
             "line 7705's MUST + line 6336: FactoryReset restores the initial serialized large-blob array byte string, byte-exact, even though `before` carried a grown (40-byte) array.");
 
         Assert.AreEqual(aaguid, after.Aaguid, "the AAGUID is model identity, never named in the factory-default-state bullet list.");
+        Assert.AreEqual(7, after.FirmwareVersion, "firmwareVersion is device identity, like the AAGUID, and survives a factory reset unchanged.");
         Assert.AreSame(before.SupportedExtensions, after.SupportedExtensions);
         Assert.AreEqual(5, after.ResidentCredentialCapacity);
         Assert.AreEqual(poweredOnAt, after.PoweredOnAt, "a reset is not itself a power-up; the power-up window does not re-arm.");

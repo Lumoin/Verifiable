@@ -217,6 +217,17 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// <see cref="FactoryReset"/> unchanged (§7.1.3, line 8256: "burned into the authenticator by the
 /// vendor" — reset disables the FEATURE, never the capability).
 /// </param>
+/// <param name="PendingUserPresenceWait">
+/// A parked <c>authenticatorMakeCredential</c>/<c>authenticatorGetAssertion</c> user-presence wait (CTAP
+/// 2.3 :2840, R2), or <see langword="null"/> when none is in progress. Discarded, disposing its parked
+/// request's carriers, by ANY new command input arriving while a wait is pending (a supersede), by
+/// <see cref="PowerCycle"/>, and by <see cref="FactoryReset"/> — the SIXTH remembered-sequence slot,
+/// joining the five <c>Remembered*</c> fields on the same "state SHOULD NOT be maintained across power
+/// cycles" discipline (CTAP 2.3, section 6, item 1, line 2869), but discarded — unlike them — by ANY
+/// superseding command rather than only the ones outside its own narrow continuation set: a user-presence
+/// wait has no "continuing command" of its own the way <c>authenticatorGetNextAssertion</c> continues a
+/// remembered <c>authenticatorGetAssertion</c>.
+/// </param>
 /// <param name="IsEnterpriseAttestationEnabled">
 /// Whether the enterprise attestation feature is currently enabled — reported as the <c>ep</c> getInfo
 /// option's value when <see cref="IsEnterpriseAttestationCapable"/>. Mirrors
@@ -227,6 +238,12 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// enterprise attestation capable authenticator receives an <c>authenticatorReset</c> command, it MUST
 /// disable the enterprise attestation feature") while <see cref="EnterpriseAttestationProvisioning"/>
 /// itself survives untouched.
+/// </param>
+/// <param name="FirmwareVersion">
+/// The authenticator model's firmware version (getInfo member <c>0x0E</c>, CTAP 2.3 snapshot lines
+/// 4469-4475), seeded by <see cref="Initial"/> — device identity, the same fixed-for-the-simulator's-
+/// lifetime posture as <see cref="Aaguid"/>: neither <see cref="PowerCycle"/> nor
+/// <see cref="FactoryReset"/> names it in their own <c>with</c> copies, so it survives both implicitly.
 /// </param>
 [DebuggerDisplay("Aaguid={Aaguid}, NextAction={NextAction}, Credentials={CredentialsByCredentialId.Count}")]
 public sealed record CtapAuthenticatorState(
@@ -260,7 +277,9 @@ public sealed record CtapAuthenticatorState(
     PooledMemory SerializedLargeBlobArray,
     CtapRememberedLargeBlobWriteState? RememberedLargeBlobWrite,
     CtapEnterpriseAttestationProvisioning? EnterpriseAttestationProvisioning,
-    bool IsEnterpriseAttestationEnabled)
+    bool IsEnterpriseAttestationEnabled,
+    CtapPendingUserPresenceState? PendingUserPresenceWait,
+    int FirmwareVersion)
 {
     /// <summary>
     /// The maximum value <see cref="PinRetries"/> (and, in this simulator, <see cref="UvRetries"/>) is
@@ -350,6 +369,17 @@ public sealed record CtapAuthenticatorState(
     /// own bound check against a supplied <c>minPinLengthRPIDs</c> list (CTAP 2.3 §6.11.4, line 8182).
     /// </summary>
     public static int MaxRpIdsForSetMinPinLengthCapacity => 8;
+
+    /// <summary>
+    /// The fixed <c>maxCredentialCountInList</c> capacity this authenticator model advertises and
+    /// enforces: 8, mirroring <see cref="MaxRpIdsForSetMinPinLengthCapacity"/>'s own single-sourced-getter
+    /// shape. Single-sourced for BOTH the <c>authenticatorGetInfo</c> <c>maxCredentialCountInList</c>
+    /// (<c>0x07</c>) emission and <c>authenticatorMakeCredential</c>'s/<c>authenticatorGetAssertion</c>'s
+    /// own <c>excludeList</c>/<c>allowList</c> bound check (CTAP 2.3, snapshot lines 4405-4409: "Maximum
+    /// number of credentials supported in credentialID list at a time by the authenticator. MUST be
+    /// greater than zero if present" — 8 satisfies the MUST).
+    /// </summary>
+    public static int MaxCredentialCountInListCapacity => 8;
 
     /// <summary>
     /// The fixed <c>maxCaptureSamplesRequiredForEnroll</c> value this authenticator model reports via
@@ -500,12 +530,16 @@ public sealed record CtapAuthenticatorState(
     /// stays step-2-rejected, matching CTAP 2.3 §7.1's own vendor-provisioning reality (snapshot line
     /// 8251) that most authenticators are never enterprise attestation capable at all.
     /// </param>
+    /// <param name="firmwareVersion">
+    /// The authenticator model's firmware version, seeded once — device identity, the same
+    /// fixed-for-the-simulator's-lifetime posture as <paramref name="aaguid"/>. Defaults to <c>1</c>.
+    /// </param>
     /// <returns>The initial state.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of both CtapPinUvAuthKeyAgreementKeyPair instances, both CtapPinUvAuthTokenState instances, and the seeded PooledMemory transfers to the returned CtapAuthenticatorState, which CtapAuthenticatorSimulator.Dispose disposes as part of its dispose walk.")]
     public static CtapAuthenticatorState Initial(
         Guid aaguid, DateTimeOffset poweredOnAt, IReadOnlyList<string>? supportedExtensions = null, int residentCredentialCapacity = 8, MemoryPool<byte>? keyAgreementPool = null,
-        CtapEnterpriseAttestationProvisioning? enterpriseAttestationProvisioning = null)
+        CtapEnterpriseAttestationProvisioning? enterpriseAttestationProvisioning = null, int firmwareVersion = 1)
     {
         MemoryPool<byte> resolvedKeyAgreementPool = keyAgreementPool ?? BaseMemoryPool.Shared;
 
@@ -545,7 +579,9 @@ public sealed record CtapAuthenticatorState(
             SerializedLargeBlobArray: PooledMemory.FromBytes(InitialSerializedLargeBlobArray, resolvedKeyAgreementPool, Fido2BufferTags.CtapSerializedLargeBlobArrayPayload),
             RememberedLargeBlobWrite: null,
             EnterpriseAttestationProvisioning: enterpriseAttestationProvisioning,
-            IsEnterpriseAttestationEnabled: false);
+            IsEnterpriseAttestationEnabled: false,
+            PendingUserPresenceWait: null,
+            FirmwareVersion: firmwareVersion);
     }
 
 
@@ -563,13 +599,18 @@ public sealed record CtapAuthenticatorState(
     /// on the same basis as the other remembered sequences, a deliberate choice rather than an
     /// incidental one; R7 joins <see cref="RememberedBioEnrollment"/> and <see cref="RememberedLargeBlobWrite"/>
     /// to this same discard set — a pending large-blob write DIES across a power cycle, but the
-    /// COMMITTED <see cref="SerializedLargeBlobArray"/> survives (the next bullet). Every other member —
+    /// COMMITTED <see cref="SerializedLargeBlobArray"/> survives (the next bullet). Also discards
+    /// <see cref="PendingUserPresenceWait"/> (R2), the SIXTH slot on this same discipline: a parked
+    /// user-presence wait cannot survive the fresh <c>pinUvAuthToken</c>/key-agreement material this same
+    /// power cycle just minted. Every other member —
     /// the PIN itself, both retry counters, the credential store,
     /// <see cref="BioEnrollmentTemplatesByTemplateId"/>, <see cref="SerializedLargeBlobArray"/>
     /// (CTAP 2.3 §6, line 7539's storage names no power-cycle-clearing obligation of its own), the
-    /// AAGUID, <see cref="EnterpriseAttestationProvisioning"/>, and <see cref="IsEnterpriseAttestationEnabled"/>
+    /// AAGUID, <see cref="EnterpriseAttestationProvisioning"/>, <see cref="IsEnterpriseAttestationEnabled"/>
     /// (R3: neither the vendor-burned-in capability nor the enabled feature is named anywhere in CTAP
-    /// 2.3's own power-cycle text, section 6 item 1, line 2869) — is unaffected, matching
+    /// 2.3's own power-cycle text, section 6 item 1, line 2869), and <see cref="FirmwareVersion"/>
+    /// (device identity, the <see cref="Aaguid"/> analogy — absent from the <c>with</c> block below, so
+    /// it survives implicitly) — is unaffected, matching
     /// CTAP 2.3's own distinction between a power cycle (recoverable) and an <c>authenticatorReset</c>
     /// (destructive; see <see cref="FactoryReset"/>).
     /// </summary>
@@ -602,6 +643,7 @@ public sealed record CtapAuthenticatorState(
         RememberedGetAssertion?.Dispose();
         RememberedBioEnrollment?.Dispose();
         RememberedLargeBlobWrite?.Dispose();
+        PendingUserPresenceWait?.Dispose();
 
         return this with
         {
@@ -616,7 +658,8 @@ public sealed record CtapAuthenticatorState(
             RememberedEnumerateRps = null,
             RememberedEnumerateCredentials = null,
             RememberedBioEnrollment = null,
-            RememberedLargeBlobWrite = null
+            RememberedLargeBlobWrite = null,
+            PendingUserPresenceWait = null
         };
     }
 
@@ -629,9 +672,10 @@ public sealed record CtapAuthenticatorState(
     /// credentials") — zeroes <see cref="NextCredentialSequence"/>, disposes and empties
     /// <see cref="BioEnrollmentTemplatesByTemplateId"/> (a documented profile-security posture over
     /// §6.6's own silence on bio enrollment, bio scout Finding 8 — no MUST is claimed; §6.7.1's own
-    /// feature-detection text and the <c>uv</c>-honesty argument justify the choice), discards all FIVE
-    /// remembered stateful-command sequences (joining <see cref="RememberedBioEnrollment"/> and
-    /// <see cref="RememberedLargeBlobWrite"/> to the existing three), disposes and unsets the stored PIN
+    /// feature-detection text and the <c>uv</c>-honesty argument justify the choice), discards all SIX
+    /// remembered stateful-command sequences (joining <see cref="RememberedBioEnrollment"/>,
+    /// <see cref="RememberedLargeBlobWrite"/>, and <see cref="PendingUserPresenceWait"/> (R2) to the
+    /// existing three), disposes and unsets the stored PIN
     /// (<see cref="CurrentStoredPin"/>/<see cref="PinCodePointLength"/>), restores
     /// <see cref="PinRetries"/> to <see cref="MaxPinRetries"/> and <see cref="UvRetries"/> to
     /// <see cref="MaxUvRetries"/> and <see cref="ConsecutivePinMismatches"/> to 0 (CTAP 2.3, lines
@@ -674,9 +718,12 @@ public sealed record CtapAuthenticatorState(
     /// <remarks>
     /// <para>
     /// Leaves <see cref="Aaguid"/>, <see cref="SupportedExtensions"/>, <see cref="ResidentCredentialCapacity"/>,
-    /// <see cref="PoweredOnAt"/>, and <see cref="EnterpriseAttestationProvisioning"/> untouched —
-    /// identity/personalization/boot facts (and, per §7.1.3's own line 8256, the vendor's burned-in
-    /// enterprise attestation material) a factory reset does not clear; a reset is not itself a power-up,
+    /// <see cref="PoweredOnAt"/>, <see cref="EnterpriseAttestationProvisioning"/>, and
+    /// <see cref="FirmwareVersion"/> untouched — identity/personalization/boot facts (and, per
+    /// §7.1.3's own line 8256, the vendor's burned-in enterprise attestation material; a firmware
+    /// version is device identity, not clientPIN/config/large-blob state) a factory reset does not
+    /// clear; <see cref="FirmwareVersion"/> is absent from the <c>with</c> block below, so it survives
+    /// implicitly, the same posture as <see cref="Aaguid"/>. A reset is not itself a power-up,
     /// so the power-up window does not re-arm. Leaves both
     /// PIN/UV auth protocols' key-agreement key pairs and <c>pinUvAuthToken</c>s untouched too: those
     /// four fields are non-nullable and their replacement values are minted entropy, which this
@@ -717,6 +764,7 @@ public sealed record CtapAuthenticatorState(
         RememberedGetAssertion?.Dispose();
         RememberedBioEnrollment?.Dispose();
         RememberedLargeBlobWrite?.Dispose();
+        PendingUserPresenceWait?.Dispose();
         SerializedLargeBlobArray.Dispose();
 
         return this with
@@ -727,6 +775,7 @@ public sealed record CtapAuthenticatorState(
             RememberedEnumerateRps = null,
             RememberedEnumerateCredentials = null,
             RememberedLargeBlobWrite = null,
+            PendingUserPresenceWait = null,
             CurrentStoredPin = null,
             PinCodePointLength = 0,
             PinRetries = MaxPinRetries,
