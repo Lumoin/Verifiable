@@ -8,6 +8,7 @@ $projects = @(
     'Verifiable.Cryptography',
     'Verifiable.DidComm',
     'Verifiable.DidWebs',
+    'Verifiable.Fido2',
     'Verifiable.Foundation',
     'Verifiable.JCose',
     'Verifiable.Json',

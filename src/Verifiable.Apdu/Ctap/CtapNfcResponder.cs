@@ -22,16 +22,22 @@ namespace Verifiable.Apdu.Ctap;
 /// lifecycle, its own instruction table.
 /// </para>
 /// <para>
-/// <strong>Wave-1 scope: no deferred processing.</strong> <see cref="WellKnownCtapInstructionCodes.NfcCtapGetResponse"/>
-/// (<c>0x11</c>) polls for the "still processing" wrapper
-/// (<see cref="WellKnownCtapStatusWords.ResponseStatus"/>, <c>0x9100</c>) per
+/// <strong>Deferred processing is opt-in.</strong> <see cref="Create(CtapPayloadTransceiveDelegate)"/>
+/// wires only the synchronous seam: every <see cref="WellKnownCtapInstructionCodes.NfcCtapMsg"/> request
+/// is awaited to completion inside the same call, so this responder never emits
+/// (<see cref="WellKnownCtapStatusWords.ResponseStatus"/>, <c>0x9100</c>) and an
+/// <see cref="WellKnownCtapInstructionCodes.NfcCtapGetResponse"/> poll always answers "conditions not
+/// satisfied" (<c>0x6985</c>) rather than "instruction not supported" (<c>0x6D00</c>).
+/// <see cref="Create(CtapPayloadTransceiveDelegate, CtapPayloadDeferredTransceiveDelegate, CtapPayloadDeferredPollDelegate, CtapPayloadDeferredCancelDelegate)"/>
+/// additionally wires the deferral seam per
 /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#nfc-ctap-response">
-/// CTAP 2.3, section 11.3.7.2</see>. This responder always awaits <see cref="CtapPayloadTransceiveDelegate"/>
-/// to completion synchronously inside <see cref="WellKnownCtapInstructionCodes.NfcCtapMsg"/> handling
-/// (wave 1's <c>authenticatorGetInfo</c> has no user-presence wait to model), so it never emits
-/// <c>0x9100</c> and never has a deferred result to report. The instruction is still recognized: an
-/// out-of-sequence poll answers "conditions not satisfied" (<c>0x6985</c>) rather than "instruction not
-/// supported" (<c>0x6D00</c>), leaving room for a future authenticator that does defer.
+/// CTAP 2.3, section 11.3.7.2</see>: an <c>NFCCTAP_MSG</c> whose P1 carries
+/// <see cref="WellKnownCtapCommandParameters.SupportsGetResponseP1Bit"/> (lines 10799-10800's MAY,
+/// conditioned on that bit — never emitted otherwise) may park, answering <c>0x9100</c> with one
+/// <see cref="WellKnownCtapKeepaliveStatusCodes.UpNeeded"/> data byte; the client then polls or cancels
+/// with <see cref="WellKnownCtapInstructionCodes.NfcCtapGetResponse"/> (lines 10817-10821's SHALLs) until
+/// the parked request resolves. Whichever <c>Create</c> overload built this instance, a request without
+/// the P1 bit — or any request at all when deferral was never wired — always completes synchronously.
 /// </para>
 /// <para>
 /// <strong>Response chaining is genuinely exercised, both encodings.</strong> Per
@@ -57,8 +63,37 @@ public sealed class CtapNfcResponder: IDisposable
 
     private CtapPayloadTransceiveDelegate PayloadTransceive { get; }
 
+    private CtapPayloadDeferredTransceiveDelegate? DeferredTransceive { get; }
+
+    private CtapPayloadDeferredPollDelegate? DeferredPoll { get; }
+
+    private CtapPayloadDeferredCancelDelegate? DeferredCancel { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether this instance was created with the deferral seam wired
+    /// (<see cref="Create(CtapPayloadTransceiveDelegate, CtapPayloadDeferredTransceiveDelegate, CtapPayloadDeferredPollDelegate, CtapPayloadDeferredCancelDelegate)"/>).
+    /// </summary>
+    private bool DeferralConfigured => DeferredTransceive is not null;
+
     /// <summary>Gets or sets a value indicating whether the FIDO applet is currently selected.</summary>
     private bool AppletSelected { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether an <c>NFCCTAP_MSG</c> request has parked awaiting user
+    /// presence and is awaiting an <see cref="WellKnownCtapInstructionCodes.NfcCtapGetResponse"/> poll
+    /// or cancel — the responder's own mirror of the authenticator-side parked state
+    /// <see cref="DeferredPoll"/>/<see cref="DeferredCancel"/> resolve. Cleared by a completed poll, a
+    /// cancel, or the supersede discipline any new <c>SELECT</c>, deselection, or <c>NFCCTAP_MSG</c>
+    /// applies.
+    /// </summary>
+    private bool DeferredResponsePending { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the parked <c>NFCCTAP_MSG</c> request used extended-length encoding — once
+    /// <see cref="DeferredResponsePending"/> resolves, the completed response's own framing follows this
+    /// exactly as an ordinary synchronous response would (spec §11.3.6).
+    /// </summary>
+    private bool PendingDeferralWasExtended { get; set; }
 
     /// <summary>
     /// Gets or sets the pooled response envelope a chain is currently being drained from; owns the
@@ -93,12 +128,44 @@ public sealed class CtapNfcResponder: IDisposable
 
 
     /// <summary>
-    /// Initializes a new instance over the supplied opaque-payload seam.
+    /// Tears down a request parked awaiting deferred completion, if any: invokes
+    /// <see cref="DeferredCancel"/>, discards the returned envelope, and clears
+    /// <see cref="DeferredResponsePending"/>. Called wherever <see cref="ClearPendingChain"/> is — a new
+    /// <c>SELECT</c>, applet deselection, or <c>NFCCTAP_MSG</c> supersedes whatever request, if any, was
+    /// still parked — so a superseded deferral never leaves the authenticator-side parked state it
+    /// references without a deterministic teardown. A no-op when nothing is parked.
     /// </summary>
-    /// <param name="payloadTransceive">The seam that handles one opaque CTAP2 request/response envelope.</param>
-    private CtapNfcResponder(CtapPayloadTransceiveDelegate payloadTransceive)
+    /// <param name="pool">The memory pool for <see cref="DeferredCancel"/>'s discarded envelope.</param>
+    /// <param name="cancellationToken">Cancellation token forwarded to <see cref="DeferredCancel"/>.</param>
+    private async ValueTask ClearPendingDeferralAsync(MemoryPool<byte> pool, CancellationToken cancellationToken)
+    {
+        if(!DeferredResponsePending)
+        {
+            return;
+        }
+
+        using PooledMemory discardedEnvelope = await DeferredCancel!(pool, cancellationToken).ConfigureAwait(false);
+        DeferredResponsePending = false;
+    }
+
+
+    /// <summary>
+    /// Initializes a new instance over the supplied opaque-payload seam and, optionally, the deferral seam.
+    /// </summary>
+    /// <param name="payloadTransceive">The seam that handles one opaque CTAP2 request/response envelope synchronously.</param>
+    /// <param name="deferredTransceive">The seam beginning a request that may defer, or <see langword="null"/> if deferral is not wired.</param>
+    /// <param name="deferredPoll">The seam polling a parked request, or <see langword="null"/> if deferral is not wired.</param>
+    /// <param name="deferredCancel">The seam cancelling a parked request, or <see langword="null"/> if deferral is not wired.</param>
+    private CtapNfcResponder(
+        CtapPayloadTransceiveDelegate payloadTransceive,
+        CtapPayloadDeferredTransceiveDelegate? deferredTransceive,
+        CtapPayloadDeferredPollDelegate? deferredPoll,
+        CtapPayloadDeferredCancelDelegate? deferredCancel)
     {
         this.PayloadTransceive = payloadTransceive;
+        this.DeferredTransceive = deferredTransceive;
+        this.DeferredPoll = deferredPoll;
+        this.DeferredCancel = deferredCancel;
     }
 
 
@@ -114,12 +181,55 @@ public sealed class CtapNfcResponder: IDisposable
     /// A responder ready to be wrapped by <c>ApduDevice.Create(responder.TransceiveAsync)</c>. The
     /// caller owns it and must dispose it; disposal releases any chained response buffer still in flight.
     /// </returns>
+    /// <remarks>
+    /// No deferral seam: every <c>NFCCTAP_MSG</c> completes synchronously regardless of P1. Use
+    /// <see cref="Create(CtapPayloadTransceiveDelegate, CtapPayloadDeferredTransceiveDelegate, CtapPayloadDeferredPollDelegate, CtapPayloadDeferredCancelDelegate)"/>
+    /// to enable <c>NFCCTAP_GETRESPONSE</c> deferral.
+    /// </remarks>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="payloadTransceive"/> is <see langword="null"/>.</exception>
     public static CtapNfcResponder Create(CtapPayloadTransceiveDelegate payloadTransceive)
     {
         ArgumentNullException.ThrowIfNull(payloadTransceive);
 
-        return new CtapNfcResponder(payloadTransceive);
+        return new CtapNfcResponder(payloadTransceive, null, null, null);
+    }
+
+
+    /// <summary>
+    /// Creates a responder that deframes NFC/ISO7816-4 traffic, forwards opaque CTAP2 envelopes to
+    /// <paramref name="payloadTransceive"/>, and additionally supports deferring a request across
+    /// separate <c>NFCCTAP_MSG</c>/<c>NFCCTAP_GETRESPONSE</c> exchanges
+    /// (<see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#nfc-ctap-response">
+    /// CTAP 2.3, section 11.3.7.2</see>, lines 10817-10821) via <paramref name="deferredTransceive"/>/
+    /// <paramref name="deferredPoll"/>/<paramref name="deferredCancel"/>.
+    /// </summary>
+    /// <param name="payloadTransceive">
+    /// The seam handling one opaque CTAP2 request/response envelope synchronously — used whenever the
+    /// client's <c>NFCCTAP_MSG</c> P1 does not carry <see cref="WellKnownCtapCommandParameters.SupportsGetResponseP1Bit"/>.
+    /// </param>
+    /// <param name="deferredTransceive">
+    /// The seam beginning one CTAP2 request that may park awaiting user presence — invoked only when
+    /// the client's P1 carries <see cref="WellKnownCtapCommandParameters.SupportsGetResponseP1Bit"/>.
+    /// </param>
+    /// <param name="deferredPoll">The seam polling a previously parked request.</param>
+    /// <param name="deferredCancel">The seam cancelling a previously parked request, also used to supersede a parked request on a new SELECT, deselection, or NFCCTAP_MSG.</param>
+    /// <returns>
+    /// A responder ready to be wrapped by <c>ApduDevice.Create(responder.TransceiveAsync)</c>. The
+    /// caller owns it and must dispose it; disposal releases any chained response buffer still in flight.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown when any parameter is <see langword="null"/>.</exception>
+    public static CtapNfcResponder Create(
+        CtapPayloadTransceiveDelegate payloadTransceive,
+        CtapPayloadDeferredTransceiveDelegate deferredTransceive,
+        CtapPayloadDeferredPollDelegate deferredPoll,
+        CtapPayloadDeferredCancelDelegate deferredCancel)
+    {
+        ArgumentNullException.ThrowIfNull(payloadTransceive);
+        ArgumentNullException.ThrowIfNull(deferredTransceive);
+        ArgumentNullException.ThrowIfNull(deferredPoll);
+        ArgumentNullException.ThrowIfNull(deferredCancel);
+
+        return new CtapNfcResponder(payloadTransceive, deferredTransceive, deferredPoll, deferredCancel);
     }
 
 
@@ -129,7 +239,7 @@ public sealed class CtapNfcResponder: IDisposable
     /// </summary>
     /// <param name="commandApdu">The complete command APDU bytes.</param>
     /// <param name="pool">The memory pool for the response buffer.</param>
-    /// <param name="cancellationToken">Cancellation token forwarded to <see cref="CtapPayloadTransceiveDelegate"/>.</param>
+    /// <param name="cancellationToken">Cancellation token forwarded to <see cref="CtapPayloadTransceiveDelegate"/> and, when deferral is configured, the deferral delegates.</param>
     /// <returns>A result carrying the response APDU. Always a success at the transport level; card-level errors ride the status word, matching the established <c>VirtualCard</c> convention.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="pool"/> is <see langword="null"/>.</exception>
     public async ValueTask<ApduResult<ApduResponse>> TransceiveAsync(
@@ -151,11 +261,11 @@ public sealed class CtapNfcResponder: IDisposable
 
         ValueTask<ApduResult<ApduResponse>> dispatched = ins switch
         {
-            var i when i == InstructionCode.Select.Code => HandleSelectAsync(commandApdu, p1, pool),
-            var i when i == WellKnownCtapInstructionCodes.NfcCtapMsg.Code => HandleNfcCtapMsgAsync(commandApdu, pool, cancellationToken),
+            var i when i == InstructionCode.Select.Code => HandleSelectAsync(commandApdu, p1, pool, cancellationToken),
+            var i when i == WellKnownCtapInstructionCodes.NfcCtapMsg.Code => HandleNfcCtapMsgAsync(commandApdu, p1, pool, cancellationToken),
             var i when i == InstructionCode.GetResponse.Code => HandleGetResponseAsync(commandApdu, pool),
-            var i when i == WellKnownCtapInstructionCodes.NfcCtapGetResponse.Code => HandleNfcCtapGetResponseAsync(pool),
-            var i when i == WellKnownCtapInstructionCodes.NfcCtapControl.Code => HandleControlAsync(p1, pool),
+            var i when i == WellKnownCtapInstructionCodes.NfcCtapGetResponse.Code => HandleNfcCtapGetResponseAsync(commandApdu, p1, pool, cancellationToken),
+            var i when i == WellKnownCtapInstructionCodes.NfcCtapControl.Code => HandleControlAsync(p1, pool, cancellationToken),
             _ => ValueTask.FromResult(Reply(StatusWord.InstructionNotSupported, pool))
         };
 
@@ -164,74 +274,84 @@ public sealed class CtapNfcResponder: IDisposable
 
 
     /// <summary>
-    /// Handles applet selection (spec §11.3.3): only select-by-AID for <see cref="WellKnownAid.Fido"/> succeeds.
+    /// Handles applet selection (spec §11.3.3): only select-by-AID for <see cref="WellKnownAid.Fido"/>
+    /// succeeds. Supersedes any request still parked awaiting deferred completion.
     /// </summary>
     /// <param name="commandApdu">The SELECT command APDU.</param>
     /// <param name="p1">The command's P1 byte.</param>
     /// <param name="pool">The memory pool for the response buffer.</param>
+    /// <param name="cancellationToken">Cancellation token forwarded to <see cref="DeferredCancel"/> when superseding a parked request.</param>
     /// <returns>The SELECT response.</returns>
-    private ValueTask<ApduResult<ApduResponse>> HandleSelectAsync(ReadOnlyMemory<byte> commandApdu, byte p1, MemoryPool<byte> pool)
+    private async ValueTask<ApduResult<ApduResponse>> HandleSelectAsync(
+        ReadOnlyMemory<byte> commandApdu, byte p1, MemoryPool<byte> pool, CancellationToken cancellationToken)
     {
         AppletSelected = false;
+        await ClearPendingDeferralAsync(pool, cancellationToken).ConfigureAwait(false);
         ClearPendingChain();
 
         if(p1 != WellKnownCommandParameters.SelectByDfNameP1)
         {
-            return ValueTask.FromResult(Reply(StatusWord.IncorrectP1P2, pool));
+            return Reply(StatusWord.IncorrectP1P2, pool);
         }
 
         if(!TryParseDataAndLe(commandApdu, out ReadOnlyMemory<byte> aid, out _, out _))
         {
-            return ValueTask.FromResult(Reply(StatusWord.WrongLength, pool));
+            return Reply(StatusWord.WrongLength, pool);
         }
 
         if(!WellKnownAid.Matches(aid.Span, WellKnownAid.Fido))
         {
-            return ValueTask.FromResult(Reply(StatusWord.FileNotFound, pool));
+            return Reply(StatusWord.FileNotFound, pool);
         }
 
         AppletSelected = true;
 
-        return ValueTask.FromResult(Reply(SelectVersionString, StatusWord.Success, pool));
+        return Reply(SelectVersionString, StatusWord.Success, pool);
     }
 
 
     /// <summary>
-    /// Handles applet deselection (spec §11.3.4): the applet ignores all CTAP commands until the next SELECT.
+    /// Handles applet deselection (spec §11.3.4): the applet ignores all CTAP commands until the next
+    /// SELECT. Supersedes any request still parked awaiting deferred completion.
     /// </summary>
     /// <param name="p1">The command's P1 byte.</param>
     /// <param name="pool">The memory pool for the response buffer.</param>
+    /// <param name="cancellationToken">Cancellation token forwarded to <see cref="DeferredCancel"/> when superseding a parked request.</param>
     /// <returns>The deselection response.</returns>
-    private ValueTask<ApduResult<ApduResponse>> HandleControlAsync(byte p1, MemoryPool<byte> pool)
+    private async ValueTask<ApduResult<ApduResponse>> HandleControlAsync(byte p1, MemoryPool<byte> pool, CancellationToken cancellationToken)
     {
         if(p1 != WellKnownCtapCommandParameters.DeselectControlP1)
         {
-            return ValueTask.FromResult(Reply(StatusWord.IncorrectP1P2, pool));
+            return Reply(StatusWord.IncorrectP1P2, pool);
         }
 
         AppletSelected = false;
+        await ClearPendingDeferralAsync(pool, cancellationToken).ConfigureAwait(false);
         ClearPendingChain();
 
-        return ValueTask.FromResult(Reply(StatusWord.Success, pool));
+        return Reply(StatusWord.Success, pool);
     }
 
 
     /// <summary>
     /// Deframes an NFCCTAP_MSG command (spec §11.3.5.1), forwards the opaque envelope to
-    /// <see cref="PayloadTransceive"/>, and frames the response per spec §11.3.6.
+    /// <see cref="PayloadTransceive"/> or, when eligible and wired, <see cref="DeferredTransceive"/>, and
+    /// frames the response per spec §11.3.6. Supersedes any request still parked from an earlier exchange.
     /// </summary>
     /// <param name="commandApdu">The NFCCTAP_MSG command APDU.</param>
+    /// <param name="p1">The command's P1 byte.</param>
     /// <param name="pool">The memory pool for command and response buffers.</param>
-    /// <param name="cancellationToken">Cancellation token forwarded to <see cref="PayloadTransceive"/>.</param>
+    /// <param name="cancellationToken">Cancellation token forwarded to <see cref="PayloadTransceive"/>/<see cref="DeferredTransceive"/>.</param>
     /// <returns>The framed response.</returns>
     private async ValueTask<ApduResult<ApduResponse>> HandleNfcCtapMsgAsync(
-        ReadOnlyMemory<byte> commandApdu, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> commandApdu, byte p1, MemoryPool<byte> pool, CancellationToken cancellationToken)
     {
         if(!AppletSelected)
         {
             return Reply(StatusWord.ConditionsNotSatisfied, pool);
         }
 
+        await ClearPendingDeferralAsync(pool, cancellationToken).ConfigureAwait(false);
         ClearPendingChain();
 
         if(!TryParseDataAndLe(commandApdu, out ReadOnlyMemory<byte> payload, out int requestedLe, out bool isExtended))
@@ -239,14 +359,53 @@ public sealed class CtapNfcResponder: IDisposable
             return Reply(StatusWord.WrongLength, pool);
         }
 
+        //THE TRAP (:10799-10800): a 0x9100 deferral is legal only when the client's own P1 declares
+        //NFCCTAP_GETRESPONSE support. Without the bit — or without the deferral seam wired at all —
+        //this always falls through to the synchronous PayloadTransceive path below, byte-identical to a
+        //responder created via the single-delegate Create overload.
+        if(WellKnownCtapCommandParameters.IsSupportsGetResponseP1Bit(p1) && DeferralConfigured)
+        {
+            PooledMemory deferredResult = await DeferredTransceive!(payload, pool, cancellationToken).ConfigureAwait(false);
+
+            if(deferredResult.Length == 0)
+            {
+                deferredResult.Dispose();
+                DeferredResponsePending = true;
+                PendingDeferralWasExtended = isExtended;
+
+                return Reply([WellKnownCtapKeepaliveStatusCodes.UpNeeded], WellKnownCtapStatusWords.ResponseStatus, pool);
+            }
+
+            return EmitMsgResponse(deferredResult, requestedLe, isExtended, pool);
+        }
+
         PooledMemory response = await PayloadTransceive(payload, pool, cancellationToken).ConfigureAwait(false);
 
+        return EmitMsgResponse(response, requestedLe, isExtended, pool);
+    }
+
+
+    /// <summary>
+    /// Frames a complete opaque CTAP2 response envelope per spec §11.3.6: an extended-length request is
+    /// answered in one frame regardless of size, a short-form request chains via <see cref="EmitChunk"/>.
+    /// Shared by the synchronous <see cref="PayloadTransceive"/> path and every deferred-completion path
+    /// (an <c>NFCCTAP_MSG</c> whose deferred begin resolves immediately, and a later
+    /// <c>NFCCTAP_GETRESPONSE</c> poll resolving a parked request), so the framing rule and the
+    /// dispose-after-copy ordering it depends on are implemented exactly once.
+    /// </summary>
+    /// <param name="response">The complete response envelope; ownership transfers to this method.</param>
+    /// <param name="requestedLe">The Le the terminal requested on the exchange carrying this response.</param>
+    /// <param name="isExtended">Whether the originating NFCCTAP_MSG request used extended-length encoding.</param>
+    /// <param name="pool">The memory pool for the response buffer.</param>
+    /// <returns>The framed response.</returns>
+    private ApduResult<ApduResponse> EmitMsgResponse(PooledMemory response, int requestedLe, bool isExtended, MemoryPool<byte> pool)
+    {
         if(isExtended)
         {
             //Spec §11.3.6: an extended-length request MUST be answered with an extended-length
-            //response, in one frame — never chained, regardless of the response's size this wave. The
-            //frame's bytes are copied into the ApduResponse's own buffer before this scope ends, so the
-            //payload delegate's buffer is disposed immediately.
+            //response, in one frame — never chained, regardless of the response's size. The frame's
+            //bytes are copied into the ApduResponse's own buffer before this scope ends, so response's
+            //own buffer is disposed immediately.
             using(response)
             {
                 return Reply(response.AsReadOnlySpan(), StatusWord.Success, pool);
@@ -282,14 +441,55 @@ public sealed class CtapNfcResponder: IDisposable
 
 
     /// <summary>
-    /// Handles an NFCCTAP_GETRESPONSE (<c>0x11</c>) poll or cancel. See the type remarks for why this
-    /// wave never has a deferred result to report.
+    /// Handles an NFCCTAP_GETRESPONSE (<c>0x11</c>) poll or cancel
+    /// (<see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#nfc-ctap-response">
+    /// CTAP 2.3, section 11.3.7.2</see>, lines 10817-10821).
     /// </summary>
+    /// <param name="commandApdu">The NFCCTAP_GETRESPONSE command APDU.</param>
+    /// <param name="p1">The command's P1 byte: <see cref="WellKnownCtapCommandParameters.CancelP1"/> requests cancellation; any other value polls.</param>
     /// <param name="pool">The memory pool for the response buffer.</param>
-    /// <returns>A "conditions not satisfied" response.</returns>
-    private static ValueTask<ApduResult<ApduResponse>> HandleNfcCtapGetResponseAsync(MemoryPool<byte> pool)
+    /// <param name="cancellationToken">Cancellation token forwarded to <see cref="DeferredPoll"/>/<see cref="DeferredCancel"/>.</param>
+    /// <returns>
+    /// <c>0x6985</c> (conditions not satisfied) when nothing is parked, regardless of
+    /// <paramref name="p1"/> — the out-of-sequence fence. Otherwise: the cancel outcome
+    /// (<c>0x9000</c> with the opaque envelope <see cref="DeferredCancel"/> returns — the
+    /// <c>CTAP2_ERR_KEEPALIVE_CANCEL</c> status byte per :10819-10821's SHALL, opaque to this
+    /// responder) when <paramref name="p1"/> is <see cref="WellKnownCtapCommandParameters.CancelP1"/>;
+    /// otherwise the poll outcome (<c>0x9100</c> with one
+    /// <see cref="WellKnownCtapKeepaliveStatusCodes.UpNeeded"/> data byte while still parked, or the
+    /// completed response once resolved).
+    /// </returns>
+    private async ValueTask<ApduResult<ApduResponse>> HandleNfcCtapGetResponseAsync(
+        ReadOnlyMemory<byte> commandApdu, byte p1, MemoryPool<byte> pool, CancellationToken cancellationToken)
     {
-        return ValueTask.FromResult(Reply(StatusWord.ConditionsNotSatisfied, pool));
+        if(!DeferredResponsePending)
+        {
+            return Reply(StatusWord.ConditionsNotSatisfied, pool);
+        }
+
+        if(WellKnownCtapCommandParameters.IsCancelP1(p1))
+        {
+            using PooledMemory cancelEnvelope = await DeferredCancel!(pool, cancellationToken).ConfigureAwait(false);
+            DeferredResponsePending = false;
+
+            return Reply(cancelEnvelope.AsReadOnlySpan(), StatusWord.Success, pool);
+        }
+
+        //Any other P1 with a request parked is the normal poll: lines 10823's P1-RFU MUST binds the
+        //platform, not this responder, which permissively treats every non-cancel P1 as a poll.
+        PooledMemory pollResult = await DeferredPoll!(pool, cancellationToken).ConfigureAwait(false);
+
+        if(pollResult.Length == 0)
+        {
+            pollResult.Dispose();
+
+            return Reply([WellKnownCtapKeepaliveStatusCodes.UpNeeded], WellKnownCtapStatusWords.ResponseStatus, pool);
+        }
+
+        DeferredResponsePending = false;
+        int requestedLe = ParseCase2Le(commandApdu.Span);
+
+        return EmitMsgResponse(pollResult, requestedLe, PendingDeferralWasExtended, pool);
     }
 
 
@@ -472,6 +672,6 @@ public sealed class CtapNfcResponder: IDisposable
 
 
     private string DebuggerDisplay => AppletSelected
-        ? $"CtapNfcResponder(selected, {PendingChain.Length}B chain pending)"
+        ? $"CtapNfcResponder(selected, {PendingChain.Length}B chain pending{(DeferredResponsePending ? ", deferral pending" : string.Empty)})"
         : "CtapNfcResponder(not selected)";
 }

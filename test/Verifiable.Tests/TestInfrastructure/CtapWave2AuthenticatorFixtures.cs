@@ -67,10 +67,11 @@ internal static class CtapWave2AuthenticatorFixtures
     public static CtapAuthenticatorSimulator CreateSimulator(
         string runId, FillEntropyDelegate? rng = null, int residentCredentialCapacity = 8, TimeProvider? timeProvider = null,
         SimulateFingerprintCaptureDelegate? simulateFingerprintCapture = null, SimulateBuiltInUvDelegate? simulateBuiltInUv = null,
-        CtapEnterpriseAttestationProvisioning? enterpriseAttestationProvisioning = null, Guid? aaguid = null) =>
+        CtapEnterpriseAttestationProvisioning? enterpriseAttestationProvisioning = null, Guid? aaguid = null,
+        SimulateUserPresenceDelegate? simulateUserPresence = null) =>
         CreateSimulatorWithBackend(
             runId, CtapCredentialSigningBackend.CreateEs256Default(), rng, residentCredentialCapacity, timeProvider, simulateFingerprintCapture, simulateBuiltInUv,
-            enterpriseAttestationProvisioning, aaguid);
+            enterpriseAttestationProvisioning, aaguid, simulateUserPresence);
 
 
     /// <summary>
@@ -92,7 +93,8 @@ internal static class CtapWave2AuthenticatorFixtures
         SimulateFingerprintCaptureDelegate? simulateFingerprintCapture = null,
         SimulateBuiltInUvDelegate? simulateBuiltInUv = null,
         CtapEnterpriseAttestationProvisioning? enterpriseAttestationProvisioning = null,
-        Guid? aaguid = null) =>
+        Guid? aaguid = null,
+        SimulateUserPresenceDelegate? simulateUserPresence = null) =>
         new(
             runId,
             CtapGetInfoResponseCborWriter.Write,
@@ -120,6 +122,7 @@ internal static class CtapWave2AuthenticatorFixtures
             timeProvider: timeProvider,
             simulateFingerprintCapture: simulateFingerprintCapture,
             simulateBuiltInUv: simulateBuiltInUv,
+            simulateUserPresence: simulateUserPresence,
             enterpriseAttestationProvisioning: enterpriseAttestationProvisioning,
             encodePackedCertifiedAttestationStatement: PackedAttestationStatementCborWriter.WriteCertified);
 

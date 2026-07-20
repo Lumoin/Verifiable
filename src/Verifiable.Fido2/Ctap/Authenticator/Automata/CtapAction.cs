@@ -24,6 +24,20 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 public abstract record CtapAction: PdaAction;
 
 /// <summary>
+/// Declares that the simulator must consult the injected <see cref="SimulateUserPresenceDelegate"/> for a
+/// user-presence decision before continuing an <c>authenticatorMakeCredential</c>/
+/// <c>authenticatorGetAssertion</c> that requires evidence of user interaction (CTAP 2.3 :2840). Emitted
+/// by the pure transition once every earlier pure pre-check has passed, and declared again — unchanged —
+/// by <c>UserPresencePollRequested</c>'s own handling while a wait remains parked; the effectful loop
+/// folds the seam's answer back as a <see cref="UserPresenceDecisionCollected"/> input. Carries no fields:
+/// the continuation to resume once a decision arrives lives on
+/// <see cref="CtapAuthenticatorState.PendingUserPresenceWait"/>, armed by the transition BEFORE this
+/// action is ever declared, so re-declaring this SAME action across a poll needs no re-supplied
+/// continuation — mirroring <see cref="CtapBeginBioEnrollmentCaptureAction"/>'s own no-fields shape.
+/// </summary>
+public sealed record CtapCollectUserPresenceAction: CtapAction;
+
+/// <summary>
 /// Declares that the simulator must mint a fresh credential key pair before the next transition. Emitted
 /// by the <c>authenticatorMakeCredential</c> transition once every non-effectful validation step has
 /// passed; the effectful loop draws a fresh credential identifier from the injected entropy provider,

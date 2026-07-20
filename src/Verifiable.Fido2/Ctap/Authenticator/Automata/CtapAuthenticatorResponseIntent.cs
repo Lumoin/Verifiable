@@ -129,3 +129,15 @@ public sealed record BioEnrollmentResponseReady(CtapBioEnrollmentResponse? Respo
 /// </remarks>
 /// <param name="Response">The response model to CBOR-encode, or <see langword="null"/> for a bare <c>CTAP2_OK</c>.</param>
 public sealed record LargeBlobsResponseReady(CtapLargeBlobsResponse? Response): CtapAuthenticatorResponseIntent;
+
+/// <summary>
+/// An <c>authenticatorMakeCredential</c>/<c>authenticatorGetAssertion</c> user-presence wait remains
+/// parked (CTAP 2.3 :2840, R2): no gesture has been collected yet and the request's transport allows
+/// deferral. Carries no CBOR body — <see cref="CtapAuthenticatorSimulator.BeginDeferredTransceiveAsync"/>/
+/// <see cref="CtapAuthenticatorSimulator.PollDeferredTransceiveAsync"/> frame this intent as a
+/// zero-length <see cref="PooledMemory"/> "still pending" marker, never a legal final CTAP2 response
+/// envelope. Plain <see cref="CtapAuthenticatorSimulator.TransceiveAsync"/> never sees this intent — the
+/// inputs it builds never allow deferral (<see cref="MakeCredentialRequested.IsUserPresenceDeferralAllowed"/>/
+/// <see cref="GetAssertionRequested.IsUserPresenceDeferralAllowed"/> stay <see langword="false"/>).
+/// </summary>
+public sealed record UserPresencePending: CtapAuthenticatorResponseIntent;

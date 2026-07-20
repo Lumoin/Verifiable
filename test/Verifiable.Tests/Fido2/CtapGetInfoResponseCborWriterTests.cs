@@ -1,7 +1,9 @@
 using System;
 using Verifiable.Cbor.Ctap;
+using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
+using Verifiable.JCose;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -18,6 +20,20 @@ internal sealed class CtapGetInfoResponseCborWriterTests
 
     /// <summary>ASCII bytes of "FIDO_2_3", the version string a CTAP2.3 authenticator MUST report.</summary>
     private static byte[] Fido23Ascii => [0x46, 0x49, 0x44, 0x4F, 0x5F, 0x32, 0x5F, 0x33];
+
+    /// <summary>The single-entry <c>algorithms</c> advertisement <see cref="CtapCredentialSigningBackend.CreateEs256Default"/> produces.</summary>
+    private static PublicKeyCredentialParameters[] Es256Algorithms =>
+        [new PublicKeyCredentialParameters { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Alg = WellKnownCoseAlgorithms.Es256 }];
+
+    /// <summary>
+    /// The CBOR bytes of a one-element <c>algorithms</c> array advertising ES256/"public-key":
+    /// <c>81</c> array(1), <c>A2</c> map(2), <c>63 "alg"</c>, <c>26</c> (-7, ES256), <c>64 "type"</c>,
+    /// <c>6A "public-key"</c> — hand-verified against
+    /// <see cref="Verifiable.Cbor.Ctap.CtapCommandEntityCborCodec.WriteParameters"/>'s own fixed
+    /// <c>alg</c>-then-<c>type</c> member order.
+    /// </summary>
+    private static byte[] Es256AlgorithmsBytes =>
+        [0x81, 0xA2, 0x63, 0x61, 0x6C, 0x67, 0x26, 0x64, 0x74, 0x79, 0x70, 0x65, 0x6A, 0x70, 0x75, 0x62, 0x6C, 0x69, 0x63, 0x2D, 0x6B, 0x65, 0x79];
 
 
     /// <summary>
@@ -603,6 +619,105 @@ internal sealed class CtapGetInfoResponseCborWriterTests
 
 
     /// <summary>
+    /// The two R5/R6 members this wave adds — <c>maxCredentialCountInList</c> (0x07) and
+    /// <c>algorithms</c> (0x0A) — write in ascending integer-key order, inserted between
+    /// <c>pinUvAuthProtocols</c> (0x06) and <c>maxSerializedLargeBlobArray</c> (0x0B): trap 7's
+    /// ascending-key insertion, <c>0x07</c> strictly before <c>0x0A</c>. The <c>algorithms</c> array's
+    /// own element map is text-keyed canonical (<c>"alg"</c> before <c>"type"</c>, length-first) — see
+    /// <see cref="Es256AlgorithmsBytes"/>'s own derivation.
+    /// </summary>
+    [TestMethod]
+    public void WriteOrdersMaxCredentialCountInListAndAlgorithmsBetweenPinUvAuthProtocolsAndMaxSerializedLargeBlobArray()
+    {
+        Guid aaguid = new(FixedAaguidBytes, bigEndian: true);
+        var response = new CtapGetInfoResponse(
+            Versions: [WellKnownCtapVersions.Fido23],
+            Aaguid: aaguid,
+            PinUvAuthProtocols: [2, 1],
+            MaxCredentialCountInList: 8,
+            Algorithms: Es256Algorithms,
+            MaxSerializedLargeBlobArray: CtapAuthenticatorState.MaxSerializedLargeBlobArrayCapacity);
+
+        TaggedMemory<byte> result = CtapGetInfoResponseCborWriter.Write(response);
+
+        byte[] expected =
+        [
+            0xA6, //map(6): versions, aaguid, pinUvAuthProtocols, maxCredentialCountInList, algorithms, maxSerializedLargeBlobArray
+            0x01, 0x81, 0x68, .. Fido23Ascii,
+            0x03, 0x50, .. FixedAaguidBytes,
+            0x06, 0x82, 0x02, 0x01, //key 6 (pinUvAuthProtocols): [2, 1]
+            0x07, 0x08, //key 0x07 (maxCredentialCountInList) -> 8
+            0x0A, .. Es256AlgorithmsBytes, //key 0x0A (algorithms) -> [{alg: ES256, type: "public-key"}]
+            0x0B, 0x19, 0x10, 0x00 //key 0x0B (maxSerializedLargeBlobArray) -> 4096
+        ];
+
+        Assert.IsTrue(result.Span.SequenceEqual(expected));
+    }
+
+
+    /// <summary>
+    /// A response carrying <c>maxCredentialCountInList</c> alone (<c>algorithms</c> left
+    /// <see langword="null"/>) writes 0x07 with NO following 0x0A entry — the writer omits the
+    /// <c>algorithms</c> member entirely rather than emitting an empty array, since
+    /// <see cref="CtapGetInfoResponse.Algorithms"/> is itself the omission signal (R6: "MUST NOT... be
+    /// empty if present" is satisfied by never presenting an empty array at all).
+    /// </summary>
+    [TestMethod]
+    public void WriteOmitsAlgorithmsWhenNullAlongsideMaxCredentialCountInList()
+    {
+        Guid aaguid = new(FixedAaguidBytes, bigEndian: true);
+        var response = new CtapGetInfoResponse(
+            Versions: [WellKnownCtapVersions.Fido23],
+            Aaguid: aaguid,
+            MaxCredentialCountInList: 8);
+
+        TaggedMemory<byte> result = CtapGetInfoResponseCborWriter.Write(response);
+
+        byte[] expected =
+        [
+            0xA3, //map(3): versions, aaguid, maxCredentialCountInList
+            0x01, 0x81, 0x68, .. Fido23Ascii,
+            0x03, 0x50, .. FixedAaguidBytes,
+            0x07, 0x08 //key 0x07 (maxCredentialCountInList) -> 8, no 0x0A follows
+        ];
+
+        Assert.IsTrue(result.Span.SequenceEqual(expected));
+    }
+
+
+    /// <summary>
+    /// The R7 member <c>firmwareVersion</c> (0x0E) writes in ascending integer-key order, inserted
+    /// between <c>minPINLength</c> (0x0D) and <c>maxRPIDsForSetMinPINLength</c> (0x10) — trap 7's second
+    /// insertion point.
+    /// </summary>
+    [TestMethod]
+    public void WriteOrdersFirmwareVersionBetweenMinPinLengthAndMaxRpIdsForSetMinPinLength()
+    {
+        Guid aaguid = new(FixedAaguidBytes, bigEndian: true);
+        var response = new CtapGetInfoResponse(
+            Versions: [WellKnownCtapVersions.Fido23],
+            Aaguid: aaguid,
+            MinPinLength: 4,
+            FirmwareVersion: 1,
+            MaxRpIdsForSetMinPinLength: 8);
+
+        TaggedMemory<byte> result = CtapGetInfoResponseCborWriter.Write(response);
+
+        byte[] expected =
+        [
+            0xA5, //map(5): versions, aaguid, minPINLength, firmwareVersion, maxRPIDsForSetMinPINLength
+            0x01, 0x81, 0x68, .. Fido23Ascii,
+            0x03, 0x50, .. FixedAaguidBytes,
+            0x0D, 0x04, //key 0x0D (minPINLength) -> 4
+            0x0E, 0x01, //key 0x0E (firmwareVersion) -> 1
+            0x10, 0x08 //key 0x10 (maxRPIDsForSetMinPINLength) -> 8
+        ];
+
+        Assert.IsTrue(result.Span.SequenceEqual(expected));
+    }
+
+
+    /// <summary>
     /// The full <c>authenticatorConfig</c>+<c>authenticatorCredentialManagement</c>+wavebio getInfo
     /// surface in the <c>alwaysUv</c>-disabled state: the default <c>extensions:["credProtect",
     /// "hmac-secret", "hmac-secret-mc", "largeBlobKey", "minPinLength"]</c> (contract R1), <c>alwaysUv:false</c>,
@@ -614,12 +729,16 @@ internal sealed class CtapGetInfoResponseCborWriterTests
     /// <c>maxSerializedLargeBlobArray:4096</c>/<c>maxRPIDsForSetMinPINLength:8</c> (both single-sourced
     /// fixed capacity constants), <c>preferredPlatformUvAttempts:3</c>/<c>uvModality:2</c>
     /// (single-sourced statics), <c>remainingDiscoverableCredentials:8</c> (the default resident
-    /// credential capacity, empty store), and <c>authenticatorConfigCommands:[2, 3]</c> — this is the
-    /// exact shape
+    /// credential capacity, empty store), <c>authenticatorConfigCommands:[2, 3]</c>,
+    /// <c>maxCredentialCountInList:8</c> (R5), a one-element <c>algorithms:[{alg: ES256, type:
+    /// "public-key"}]</c> (R6, the ES256-only default credential-signing backend), and
+    /// <c>firmwareVersion:1</c> (R7, <see cref="CtapAuthenticatorState.Initial"/>'s own seed default) —
+    /// this is the exact shape
     /// <see cref="Verifiable.Fido2.Ctap.Authenticator.Automata.CtapAuthenticatorTransitions"/>'s
-    /// <c>BuildGetInfoResponse</c> produces for a freshly constructed authenticator. R11 regression
-    /// fence: this authenticator is NON-CAPABLE (no <c>EnterpriseAttestationProvisioning</c> seeded), so
-    /// <c>ep</c> stays absent and this vector's bytes are UNCHANGED by the waveep contract —
+    /// <c>BuildGetInfoResponse</c> produces for a freshly constructed authenticator with the ES256
+    /// default backend injected. R11 regression fence: this authenticator is NON-CAPABLE (no
+    /// <c>EnterpriseAttestationProvisioning</c> seeded), so <c>ep</c> stays absent and this vector's
+    /// <c>options</c> bytes are UNCHANGED by the waveep contract —
     /// <see cref="WriteEncodesEnterpriseAttestationCapableEnabledFullSurfaceToExactCanonicalBytes"/> is
     /// the capable+enabled sibling proving the two profiles diverge only where <c>ep</c> itself differs.
     /// </summary>
@@ -653,7 +772,10 @@ internal sealed class CtapGetInfoResponseCborWriterTests
             PreferredPlatformUvAttempts: 3,
             UvModality: 0x00000002,
             RemainingDiscoverableCredentials: 8,
-            AuthenticatorConfigCommands: [2, 3]);
+            AuthenticatorConfigCommands: [2, 3],
+            MaxCredentialCountInList: 8,
+            Algorithms: Es256Algorithms,
+            FirmwareVersion: 1);
 
         TaggedMemory<byte> result = CtapGetInfoResponseCborWriter.Write(response);
 
@@ -675,7 +797,7 @@ internal sealed class CtapGetInfoResponseCborWriterTests
 
         byte[] expected =
         [
-            0xAD, //map(13): versions, extensions, aaguid, options, pinUvAuthProtocols, maxSerializedLargeBlobArray, forcePINChange, minPINLength, maxRPIDsForSetMinPINLength, preferredPlatformUvAttempts, uvModality, remainingDiscoverableCredentials, authenticatorConfigCommands
+            0xB0, //map(16): versions, extensions, aaguid, options, pinUvAuthProtocols, maxCredentialCountInList, algorithms, maxSerializedLargeBlobArray, forcePINChange, minPINLength, firmwareVersion, maxRPIDsForSetMinPINLength, preferredPlatformUvAttempts, uvModality, remainingDiscoverableCredentials, authenticatorConfigCommands
             0x01, 0x81, 0x68, .. Fido23Ascii,
             0x02, 0x85, 0x6B, .. credProtectAscii, 0x6B, .. hmacSecretAscii, 0x6E, .. hmacSecretMcAscii, 0x6C, .. largeBlobKeyAscii, 0x6C, .. minPinLengthAscii, //key 2 (extensions): array(5) of text(11), text(11), text(14), text(12), text(12)
             0x03, 0x50, .. FixedAaguidBytes,
@@ -694,9 +816,12 @@ internal sealed class CtapGetInfoResponseCborWriterTests
                 0x6F, .. setMinPinLengthAscii, 0xF5, //"setMinPINLength" (text(15)) -> true
                 0x70, .. makeCredUvNotRqdAscii, 0xF5, //"makeCredUvNotRqd" (text(16)) -> true
             0x06, 0x82, 0x02, 0x01, //key 6 (pinUvAuthProtocols): [2, 1]
+            0x07, 0x08, //key 0x07 (maxCredentialCountInList) -> 8
+            0x0A, .. Es256AlgorithmsBytes, //key 0x0A (algorithms) -> [{alg: ES256, type: "public-key"}]
             0x0B, 0x19, 0x10, 0x00, //key 0x0B (maxSerializedLargeBlobArray) -> 4096
             0x0C, 0xF4, //key 0x0C (forcePINChange) -> false
             0x0D, 0x04, //key 0x0D (minPINLength) -> 4
+            0x0E, 0x01, //key 0x0E (firmwareVersion) -> 1
             0x10, 0x08, //key 0x10 (maxRPIDsForSetMinPINLength) -> 8
             0x11, 0x03, //key 0x11 (preferredPlatformUvAttempts) -> 3
             0x12, 0x02, //key 0x12 (uvModality) -> 2
@@ -717,9 +842,11 @@ internal sealed class CtapGetInfoResponseCborWriterTests
     /// <c>maxRPIDsForSetMinPINLength:8</c> (R8), and the wavebio <c>uv:false</c>/<c>bioEnroll:false</c>/
     /// <c>uvBioEnroll:true</c>/<c>preferredPlatformUvAttempts:3</c>/<c>uvModality:2</c> surface — bio
     /// enrollment state is independent of <c>alwaysUv</c> — with only the changed booleans/integer
-    /// differing, proving the config-state flips are value changes, never structural ones. R11
-    /// regression fence: this authenticator is also NON-CAPABLE, so <c>ep</c> stays absent here too —
-    /// this vector's bytes are UNCHANGED by the waveep contract.
+    /// differing, proving the config-state flips are value changes, never structural ones.
+    /// <c>maxCredentialCountInList:8</c>/<c>algorithms:[{alg: ES256, type: "public-key"}]</c>/
+    /// <c>firmwareVersion:1</c> (R5/R6/R7) are orthogonal to <c>alwaysUv</c> and stay byte-identical to
+    /// the disabled variant. R11 regression fence: this authenticator is also NON-CAPABLE, so <c>ep</c>
+    /// stays absent here too — this vector's <c>options</c> bytes are UNCHANGED by the waveep contract.
     /// </summary>
     [TestMethod]
     public void WriteEncodesFullAuthenticatorConfigSurfaceWithAlwaysUvEnabledToExactCanonicalBytes()
@@ -751,7 +878,10 @@ internal sealed class CtapGetInfoResponseCborWriterTests
             PreferredPlatformUvAttempts: 3,
             UvModality: 0x00000002,
             RemainingDiscoverableCredentials: 8,
-            AuthenticatorConfigCommands: [2, 3]);
+            AuthenticatorConfigCommands: [2, 3],
+            MaxCredentialCountInList: 8,
+            Algorithms: Es256Algorithms,
+            FirmwareVersion: 1);
 
         TaggedMemory<byte> result = CtapGetInfoResponseCborWriter.Write(response);
 
@@ -773,7 +903,7 @@ internal sealed class CtapGetInfoResponseCborWriterTests
 
         byte[] expected =
         [
-            0xAD,
+            0xB0, //map(16), see WriteEncodesFullAuthenticatorConfigSurfaceWithAlwaysUvDisabledToExactCanonicalBytes
             0x01, 0x81, 0x68, .. Fido23Ascii,
             0x02, 0x85, 0x6B, .. credProtectAscii, 0x6B, .. hmacSecretAscii, 0x6E, .. hmacSecretMcAscii, 0x6C, .. largeBlobKeyAscii, 0x6C, .. minPinLengthAscii, //key 2 (extensions): array(5) of text(11), text(11), text(14), text(12), text(12)
             0x03, 0x50, .. FixedAaguidBytes,
@@ -792,9 +922,12 @@ internal sealed class CtapGetInfoResponseCborWriterTests
                 0x6F, .. setMinPinLengthAscii, 0xF5, //"setMinPINLength" -> true
                 0x70, .. makeCredUvNotRqdAscii, 0xF4, //"makeCredUvNotRqd" -> false
             0x06, 0x82, 0x02, 0x01,
+            0x07, 0x08, //key 0x07 (maxCredentialCountInList) -> 8
+            0x0A, .. Es256AlgorithmsBytes, //key 0x0A (algorithms) -> [{alg: ES256, type: "public-key"}]
             0x0B, 0x19, 0x10, 0x00, //key 0x0B (maxSerializedLargeBlobArray) -> 4096
             0x0C, 0xF5, //key 0x0C (forcePINChange) -> true
             0x0D, 0x06, //key 0x0D (minPINLength) -> 6
+            0x0E, 0x01, //key 0x0E (firmwareVersion) -> 1
             0x10, 0x08, //key 0x10 (maxRPIDsForSetMinPINLength) -> 8
             0x11, 0x03, //key 0x11 (preferredPlatformUvAttempts) -> 3
             0x12, 0x02, //key 0x12 (uvModality) -> 2
@@ -813,8 +946,10 @@ internal sealed class CtapGetInfoResponseCborWriterTests
     /// (<c>62 65 70 F5</c>), written FIRST (before <c>"rk"</c>, R10's own length-2 tie-break), bumping
     /// the options map header from map(13) to map(14); and <c>authenticatorConfigCommands</c> becomes
     /// the ascending 3-element array <c>[1, 2, 3]</c> (<c>83 01 02 03</c>, trap 6) rather than <c>[2, 3]</c>.
-    /// Every other byte is identical to the non-capable regression-fence vector, proving the capability
-    /// flip is additive, never structural elsewhere.
+    /// <c>maxCredentialCountInList:8</c>/<c>algorithms:[{alg: ES256, type: "public-key"}]</c>/
+    /// <c>firmwareVersion:1</c> (R5/R6/R7) are orthogonal to enterprise attestation and stay
+    /// byte-identical to the disabled variant. Every other byte is identical to the non-capable
+    /// regression-fence vector, proving the capability flip is additive, never structural elsewhere.
     /// </summary>
     [TestMethod]
     public void WriteEncodesEnterpriseAttestationCapableEnabledFullSurfaceToExactCanonicalBytes()
@@ -847,7 +982,10 @@ internal sealed class CtapGetInfoResponseCborWriterTests
             PreferredPlatformUvAttempts: 3,
             UvModality: 0x00000002,
             RemainingDiscoverableCredentials: 8,
-            AuthenticatorConfigCommands: [1, 2, 3]);
+            AuthenticatorConfigCommands: [1, 2, 3],
+            MaxCredentialCountInList: 8,
+            Algorithms: Es256Algorithms,
+            FirmwareVersion: 1);
 
         TaggedMemory<byte> result = CtapGetInfoResponseCborWriter.Write(response);
 
@@ -869,7 +1007,7 @@ internal sealed class CtapGetInfoResponseCborWriterTests
 
         byte[] expected =
         [
-            0xAD, //map(13): versions, extensions, aaguid, options, pinUvAuthProtocols, maxSerializedLargeBlobArray, forcePINChange, minPINLength, maxRPIDsForSetMinPINLength, preferredPlatformUvAttempts, uvModality, remainingDiscoverableCredentials, authenticatorConfigCommands
+            0xB0, //map(16), see WriteEncodesFullAuthenticatorConfigSurfaceWithAlwaysUvDisabledToExactCanonicalBytes
             0x01, 0x81, 0x68, .. Fido23Ascii,
             0x02, 0x85, 0x6B, .. credProtectAscii, 0x6B, .. hmacSecretAscii, 0x6E, .. hmacSecretMcAscii, 0x6C, .. largeBlobKeyAscii, 0x6C, .. minPinLengthAscii, //key 2 (extensions): array(5) of text(11), text(11), text(14), text(12), text(12)
             0x03, 0x50, .. FixedAaguidBytes,
@@ -889,9 +1027,12 @@ internal sealed class CtapGetInfoResponseCborWriterTests
                 0x6F, .. setMinPinLengthAscii, 0xF5, //"setMinPINLength" (text(15)) -> true
                 0x70, .. makeCredUvNotRqdAscii, 0xF5, //"makeCredUvNotRqd" (text(16)) -> true
             0x06, 0x82, 0x02, 0x01, //key 6 (pinUvAuthProtocols): [2, 1]
+            0x07, 0x08, //key 0x07 (maxCredentialCountInList) -> 8
+            0x0A, .. Es256AlgorithmsBytes, //key 0x0A (algorithms) -> [{alg: ES256, type: "public-key"}]
             0x0B, 0x19, 0x10, 0x00, //key 0x0B (maxSerializedLargeBlobArray) -> 4096
             0x0C, 0xF4, //key 0x0C (forcePINChange) -> false
             0x0D, 0x04, //key 0x0D (minPINLength) -> 4
+            0x0E, 0x01, //key 0x0E (firmwareVersion) -> 1
             0x10, 0x08, //key 0x10 (maxRPIDsForSetMinPINLength) -> 8
             0x11, 0x03, //key 0x11 (preferredPlatformUvAttempts) -> 3
             0x12, 0x02, //key 0x12 (uvModality) -> 2

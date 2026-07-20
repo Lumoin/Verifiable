@@ -146,6 +146,18 @@ public static class WellKnownCtapStatusCodes
     public const byte MissingParameter = 0x14;
 
     /// <summary>
+    /// <c>CTAP2_ERR_LIMIT_EXCEEDED</c> (<c>0x15</c>): "Limit for number of items exceeded." Returned
+    /// when <c>authenticatorMakeCredential</c>'s <c>excludeList</c>, or <c>authenticatorGetAssertion</c>'s
+    /// <c>allowList</c>, carries more entries than <c>CtapAuthenticatorState.MaxCredentialCountInListCapacity</c>
+    /// (the same capacity <c>authenticatorGetInfo</c>'s <c>maxCredentialCountInList</c> member advertises).
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#error-responses">
+    /// CTAP 2.3, section 8.2: Status codes</see>, lines 8897-8899.
+    /// </remarks>
+    public const byte LimitExceeded = 0x15;
+
+    /// <summary>
     /// <c>CTAP2_ERR_CREDENTIAL_EXCLUDED</c> (<c>0x19</c>): a valid credential was found in the
     /// <c>excludeList</c> during <c>authenticatorMakeCredential</c>.
     /// </summary>
@@ -249,6 +261,18 @@ public static class WellKnownCtapStatusCodes
     /// CTAP 2.3, section 8.2: Status codes</see>.
     /// </remarks>
     public const byte InvalidOption = 0x2C;
+
+    /// <summary>
+    /// <c>CTAP2_ERR_KEEPALIVE_CANCEL</c> (<c>0x2D</c>): "Pending keep alive was cancelled." Returned by
+    /// <c>CancelDeferredTransceiveAsync</c> once a parked <c>authenticatorMakeCredential</c>/
+    /// <c>authenticatorGetAssertion</c> user-presence wait has been torn down on the platform's own
+    /// cancel request (CTAP 2.3's NFC <c>NFCCTAP_GETRESPONSE</c> cancel variant, P1 <c>0x11</c>).
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#error-responses">
+    /// CTAP 2.3, section 8.2: Status codes</see>, lines 8953-8955.
+    /// </remarks>
+    public const byte KeepaliveCancel = 0x2D;
 
     /// <summary>
     /// <c>CTAP2_ERR_NO_CREDENTIALS</c> (<c>0x2E</c>): no credential matched the assertion request
@@ -471,6 +495,13 @@ public static class WellKnownCtapStatusCodes
     public static bool IsMissingParameter(byte statusCode) => statusCode == MissingParameter;
 
     /// <summary>
+    /// Gets a value indicating whether <paramref name="statusCode"/> is <see cref="LimitExceeded"/>.
+    /// </summary>
+    /// <param name="statusCode">The CTAP2 response status byte to check.</param>
+    /// <returns><see langword="true"/> if an excludeList/allowList carried more entries than this authenticator supports.</returns>
+    public static bool IsLimitExceeded(byte statusCode) => statusCode == LimitExceeded;
+
+    /// <summary>
     /// Gets a value indicating whether <paramref name="statusCode"/> is <see cref="CborUnexpectedType"/>.
     /// </summary>
     /// <param name="statusCode">The CTAP2 response status byte to check.</param>
@@ -539,6 +570,13 @@ public static class WellKnownCtapStatusCodes
     /// <param name="statusCode">The CTAP2 response status byte to check.</param>
     /// <returns><see langword="true"/> if an option's value is invalid for the operation.</returns>
     public static bool IsInvalidOption(byte statusCode) => statusCode == InvalidOption;
+
+    /// <summary>
+    /// Gets a value indicating whether <paramref name="statusCode"/> is <see cref="KeepaliveCancel"/>.
+    /// </summary>
+    /// <param name="statusCode">The CTAP2 response status byte to check.</param>
+    /// <returns><see langword="true"/> if a pending keep alive was cancelled.</returns>
+    public static bool IsKeepaliveCancel(byte statusCode) => statusCode == KeepaliveCancel;
 
     /// <summary>
     /// Gets a value indicating whether <paramref name="statusCode"/> is <see cref="NoCredentials"/>.

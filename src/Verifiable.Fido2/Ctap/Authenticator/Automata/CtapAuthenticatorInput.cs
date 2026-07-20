@@ -17,14 +17,22 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 public abstract record CtapAuthenticatorInput;
 
 /// <summary>
-/// An <c>authenticatorGetInfo</c> (<c>0x04</c>) request. The command takes no parameters, so this
-/// input carries none.
+/// An <c>authenticatorGetInfo</c> (<c>0x04</c>) request. The command itself takes no wire parameters;
+/// <see cref="SupportedAlgorithms"/> is a composition-time fact resolved before dispatch (the same
+/// "the pure transition has no access to the backend" reason
+/// <see cref="MakeCredentialRequested.SelectedAlgorithm"/> is resolved outside the automaton for).
 /// </summary>
 /// <remarks>
 /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorGetInfo">
 /// CTAP 2.3, section 6.4: authenticatorGetInfo (0x04)</see>.
 /// </remarks>
-public sealed record GetInfoRequested: CtapAuthenticatorInput;
+/// <param name="SupportedAlgorithms">
+/// The credential-signing backend's supported COSE algorithm identifiers
+/// (<see cref="CtapCredentialSigningBackend.SupportedAlgorithms"/>), or <see langword="null"/> when no
+/// backend is injected — the source <c>CtapAuthenticatorTransitions.BuildGetInfoResponse</c> builds
+/// the <c>algorithms</c> (<c>0x0A</c>) getInfo member from (CTAP 2.3, snapshot lines 4424-4427).
+/// </param>
+public sealed record GetInfoRequested(IReadOnlyList<int>? SupportedAlgorithms = null): CtapAuthenticatorInput;
 
 /// <summary>
 /// An <c>authenticatorClientPIN</c> (<c>0x06</c>) request, already CBOR-decoded by
@@ -91,7 +99,15 @@ public sealed record UnsupportedCtapCommandReceived(byte CommandByte): CtapAuthe
 /// verify writes into the token's <see cref="CtapPinUvAuthTokenState.LastUsedAt"/>. The pure transition
 /// never reads a clock itself.
 /// </param>
-public sealed record MakeCredentialRequested(CtapMakeCredentialRequest Request, int? SelectedAlgorithm, DateTimeOffset Now): CtapAuthenticatorInput;
+/// <param name="IsUserPresenceDeferralAllowed">
+/// Whether the transport that decoded this request supports parking a user-presence wait across
+/// separate wire round trips (R2) — threaded as data from <see cref="CtapAuthenticatorSimulator.BeginDeferredTransceiveAsync"/>,
+/// never ambient state. Defaults to <see langword="false"/>: a plain <see cref="Ctap2TransceiveDelegate"/>
+/// call processes synchronously to completion, so <see cref="CtapUserPresenceDecision.Pending"/> resolves
+/// to <see cref="WellKnownCtapStatusCodes.UserActionTimeout"/> rather than parking.
+/// </param>
+public sealed record MakeCredentialRequested(
+    CtapMakeCredentialRequest Request, int? SelectedAlgorithm, DateTimeOffset Now, bool IsUserPresenceDeferralAllowed = false): CtapAuthenticatorInput;
 
 /// <summary>
 /// An <c>authenticatorGetAssertion</c> (<c>0x02</c>) request, already CBOR-decoded by
@@ -111,7 +127,13 @@ public sealed record MakeCredentialRequested(CtapMakeCredentialRequest Request, 
 /// token being trusted, and it is the stamp a successful verify writes into the token's
 /// <see cref="CtapPinUvAuthTokenState.LastUsedAt"/>. The pure transition never reads a clock itself.
 /// </param>
-public sealed record GetAssertionRequested(CtapGetAssertionRequest Request, DateTimeOffset Now): CtapAuthenticatorInput;
+/// <param name="IsUserPresenceDeferralAllowed">
+/// Whether the transport that decoded this request supports parking a user-presence wait across
+/// separate wire round trips (R2) — see <see cref="MakeCredentialRequested.IsUserPresenceDeferralAllowed"/>'s
+/// identical remark. Defaults to <see langword="false"/>.
+/// </param>
+public sealed record GetAssertionRequested(
+    CtapGetAssertionRequest Request, DateTimeOffset Now, bool IsUserPresenceDeferralAllowed = false): CtapAuthenticatorInput;
 
 /// <summary>
 /// An <c>authenticatorGetNextAssertion</c> (<c>0x08</c>) request. The command takes no parameters, so
@@ -735,3 +757,45 @@ public sealed record CtapLargeBlobArrayCommitAttempted(
     CtapPinUvAuthProtocolId? AuthenticatingPinUvAuthProtocol,
     bool IsIntegrityValid,
     PooledMemory? CommittedArray): CtapAuthenticatorInput;
+
+/// <summary>
+/// The effect fold-back of a <see cref="CtapCollectUserPresenceAction"/>: the injected
+/// <see cref="SimulateUserPresenceDelegate"/>'s decision and the instant it was collected (CTAP 2.3
+/// :2840). The interrupted command's own continuation is not carried here — it lives on
+/// <see cref="CtapAuthenticatorState.PendingUserPresenceWait"/>, armed before the collect action was
+/// declared, so this same fold-back shape resumes both the initial synchronous collection and every
+/// later <see cref="UserPresencePollRequested"/> re-declaration unchanged.
+/// </summary>
+/// <param name="Decision">The collected decision.</param>
+/// <param name="Now">
+/// The time this decision was collected, read once from the simulator's threaded
+/// <see cref="TimeProvider"/> by the executor — the pure transition never reads a clock itself.
+/// </param>
+public sealed record UserPresenceDecisionCollected(CtapUserPresenceDecision Decision, DateTimeOffset Now): CtapAuthenticatorInput;
+
+/// <summary>
+/// A platform poll for a parked <c>authenticatorMakeCredential</c>/<c>authenticatorGetAssertion</c>
+/// user-presence wait (the NFC <c>NFCCTAP_GETRESPONSE</c> polling instruction's authenticator-side
+/// model, CTAP 2.3 :10818). Consumed only by <see cref="CtapAuthenticatorSimulator.PollDeferredTransceiveAsync"/>;
+/// fed to the automaton only when <see cref="CtapAuthenticatorState.PendingUserPresenceWait"/> is
+/// non-null, since the pure transition itself never throws.
+/// </summary>
+/// <param name="Now">
+/// The time this poll arrived, read once from the simulator's threaded <see cref="TimeProvider"/>
+/// before this input was built — compared against <see cref="CtapPendingUserPresenceState.ArmedAt"/> for
+/// the :2840 timeout check. The pure transition never reads a clock itself.
+/// </param>
+public sealed record UserPresencePollRequested(DateTimeOffset Now): CtapAuthenticatorInput;
+
+/// <summary>
+/// A platform cancel of a parked <c>authenticatorMakeCredential</c>/<c>authenticatorGetAssertion</c>
+/// user-presence wait (the NFC <c>NFCCTAP_GETRESPONSE</c> cancel variant's authenticator-side model,
+/// CTAP 2.3 :10821). Consumed only by <see cref="CtapAuthenticatorSimulator.CancelDeferredTransceiveAsync"/>;
+/// fed to the automaton only when <see cref="CtapAuthenticatorState.PendingUserPresenceWait"/> is
+/// non-null, since the pure transition itself never throws.
+/// </summary>
+/// <param name="Now">
+/// The time this cancel arrived, read once from the simulator's threaded <see cref="TimeProvider"/>
+/// before this input was built. The pure transition never reads a clock itself.
+/// </param>
+public sealed record UserPresenceCancelRequested(DateTimeOffset Now): CtapAuthenticatorInput;

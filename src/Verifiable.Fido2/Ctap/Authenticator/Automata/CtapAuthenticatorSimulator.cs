@@ -333,6 +333,23 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     private static CtapBuiltInUvAttemptOutcome DefaultSimulateBuiltInUv() => CtapBuiltInUvAttemptOutcome.Success;
 
     /// <summary>
+    /// The R1 user-presence decision seam for <c>authenticatorMakeCredential</c>'s/
+    /// <c>authenticatorGetAssertion</c>'s own :2840 user-action collection — a composition-time
+    /// personalization, never a test-only seam. Defaults to always <see cref="CtapUserPresenceDecision.Granted"/>
+    /// (an ideal, always-present user), preserving the byte-for-byte behavior of every existing test and
+    /// of mc's own historical hardcoded <c>userPresent: true</c>. Consumed ONLY by the
+    /// <see cref="CtapCollectUserPresenceAction"/> executor.
+    /// </summary>
+    private SimulateUserPresenceDelegate SimulateUserPresence { get; }
+
+    /// <summary>
+    /// The shipped default for <see cref="SimulateUserPresence"/>: an ideal, always-present user that
+    /// always reports <see cref="CtapUserPresenceDecision.Granted"/>.
+    /// </summary>
+    private static ValueTask<CtapUserPresenceDecision> DefaultSimulateUserPresence(CancellationToken cancellationToken) =>
+        ValueTask.FromResult(CtapUserPresenceDecision.Granted);
+
+    /// <summary>
     /// The credential-minting backend for <c>authenticatorMakeCredential</c>, or <see langword="null"/> if
     /// none was injected (every <c>authenticatorMakeCredential</c> request then answers
     /// <c>CTAP2_ERR_UNSUPPORTED_ALGORITHM</c>).
@@ -461,6 +478,14 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <see langword="null"/>. A composition-time personalization knob, never a test-only seam — mirroring
     /// <paramref name="simulateFingerprintCapture"/>'s own posture.
     /// </param>
+    /// <param name="simulateUserPresence">
+    /// The R1 outcome-injection knob for <c>authenticatorMakeCredential</c>'s/
+    /// <c>authenticatorGetAssertion</c>'s own :2840 user-presence collection. Defaults to always
+    /// <see cref="CtapUserPresenceDecision.Granted"/> (the ideal-user personalization) when
+    /// <see langword="null"/> — preserving every existing test's and mc's own historical hardcoded
+    /// <c>userPresent: true</c> behavior byte-for-byte. A composition-time personalization knob, never a
+    /// test-only seam — mirroring <paramref name="simulateBuiltInUv"/>'s own posture.
+    /// </param>
     /// <param name="enterpriseAttestationProvisioning">
     /// The vendor-burned-in enterprise attestation material (waveep R1), threaded verbatim into
     /// <see cref="CtapAuthenticatorState.Initial"/>. <see langword="null"/> (the default) yields a
@@ -475,6 +500,13 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// is ALSO <see langword="null"/> — mc Step 9 can never grant an enterprise attestation without
     /// provisioning material, so the certified branch is then structurally unreachable.
     /// </param>
+    /// <param name="firmwareVersion">
+    /// The authenticator model's firmware version (getInfo member <c>0x0E</c>, CTAP 2.3 snapshot lines
+    /// 4469-4475), threaded verbatim into <see cref="CtapAuthenticatorState.Initial"/> — a
+    /// per-device-build identity value, the same personalization-knob posture as
+    /// <paramref name="aaguid"/>. Defaults to <c>1</c>, the lowest legal value for a version that "MUST
+    /// increase" on every firmware release.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Any of <paramref name="encodeGetInfoResponse"/>, <paramref name="decodeMakeCredentialRequest"/>,
     /// <paramref name="encodeMakeCredentialResponse"/>, <paramref name="decodeGetAssertionRequest"/>,
@@ -487,7 +519,10 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <paramref name="encodeMakeCredentialExtensionOutputs"/>, or
     /// <paramref name="encodeGetAssertionExtensionOutputs"/> is <see langword="null"/>.
     /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="residentCredentialCapacity"/> is negative.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="residentCredentialCapacity"/> is negative, or <paramref name="firmwareVersion"/>
+    /// is not positive.
+    /// </exception>
     public CtapAuthenticatorSimulator(
         string runId,
         EncodeCtapGetInfoResponseDelegate encodeGetInfoResponse,
@@ -517,8 +552,10 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         MemoryPool<byte>? pinUvAuthKeyAgreementPool = null,
         SimulateFingerprintCaptureDelegate? simulateFingerprintCapture = null,
         SimulateBuiltInUvDelegate? simulateBuiltInUv = null,
+        SimulateUserPresenceDelegate? simulateUserPresence = null,
         CtapEnterpriseAttestationProvisioning? enterpriseAttestationProvisioning = null,
-        EncodePackedCertifiedAttestationStatementDelegate? encodePackedCertifiedAttestationStatement = null)
+        EncodePackedCertifiedAttestationStatementDelegate? encodePackedCertifiedAttestationStatement = null,
+        int firmwareVersion = 1)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(runId);
         ArgumentNullException.ThrowIfNull(encodeGetInfoResponse);
@@ -540,6 +577,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         ArgumentNullException.ThrowIfNull(encodeMakeCredentialExtensionOutputs);
         ArgumentNullException.ThrowIfNull(encodeGetAssertionExtensionOutputs);
         ArgumentOutOfRangeException.ThrowIfNegative(residentCredentialCapacity);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(firmwareVersion);
 
         EncodeGetInfoResponse = encodeGetInfoResponse;
         DecodeMakeCredentialRequest = decodeMakeCredentialRequest;
@@ -554,6 +592,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         Rng = rng ?? RandomNumberGenerator.Fill;
         SimulateFingerprintCapture = simulateFingerprintCapture ?? DefaultSimulateFingerprintCapture;
         SimulateBuiltInUv = simulateBuiltInUv ?? DefaultSimulateBuiltInUv;
+        SimulateUserPresence = simulateUserPresence ?? DefaultSimulateUserPresence;
         DecodeClientPinRequest = decodeClientPinRequest;
         EncodeClientPinResponse = encodeClientPinResponse;
         DecodeAuthenticatorConfigRequest = decodeAuthenticatorConfigRequest;
@@ -572,7 +611,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             runId: runId,
             initialState: CtapAuthenticatorState.Initial(
                 resolvedAaguid, TimeProvider.GetUtcNow(), supportedExtensions, residentCredentialCapacity, pinUvAuthKeyAgreementPool,
-                enterpriseAttestationProvisioning),
+                enterpriseAttestationProvisioning, firmwareVersion),
             initialStackSymbol: CtapAuthenticatorStackSymbol.Session,
             transition: CtapAuthenticatorTransitions.Create(),
             acceptPredicate: static _ => true,
@@ -636,6 +675,12 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <see cref="PooledMemory"/> rented from <paramref name="pool"/>; the caller owns it and must
     /// dispose it.
     /// </returns>
+    /// <remarks>
+    /// Never allows a user-presence wait to defer (<see cref="MakeCredentialRequested.IsUserPresenceDeferralAllowed"/>/
+    /// <see cref="GetAssertionRequested.IsUserPresenceDeferralAllowed"/> stay <see langword="false"/> on
+    /// every input this call builds, R2) — use <see cref="BeginDeferredTransceiveAsync"/> for a transport
+    /// that supports deferral.
+    /// </remarks>
     /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
     public async ValueTask<PooledMemory> TransceiveAsync(ReadOnlyMemory<byte> request, MemoryPool<byte> pool, CancellationToken cancellationToken)
@@ -649,57 +694,13 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             return FrameError(WellKnownCtapStatusCodes.InvalidCommand, pool);
         }
 
-        byte commandByte = request.Span[0];
-        ReadOnlyMemory<byte> parameters = request[1..];
-
-        //Decoded here (outside the pure automaton) so the credential-signing backend's supported-
-        //algorithm set — a composition-time dependency the pure transition has no access to — can be
-        //consulted before the input is built, mirroring TpmSimulator's own "check backend presence
-        //before entering the automaton" precedent for its object/signing commands.
-        CtapMakeCredentialRequest? makeCredentialRequest = null;
-        CtapGetAssertionRequest? getAssertionRequest = null;
-        CtapCredentialManagementRequest? credentialManagementRequest = null;
+        CtapMakeCredentialRequest? makeCredentialRequest;
+        CtapGetAssertionRequest? getAssertionRequest;
+        CtapCredentialManagementRequest? credentialManagementRequest;
         CtapAuthenticatorInput input;
-
-        //Every decode delegate below throws Fido2FormatException uniformly on a malformed or
-        //incomplete request, so that failure is caught once here rather than duplicated per command.
         try
         {
-            input = commandByte switch
-            {
-                var command when WellKnownCtapCommands.IsGetInfo(command) => new GetInfoRequested(),
-                var command when WellKnownCtapCommands.IsMakeCredential(command) =>
-                    BuildMakeCredentialInput(parameters, pool, DecodeMakeCredentialRequest, CredentialSigningBackend?.SupportedAlgorithms, TimeProvider, out makeCredentialRequest),
-                var command when WellKnownCtapCommands.IsGetAssertion(command) =>
-                    BuildGetAssertionInput(parameters, pool, DecodeGetAssertionRequest, TimeProvider, out getAssertionRequest),
-                var command when WellKnownCtapCommands.IsGetNextAssertion(command) => new GetNextAssertionRequested(TimeProvider.GetUtcNow()),
-                var command when WellKnownCtapCommands.IsClientPin(command) =>
-                    new ClientPinRequested(DecodeClientPinRequest(parameters), TimeProvider.GetUtcNow()),
-                var command when WellKnownCtapCommands.IsReset(command) => new ResetRequested(TimeProvider.GetUtcNow(), pool),
-
-                //Step 1 (line 7953): subCommand absent -> CTAP2_ERR_MISSING_PARAMETER, realized at the
-                //decode boundary — mirroring every other command's required-field-absence handling
-                //(e.g. CtapClientPinRequestCborReader's own subCommand throw) rather than as a separate
-                //pure-transition check, since a decoded request model has no way to represent "subCommand
-                //was absent" once decoding has already failed. R7's classification (via
-                //MapDecodeFailureToStatusCode) now discriminates that case from a genuinely malformed or
-                //wrong-typed request instead of collapsing every decode failure onto MissingParameter; the
-                //subCommand-absent sub-case this profile's own test matrix pins still resolves to the
-                //identical status byte it always has.
-                var command when WellKnownCtapCommands.IsAuthenticatorConfig(command) =>
-                    new AuthenticatorConfigRequested(DecodeAuthenticatorConfigRequest(parameters), TimeProvider.GetUtcNow()),
-
-                //Step 1's equivalent (the required subCommand member absent) is realized at the decode
-                //boundary, mirroring authenticatorConfig's own identical handling above.
-                var command when WellKnownCtapCommands.IsCredentialManagement(command) =>
-                    BuildCredentialManagementInput(parameters, pool, DecodeCredentialManagementRequest, TimeProvider, out credentialManagementRequest),
-
-                var command when WellKnownCtapCommands.IsBioEnrollment(command) =>
-                    new BioEnrollmentRequested(DecodeBioEnrollmentRequest(parameters), TimeProvider.GetUtcNow()),
-                var command when WellKnownCtapCommands.IsLargeBlobs(command) =>
-                    new LargeBlobsRequested(DecodeLargeBlobsRequest(parameters), TimeProvider.GetUtcNow()),
-                _ => new UnsupportedCtapCommandReceived(commandByte)
-            };
+            input = DecodeRequest(request, pool, out makeCredentialRequest, out getAssertionRequest, out credentialManagementRequest);
         }
         catch(Fido2FormatException exception)
         {
@@ -713,173 +714,505 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             CtapAuthenticatorResponseIntent intent = Automaton.CurrentState.ResponseIntent
                 ?? throw new InvalidOperationException("The automaton completed a step without producing a response intent.");
 
-            return intent switch
-            {
-                GetInfoResponseReady getInfo => FrameSuccess(EncodeGetInfoResponse(getInfo.Response), pool),
-                MakeCredentialResponseReady makeCredential => FrameSuccess(EncodeMakeCredentialResponse(makeCredential.Response), pool),
-                GetAssertionResponseReady getAssertion => FrameSuccess(EncodeGetAssertionResponse(getAssertion.Response), pool),
-                ClientPinResponseReady clientPin => FrameSuccess(EncodeClientPinResponse(clientPin.Response), pool),
-                AuthenticatorConfigResponseReady => FrameError(WellKnownCtapStatusCodes.Ok, pool),
-                AuthenticatorResetResponseReady => FrameError(WellKnownCtapStatusCodes.Ok, pool),
-                CredentialManagementResponseReady credentialManagement => credentialManagement.Response is CtapCredentialManagementResponse response
-                    ? FrameSuccess(EncodeCredentialManagementResponse(response), pool)
-                    : FrameError(WellKnownCtapStatusCodes.Ok, pool),
-                BioEnrollmentResponseReady bioEnrollment => bioEnrollment.Response is CtapBioEnrollmentResponse bioEnrollmentResponse
-                    ? FrameSuccess(EncodeBioEnrollmentResponse(bioEnrollmentResponse), pool)
-                    : FrameError(WellKnownCtapStatusCodes.Ok, pool),
-                LargeBlobsResponseReady largeBlobs => largeBlobs.Response is CtapLargeBlobsResponse largeBlobsResponse
-                    ? FrameSuccess(EncodeLargeBlobsResponse(largeBlobsResponse), pool)
-                    : FrameError(WellKnownCtapStatusCodes.Ok, pool),
-                CtapErrorResponse error => FrameError(error.StatusCode, pool),
-                UnsupportedCommandResponse => FrameError(WellKnownCtapStatusCodes.InvalidCommand, pool),
-                _ => throw new NotSupportedException($"No response framing is registered for intent '{intent.GetType().Name}'.")
-            };
+            return FrameFinalResponse(intent, pool);
         }
         finally
         {
             DisposeRequestCarriers(makeCredentialRequest, getAssertionRequest, credentialManagementRequest);
         }
+    }
 
-        //Prefixes a CBOR-encoded response payload with the CTAP2_OK status byte, per CTAP 2.3
-        //section 8's "status byte followed by CBOR-encoded response data" response shape, into a
-        //buffer rented from the pool: the one copy of the payload's bytes happens here, out of the
-        //codec seam's own wrapped array and into the pooled envelope the caller owns.
-        static PooledMemory FrameSuccess(TaggedMemory<byte> payload, MemoryPool<byte> pool)
+
+    /// <summary>
+    /// Processes one complete CTAP2 request envelope over a transport that supports deferring a
+    /// user-presence wait across separate wire round trips (CTAP 2.3 :10798, R2): decodes exactly like
+    /// <see cref="TransceiveAsync"/>, but sets <see cref="MakeCredentialRequested.IsUserPresenceDeferralAllowed"/>/
+    /// <see cref="GetAssertionRequested.IsUserPresenceDeferralAllowed"/> <see langword="true"/> on
+    /// <c>authenticatorMakeCredential</c>/<c>authenticatorGetAssertion</c> inputs — every other command's
+    /// input is unaffected and processes synchronously to completion exactly like <see cref="TransceiveAsync"/>.
+    /// If the command's own user-presence collection concludes <see cref="CtapUserPresenceDecision.Pending"/>,
+    /// this call PARKS it on <see cref="CtapAuthenticatorState.PendingUserPresenceWait"/> and returns
+    /// immediately — see <see cref="PollDeferredTransceiveAsync"/>/<see cref="CancelDeferredTransceiveAsync"/>.
+    /// </summary>
+    /// <param name="request">The complete CTAP2 request envelope (command byte plus CBOR parameters).</param>
+    /// <param name="pool">The memory pool available for allocating the response buffer.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>
+    /// The complete CTAP2 response envelope, exactly like <see cref="TransceiveAsync"/>'s own return — OR
+    /// a ZERO-LENGTH <see cref="PooledMemory"/> marking "the command parked awaiting user presence": every
+    /// real CTAP2 response carries at least one status byte, so an empty result is unambiguous (the
+    /// existing client wrappers already treat an empty response as a <see cref="Fido2FormatException"/>,
+    /// i.e. never a legal final response, on the non-deferred <see cref="Ctap2TransceiveDelegate"/> shape).
+    /// </returns>
+    /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
+    public async ValueTask<PooledMemory> BeginDeferredTransceiveAsync(ReadOnlyMemory<byte> request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        ArgumentNullException.ThrowIfNull(pool);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if(request.IsEmpty)
         {
-            IMemoryOwner<byte> storage = pool.Rent(payload.Length + 1);
-            try
-            {
-                Span<byte> framed = storage.Memory.Span;
-                framed[0] = WellKnownCtapStatusCodes.Ok;
-                payload.Span.CopyTo(framed[1..]);
-
-                return new PooledMemory(storage, payload.Length + 1, Fido2BufferTags.CtapResponseEnvelope);
-            }
-            catch
-            {
-                storage.Dispose();
-                throw;
-            }
+            return FrameError(WellKnownCtapStatusCodes.InvalidCommand, pool);
         }
 
-        //Frames a bare status-byte error response (CTAP 2.3 section 8.2: Status codes) with no CBOR
-        //body, into a one-byte buffer rented from the pool.
-        static PooledMemory FrameError(byte statusCode, MemoryPool<byte> pool)
+        CtapMakeCredentialRequest? makeCredentialRequest;
+        CtapGetAssertionRequest? getAssertionRequest;
+        CtapCredentialManagementRequest? credentialManagementRequest;
+        CtapAuthenticatorInput input;
+        try
         {
-            IMemoryOwner<byte> storage = pool.Rent(1);
-            try
-            {
-                storage.Memory.Span[0] = statusCode;
-
-                return new PooledMemory(storage, 1, Fido2BufferTags.CtapResponseEnvelope);
-            }
-            catch
-            {
-                storage.Dispose();
-                throw;
-            }
+            input = DecodeRequest(request, pool, out makeCredentialRequest, out getAssertionRequest, out credentialManagementRequest);
+        }
+        catch(Fido2FormatException exception)
+        {
+            return FrameError(MapDecodeFailureToStatusCode(exception.FailureKind), pool);
         }
 
-        //Maps a decode-boundary Fido2FormatException's classification to its CTAP2 status byte (R7):
-        //the tri-code split ships uniformly across every body-carrying command boundary above, so this
-        //one function is the entire classification-to-status-byte seam this wave adds.
-        static byte MapDecodeFailureToStatusCode(Fido2FormatFailureKind failureKind) => failureKind switch
+        //Only mc/ga ever collect user presence (R1) — every other command's input is unaffected.
+        input = input switch
         {
-            Fido2FormatFailureKind.MissingRequiredParameter => WellKnownCtapStatusCodes.MissingParameter,
-            Fido2FormatFailureKind.UnexpectedStructure => WellKnownCtapStatusCodes.CborUnexpectedType,
-            Fido2FormatFailureKind.MalformedCbor => WellKnownCtapStatusCodes.InvalidCbor,
-            _ => throw new NotSupportedException($"No status code is registered for decode failure kind '{failureKind}'.")
+            MakeCredentialRequested makeCredential => makeCredential with { IsUserPresenceDeferralAllowed = true },
+            GetAssertionRequested getAssertion => getAssertion with { IsUserPresenceDeferralAllowed = true },
+            _ => input
         };
 
-        //Decodes an authenticatorMakeCredential request and selects the algorithm identifier — the
-        //first PubKeyCredParams entry the credential-signing backend's supported-algorithm set
-        //contains (CTAP 2.3, section 6.1.2, step 3). The decoded request is also handed back through
-        //makeCredentialRequest so DisposeRequestCarriers can release its pooled carriers regardless of
-        //what happens once the automaton takes over.
-        static CtapAuthenticatorInput BuildMakeCredentialInput(
-            ReadOnlyMemory<byte> parameters,
-            MemoryPool<byte> pool,
-            DecodeCtapMakeCredentialRequestDelegate decodeMakeCredentialRequest,
-            IReadOnlyList<int>? supportedAlgorithms,
-            TimeProvider timeProvider,
-            out CtapMakeCredentialRequest makeCredentialRequest)
+        bool parked = false;
+        try
         {
-            makeCredentialRequest = decodeMakeCredentialRequest(parameters, pool);
-            int? selectedAlgorithm = SelectSupportedAlgorithm(makeCredentialRequest.PubKeyCredParams, supportedAlgorithms);
-
-            return new MakeCredentialRequested(makeCredentialRequest, selectedAlgorithm, timeProvider.GetUtcNow());
-        }
-
-        //Decodes an authenticatorGetAssertion request, handing it back through getAssertionRequest so
-        //DisposeRequestCarriers can release its pooled carriers regardless of what happens once the
-        //automaton takes over.
-        static CtapAuthenticatorInput BuildGetAssertionInput(
-            ReadOnlyMemory<byte> parameters,
-            MemoryPool<byte> pool,
-            DecodeCtapGetAssertionRequestDelegate decodeGetAssertionRequest,
-            TimeProvider timeProvider,
-            out CtapGetAssertionRequest getAssertionRequest)
-        {
-            getAssertionRequest = decodeGetAssertionRequest(parameters, pool);
-
-            return new GetAssertionRequested(getAssertionRequest, timeProvider.GetUtcNow());
-        }
-
-        //Decodes an authenticatorCredentialManagement request, handing it back through
-        //credentialManagementRequest so DisposeRequestCarriers can release its pooled carriers
-        //regardless of what happens once the automaton takes over.
-        static CtapAuthenticatorInput BuildCredentialManagementInput(
-            ReadOnlyMemory<byte> parameters,
-            MemoryPool<byte> pool,
-            DecodeCtapCredentialManagementRequestDelegate decodeCredentialManagementRequest,
-            TimeProvider timeProvider,
-            out CtapCredentialManagementRequest credentialManagementRequest)
-        {
-            credentialManagementRequest = decodeCredentialManagementRequest(parameters, pool);
-
-            return new CredentialManagementRequested(credentialManagementRequest, timeProvider.GetUtcNow());
-        }
-
-        //Disposes whichever of the decoded request's own SensitiveMemory carriers the credential store
-        //did not adopt: the store always copies what it needs to keep (a fresh UserHandle; a freshly
-        //minted CredentialId never derived from the request at all), so every carrier the decode
-        //delegate handed back is disposed here regardless of whether the command succeeded, was
-        //rejected, or never reached the credential store.
-        static void DisposeRequestCarriers(
-            CtapMakeCredentialRequest? makeCredentialRequest, CtapGetAssertionRequest? getAssertionRequest, CtapCredentialManagementRequest? credentialManagementRequest)
-        {
-            if(makeCredentialRequest is not null)
+            try
             {
-                makeCredentialRequest.ClientDataHash.Dispose();
-                makeCredentialRequest.User.Id.Dispose();
+                await RunWithEffectsAsync(input, pool, cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                //C-1: the pure transition commits an armed PendingUserPresenceWait to Automaton.CurrentState
+                //in the SAME step that declares the collect action — the effectful loop steps first and
+                //executes the action second, so a fault or cancellation out of SimulateUserPresence here
+                //leaves the wait already resumable while parked stays false (no UserPresencePending intent
+                //was ever produced) and this method's own finally is about to dispose the same carriers the
+                //wait references. Tear the wait down before the fault propagates, so a later poll finds
+                //nothing pending rather than resuming over disposed carriers.
+                DisarmPendingUserPresenceWaitAfterCollectEffectFault();
+                throw;
+            }
 
-                if(makeCredentialRequest.ExcludeList is not null)
+            CtapAuthenticatorResponseIntent intent = Automaton.CurrentState.ResponseIntent
+                ?? throw new InvalidOperationException("The automaton completed a step without producing a response intent.");
+
+            if(intent is UserPresencePending)
+            {
+                //Ownership of the decoded request's carriers transferred into
+                //Automaton.CurrentState.PendingUserPresenceWait (R2, trap 2) — this call must NOT dispose
+                //them; they are released once the wait resolves, is cancelled, is superseded, or is
+                //discarded by PowerCycle/FactoryReset.
+                parked = true;
+
+                return FrameDeferralPendingMarker(pool);
+            }
+
+            return FrameFinalResponse(intent, pool);
+        }
+        finally
+        {
+            if(!parked)
+            {
+                DisposeRequestCarriers(makeCredentialRequest, getAssertionRequest, credentialManagementRequest);
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// Tears down an armed <see cref="CtapAuthenticatorState.PendingUserPresenceWait"/> after
+    /// <see cref="BeginDeferredTransceiveAsync"/>'s own user-presence collect effect faults or is
+    /// cancelled (C-1): disposes it and rebuilds <see cref="Automaton"/> around the cleared slot — the
+    /// same "reassign around a modified snapshot" seam <see cref="PowerCycle"/> uses to force state
+    /// without replaying a transition — so no later <see cref="PollDeferredTransceiveAsync"/>/
+    /// <see cref="CancelDeferredTransceiveAsync"/> can resume the wait over the carriers
+    /// <see cref="BeginDeferredTransceiveAsync"/>'s own <c>finally</c> is about to dispose. A no-op when
+    /// nothing is armed — the ordinary fault path for every command that never collects user presence, or
+    /// one whose collect action already resolved (granted/denied/timed out) before a LATER effect in the
+    /// same call faulted.
+    /// </summary>
+    private void DisarmPendingUserPresenceWaitAfterCollectEffectFault()
+    {
+        CtapPendingUserPresenceState? armed = Automaton.CurrentState.PendingUserPresenceWait;
+        if(armed is null)
+        {
+            return;
+        }
+
+        armed.Dispose();
+
+        Automaton = new PushdownAutomaton<CtapAuthenticatorState, CtapAuthenticatorInput, CtapAuthenticatorStackSymbol>(
+            runId: Automaton.RunId,
+            savedState: Automaton.CurrentState with { PendingUserPresenceWait = null },
+            savedStack: Automaton.GetStack(),
+            savedStepCount: Automaton.StepCount,
+            transition: CtapAuthenticatorTransitions.Create(),
+            acceptPredicate: static _ => true,
+            timeProvider: TimeProvider);
+    }
+
+
+    /// <summary>
+    /// Polls a parked user-presence wait (CTAP 2.3 :2840/:10818, R2).
+    /// </summary>
+    /// <param name="pool">The memory pool available for allocating the response buffer.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>
+    /// A ZERO-LENGTH <see cref="PooledMemory"/> if the wait is still pending, otherwise the final CTAP2
+    /// response envelope (success payload, <c>[0x27]</c>, <c>[0x2F]</c>, …) — see
+    /// <see cref="BeginDeferredTransceiveAsync"/>'s identical empty-marker convention.
+    /// </returns>
+    /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">No user-presence wait is currently pending (internal-misuse guard: the pure transition itself never throws).</exception>
+    public async ValueTask<PooledMemory> PollDeferredTransceiveAsync(MemoryPool<byte> pool, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        ArgumentNullException.ThrowIfNull(pool);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        CtapPendingUserPresenceState? pendingBeforePoll = Automaton.CurrentState.PendingUserPresenceWait;
+        if(pendingBeforePoll is null)
+        {
+            throw new InvalidOperationException("PollDeferredTransceiveAsync was called with no user-presence wait pending.");
+        }
+
+        await RunWithEffectsAsync(new UserPresencePollRequested(TimeProvider.GetUtcNow()), pool, cancellationToken).ConfigureAwait(false);
+
+        CtapAuthenticatorResponseIntent intent = Automaton.CurrentState.ResponseIntent
+            ?? throw new InvalidOperationException("The automaton completed a step without producing a response intent.");
+
+        if(intent is UserPresencePending)
+        {
+            //Still parked — the pure transition kept PendingUserPresenceWait armed for the next poll.
+            return FrameDeferralPendingMarker(pool);
+        }
+
+        //Resolved this call. A denied/timed-out resolution already disposed pendingBeforePoll's carriers
+        //via the pure transition's own terminal discard; a granted-then-completed resolution left them
+        //undisposed on purpose (ContinueMakeCredential/ContinueGetAssertion, and the credential-
+        //generation/assertion-signing effect that followed, read them throughout this SAME call — see
+        //CtapAuthenticatorTransitions.ClearPendingUserPresenceWait). This disposes them unconditionally:
+        //SensitiveMemory's Dispose is idempotent, so an already-disposed carrier tolerates the second
+        //call, and a granted-then-completed one is released exactly here, now that the resumed command's
+        //own effectful loop has fully returned.
+        pendingBeforePoll.Dispose();
+
+        return FrameFinalResponse(intent, pool);
+    }
+
+
+    /// <summary>
+    /// Cancels a parked user-presence wait (CTAP 2.3 :10821, R2).
+    /// </summary>
+    /// <param name="pool">The memory pool available for allocating the response buffer.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The final CTAP2 response envelope — always <c>[<see cref="WellKnownCtapStatusCodes.KeepaliveCancel"/>]</c>.</returns>
+    /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">No user-presence wait is currently pending (internal-misuse guard: the pure transition itself never throws).</exception>
+    public async ValueTask<PooledMemory> CancelDeferredTransceiveAsync(MemoryPool<byte> pool, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        ArgumentNullException.ThrowIfNull(pool);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if(Automaton.CurrentState.PendingUserPresenceWait is null)
+        {
+            throw new InvalidOperationException("CancelDeferredTransceiveAsync was called with no user-presence wait pending.");
+        }
+
+        await RunWithEffectsAsync(new UserPresenceCancelRequested(TimeProvider.GetUtcNow()), pool, cancellationToken).ConfigureAwait(false);
+
+        CtapAuthenticatorResponseIntent intent = Automaton.CurrentState.ResponseIntent
+            ?? throw new InvalidOperationException("The automaton completed a step without producing a response intent.");
+
+        return FrameFinalResponse(intent, pool);
+    }
+
+
+    /// <summary>
+    /// Decodes a CTAP2 request envelope's command byte and parameters into a
+    /// <see cref="CtapAuthenticatorInput"/> — the shared decode switch <see cref="TransceiveAsync"/>/
+    /// <see cref="BeginDeferredTransceiveAsync"/> both use.
+    /// </summary>
+    /// <param name="request">The complete CTAP2 request envelope, already confirmed non-empty by the caller.</param>
+    /// <param name="pool">The memory pool available for decoding.</param>
+    /// <param name="makeCredentialRequest">The decoded <c>authenticatorMakeCredential</c> request, if the command byte named one.</param>
+    /// <param name="getAssertionRequest">The decoded <c>authenticatorGetAssertion</c> request, if the command byte named one.</param>
+    /// <param name="credentialManagementRequest">The decoded <c>authenticatorCredentialManagement</c> request, if the command byte named one.</param>
+    /// <returns>The decoded input.</returns>
+    /// <exception cref="Fido2FormatException">The request's parameters did not decode.</exception>
+    private CtapAuthenticatorInput DecodeRequest(
+        ReadOnlyMemory<byte> request,
+        MemoryPool<byte> pool,
+        out CtapMakeCredentialRequest? makeCredentialRequest,
+        out CtapGetAssertionRequest? getAssertionRequest,
+        out CtapCredentialManagementRequest? credentialManagementRequest)
+    {
+        byte commandByte = request.Span[0];
+        ReadOnlyMemory<byte> parameters = request[1..];
+
+        makeCredentialRequest = null;
+        getAssertionRequest = null;
+        credentialManagementRequest = null;
+
+        //Decoded here (outside the pure automaton) so the credential-signing backend's supported-
+        //algorithm set — a composition-time dependency the pure transition has no access to — can be
+        //consulted before the input is built, mirroring TpmSimulator's own "check backend presence
+        //before entering the automaton" precedent for its object/signing commands. Every decode
+        //delegate below throws Fido2FormatException uniformly on a malformed or incomplete request, so
+        //that failure is caught once by each caller rather than duplicated per command.
+        return commandByte switch
+        {
+            var command when WellKnownCtapCommands.IsGetInfo(command) => new GetInfoRequested(CredentialSigningBackend?.SupportedAlgorithms),
+            var command when WellKnownCtapCommands.IsMakeCredential(command) =>
+                BuildMakeCredentialInput(parameters, pool, DecodeMakeCredentialRequest, CredentialSigningBackend?.SupportedAlgorithms, TimeProvider, out makeCredentialRequest),
+            var command when WellKnownCtapCommands.IsGetAssertion(command) =>
+                BuildGetAssertionInput(parameters, pool, DecodeGetAssertionRequest, TimeProvider, out getAssertionRequest),
+            var command when WellKnownCtapCommands.IsGetNextAssertion(command) => new GetNextAssertionRequested(TimeProvider.GetUtcNow()),
+            var command when WellKnownCtapCommands.IsClientPin(command) =>
+                new ClientPinRequested(DecodeClientPinRequest(parameters), TimeProvider.GetUtcNow()),
+            var command when WellKnownCtapCommands.IsReset(command) => new ResetRequested(TimeProvider.GetUtcNow(), pool),
+
+            //Step 1 (line 7953): subCommand absent -> CTAP2_ERR_MISSING_PARAMETER, realized at the
+            //decode boundary — mirroring every other command's required-field-absence handling
+            //(e.g. CtapClientPinRequestCborReader's own subCommand throw) rather than as a separate
+            //pure-transition check, since a decoded request model has no way to represent "subCommand
+            //was absent" once decoding has already failed. R7's classification (via
+            //MapDecodeFailureToStatusCode) now discriminates that case from a genuinely malformed or
+            //wrong-typed request instead of collapsing every decode failure onto MissingParameter; the
+            //subCommand-absent sub-case this profile's own test matrix pins still resolves to the
+            //identical status byte it always has.
+            var command when WellKnownCtapCommands.IsAuthenticatorConfig(command) =>
+                new AuthenticatorConfigRequested(DecodeAuthenticatorConfigRequest(parameters), TimeProvider.GetUtcNow()),
+
+            //Step 1's equivalent (the required subCommand member absent) is realized at the decode
+            //boundary, mirroring authenticatorConfig's own identical handling above.
+            var command when WellKnownCtapCommands.IsCredentialManagement(command) =>
+                BuildCredentialManagementInput(parameters, pool, DecodeCredentialManagementRequest, TimeProvider, out credentialManagementRequest),
+
+            var command when WellKnownCtapCommands.IsBioEnrollment(command) =>
+                new BioEnrollmentRequested(DecodeBioEnrollmentRequest(parameters), TimeProvider.GetUtcNow()),
+            var command when WellKnownCtapCommands.IsLargeBlobs(command) =>
+                new LargeBlobsRequested(DecodeLargeBlobsRequest(parameters), TimeProvider.GetUtcNow()),
+            _ => new UnsupportedCtapCommandReceived(commandByte)
+        };
+    }
+
+
+    /// <summary>
+    /// Frames a completed automaton response intent into its final CTAP2 wire envelope — the shared
+    /// mapping <see cref="TransceiveAsync"/>/<see cref="PollDeferredTransceiveAsync"/>/
+    /// <see cref="CancelDeferredTransceiveAsync"/> use.
+    /// </summary>
+    /// <param name="intent">The completed intent.</param>
+    /// <param name="pool">The memory pool available for allocating the response buffer.</param>
+    /// <returns>The final CTAP2 response envelope.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// <paramref name="intent"/> is <see cref="UserPresencePending"/> — never a legal FINAL response.
+    /// <see cref="TransceiveAsync"/>'s own inputs never allow deferral, so it can never observe this
+    /// intent; <see cref="BeginDeferredTransceiveAsync"/>/<see cref="PollDeferredTransceiveAsync"/> check
+    /// for it themselves and map it to the empty "still pending" marker before ever reaching this method.
+    /// </exception>
+    private PooledMemory FrameFinalResponse(CtapAuthenticatorResponseIntent intent, MemoryPool<byte> pool) =>
+        intent switch
+        {
+            GetInfoResponseReady getInfo => FrameSuccess(EncodeGetInfoResponse(getInfo.Response), pool),
+            MakeCredentialResponseReady makeCredential => FrameSuccess(EncodeMakeCredentialResponse(makeCredential.Response), pool),
+            GetAssertionResponseReady getAssertion => FrameSuccess(EncodeGetAssertionResponse(getAssertion.Response), pool),
+            ClientPinResponseReady clientPin => FrameSuccess(EncodeClientPinResponse(clientPin.Response), pool),
+            AuthenticatorConfigResponseReady => FrameError(WellKnownCtapStatusCodes.Ok, pool),
+            AuthenticatorResetResponseReady => FrameError(WellKnownCtapStatusCodes.Ok, pool),
+            CredentialManagementResponseReady credentialManagement => credentialManagement.Response is CtapCredentialManagementResponse response
+                ? FrameSuccess(EncodeCredentialManagementResponse(response), pool)
+                : FrameError(WellKnownCtapStatusCodes.Ok, pool),
+            BioEnrollmentResponseReady bioEnrollment => bioEnrollment.Response is CtapBioEnrollmentResponse bioEnrollmentResponse
+                ? FrameSuccess(EncodeBioEnrollmentResponse(bioEnrollmentResponse), pool)
+                : FrameError(WellKnownCtapStatusCodes.Ok, pool),
+            LargeBlobsResponseReady largeBlobs => largeBlobs.Response is CtapLargeBlobsResponse largeBlobsResponse
+                ? FrameSuccess(EncodeLargeBlobsResponse(largeBlobsResponse), pool)
+                : FrameError(WellKnownCtapStatusCodes.Ok, pool),
+            CtapErrorResponse error => FrameError(error.StatusCode, pool),
+            UnsupportedCommandResponse => FrameError(WellKnownCtapStatusCodes.InvalidCommand, pool),
+            UserPresencePending => throw new InvalidOperationException(
+                "UserPresencePending is not a legal final response; callers that allow deferral must check for it before calling FrameFinalResponse."),
+            _ => throw new NotSupportedException($"No response framing is registered for intent '{intent.GetType().Name}'.")
+        };
+
+
+    /// <summary>
+    /// Prefixes a CBOR-encoded response payload with the CTAP2_OK status byte, per CTAP 2.3 section 8's
+    /// "status byte followed by CBOR-encoded response data" response shape, into a buffer rented from
+    /// the pool: the one copy of the payload's bytes happens here, out of the codec seam's own wrapped
+    /// array and into the pooled envelope the caller owns.
+    /// </summary>
+    private static PooledMemory FrameSuccess(TaggedMemory<byte> payload, MemoryPool<byte> pool)
+    {
+        IMemoryOwner<byte> storage = pool.Rent(payload.Length + 1);
+        try
+        {
+            Span<byte> framed = storage.Memory.Span;
+            framed[0] = WellKnownCtapStatusCodes.Ok;
+            payload.Span.CopyTo(framed[1..]);
+
+            return new PooledMemory(storage, payload.Length + 1, Fido2BufferTags.CtapResponseEnvelope);
+        }
+        catch
+        {
+            storage.Dispose();
+            throw;
+        }
+    }
+
+
+    /// <summary>
+    /// Frames a bare status-byte error response (CTAP 2.3 section 8.2: Status codes) with no CBOR body,
+    /// into a one-byte buffer rented from the pool.
+    /// </summary>
+    private static PooledMemory FrameError(byte statusCode, MemoryPool<byte> pool)
+    {
+        IMemoryOwner<byte> storage = pool.Rent(1);
+        try
+        {
+            storage.Memory.Span[0] = statusCode;
+
+            return new PooledMemory(storage, 1, Fido2BufferTags.CtapResponseEnvelope);
+        }
+        catch
+        {
+            storage.Dispose();
+            throw;
+        }
+    }
+
+
+    /// <summary>
+    /// Builds the "command parked awaiting user presence" marker (R2): a ZERO-LENGTH <see cref="PooledMemory"/>,
+    /// unambiguous since every real CTAP2 response carries at least one status byte.
+    /// </summary>
+    private static PooledMemory FrameDeferralPendingMarker(MemoryPool<byte> pool) =>
+        PooledMemory.FromBytes(ReadOnlySpan<byte>.Empty, pool, Fido2BufferTags.CtapResponseEnvelope);
+
+
+    /// <summary>
+    /// Maps a decode-boundary Fido2FormatException's classification to its CTAP2 status byte (R7): the
+    /// tri-code split ships uniformly across every body-carrying command boundary <see cref="DecodeRequest"/>
+    /// covers, so this one method is the entire classification-to-status-byte seam this wave adds.
+    /// </summary>
+    private static byte MapDecodeFailureToStatusCode(Fido2FormatFailureKind failureKind) => failureKind switch
+    {
+        Fido2FormatFailureKind.MissingRequiredParameter => WellKnownCtapStatusCodes.MissingParameter,
+        Fido2FormatFailureKind.UnexpectedStructure => WellKnownCtapStatusCodes.CborUnexpectedType,
+        Fido2FormatFailureKind.MalformedCbor => WellKnownCtapStatusCodes.InvalidCbor,
+        _ => throw new NotSupportedException($"No status code is registered for decode failure kind '{failureKind}'.")
+    };
+
+
+    /// <summary>
+    /// Decodes an authenticatorMakeCredential request and selects the algorithm identifier — the first
+    /// PubKeyCredParams entry the credential-signing backend's supported-algorithm set contains (CTAP
+    /// 2.3, section 6.1.2, step 3). The decoded request is also handed back through makeCredentialRequest
+    /// so DisposeRequestCarriers can release its pooled carriers regardless of what happens once the
+    /// automaton takes over.
+    /// </summary>
+    private static MakeCredentialRequested BuildMakeCredentialInput(
+        ReadOnlyMemory<byte> parameters,
+        MemoryPool<byte> pool,
+        DecodeCtapMakeCredentialRequestDelegate decodeMakeCredentialRequest,
+        IReadOnlyList<int>? supportedAlgorithms,
+        TimeProvider timeProvider,
+        out CtapMakeCredentialRequest makeCredentialRequest)
+    {
+        makeCredentialRequest = decodeMakeCredentialRequest(parameters, pool);
+        int? selectedAlgorithm = SelectSupportedAlgorithm(makeCredentialRequest.PubKeyCredParams, supportedAlgorithms);
+
+        return new MakeCredentialRequested(makeCredentialRequest, selectedAlgorithm, timeProvider.GetUtcNow());
+    }
+
+
+    /// <summary>
+    /// Decodes an authenticatorGetAssertion request, handing it back through getAssertionRequest so
+    /// DisposeRequestCarriers can release its pooled carriers regardless of what happens once the
+    /// automaton takes over.
+    /// </summary>
+    private static GetAssertionRequested BuildGetAssertionInput(
+        ReadOnlyMemory<byte> parameters,
+        MemoryPool<byte> pool,
+        DecodeCtapGetAssertionRequestDelegate decodeGetAssertionRequest,
+        TimeProvider timeProvider,
+        out CtapGetAssertionRequest getAssertionRequest)
+    {
+        getAssertionRequest = decodeGetAssertionRequest(parameters, pool);
+
+        return new GetAssertionRequested(getAssertionRequest, timeProvider.GetUtcNow());
+    }
+
+
+    /// <summary>
+    /// Decodes an authenticatorCredentialManagement request, handing it back through
+    /// credentialManagementRequest so DisposeRequestCarriers can release its pooled carriers regardless
+    /// of what happens once the automaton takes over.
+    /// </summary>
+    private static CredentialManagementRequested BuildCredentialManagementInput(
+        ReadOnlyMemory<byte> parameters,
+        MemoryPool<byte> pool,
+        DecodeCtapCredentialManagementRequestDelegate decodeCredentialManagementRequest,
+        TimeProvider timeProvider,
+        out CtapCredentialManagementRequest credentialManagementRequest)
+    {
+        credentialManagementRequest = decodeCredentialManagementRequest(parameters, pool);
+
+        return new CredentialManagementRequested(credentialManagementRequest, timeProvider.GetUtcNow());
+    }
+
+
+    /// <summary>
+    /// Disposes whichever of the decoded request's own SensitiveMemory carriers the credential store did
+    /// not adopt: the store always copies what it needs to keep (a fresh UserHandle; a freshly minted
+    /// CredentialId never derived from the request at all), so every carrier the decode delegate handed
+    /// back is disposed here regardless of whether the command succeeded, was rejected, or never reached
+    /// the credential store. NOT called for a command that PARKED — see <see cref="BeginDeferredTransceiveAsync"/>.
+    /// </summary>
+    private static void DisposeRequestCarriers(
+        CtapMakeCredentialRequest? makeCredentialRequest, CtapGetAssertionRequest? getAssertionRequest, CtapCredentialManagementRequest? credentialManagementRequest)
+    {
+        if(makeCredentialRequest is not null)
+        {
+            makeCredentialRequest.ClientDataHash.Dispose();
+            makeCredentialRequest.User.Id.Dispose();
+
+            if(makeCredentialRequest.ExcludeList is not null)
+            {
+                foreach(PublicKeyCredentialDescriptor descriptor in makeCredentialRequest.ExcludeList)
                 {
-                    foreach(PublicKeyCredentialDescriptor descriptor in makeCredentialRequest.ExcludeList)
-                    {
-                        descriptor.Id.Dispose();
-                    }
+                    descriptor.Id.Dispose();
                 }
             }
+        }
 
-            if(getAssertionRequest is not null)
+        if(getAssertionRequest is not null)
+        {
+            getAssertionRequest.ClientDataHash.Dispose();
+
+            if(getAssertionRequest.AllowList is not null)
             {
-                getAssertionRequest.ClientDataHash.Dispose();
-
-                if(getAssertionRequest.AllowList is not null)
+                foreach(PublicKeyCredentialDescriptor descriptor in getAssertionRequest.AllowList)
                 {
-                    foreach(PublicKeyCredentialDescriptor descriptor in getAssertionRequest.AllowList)
-                    {
-                        descriptor.Id.Dispose();
-                    }
+                    descriptor.Id.Dispose();
                 }
             }
+        }
 
-            if(credentialManagementRequest is not null)
-            {
-                credentialManagementRequest.CredentialId?.Id.Dispose();
-                credentialManagementRequest.User?.Id.Dispose();
-            }
+        if(credentialManagementRequest is not null)
+        {
+            credentialManagementRequest.CredentialId?.Id.Dispose();
+            credentialManagementRequest.User?.Id.Dispose();
         }
     }
 
@@ -900,7 +1233,8 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             actionContext: new CtapActionContext(
                 Rng, pool, Aaguid, CredentialSigningBackend, EncodeCredentialPublicKey, EncodePackedSelfAttestationStatement,
                 EncodePackedCertifiedAttestationStatement, Automaton.CurrentState.EnterpriseAttestationProvisioning,
-                EncodeMakeCredentialExtensionOutputs, EncodeGetAssertionExtensionOutputs, SimulateFingerprintCapture, SimulateBuiltInUv),
+                EncodeMakeCredentialExtensionOutputs, EncodeGetAssertionExtensionOutputs, SimulateFingerprintCapture, SimulateBuiltInUv,
+                SimulateUserPresence, TimeProvider),
             TimeProvider,
             cancellationToken).ConfigureAwait(false);
     }
@@ -977,8 +1311,22 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
                 await VerifyLargeBlobsTokenAsync(verifyLargeBlobsAction, context, cancellationToken).ConfigureAwait(false),
             CtapCommitLargeBlobArrayAction commitLargeBlobArrayAction =>
                 await CommitLargeBlobArrayAsync(commitLargeBlobArrayAction, context, cancellationToken).ConfigureAwait(false),
+            CtapCollectUserPresenceAction => await CollectUserPresenceAsync(context, cancellationToken).ConfigureAwait(false),
             _ => throw new NotSupportedException($"No executor is registered for action '{action.GetType().Name}'.")
         };
+
+
+    /// <summary>
+    /// The user-presence collection effect (CTAP 2.3 :2840, R1): consults the injected
+    /// <see cref="SimulateUserPresenceDelegate"/> and folds its answer back with the instant it was
+    /// collected — the pure transition never reads a clock itself.
+    /// </summary>
+    private static async ValueTask<CtapAuthenticatorInput> CollectUserPresenceAsync(CtapActionContext context, CancellationToken cancellationToken)
+    {
+        CtapUserPresenceDecision decision = await context.SimulateUserPresence(cancellationToken).ConfigureAwait(false);
+
+        return new UserPresenceDecisionCollected(decision, context.TimeProvider.GetUtcNow());
+    }
 
 
     /// <summary>
@@ -2871,9 +3219,11 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// pairs and <c>pinUvAuthToken</c>s, disposes the stored PIN hash, if a PIN has been set, and
     /// disposes the persistent <see cref="CtapAuthenticatorState.SerializedLargeBlobArray"/> buffer
     /// (always present — seeded by <see cref="CtapAuthenticatorState.Initial"/>, never
-    /// <see langword="null"/>), and disposes the vendor-burned-in
+    /// <see langword="null"/>), disposes the vendor-burned-in
     /// <see cref="CtapAuthenticatorState.EnterpriseAttestationProvisioning"/> record, if this simulator
-    /// was constructed enterprise-attestation-capable.
+    /// was constructed enterprise-attestation-capable, and disposes a parked
+    /// <see cref="CtapAuthenticatorState.PendingUserPresenceWait"/>'s own request carriers, if a wait was
+    /// left pending (R2).
     /// </remarks>
     public void Dispose()
     {
@@ -2896,6 +3246,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
         Automaton.CurrentState.RememberedGetAssertion?.Dispose();
         Automaton.CurrentState.RememberedBioEnrollment?.Dispose();
+        Automaton.CurrentState.PendingUserPresenceWait?.Dispose();
         Automaton.CurrentState.ProtocolOneKeyAgreementKeyPair.Dispose();
         Automaton.CurrentState.ProtocolTwoKeyAgreementKeyPair.Dispose();
         Automaton.CurrentState.ProtocolOneToken.Dispose();
@@ -2924,6 +3275,8 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <param name="encodeGetAssertionExtensionOutputs">The codec seam that CBOR-encodes the resolved <c>hmac-secret</c> <c>authenticatorGetAssertion</c> authData extensions output map.</param>
     /// <param name="simulateFingerprintCapture">The R8 outcome-injection knob for a simulated fingerprint sensor capture.</param>
     /// <param name="simulateBuiltInUv">The R8 outcome-injection knob for a simulated built-in user verification gesture.</param>
+    /// <param name="simulateUserPresence">The R1 outcome-injection knob for a simulated :2840 user-presence collection.</param>
+    /// <param name="timeProvider">The time source the <see cref="CtapCollectUserPresenceAction"/> executor stamps a collected decision's <c>Now</c> with.</param>
     private readonly struct CtapActionContext(
         FillEntropyDelegate rng,
         MemoryPool<byte> pool,
@@ -2936,7 +3289,9 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         EncodeCtapMakeCredentialExtensionOutputsDelegate encodeMakeCredentialExtensionOutputs,
         EncodeCtapGetAssertionExtensionOutputsDelegate encodeGetAssertionExtensionOutputs,
         SimulateFingerprintCaptureDelegate simulateFingerprintCapture,
-        SimulateBuiltInUvDelegate simulateBuiltInUv)
+        SimulateBuiltInUvDelegate simulateBuiltInUv,
+        SimulateUserPresenceDelegate simulateUserPresence,
+        TimeProvider timeProvider)
     {
         /// <summary>The entropy provider credential identifiers are drawn from.</summary>
         public FillEntropyDelegate Rng { get; } = rng;
@@ -2973,6 +3328,12 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
         /// <summary>The R8 outcome-injection knob for a simulated built-in user verification gesture.</summary>
         public SimulateBuiltInUvDelegate SimulateBuiltInUv { get; } = simulateBuiltInUv;
+
+        /// <summary>The R1 outcome-injection knob for a simulated :2840 user-presence collection.</summary>
+        public SimulateUserPresenceDelegate SimulateUserPresence { get; } = simulateUserPresence;
+
+        /// <summary>The time source the <see cref="CtapCollectUserPresenceAction"/> executor stamps a collected decision's <c>Now</c> with.</summary>
+        public TimeProvider TimeProvider { get; } = timeProvider;
     }
 
 

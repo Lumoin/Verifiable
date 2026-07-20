@@ -28,8 +28,15 @@ internal sealed class CtapWave2TransportHarness: IDisposable
     /// <summary>The NFC responder bridging the simulator's transceive method to the APDU device.</summary>
     private CtapNfcResponder Responder { get; }
 
-    /// <summary>The real, unmodified APDU device the FIDO applet is selected on.</summary>
-    private ApduDevice Device { get; }
+    /// <summary>
+    /// The real, unmodified APDU device the FIDO applet is selected on. Accessible within the test
+    /// assembly (rather than only through <see cref="Transceive"/>) for capstones that need to control
+    /// P1 directly — CTAP 2.3's :10798 P1-gate trap and the :10510 immediacy proof are only observable
+    /// one raw <see cref="ApduExecutor.ExecuteAsync"/> exchange at a time, since <see cref="CtapNfcTransport"/>
+    /// always sets <see cref="WellKnownCtapCommandParameters.SupportsGetResponseP1Bit"/> and hides its own
+    /// poll loop from the caller.
+    /// </summary>
+    internal ApduDevice Device { get; }
 
     /// <summary>Guards against redundant disposal.</summary>
     private bool disposed;
@@ -64,6 +71,35 @@ internal sealed class CtapWave2TransportHarness: IDisposable
         CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, CancellationToken cancellationToken)
     {
         CtapNfcResponder responder = CtapNfcResponder.Create(simulator.TransceiveAsync);
+        ApduDevice device = ApduDevice.Create(responder.TransceiveAsync);
+
+        ApduResult<SelectResponse> selectResult = await device.SelectAsync(WellKnownAid.Fido, pool, cancellationToken).ConfigureAwait(false);
+        selectResult.Value.Dispose();
+
+        CtapNfcTransport transport = CtapNfcTransport.OverApdu(device);
+
+        return new CtapWave2TransportHarness(responder, device, transport.TransceiveAsync);
+    }
+
+
+    /// <summary>
+    /// Builds a harness identically to <see cref="CreateAsync"/>, except the responder is wired with
+    /// <paramref name="simulator"/>'s own <see cref="CtapAuthenticatorSimulator.BeginDeferredTransceiveAsync"/>/
+    /// <see cref="CtapAuthenticatorSimulator.PollDeferredTransceiveAsync"/>/
+    /// <see cref="CtapAuthenticatorSimulator.CancelDeferredTransceiveAsync"/> (CTAP 2.3 :10798/:10818/:10821,
+    /// R2/R3), bound by ordinary C# method-group conversion — the composition every wave-2 deferral
+    /// capstone shares instead of reimplementing the four-delegate <see cref="CtapNfcResponder.Create(CtapPayloadTransceiveDelegate, CtapPayloadDeferredTransceiveDelegate, CtapPayloadDeferredPollDelegate, CtapPayloadDeferredCancelDelegate)"/>
+    /// wiring per test.
+    /// </summary>
+    /// <param name="simulator">The authenticator simulator to drive over the real transport.</param>
+    /// <param name="pool">The memory pool the <c>SELECT</c> exchange rents from.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The composed harness. The caller owns it and must dispose it.</returns>
+    public static async Task<CtapWave2TransportHarness> CreateWithDeferralAsync(
+        CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    {
+        CtapNfcResponder responder = CtapNfcResponder.Create(
+            simulator.TransceiveAsync, simulator.BeginDeferredTransceiveAsync, simulator.PollDeferredTransceiveAsync, simulator.CancelDeferredTransceiveAsync);
         ApduDevice device = ApduDevice.Create(responder.TransceiveAsync);
 
         ApduResult<SelectResponse> selectResult = await device.SelectAsync(WellKnownAid.Fido, pool, cancellationToken).ConfigureAwait(false);
