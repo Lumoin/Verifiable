@@ -4,9 +4,9 @@
     "net10.0": {
       "Lumoin.Base": {
         "type": "Direct",
-        "requested": "[0.0.6, )",
-        "resolved": "0.0.6",
-        "contentHash": "NRaNiGb9SPGuDo9+tRGxZ5UQPWWPFSVt5Il/UV3yFGY/EHIVAuGy5M+wFHmNcXzMWucHOj8vxt19qQ1ZjJoE1A=="
+        "requested": "[0.0.7, )",
+        "resolved": "0.0.7",
+        "contentHash": "d6F1X14lCQZJejiZH8UQ8vf4TL3MDGO+llscPCVy3k9KMvn9Xc52zQEEOHZ+ZTc7gDtc2ekG7JduQCsCrTjygA=="
       },
       "Microsoft.CodeAnalysis.BannedApiAnalyzers": {
         "type": "Direct",
@@ -115,8 +115,8 @@
       },
       "System.Security.Cryptography.Pkcs": {
         "type": "Transitive",
-        "resolved": "10.0.9",
-        "contentHash": "aud6Ox9eSPayMBNu6qL+Zk7yDB6ShrRxg1aMJ1uPqFTGAFVisrjFeKj6RE9SimjNKcbl+chwmiYIK4b3hvc61A=="
+        "resolved": "10.0.10",
+        "contentHash": "KG8t5RHczdgB3IWvRndpI0nE1DSo7ikDYSDbITxfgRFyIvnYiKzuPjaZOsPnwFQ1aOGUl9sEulJul9wlHLEUoA=="
       },
       "verifiable.core": {
         "type": "Project",
@@ -131,14 +131,14 @@
       "verifiable.cryptography": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.6, )",
+          "Lumoin.Base": "[0.0.7, )",
           "Verifiable.Foundation": "[0.0.0, )"
         }
       },
       "verifiable.foundation": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.6, )"
+          "Lumoin.Base": "[0.0.7, )"
         }
       },
       "verifiable.jcose": {
@@ -199,11 +199,11 @@
       },
       "System.Security.Cryptography.Xml": {
         "type": "CentralTransitive",
-        "requested": "[10.0.9, )",
-        "resolved": "10.0.9",
-        "contentHash": "RxJRvzbS1rZpGF8389e+TEwTMHIhkNHEUQuAyN2oQkCGsZZ/EKhUUViwteKrs3IeHRzoJPqzB3Z1lJsQg3+Nxg==",
+        "requested": "[10.0.10, )",
+        "resolved": "10.0.10",
+        "contentHash": "Mz6Y+s+uMQKj1H2BUF0OhlmaOQkLgSG34/IrUaBDirYBQ6bgwcFvO/XtXWcoDlBLFoFB0uKqDNhybHOd+fQK1A==",
         "dependencies": {
-          "System.Security.Cryptography.Pkcs": "10.0.9"
+          "System.Security.Cryptography.Pkcs": "10.0.10"
         }
       }
     }

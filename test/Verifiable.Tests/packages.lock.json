@@ -63,12 +63,12 @@
       },
       "Microsoft.IdentityModel.Tokens": {
         "type": "Direct",
-        "requested": "[8.19.2, )",
-        "resolved": "8.19.2",
-        "contentHash": "GtPC1S02uH1gOO4fQ+zRysIicKmEXaYFP8PIkdJYXqMyruYhopre4ozVHp0XiDSA0+GJvOZH9prxCPvgBMg4Ww==",
+        "requested": "[8.20.0, )",
+        "resolved": "8.20.0",
+        "contentHash": "wjnhcOJNRX7mGEhTfKNsmEB0q3eHOadLP4vsoyj4e5GH0uVBRbulTvUsGGQYi6nMAOj+o6AF36naEpGpnP5EWw==",
         "dependencies": {
           "Microsoft.Bcl.Cryptography": "10.0.2",
-          "Microsoft.IdentityModel.Logging": "8.19.2"
+          "Microsoft.IdentityModel.Logging": "8.20.0"
         }
       },
       "Microsoft.NET.ILLink.Tasks": {
@@ -509,15 +509,15 @@
       },
       "Microsoft.IdentityModel.Abstractions": {
         "type": "Transitive",
-        "resolved": "8.19.2",
-        "contentHash": "HJbo/lnSfNHUfphPRT910poQc4T2/9+8svFLvzuaYHGAOJ2Tu+oEDqpX0BVP3BJ4OuUM1kylEKyaiX2fCAK3Cw=="
+        "resolved": "8.20.0",
+        "contentHash": "2YrBraNn8E5lLXamv0ccIM6PtGrv4GA46lNNIzw3d3M3CJ177iHiSXKEjUjy+s9aKsodjFTi4i8h5gGG12wiAA=="
       },
       "Microsoft.IdentityModel.Logging": {
         "type": "Transitive",
-        "resolved": "8.19.2",
-        "contentHash": "r5YLDIxGOnkVJHrqXv/iD1FM1CgGrQOdriXuvuWvTPmKbnGANhEysq9XKmN6IHjf2a+9bAGEpnoRBsAQlvJU5w==",
+        "resolved": "8.20.0",
+        "contentHash": "lSFZ7xwtaZtBvsXHJacUdWteZLrmRw6KCAfN0mWCqQ29DRzewIWIbt54lQOtooa1VQZevnw6ooy64FfWOUliIQ==",
         "dependencies": {
-          "Microsoft.IdentityModel.Abstractions": "8.19.2"
+          "Microsoft.IdentityModel.Abstractions": "8.20.0"
         }
       },
       "Microsoft.NET.StringTools": {
@@ -697,7 +697,7 @@
       "verifiable.apdu": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.6, )",
+          "Lumoin.Base": "[0.0.7, )",
           "Verifiable.Cryptography": "[0.0.0, )",
           "Verifiable.Foundation": "[0.0.0, )"
         }
@@ -739,14 +739,14 @@
       "verifiable.cryptography": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.6, )",
+          "Lumoin.Base": "[0.0.7, )",
           "Verifiable.Foundation": "[0.0.0, )"
         }
       },
       "verifiable.didcomm": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.6, )",
+          "Lumoin.Base": "[0.0.7, )",
           "Verifiable.Core": "[0.0.0, )",
           "Verifiable.Cryptography": "[0.0.0, )",
           "Verifiable.Foundation": "[0.0.0, )",
@@ -774,7 +774,7 @@
       "verifiable.foundation": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.6, )"
+          "Lumoin.Base": "[0.0.7, )"
         }
       },
       "verifiable.jcose": {
@@ -878,9 +878,9 @@
       },
       "Lumoin.Base": {
         "type": "CentralTransitive",
-        "requested": "[0.0.6, )",
-        "resolved": "0.0.6",
-        "contentHash": "NRaNiGb9SPGuDo9+tRGxZ5UQPWWPFSVt5Il/UV3yFGY/EHIVAuGy5M+wFHmNcXzMWucHOj8vxt19qQ1ZjJoE1A=="
+        "requested": "[0.0.7, )",
+        "resolved": "0.0.7",
+        "contentHash": "d6F1X14lCQZJejiZH8UQ8vf4TL3MDGO+llscPCVy3k9KMvn9Xc52zQEEOHZ+ZTc7gDtc2ekG7JduQCsCrTjygA=="
       },
       "Lumoin.Veridical.Backends.Managed": {
         "type": "CentralTransitive",
