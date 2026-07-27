@@ -2,7 +2,7 @@ using System;
 using System.Globalization;
 using Verifiable.Tpm.Extensions.Info;
 using Verifiable.Tpm.Extensions.Pcr;
-using Verifiable.Tpm.Infrastructure.Spec.Constants;
+using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable;
 

@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Verifiable.Tpm.Infrastructure.Spec.Constants;
+using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 

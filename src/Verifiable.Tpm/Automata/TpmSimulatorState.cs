@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Immutable;
 using Verifiable.Foundation.Automata;
-using Verifiable.Tpm.Infrastructure.Spec.Structures;
-using Verifiable.Tpm.Structures.Spec.Constants;
+using Verifiable.Tpm.Spec.Structures;
+using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable.Tpm.Automata;
 

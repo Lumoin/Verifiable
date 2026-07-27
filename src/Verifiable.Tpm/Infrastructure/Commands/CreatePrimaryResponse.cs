@@ -1,8 +1,8 @@
 using System;
-using Verifiable.Tpm.Infrastructure.Spec.Structures;
+using Verifiable.Tpm.Spec.Structures;
 using System.Buffers;
 using System.Diagnostics;
-using Verifiable.Tpm.Infrastructure.Spec.Handles;
+using Verifiable.Tpm.Spec.Handles;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 

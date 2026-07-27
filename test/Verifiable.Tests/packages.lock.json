@@ -763,7 +763,7 @@
           "Verifiable.Cryptography": "[0.0.0, )",
           "Verifiable.Foundation": "[0.0.0, )",
           "Verifiable.JCose": "[0.0.0, )",
-          "Verifiable.Tpm": "[0.0.0, )"
+          "Verifiable.Tpm.Spec": "[0.0.0, )"
         }
       },
       "verifiable.foundation": {
@@ -838,6 +838,14 @@
         }
       },
       "verifiable.tpm": {
+        "type": "Project",
+        "dependencies": {
+          "Verifiable.Cryptography": "[0.0.0, )",
+          "Verifiable.Foundation": "[0.0.0, )",
+          "Verifiable.Tpm.Spec": "[0.0.0, )"
+        }
+      },
+      "verifiable.tpm.spec": {
         "type": "Project",
         "dependencies": {
           "Verifiable.Cryptography": "[0.0.0, )",

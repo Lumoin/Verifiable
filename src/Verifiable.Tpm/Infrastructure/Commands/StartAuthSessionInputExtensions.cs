@@ -6,10 +6,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Tpm.Automata;
-using Verifiable.Tpm.Infrastructure.Spec.Constants;
-using Verifiable.Tpm.Infrastructure.Spec.Handles;
-using Verifiable.Tpm.Infrastructure.Spec.Structures;
-using Verifiable.Tpm.Structures.Spec.Constants;
+using Verifiable.Tpm.Spec.Constants;
+using Verifiable.Tpm.Spec.Handles;
+using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 

@@ -1,6 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Tpm.Infrastructure.Commands;
-using Verifiable.Tpm.Infrastructure.Spec.Handles;
+using Verifiable.Tpm.Spec.Handles;
 
 namespace Verifiable.Tpm.Infrastructure;
 

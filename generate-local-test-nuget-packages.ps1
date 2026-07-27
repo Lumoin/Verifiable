@@ -19,6 +19,7 @@ $projects = @(
     'Verifiable.OAuth',
     'Verifiable.Server',
     'Verifiable.Tpm',
+    'Verifiable.Tpm.Spec',
     'Verifiable.Vcalm',
     'Verifiable.WebFinger'
 )

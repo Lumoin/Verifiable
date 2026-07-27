@@ -145,7 +145,7 @@
       "verifiable.jsonpointer": {
         "type": "Project"
       },
-      "verifiable.tpm": {
+      "verifiable.tpm.spec": {
         "type": "Project",
         "dependencies": {
           "Verifiable.Cryptography": "[0.0.0, )",

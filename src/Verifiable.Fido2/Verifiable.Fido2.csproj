@@ -20,13 +20,22 @@
     Fido2ValidationProfiles) — the same claim-issuance pipeline
     Verifiable.OAuth's validators use. The reference is acyclic: Verifiable.Core
     does not reference Verifiable.Fido2.
+
+    Verifiable.Tpm.Spec (the TPM 2.0 wire vocabulary, not the TPM engine) is
+    referenced for TpmAttestation.cs, the WebAuthn "tpm" attestation format
+    verifier: it parses TPMS_ATTEST/TPMT_PUBLIC wire bytes and never talks to a
+    device, so it needs the spec-exact structures/constants and the TPM-to-
+    neutral-carrier crypto projections, not the simulator/session/device-verb
+    engine (Verifiable.Tpm). The three TPM-backed CTAP custody adapters that
+    previously lived here (sealed-state/signature-counter/PIN-retries) moved to
+    a staged composition directory under test/ (layering-split-ledger.md).
   -->
   <ItemGroup>
     <ProjectReference Include="..\Verifiable.Foundation\Verifiable.Foundation.csproj" />
     <ProjectReference Include="..\Verifiable.Cryptography\Verifiable.Cryptography.csproj" />
     <ProjectReference Include="..\Verifiable.JCose\Verifiable.JCose.csproj" />
     <ProjectReference Include="..\Verifiable.Core\Verifiable.Core.csproj" />
-    <ProjectReference Include="..\Verifiable.Tpm\Verifiable.Tpm.csproj" />
+    <ProjectReference Include="..\Verifiable.Tpm.Spec\Verifiable.Tpm.Spec.csproj" />
   </ItemGroup>
 
 </Project>

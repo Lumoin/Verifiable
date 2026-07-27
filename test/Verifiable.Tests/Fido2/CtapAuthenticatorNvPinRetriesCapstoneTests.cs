@@ -7,6 +7,7 @@ using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
 using Verifiable.Fido2.Ctap.Authenticator.Custody;
+using Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tests.Tpm;
 using Verifiable.Tpm;
@@ -16,9 +17,8 @@ using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Infrastructure.Spec.Constants;
-using Verifiable.Tpm.Infrastructure.Spec.Handles;
-using Verifiable.Tpm.Structures.Spec.Constants;
+using Verifiable.Tpm.Spec.Constants;
+using Verifiable.Tpm.Spec.Handles;
 
 namespace Verifiable.Tests.Fido2;
 
