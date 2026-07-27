@@ -5,6 +5,7 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
+using Verifiable.Tests.X509;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -219,12 +220,12 @@ internal sealed class BackendLeafKeyParityTests
             ?? throw new ArgumentException("Issuer certificate must carry an ECDsa private key.", nameof(issuerCertificate));
         X509SignatureGenerator issuerSignatureGenerator = X509SignatureGenerator.CreateForECDsa(issuerKey);
 
-        byte[] serialNumber = RandomNumberGenerator.GetBytes(16);
+        using Salt serialNumber = X509ChainTestRing.CreateSerialNumber(16);
         return request.Create(
             issuerCertificate.SubjectName,
             issuerSignatureGenerator,
             notBefore: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
             notAfter: new DateTimeOffset(2029, 1, 1, 0, 0, 0, TimeSpan.Zero),
-            serialNumber).CopyWithPrivateKey(leafKey);
+            serialNumber.AsReadOnlySpan()).CopyWithPrivateKey(leafKey);
     }
 }

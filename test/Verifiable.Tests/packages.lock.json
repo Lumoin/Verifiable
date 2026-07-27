@@ -63,12 +63,12 @@
       },
       "Microsoft.IdentityModel.Tokens": {
         "type": "Direct",
-        "requested": "[8.20.0, )",
-        "resolved": "8.20.0",
-        "contentHash": "wjnhcOJNRX7mGEhTfKNsmEB0q3eHOadLP4vsoyj4e5GH0uVBRbulTvUsGGQYi6nMAOj+o6AF36naEpGpnP5EWw==",
+        "requested": "[8.21.0, )",
+        "resolved": "8.21.0",
+        "contentHash": "xFnFEl4VrhAJEbqtRrpgfAACgkm6NYo7cWYKYROH00N9/M5OYrRwTP0lHsginnLrqPrseLcSqAueQNRCyGNsdw==",
         "dependencies": {
           "Microsoft.Bcl.Cryptography": "10.0.2",
-          "Microsoft.IdentityModel.Logging": "8.20.0"
+          "Microsoft.IdentityModel.Logging": "8.21.0"
         }
       },
       "Microsoft.NET.ILLink.Tasks": {
@@ -230,9 +230,9 @@
       },
       "SimpleBase": {
         "type": "Direct",
-        "requested": "[5.6.2, )",
-        "resolved": "5.6.2",
-        "contentHash": "xQFeRXI25LdFy+wGQ0HVCXw0wONI2GVDkgm9cmbNOQcr5XciryiDfPH1a3afaseTahD8ajIc8o7KIN9rcNPOdw=="
+        "requested": "[5.6.3, )",
+        "resolved": "5.6.3",
+        "contentHash": "ayL730f1gdQVYmFFLKSX83QcoltyKSMBsV94qfCBpZHMaJz/e3ALuXKZDD8SkseWbNHxBe0HxLRBe5OOpQ9HpA=="
       },
       "System.CommandLine": {
         "type": "Direct",
@@ -373,11 +373,6 @@
         "resolved": "2.1.0",
         "contentHash": "Vooz1wbnnqWuS+u93tADXK5Owxo8vLJhSrZ9Ac+KpgDF3GJq9TybXXTF1TFcWILgEtRThc8AOBENEzB0TQH1JA=="
       },
-      "libsodium": {
-        "type": "Transitive",
-        "resolved": "1.0.22",
-        "contentHash": "KPD9SloJFclrsjnhABu7dzWrcyYkwPbvx5l1gRSPAX/0n+OBtSiVCKtGFv4n+ecWUHU0tCG9LSSwoZZx673zBQ=="
-      },
       "LiquidTestReports.Core": {
         "type": "Transitive",
         "resolved": "1.4.3-beta",
@@ -509,15 +504,15 @@
       },
       "Microsoft.IdentityModel.Abstractions": {
         "type": "Transitive",
-        "resolved": "8.20.0",
-        "contentHash": "2YrBraNn8E5lLXamv0ccIM6PtGrv4GA46lNNIzw3d3M3CJ177iHiSXKEjUjy+s9aKsodjFTi4i8h5gGG12wiAA=="
+        "resolved": "8.21.0",
+        "contentHash": "XYgEmYpUvng0oYIagDJ+uebboQSnWtCV7q9zMyXlBw6ZqLLCHcmGUb7TpXvQ3HWY4OzbOCUQm2Ac0saPSnwqSw=="
       },
       "Microsoft.IdentityModel.Logging": {
         "type": "Transitive",
-        "resolved": "8.20.0",
-        "contentHash": "lSFZ7xwtaZtBvsXHJacUdWteZLrmRw6KCAfN0mWCqQ29DRzewIWIbt54lQOtooa1VQZevnw6ooy64FfWOUliIQ==",
+        "resolved": "8.21.0",
+        "contentHash": "LgIWUUX386xCbvjq2ex8iXGIu2raDWrrIQ4OyYZKaNWMhzvN8YOTbAYMFJC+iHmKnkNBM8g7mLak9KQodldH3g==",
         "dependencies": {
-          "Microsoft.IdentityModel.Abstractions": "8.20.0"
+          "Microsoft.IdentityModel.Abstractions": "8.21.0"
         }
       },
       "Microsoft.NET.StringTools": {
@@ -675,7 +670,7 @@
         "type": "Project",
         "dependencies": {
           "ModelContextProtocol": "[1.4.1, )",
-          "SimpleBase": "[5.6.2, )",
+          "SimpleBase": "[5.6.3, )",
           "System.CommandLine": "[2.0.10, )",
           "Verifiable.Cbor": "[0.0.0, )",
           "Verifiable.Core": "[0.0.0, )",
@@ -808,18 +803,19 @@
           "Verifiable.Cryptography": "[0.0.0, )"
         }
       },
+      "verifiable.libsodium": {
+        "type": "Project",
+        "dependencies": {
+          "Lumoin.Base.Sodium": "[0.0.7, )",
+          "Verifiable.Core": "[0.0.0, )",
+          "Verifiable.Foundation": "[0.0.0, )",
+          "libsodium": "[1.0.22, )"
+        }
+      },
       "verifiable.microsoft": {
         "type": "Project",
         "dependencies": {
           "System.Security.Cryptography.ProtectedData": "[10.0.10, )",
-          "Verifiable.Core": "[0.0.0, )",
-          "Verifiable.Foundation": "[0.0.0, )"
-        }
-      },
-      "verifiable.nsec": {
-        "type": "Project",
-        "dependencies": {
-          "NSec.Cryptography": "[26.4.0, )",
           "Verifiable.Core": "[0.0.0, )",
           "Verifiable.Foundation": "[0.0.0, )"
         }
@@ -876,11 +872,26 @@
         "resolved": "2.6.2",
         "contentHash": "7oWOcvnntmMKNzDLsdxAYqApt+AjpRpP2CShjMfIa3umZ42UQMvH0tl1qAliYPNYO6vTdcGMqnRrCPmsfzTI1w=="
       },
+      "libsodium": {
+        "type": "CentralTransitive",
+        "requested": "[1.0.22, )",
+        "resolved": "1.0.22",
+        "contentHash": "KPD9SloJFclrsjnhABu7dzWrcyYkwPbvx5l1gRSPAX/0n+OBtSiVCKtGFv4n+ecWUHU0tCG9LSSwoZZx673zBQ=="
+      },
       "Lumoin.Base": {
         "type": "CentralTransitive",
         "requested": "[0.0.7, )",
         "resolved": "0.0.7",
         "contentHash": "d6F1X14lCQZJejiZH8UQ8vf4TL3MDGO+llscPCVy3k9KMvn9Xc52zQEEOHZ+ZTc7gDtc2ekG7JduQCsCrTjygA=="
+      },
+      "Lumoin.Base.Sodium": {
+        "type": "CentralTransitive",
+        "requested": "[0.0.7, )",
+        "resolved": "0.0.7",
+        "contentHash": "Vly77SUhs0j7jEP2hBa2RqNocYhq5KS9shZmvNtfVHmbbUPQd+oeQeKmwWmsyySpnDl2UQNBfrO3l+XWrzdMJQ==",
+        "dependencies": {
+          "Lumoin.Base": "0.0.7"
+        }
       },
       "Lumoin.Veridical.Backends.Managed": {
         "type": "CentralTransitive",
@@ -920,15 +931,6 @@
         "dependencies": {
           "Lumoin.Base": "0.0.4",
           "Lumoin.Veridical.Core": "0.0.4"
-        }
-      },
-      "NSec.Cryptography": {
-        "type": "CentralTransitive",
-        "requested": "[26.4.0, )",
-        "resolved": "26.4.0",
-        "contentHash": "0vsCtY5f+YgQROiWNqzgWp+l2pddfk9FkWoGV/bEo0MuEYPKlJWuoA8aOfO6qp3f+EnObKE3zSJhn1PspJeJVg==",
-        "dependencies": {
-          "libsodium": "[1.0.22, 1.0.23)"
         }
       }
     }

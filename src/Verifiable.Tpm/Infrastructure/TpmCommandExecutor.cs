@@ -175,12 +175,18 @@ public static class TpmCommandExecutor
             }
         }
 
-        //Compute cpHash if sessions that need it are present.
-        //Password sessions (TPM_ALG_NULL) don't need cpHash.
-        TpmAlgIdConstants sessionHashAlg = TpmAlgIdConstants.TPM_ALG_NULL;
-        IMemoryOwner<byte>? cpHashOwner = null;
-        Memory<byte> cpHashMemory = Memory<byte>.Empty;
+        //Compute cpHash if sessions that need it are present. Password sessions (TPM_ALG_NULL) don't need cpHash.
+        //cpHash is computed once per DISTINCT session hash algorithm actually negotiated (Part 1, clause 18.7,
+        //equation 15), not once for the whole command: two sessions negotiating different hash algorithms (e.g. a
+        //SHA-256 auth session alongside a SHA-384 decrypt session) each need cpHash under their OWN algorithm.
+        //Reusing one session's hash for every session falsely rejects an honest, spec-legal mixed-hash
+        //multi-session command (the simulator recomputes cpHash per session per clause 18.7 and would disagree).
+        //Cached by algorithm since sessions.Count is small (at most 3: one auth handle plus one decrypt and one
+        //encrypt companion) and sessions commonly share the same algorithm.
+        Memory<byte>[] cpHashPerSession = new Memory<byte>[sessions.Count];
+        List<(TpmAlgIdConstants Alg, IMemoryOwner<byte> Owner, Memory<byte> Memory)> cpHashCache = new(Math.Min(sessions.Count, 3));
         IMemoryOwner<byte>? namesOwner = null;
+        IMemoryOwner<byte>? foldedNoncesOwner = null;
 
         try
         {
@@ -214,17 +220,19 @@ public static class TpmCommandExecutor
                         parametersMemory.Slice(sizeof(ushort), firstParamSize), pool, cancellationToken).ConfigureAwait(false);
                 }
 
-                //Find first session with a real hash algorithm.
+                //Determine whether any session needs a cpHash at all (a password-only authorization area never
+                //does), before resolving the handle-area Names (which throws for an unnamed object/NV handle).
+                bool anySessionNeedsCpHash = false;
                 foreach(var session in sessions)
                 {
                     if(session.HashAlgorithm != TpmAlgIdConstants.TPM_ALG_NULL)
                     {
-                        sessionHashAlg = session.HashAlgorithm;
+                        anySessionNeedsCpHash = true;
                         break;
                     }
                 }
 
-                if(sessionHashAlg != TpmAlgIdConstants.TPM_ALG_NULL)
+                if(anySessionNeedsCpHash)
                 {
                     //cpHash is computed over entity Names (Part 1 eq 15), not handle values. The executor derives
                     //the Name of a permanent/PCR/session handle (Name == handle); an object or NV index Name must
@@ -232,11 +240,71 @@ public static class TpmCommandExecutor
                     ReadOnlyMemory<byte> cpHashHandleArea = ResolveCpHashHandleArea(
                         handlesMemory, inputHandleCount, handleNames, pool, out namesOwner);
 
-                    int cpHashSize = GetDigestSize(sessionHashAlg);
-                    cpHashOwner = pool.Rent(cpHashSize);
-                    cpHashMemory = cpHashOwner.Memory[..cpHashSize];
-                    await ComputeCpHashAsync(
-                        sessionHashAlg, commandCode, cpHashHandleArea, parametersMemory, cpHashMemory, pool, cancellationToken).ConfigureAwait(false);
+                    for(int i = 0; i < sessions.Count; i++)
+                    {
+                        TpmAlgIdConstants sessionAlg = sessions[i].HashAlgorithm;
+                        if(sessionAlg == TpmAlgIdConstants.TPM_ALG_NULL)
+                        {
+                            continue;
+                        }
+
+                        int cacheIndex = -1;
+                        for(int c = 0; c < cpHashCache.Count; c++)
+                        {
+                            if(cpHashCache[c].Alg == sessionAlg)
+                            {
+                                cacheIndex = c;
+                                break;
+                            }
+                        }
+
+                        if(cacheIndex < 0)
+                        {
+                            int cpHashSize = GetDigestSize(sessionAlg);
+                            IMemoryOwner<byte> cpHashOwner = pool.Rent(cpHashSize);
+                            Memory<byte> cpHashMemory = cpHashOwner.Memory[..cpHashSize];
+                            await ComputeCpHashAsync(
+                                sessionAlg, commandCode, cpHashHandleArea, parametersMemory, cpHashMemory, pool, cancellationToken).ConfigureAwait(false);
+
+                            cpHashCache.Add((sessionAlg, cpHashOwner, cpHashMemory));
+                            cacheIndex = cpHashCache.Count - 1;
+                        }
+
+                        cpHashPerSession[i] = cpHashCache[cacheIndex].Memory;
+                    }
+                }
+            }
+
+            //Fold an OTHER session's nonceTPM into the FIRST session's command HMAC when that first session
+            //itself authorizes a command handle (TPM 2.0 Library Part 1, clause 19.6.3.4): the fold's own
+            //precondition is "session 0 is the first session in the authorization area AND it authorizes an
+            //entity", and by this codebase's session-ordering convention (handleNames' own per-handle contract)
+            //session 0 corresponds to the first command handle whenever one exists. Never a session's own
+            //nonceTPM into itself (guarded by reference equality), and never when the command has no handle for
+            //session 0 to authorize (GetRandom-shaped commands), matching the two existing sites this applies to.
+            ReadOnlyMemory<byte> foldedSessionNonces = ReadOnlyMemory<byte>.Empty;
+            if(hasSessions && inputHandleCount > 0)
+            {
+                TpmSessionBase firstSession = sessions[0];
+                bool foldsDecrypt = decryptSession is not null && !ReferenceEquals(decryptSession, firstSession);
+                bool foldsEncrypt = encryptSession is not null && !ReferenceEquals(encryptSession, firstSession) && !ReferenceEquals(encryptSession, decryptSession);
+
+                int foldedLength = (foldsDecrypt ? decryptSession!.NonceTpm.Length : 0) + (foldsEncrypt ? encryptSession!.NonceTpm.Length : 0);
+                if(foldedLength > 0)
+                {
+                    foldedNoncesOwner = pool.Rent(foldedLength);
+                    Memory<byte> foldedMemory = foldedNoncesOwner.Memory[..foldedLength];
+                    int foldedOffset = 0;
+                    if(foldsDecrypt)
+                    {
+                        decryptSession!.NonceTpm.CopyTo(foldedMemory[foldedOffset..]);
+                        foldedOffset += decryptSession.NonceTpm.Length;
+                    }
+                    if(foldsEncrypt)
+                    {
+                        encryptSession!.NonceTpm.CopyTo(foldedMemory[foldedOffset..]);
+                    }
+                    foldedSessionNonces = foldedMemory;
                 }
             }
 
@@ -248,7 +316,7 @@ public static class TpmCommandExecutor
                 for(int i = 0; i < sessions.Count; i++)
                 {
                     preparedAuthHmacs[i] = await sessions[i].PrepareAuthHmacAsync(
-                        cpHashMemory, pool, cancellationToken).ConfigureAwait(false);
+                        cpHashPerSession[i], pool, cancellationToken, i == 0 ? foldedSessionNonces : ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
                 }
 
                 //Compute auth area size.
@@ -339,19 +407,47 @@ public static class TpmCommandExecutor
                         //being interpreted. This mirrors ms-tpm-20-ref: the TPM encrypts the first response
                         //parameter before computing rpHash, so on the caller side the first parameter is
                         //decrypted only after the response HMAC verifies.
-                        IMemoryOwner<byte>? rpHashOwner = null;
-                        Memory<byte> rpHashMemory = Memory<byte>.Empty;
+                        //
+                        //Like cpHash (above), rpHash is computed once per DISTINCT session hash algorithm actually
+                        //negotiated (Part 1, clause 18.8, equation 16) and each session verifies against its OWN
+                        //algorithm's rpHash, never one session's hash reused for every session.
+                        Memory<byte>[] rpHashPerSession = new Memory<byte>[sessions.Count];
+                        List<(TpmAlgIdConstants Alg, IMemoryOwner<byte> Owner, Memory<byte> Memory)> rpHashCache = new(Math.Min(sessions.Count, 3));
 
                         try
                         {
-                            if(sessionHashAlg != TpmAlgIdConstants.TPM_ALG_NULL)
+                            for(int i = 0; i < sessions.Count; i++)
                             {
-                                int rpHashSize = GetDigestSize(sessionHashAlg);
-                                rpHashOwner = pool.Rent(rpHashSize);
-                                rpHashMemory = rpHashOwner.Memory[..rpHashSize];
+                                TpmAlgIdConstants sessionAlg = sessions[i].HashAlgorithm;
+                                if(sessionAlg == TpmAlgIdConstants.TPM_ALG_NULL)
+                                {
+                                    continue;
+                                }
 
-                                await ComputeRpHashAsync(
-                                    sessionHashAlg, layout.ResponseCode, commandCode, responseParamsMemory, rpHashMemory, pool, cancellationToken).ConfigureAwait(false);
+                                int cacheIndex = -1;
+                                for(int c = 0; c < rpHashCache.Count; c++)
+                                {
+                                    if(rpHashCache[c].Alg == sessionAlg)
+                                    {
+                                        cacheIndex = c;
+                                        break;
+                                    }
+                                }
+
+                                if(cacheIndex < 0)
+                                {
+                                    int rpHashSize = GetDigestSize(sessionAlg);
+                                    IMemoryOwner<byte> rpHashOwner = pool.Rent(rpHashSize);
+                                    Memory<byte> rpHashMemory = rpHashOwner.Memory[..rpHashSize];
+
+                                    await ComputeRpHashAsync(
+                                        sessionAlg, layout.ResponseCode, commandCode, responseParamsMemory, rpHashMemory, pool, cancellationToken).ConfigureAwait(false);
+
+                                    rpHashCache.Add((sessionAlg, rpHashOwner, rpHashMemory));
+                                    cacheIndex = rpHashCache.Count - 1;
+                                }
+
+                                rpHashPerSession[i] = rpHashCache[cacheIndex].Memory;
                             }
 
                             //Auth area parsing must happen on the response span; copy out to
@@ -378,7 +474,7 @@ public static class TpmCommandExecutor
                                     for(int i = 0; i < sessions.Count; i++)
                                     {
                                         bool ok = await sessions[i].VerifyAndUpdateAsync(
-                                            parsedAuthResponses[i], rpHashMemory, pool, cancellationToken).ConfigureAwait(false);
+                                            parsedAuthResponses[i], rpHashPerSession[i], pool, cancellationToken).ConfigureAwait(false);
                                         if(!ok)
                                         {
                                             return TpmResult<TResponse>.TpmError(TpmRcConstants.TPM_RC_AUTH_FAIL);
@@ -406,7 +502,10 @@ public static class TpmCommandExecutor
                         }
                         finally
                         {
-                            rpHashOwner?.Dispose();
+                            foreach(var cached in rpHashCache)
+                            {
+                                cached.Owner.Dispose();
+                            }
                         }
 
                         //Decrypt the data portion of the first response parameter (Part 1 §19), now that the
@@ -493,8 +592,12 @@ public static class TpmCommandExecutor
         }
         finally
         {
-            cpHashOwner?.Dispose();
+            foreach(var cached in cpHashCache)
+            {
+                cached.Owner.Dispose();
+            }
             namesOwner?.Dispose();
+            foldedNoncesOwner?.Dispose();
         }
     }
 

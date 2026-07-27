@@ -366,18 +366,27 @@ public static class MdocCborIssuance
     /// <summary>
     /// Computes the MSO digest of one IssuerSignedItem's wire bytes under
     /// the spec-permitted hash algorithm. ISO/IEC 18013-5 §9.1.2.5 limits
-    /// the choices to SHA-256, SHA-384, and SHA-512.
+    /// the choices to SHA-256, SHA-384, and SHA-512. Routed through the
+    /// registered digest seam (<see cref="CryptographicKeyEvents.ComputeDigest"/>)
+    /// rather than a direct framework hash call, so the library never
+    /// picks a hash implementation the consumer did not wire.
     /// </summary>
     private static byte[] ComputeDigest(string digestAlgorithm, ReadOnlySpan<byte> input)
     {
-        return digestAlgorithm switch
+        (Tag tag, int length, string? qualifier) = digestAlgorithm switch
         {
-            MdocMsoWellKnownKeys.DigestAlgorithmSha256 => SHA256.HashData(input),
-            MdocMsoWellKnownKeys.DigestAlgorithmSha384 => SHA384.HashData(input),
-            MdocMsoWellKnownKeys.DigestAlgorithmSha512 => SHA512.HashData(input),
+            MdocMsoWellKnownKeys.DigestAlgorithmSha256 => (CryptoTags.Sha256Digest, WellKnownHashAlgorithms.Sha256SizeBytes, (string?)null),
+            MdocMsoWellKnownKeys.DigestAlgorithmSha384 => (CryptoTags.Sha384Digest, WellKnownHashAlgorithms.Sha384SizeBytes, nameof(HashAlgorithmName.SHA384)),
+            MdocMsoWellKnownKeys.DigestAlgorithmSha512 => (CryptoTags.Sha512Digest, WellKnownHashAlgorithms.Sha512SizeBytes, nameof(HashAlgorithmName.SHA512)),
             _ => throw new NotSupportedException(
                 $"MSO digestAlgorithm '{digestAlgorithm}' is not one of the SHA-256/384/512 set " +
                 $"permitted by ISO/IEC 18013-5 §9.1.2.5.")
         };
+
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(input, length, tag, BaseMemoryPool.Shared, qualifier);
+
+        //The pooled digest buffer may be larger than the requested length (pool implementations are free to
+        //over-allocate); slice to the algorithm's exact output size before copying out.
+        return digest.AsReadOnlySpan()[..length].ToArray();
     }
 }

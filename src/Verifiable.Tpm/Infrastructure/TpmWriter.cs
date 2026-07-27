@@ -78,6 +78,16 @@ public ref struct TpmWriter
     }
 
     /// <summary>
+    /// Writes a big-endian signed 32-bit integer (two's complement).
+    /// </summary>
+    /// <param name="value">The value to write.</param>
+    public void WriteInt32(int value)
+    {
+        BinaryPrimitives.WriteInt32BigEndian(remaining, value);
+        Advance(sizeof(int));
+    }
+
+    /// <summary>
     /// Writes a sequence of bytes.
     /// </summary>
     /// <param name="bytes">The bytes to write.</param>

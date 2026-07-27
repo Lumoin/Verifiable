@@ -244,7 +244,7 @@ internal sealed class FidoU2fAttestationTests
             ExpectedOrigins = new HashSet<string> { ValidOrigin },
             ExpectedRpIdHash = Fido2TestVectors.WrapRpIdHash(rpIdHash, BaseMemoryPool.Shared),
             UserVerification = UserVerificationRequirement.Required,
-            AllowedAlgorithms = [WellKnownCoseAlgorithms.Es256]
+            ExpectedPubKeyCredParams = [new PublicKeyCredentialParameters { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Alg = WellKnownCoseAlgorithms.Es256 }]
         };
 
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCert.RawData);

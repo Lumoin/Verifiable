@@ -132,7 +132,7 @@ public delegate T PatternMatcher<T, TDiscriminator1, TDiscriminator2>(
 /// <para>
 /// This registry maps algorithm/purpose combinations to concrete signing and verification
 /// functions. It enables format-independent cryptographic operations where the same high-level
-/// code can work with different backends (BouncyCastle, Microsoft CNG, NSec, TPM) based on
+/// code can work with different backends (BouncyCastle, Microsoft CNG, Libsodium, TPM) based on
 /// runtime configuration.
 /// </para>
 /// </remarks>

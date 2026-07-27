@@ -27,7 +27,7 @@ internal sealed class WebPlusHashedKeyTests
     public async Task ComputesSpecificationHashedKeyVector()
     {
         string hashedKey = await WebPlusHashedKey.ComputeAsync(
-            MbPubKey, MultihashHeaders.Blake3.ToArray(), Blake3DigestLength, BouncyCastleEntropyFunctions.ComputeBlake3DigestAsync, CryptoTags.Blake3Digest, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared, CancellationToken.None);
+            MbPubKey, MultihashHeaders.Blake3.ToArray(), Blake3DigestLength, BouncyCastleCryptographicFunctions.ComputeBlake3DigestAsync, CryptoTags.Blake3Digest, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared, CancellationToken.None);
 
         Assert.AreEqual(ExpectedHashedKey, hashedKey);
     }
@@ -38,7 +38,7 @@ internal sealed class WebPlusHashedKeyTests
     public async Task MatcherAcceptsCommittedKeyAndRejectsOthers()
     {
         HashedKeyMatcher matcher = WebPlusHashedKey.CreateMatcher(
-            MultihashHeaders.Blake3.ToArray(), Blake3DigestLength, BouncyCastleEntropyFunctions.ComputeBlake3DigestAsync, CryptoTags.Blake3Digest, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+            MultihashHeaders.Blake3.ToArray(), Blake3DigestLength, BouncyCastleCryptographicFunctions.ComputeBlake3DigestAsync, CryptoTags.Blake3Digest, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         Assert.IsTrue(await matcher(MbPubKey, ExpectedHashedKey, CancellationToken.None), "The committed MBPubKey MUST satisfy its hashedKey commitment.");
         Assert.IsFalse(await matcher("u7QF0zsY-DxwlvuzDsosc0ZgD5drHhvNHXVkxwDDCMZHSIQ", ExpectedHashedKey, CancellationToken.None), "An unrelated key MUST NOT satisfy the commitment.");

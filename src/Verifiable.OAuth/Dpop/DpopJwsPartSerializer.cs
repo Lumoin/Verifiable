@@ -4,10 +4,9 @@ namespace Verifiable.OAuth.Dpop;
 
 /// <summary>
 /// Delegate-bundle wiring the JSON serialization of DPoP proof headers and
-/// payloads. The application supplies these via its JSON layer (typically
-/// <c>Verifiable.OAuth.Json</c> in production, an inline JsonDocument-based
-/// implementation in tests). Mirrors the pattern used by the SD-JWT and
-/// JAR serialization paths.
+/// payloads. No default is shipped; the application supplies all three
+/// members via its own JSON layer. Mirrors the pattern used by the SD-JWT
+/// and JAR serialization paths.
 /// </summary>
 public sealed record DpopJwsPartSerializer
 {

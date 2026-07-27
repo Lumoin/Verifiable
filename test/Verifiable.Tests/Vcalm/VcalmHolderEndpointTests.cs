@@ -575,7 +575,7 @@ internal sealed class VcalmHolderEndpointTests
                 SerializePresentation = SerializePresentation,
                 SerializeProofOptions = SerializeProofOptions,
                 Decoder = TestSetup.Base58Decoder,
-                ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync,
+                ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
                 MemoryPool = Pool
             };
         }
@@ -798,7 +798,7 @@ internal sealed class VcalmHolderEndpointTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             Pool,
             EmptyContext,
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -838,7 +838,7 @@ internal sealed class VcalmHolderEndpointTests
             DeserializePresentation = DeserializePresentation,
             SerializeProofOptions = SerializeProofOptions,
             Encoder = TestSetup.Base58Encoder,
-            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
             MemoryPool = Pool
         };
 

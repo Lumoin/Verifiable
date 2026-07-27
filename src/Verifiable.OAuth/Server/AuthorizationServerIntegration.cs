@@ -106,8 +106,10 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// Parses an incoming RFC 7591 client metadata document body into a typed
     /// <see cref="Client.ClientMetadata"/>. Required when
     /// <see cref="WellKnownCapabilityIdentifiers.OAuthDynamicClientRegistration"/> is
-    /// advertised — the default JSON implementation lives in
-    /// <c>Verifiable.OAuth.Json</c> and is wired by the application.
+    /// advertised. No default implementation is shipped — the application
+    /// supplies its own, following the shape of
+    /// <see cref="Verifiable.OAuth.OAuthResponseParsers.ParseParResponse"/> and
+    /// <see cref="Verifiable.OAuth.OAuthResponseParsers.ParseTokenResponse"/>.
     /// </summary>
     public ParseClientMetadataServerDelegate? ParseClientMetadataAsync { get; set; }
 
@@ -301,8 +303,11 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// Parses an OpenID AuthZEN Authorization API 1.0 Access Evaluation
     /// request JSON body into the neutral information model. Required when
     /// <see cref="WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi"/> is
-    /// advertised — the default JSON implementation lives in
-    /// <c>Verifiable.OAuth.Json</c> and is wired by the application.
+    /// advertised. The shipped default,
+    /// <c>Verifiable.Json.AuthZen.AuthZenJsonParsing.ParseAccessEvaluationRequest</c>,
+    /// is wired by <c>Verifiable.Json.AuthZen.AuthZenJsonExtensions.UseDefaultAuthZenJsonParsing</c>
+    /// (that project depends on this one, so it cannot be named by
+    /// <c>cref</c> here).
     /// </summary>
     public ParseAccessEvaluationRequestDelegate? ParseAccessEvaluationRequestAsync { get; set; }
 
@@ -311,8 +316,11 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// (batch) request JSON body into the neutral information model. Required
     /// for the <c>access_evaluations_endpoint</c> when
     /// <see cref="WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi"/> is
-    /// advertised — the default JSON implementation lives in
-    /// <c>Verifiable.OAuth.Json</c> and is wired by the application. The
+    /// advertised. The shipped default,
+    /// <c>Verifiable.Json.AuthZen.AuthZenJsonParsing.ParseAccessEvaluationsRequest</c>,
+    /// is wired by <c>Verifiable.Json.AuthZen.AuthZenJsonExtensions.UseDefaultAuthZenJsonParsing</c>
+    /// (that project depends on this one, so it cannot be named by
+    /// <c>cref</c> here). The
     /// single-evaluation PDP seam <see cref="EvaluateAccessAsync"/> is reused
     /// for each resolved item.
     /// </summary>
@@ -329,8 +337,11 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// <summary>
     /// Parses an OpenID AuthZEN Authorization API 1.0 Search API request JSON
     /// body into the neutral information model. Required for any search
-    /// endpoint that is wired. The default JSON implementation lives in
-    /// <c>Verifiable.OAuth.Json</c> and is wired by the application.
+    /// endpoint that is wired. The shipped default,
+    /// <c>Verifiable.Json.AuthZen.AuthZenJsonParsing.ParseAccessSearchRequest</c>,
+    /// is wired by <c>Verifiable.Json.AuthZen.AuthZenJsonExtensions.UseDefaultAuthZenJsonParsing</c>
+    /// (that project depends on this one, so it cannot be named by
+    /// <c>cref</c> here).
     /// </summary>
     public ParseAccessSearchRequestDelegate? ParseAccessSearchRequestAsync { get; set; }
 
@@ -548,9 +559,11 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// <summary>
     /// Parses an OID4VCI 1.0 §8.2 Credential Request body into the neutral
     /// <see cref="Oid4Vci.CredentialRequest"/>. Required when
-    /// <see cref="WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint"/> is advertised —
-    /// the default JSON implementation lives in <c>Verifiable.OAuth.Json</c> and is wired by
-    /// the application.
+    /// <see cref="WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint"/> is advertised.
+    /// The shipped default,
+    /// <c>Verifiable.Json.Oid4Vci.CredentialRequestJsonParsing.ParseCredentialRequest</c>, is
+    /// wired by <c>Verifiable.Json.Oid4Vci.CredentialRequestJsonExtensions.UseDefaultCredentialRequestJsonParsing</c>
+    /// (that project depends on this one, so it cannot be named by <c>cref</c> here).
     /// </summary>
     public ParseCredentialRequestDelegate? ParseCredentialRequestAsync { get; set; }
 
@@ -560,8 +573,10 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// <c>authorization_details</c> (RFC 9396 §2; OID4VCI 1.0 §5.1.1 / §6.1.1) — a request
     /// carrying the parameter while this seam is unwired is refused with
     /// <c>invalid_authorization_details</c> (the server does not support the parameter). The
-    /// default JSON implementation lives in <c>Verifiable.OAuth.Json</c> and is wired by the
-    /// application.
+    /// shipped default,
+    /// <c>Verifiable.Json.Oid4Vci.AuthorizationDetailsJsonParsing.ParseAuthorizationDetails</c>,
+    /// is wired by <c>Verifiable.Json.Oid4Vci.AuthorizationDetailsJsonExtensions.UseDefaultAuthorizationDetailsJsonParsing</c>
+    /// (that project depends on this one, so it cannot be named by <c>cref</c> here).
     /// </summary>
     public ParseAuthorizationDetailListDelegate? ParseAuthorizationDetailsAsync { get; set; }
 
@@ -677,8 +692,10 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// (draft-parecki-oauth-global-token-revocation §3) into the neutral
     /// <see cref="Logout.GlobalTokenRevocationRequest"/>. Required when
     /// <see cref="WellKnownCapabilityIdentifiers.OAuthGlobalTokenRevocation"/> is
-    /// advertised — the default JSON implementation lives in
-    /// <c>Verifiable.OAuth.Json</c> and is wired by the application.
+    /// advertised. The shipped default,
+    /// <c>Verifiable.Json.Logout.GlobalTokenRevocationJsonParsing.ParseGlobalTokenRevocationRequest</c>,
+    /// is wired by <c>Verifiable.Json.Logout.GlobalTokenRevocationJsonExtensions.UseDefaultGlobalTokenRevocationJsonParsing</c>
+    /// (that project depends on this one, so it cannot be named by <c>cref</c> here).
     /// </summary>
     public ParseGlobalTokenRevocationRequestDelegate? ParseGlobalTokenRevocationRequestAsync { get; set; }
 

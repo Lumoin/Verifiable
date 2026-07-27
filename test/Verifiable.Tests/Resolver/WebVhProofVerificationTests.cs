@@ -30,7 +30,7 @@ internal sealed class WebVhProofVerificationTests
     private static readonly WebVhValidationContext Context = new()
     {
         Canonicalizer = WebVhLogEntryJson.Canonicalizer,
-        ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync,
+        ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
         Base58Encoder = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase)),
         Base58Decoder = DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase)),
         MemoryPool = BaseMemoryPool.Shared,

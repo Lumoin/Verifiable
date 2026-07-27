@@ -1,6 +1,8 @@
 using System;
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Diagnostics;
+using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Spec.Attributes;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
 using Verifiable.Tpm.Infrastructure.Spec.Handles;
@@ -296,6 +298,93 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
             TpmAlgIdConstants.TPM_ALG_SHA256,
             curve,
             noDa);
+
+        return new CreatePrimaryInput(hierarchy, inSensitive, inPublic, Tpm2bData.Empty, TpmlPcrSelection.Empty);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="CreatePrimaryInput"/> for the standard ECC NIST P-256 endorsement key (TCG EK
+    /// Credential Profile, Annex B.3.4, Template L-2): a restricted storage key whose USER-role authorization is
+    /// gated on a policy session over the Endorsement Hierarchy's authorization ("PolicyA") rather than on an
+    /// authValue.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// "PolicyA" (TCG EK Credential Profile, Annex B.6.2) is computed here — not hardcoded — via
+    /// <see cref="TpmPolicyDigest.ExtendForSecret"/> over a fresh (all-zero) SHA-256 policyDigest, with
+    /// <c>authName</c> the 4 big-endian octets of <see cref="TpmRh.TPM_RH_ENDORSEMENT"/> and an empty policyRef;
+    /// this keeps the value algorithm-agile (it is derived the same way a live <c>TPM2_PolicySecret()</c> session
+    /// would derive it) rather than pinning a literal that only happens to match today's fold. <c>authName</c> is
+    /// always the Endorsement Hierarchy's handle regardless of <paramref name="hierarchy"/>, because PolicyA
+    /// authorizes "the entity that can prove knowledge of the Endorsement Hierarchy's authorization" — a property
+    /// of the policy, not of which hierarchy the primary happens to be created under (in practice callers pass
+    /// <see cref="TpmRh.TPM_RH_ENDORSEMENT"/> for both).
+    /// </para>
+    /// <para>
+    /// The key has no authValue of its own (an empty-auth sensitive area): the standard EK is authorized entirely
+    /// through PolicyA, never through a password/HMAC session on the key itself.
+    /// </para>
+    /// </remarks>
+    /// <param name="hierarchy">The hierarchy under which to create the key (typically <see cref="TpmRh.TPM_RH_ENDORSEMENT"/>).</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <returns>A <see cref="CreatePrimaryInput"/> configured for the standard endorsement key.</returns>
+    public static CreatePrimaryInput ForEndorsementKey(TpmRh hierarchy, MemoryPool<byte> pool)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+
+        int digestSize = TpmPolicyDigest.Size(TpmAlgIdConstants.TPM_ALG_SHA256);
+        Span<byte> current = stackalloc byte[digestSize];
+        Span<byte> authName = stackalloc byte[sizeof(uint)];
+        BinaryPrimitives.WriteUInt32BigEndian(authName, (uint)TpmRh.TPM_RH_ENDORSEMENT);
+        Span<byte> policyA = stackalloc byte[digestSize];
+        _ = TpmPolicyDigest.ExtendForSecret(current, authName, ReadOnlySpan<byte>.Empty, TpmAlgIdConstants.TPM_ALG_SHA256, policyA);
+
+        Tpm2bSensitiveCreate inSensitive = Tpm2bSensitiveCreate.CreateEmpty(pool);
+        Tpm2bPublic inPublic = Tpm2bPublic.CreateEccEndorsementKeyTemplate(
+            TpmAlgIdConstants.TPM_ALG_SHA256,
+            TpmEccCurveConstants.TPM_ECC_NIST_P256,
+            pool,
+            policyA);
+
+        return new CreatePrimaryInput(hierarchy, inSensitive, inPublic, Tpm2bData.Empty, TpmlPcrSelection.Empty);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="CreatePrimaryInput"/> for the standard RSA 2048 endorsement key (TCG EK Credential
+    /// Profile, Annex B.3.3, Template L-1): the RSA counterpart of <see cref="ForEndorsementKey"/> — a restricted
+    /// storage key whose USER-role authorization is gated on a policy session over the Endorsement Hierarchy's
+    /// authorization ("PolicyA") rather than on an authValue.
+    /// </summary>
+    /// <remarks>
+    /// "PolicyA" is computed identically to <see cref="ForEndorsementKey"/> — via <see cref="TpmPolicyDigest.ExtendForSecret"/>
+    /// over a fresh (all-zero) SHA-256 policyDigest, with <c>authName</c> the 4 big-endian octets of
+    /// <see cref="TpmRh.TPM_RH_ENDORSEMENT"/> and an empty policyRef — because PolicyA authorizes knowledge of the
+    /// Endorsement Hierarchy's authorization, a property of the hierarchy, not of the protected key's algorithm
+    /// (TCG EK Credential Profile, Annex B.3.2; Template L-1 and L-2 carry the byte-identical 32-octet digest).
+    /// The key has no authValue of its own, exactly as <see cref="ForEndorsementKey"/>.
+    /// </remarks>
+    /// <param name="hierarchy">The hierarchy under which to create the key (typically <see cref="TpmRh.TPM_RH_ENDORSEMENT"/>).</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <returns>A <see cref="CreatePrimaryInput"/> configured for the standard RSA endorsement key.</returns>
+    public static CreatePrimaryInput ForRsaEndorsementKey(TpmRh hierarchy, MemoryPool<byte> pool)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+
+        int digestSize = TpmPolicyDigest.Size(TpmAlgIdConstants.TPM_ALG_SHA256);
+        Span<byte> current = stackalloc byte[digestSize];
+        Span<byte> authName = stackalloc byte[sizeof(uint)];
+        BinaryPrimitives.WriteUInt32BigEndian(authName, (uint)TpmRh.TPM_RH_ENDORSEMENT);
+        Span<byte> policyA = stackalloc byte[digestSize];
+        _ = TpmPolicyDigest.ExtendForSecret(current, authName, ReadOnlySpan<byte>.Empty, TpmAlgIdConstants.TPM_ALG_SHA256, policyA);
+
+        Tpm2bSensitiveCreate inSensitive = Tpm2bSensitiveCreate.CreateEmpty(pool);
+
+        //TCG EK Credential Profile, Annex B.3.3, Table 2: Template L-1 is RSA 2048.
+        Tpm2bPublic inPublic = Tpm2bPublic.CreateRsaEndorsementKeyTemplate(
+            TpmAlgIdConstants.TPM_ALG_SHA256,
+            2048,
+            pool,
+            policyA);
 
         return new CreatePrimaryInput(hierarchy, inSensitive, inPublic, Tpm2bData.Empty, TpmlPcrSelection.Empty);
     }

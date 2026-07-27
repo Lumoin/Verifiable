@@ -45,6 +45,15 @@ public sealed class CreateInput: ITpmCommandInput, IDisposable
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_Create;
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <c>inSensitive</c> (<see cref="Tpm2bSensitiveCreate"/>) is a sized buffer and is the command's first
+    /// parameter, so it is eligible for session-based parameter encryption (TPM 2.0 Library Part 1, Section
+    /// 21.1). A session without the <c>decrypt</c> attribute is unaffected; this only enables a caller that
+    /// attaches a decrypt session to actually request encryption.
+    /// </remarks>
+    public bool FirstCommandParameterIsEncryptable => true;
+
     /// <summary>
     /// Gets the handle of the loaded parent under which the object is created.
     /// </summary>

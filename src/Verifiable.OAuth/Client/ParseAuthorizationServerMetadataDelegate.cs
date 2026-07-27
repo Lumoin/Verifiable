@@ -9,11 +9,12 @@ namespace Verifiable.OAuth.Client;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The library does not pick a JSON library. The default implementation an
-/// application wires up lives in <c>Verifiable.OAuth.Json</c> and uses
-/// <c>System.Text.Json</c>; applications wanting a different serializer
-/// supply their own delegate. The split keeps <c>Verifiable.OAuth</c> free
-/// of any direct JSON dependency.
+/// The library does not pick a JSON library, and no default implementation
+/// of this delegate is shipped. The application supplies it. Follow the
+/// shape of <see cref="Verifiable.OAuth.OAuthResponseParsers.ParseParResponse"/>
+/// and <see cref="Verifiable.OAuth.OAuthResponseParsers.ParseTokenResponse"/>
+/// — the library's own hand-written, dependency-free response parsers —
+/// as the pattern to compose against.
 /// </para>
 /// </remarks>
 /// <param name="documentBody">

@@ -26,10 +26,13 @@ using CryptoLibraryInfo = Verifiable.Cryptography.Provider.CryptoLibrary;
 namespace Verifiable.BouncyCastle
 {
     /// <summary>
-    /// Provides cryptographic signing and verification functions using the BouncyCastle library.
-    /// This includes Ed25519, ECDSA (P-256, P-384, P-521, secp256k1), RSA PKCS#1 v1.5, RSA-PSS,
+    /// Provides cryptographic signing, verification, and digest functions using the BouncyCastle
+    /// library. This includes Ed25519, ECDSA (P-256, P-384, P-521, secp256k1), RSA PKCS#1 v1.5, RSA-PSS,
     /// and X25519 key agreement. All signing operations produce pool-allocated signatures tagged
     /// with their algorithm. All ECDSA signatures use the fixed-size IEEE P1363 (r || s) encoding.
+    /// The registered <see cref="ComputeDigestDelegate"/> entry point for this provider
+    /// (<see cref="ComputeDigest"/>, <see cref="ComputeBlake3DigestAsync"/>) lives here too — see
+    /// <see cref="DigestValue"/> for how a consumer discovers and wires it.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller is responsible for disposing the returned objects.")]
     public static class BouncyCastleCryptographicFunctions
@@ -45,6 +48,159 @@ namespace Verifiable.BouncyCastle
             typeof(Org.BouncyCastle.Security.SecureRandom).Assembly.GetName().Version?.ToString() ?? "Unknown");
 
         private static ProviderClass ProviderCls { get; } = new(nameof(BouncyCastleCryptographicFunctions));
+
+
+        /// <summary>
+        /// Computes a <see cref="DigestValue"/> using the BouncyCastle digest implementation
+        /// identified by the <see cref="HashAlgorithmName"/> in <paramref name="tag"/>.
+        /// Supports SHA-256, SHA-384, and SHA-512. The registered
+        /// <see cref="ComputeDigestDelegate"/> entry point for this provider — see
+        /// <see cref="DigestValue"/> for how a consumer discovers and wires it.
+        /// </summary>
+        /// <param name="input">The bytes to hash.</param>
+        /// <param name="outputByteLength">The expected digest length in bytes.</param>
+        /// <param name="tag">Metadata identifying the algorithm and purpose.</param>
+        /// <param name="pool">The memory pool to allocate from.</param>
+        /// <returns>
+        /// The computed <see cref="DigestValue"/> and a <see cref="DigestComputedEvent"/>.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the tag does not carry a supported <see cref="HashAlgorithmName"/>.
+        /// </exception>
+        public static (DigestValue Result, CryptoEvent? Event) ComputeDigest(
+            ReadOnlySpan<byte> input,
+            int outputByteLength,
+            Tag tag,
+            MemoryPool<byte> pool)
+        {
+            ArgumentNullException.ThrowIfNull(tag);
+            ArgumentNullException.ThrowIfNull(pool);
+
+            if(!tag.TryGet(out HashAlgorithmName algorithmName))
+            {
+                throw new ArgumentException("The tag must carry a HashAlgorithmName to select the hash function.", nameof(tag));
+            }
+
+            IDigest digest = algorithmName switch
+            {
+                var a when a == HashAlgorithmName.SHA256 => new Sha256Digest(),
+                var a when a == HashAlgorithmName.SHA384 => new Sha384Digest(),
+                var a when a == HashAlgorithmName.SHA512 => new Sha512Digest(),
+                _ => throw new ArgumentException(
+                    $"Unsupported hash algorithm: {algorithmName.Name}.", nameof(tag))
+            };
+
+            HashFunctionDelegate hashFunction = (source, destination) =>
+            {
+                byte[] output = RunDigest(source, digest);
+                output.AsSpan().CopyTo(destination);
+                return output.Length;
+            };
+
+            ProviderOperation operation = new(nameof(ComputeDigest));
+            Tag stamped = CryptoProviderInstrumentation.StampTag(
+                tag, ProviderLib, CryptoLib, ProviderCls, operation);
+
+            Activity? activity = CryptoActivitySource.Source.StartActivity(
+                CryptoTelemetry.ActivityNames.Digest);
+            if(activity is not null)
+            {
+                CryptoProviderInstrumentation.SetProviderAttributes(
+                    activity, ProviderLib, CryptoLib, ProviderCls, operation);
+                activity.SetTag(CryptoTelemetry.Digest.Algorithm, algorithmName.Name);
+                activity.SetTag(CryptoTelemetry.Digest.InputLength, input.Length);
+                activity.SetTag(CryptoTelemetry.Digest.OutputLength, outputByteLength);
+            }
+
+            DigestValue result = DigestValue.Compute(
+                input, hashFunction, outputByteLength, stamped, pool, activity);
+
+            Purpose evtPurpose = stamped.TryGet<Purpose>(out Purpose p)
+                ? p : Purpose.Digest;
+            CryptoEvent evt = DigestComputedEvent.Create(
+                algorithmName.Name ?? "Unknown", input.Length, outputByteLength, evtPurpose);
+
+            return (result, evt);
+        }
+
+
+        /// <summary>
+        /// Computes a BLAKE3 digest of <paramref name="outputByteLength"/> bytes in the
+        /// <see cref="ComputeDigestDelegate"/> shape. BLAKE3 is an extendable-output function, so the requested length
+        /// is produced via its XOF output. BLAKE3 is not a <see cref="HashAlgorithmName"/>, so a digest dispatcher
+        /// routes a <see cref="CryptoAlgorithm.Blake3"/> tag (<see cref="Verifiable.Cryptography.CryptoTags.Blake3Digest"/>)
+        /// here while <see cref="HashAlgorithmName"/>-tagged digests go to the SHA backends.
+        /// </summary>
+        /// <param name="input">The bytes to hash.</param>
+        /// <param name="outputByteLength">The requested digest length in bytes (32 for BLAKE3-256).</param>
+        /// <param name="tag">Metadata identifying the algorithm and purpose.</param>
+        /// <param name="pool">The memory pool the digest is rented from.</param>
+        /// <param name="context">Unused provenance context, accepted for delegate-shape compatibility.</param>
+        /// <param name="cancellationToken">A token to observe for cancellation.</param>
+        /// <returns>The computed <see cref="DigestValue"/> and a <see cref="DigestComputedEvent"/>.</returns>
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The returned DigestValue takes ownership of the IMemoryOwner and is disposed by the caller.")]
+        public static ValueTask<(DigestValue Result, CryptoEvent? Event)> ComputeBlake3DigestAsync(
+            ReadOnlySequence<byte> input,
+            int outputByteLength,
+            Tag tag,
+            MemoryPool<byte> pool,
+            FrozenDictionary<string, object>? context = null,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(tag);
+            ArgumentNullException.ThrowIfNull(pool);
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            ProviderOperation operation = new(nameof(ComputeBlake3DigestAsync));
+            Tag stamped = CryptoProviderInstrumentation.StampTag(
+                tag, ProviderLib, CryptoLib, ProviderCls, operation);
+
+            Activity? activity = CryptoActivitySource.Source.StartActivity(
+                CryptoTelemetry.ActivityNames.Digest);
+            if(activity is not null)
+            {
+                CryptoProviderInstrumentation.SetProviderAttributes(
+                    activity, ProviderLib, CryptoLib, ProviderCls, operation);
+                activity.SetTag(CryptoTelemetry.Digest.Algorithm, nameof(CryptoAlgorithm.Blake3));
+                activity.SetTag(CryptoTelemetry.Digest.InputLength, input.Length);
+                activity.SetTag(CryptoTelemetry.Digest.OutputLength, outputByteLength);
+            }
+
+            IMemoryOwner<byte> owner = pool.Rent(outputByteLength);
+            try
+            {
+                var blake3 = new Blake3Digest();
+                foreach(ReadOnlyMemory<byte> segment in input)
+                {
+                    blake3.BlockUpdate(segment.Span);
+                }
+
+                byte[] digestBytes = new byte[outputByteLength];
+                int written = blake3.OutputFinal(digestBytes, 0, outputByteLength);
+                if(written != outputByteLength)
+                {
+                    throw new InvalidOperationException(
+                        $"Digest output length mismatch: expected {outputByteLength}, got {written}.");
+                }
+
+                digestBytes.AsSpan().CopyTo(owner.Memory.Span[..outputByteLength]);
+            }
+            catch
+            {
+                owner.Dispose();
+                throw;
+            }
+
+            DigestValue result = new(owner, stamped, activity);
+
+            Purpose evtPurpose = stamped.TryGet<Purpose>(out Purpose p)
+                ? p : Purpose.Digest;
+            CryptoEvent evt = DigestComputedEvent.Create(
+                nameof(CryptoAlgorithm.Blake3), (int)input.Length, outputByteLength, evtPurpose);
+
+            return ValueTask.FromResult<(DigestValue, CryptoEvent?)>((result, evt));
+        }
 
 
         /// <summary>
@@ -1236,37 +1392,46 @@ namespace Verifiable.BouncyCastle
             //BP-320 → SHA-384, BP-384 → SHA-384, BP-512 → SHA-512. Note that
             //BP-320 uses SHA-384 even though SHA-384 output exceeds the field
             //size — ECDSA truncates internally. brainpoolP224r1 (not an RFC 9864
-            //fully-specified algorithm) uses the field-matched SHA-224, computed
-            //through BouncyCastle because the framework has no managed SHA-224.
-            return curveName switch
-            {
-                "brainpoolP224r1" => ComputeSha224(data),
-                "secp256r1" or "secp256k1" or "brainpoolP256r1" => SHA256.HashData(data),
-                "secp384r1" or "brainpoolP320r1" or "brainpoolP384r1" => SHA384.HashData(data),
-                "secp521r1" or "brainpoolP512r1" => SHA512.HashData(data),
-                _ => throw new NotSupportedException($"Curve '{curveName}' is not supported.")
-            };
+            //fully-specified algorithm) uses the field-matched SHA-224, which the
+            //framework has no managed implementation of.
+            //
+            //Routed through GetDigest — the same curve-to-BouncyCastle-IDigest mapping the RFC 6979
+            //k-calculator below uses — and RunDigest, this provider's one internal digest path, rather
+            //than framework SHA256/384/512.HashData. That keeps the ECDSA pre-hash on a single digest
+            //implementation for every curve instead of framework hashing for three curves and
+            //BouncyCastle only for the SHA-224 outlier.
+            return RunDigest(data, GetDigest(curveName));
         }
 
 
         /// <summary>
-        /// Computes a SHA-224 digest through BouncyCastle — the framework provides no managed SHA-224 class,
-        /// and brainpoolP224r1 ECDSA pairs with the field-matched SHA-224.
+        /// Runs a BouncyCastle <see cref="IDigest"/> instance to completion over <paramref name="data"/> and
+        /// returns the digest bytes. The one internal digest path this provider uses, whether for the public
+        /// <see cref="ComputeDigest"/> entry point or the private ECDSA pre-hash in <see cref="ComputeHash"/>.
         /// </summary>
-        private static byte[] ComputeSha224(ReadOnlySpan<byte> data)
+        /// <param name="data">The bytes to hash.</param>
+        /// <param name="digest">The digest instance to run. Reset before use, so a caller may reuse an instance.</param>
+        /// <returns>The computed digest bytes, sized to <c>digest.GetDigestSize()</c>.</returns>
+        private static byte[] RunDigest(ReadOnlySpan<byte> data, IDigest digest)
         {
-            var digest = new Sha224Digest();
-            digest.BlockUpdate(data);
-            byte[] result = new byte[digest.GetDigestSize()];
-            digest.DoFinal(result);
+            digest.Reset();
+            byte[] inputArray = data.ToArray();
+            digest.BlockUpdate(inputArray, 0, inputArray.Length);
+            byte[] output = new byte[digest.GetDigestSize()];
+            digest.DoFinal(output, 0);
 
-            return result;
+            return output;
         }
 
 
         /// <summary>
         /// Returns the BouncyCastle digest instance appropriate for deterministic ECDSA k generation
-        /// (RFC 6979 via <see cref="HMacDsaKCalculator"/>) on the specified curve.
+        /// (RFC 6979 via <see cref="HMacDsaKCalculator"/>) on the specified curve. Also the source of
+        /// the digest <see cref="ComputeHash"/> runs the ECDSA pre-hash through, so the k-derivation
+        /// hash and the message-digest hash always agree for a given curve. brainpoolP224r1 resolves to
+        /// <see cref="Sha224Digest"/> because the framework has no managed SHA-224 implementation —
+        /// the one documented exception to this provider hashing exclusively through BouncyCastle's own
+        /// <see cref="IDigest"/> implementations.
         /// </summary>
         /// <param name="curveName">The SEC curve name.</param>
         /// <returns>A new <see cref="IDigest"/> instance for the curve.</returns>

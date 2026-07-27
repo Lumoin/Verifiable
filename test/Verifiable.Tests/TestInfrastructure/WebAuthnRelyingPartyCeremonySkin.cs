@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
-using Verifiable.JCose;
 using Verifiable.Json;
 
 namespace Verifiable.Tests.TestInfrastructure;
@@ -89,6 +88,15 @@ internal sealed class WebAuthnRelyingPartyCeremonySkin
 
     /// <summary>The challenge issued by the most recent <see cref="HandleAttestationOptionsAsync"/> call, or <see langword="null"/> once consumed.</summary>
     private string? pendingRegistrationChallenge;
+
+    /// <summary>
+    /// The exact <c>pubKeyCredParams</c> offered by the most recent <see cref="HandleAttestationOptionsAsync"/>
+    /// call, or <see langword="null"/> once consumed. Carried alongside <see cref="pendingRegistrationChallenge"/>
+    /// so <see cref="HandleAttestationResultAsync"/> can hand it straight to
+    /// <see cref="RegistrationCeremonyInput.ExpectedPubKeyCredParams"/> — the accepted algorithm set is
+    /// therefore always exactly what this skin offered, never a hand-authored list that could drift from it.
+    /// </summary>
+    private IReadOnlyList<PublicKeyCredentialParameters>? pendingRegistrationPubKeyCredParams;
 
     /// <summary>The challenge issued by the most recent <see cref="HandleAssertionOptionsAsync"/> call, or <see langword="null"/> once consumed.</summary>
     private string? pendingAssertionChallenge;
@@ -241,6 +249,7 @@ internal sealed class WebAuthnRelyingPartyCeremonySkin
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         pendingRegistrationChallenge = options.Challenge;
+        pendingRegistrationPubKeyCredParams = options.PubKeyCredParams;
 
         ArrayBufferWriter<byte> buffer = new();
         PublicKeyCredentialCreationOptionsJsonWriter.Write(options, buffer);
@@ -259,7 +268,8 @@ internal sealed class WebAuthnRelyingPartyCeremonySkin
     {
         AttestationResultRequestCount++;
 
-        if(pendingRegistrationChallenge is not string expectedChallenge)
+        if(pendingRegistrationChallenge is not string expectedChallenge
+            || pendingRegistrationPubKeyCredParams is not IReadOnlyList<PublicKeyCredentialParameters> expectedPubKeyCredParams)
         {
             return new MinimalHttpResponse { StatusCode = 400, ContentType = JsonContentType, Body = """{"verified":false,"error":"no pending registration"}""" };
         }
@@ -279,7 +289,7 @@ internal sealed class WebAuthnRelyingPartyCeremonySkin
                 ExpectedOrigins = new HashSet<string> { origin },
                 ExpectedRpIdHash = CtapWave2CapstoneFixtures.ComputeExpectedRpIdHash(rpId, pool),
                 UserVerification = userVerification,
-                AllowedAlgorithms = [WellKnownCoseAlgorithms.Es256]
+                ExpectedPubKeyCredParams = expectedPubKeyCredParams
             };
 
             SelectAttestationVerifierDelegate selectAttestationVerifier = Fido2AttestationSelectors.FromFormats(
@@ -300,6 +310,7 @@ internal sealed class WebAuthnRelyingPartyCeremonySkin
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
             pendingRegistrationChallenge = null;
+            pendingRegistrationPubKeyCredParams = null;
 
             if(!outcome.IsAcceptable || outcome.CredentialRecord is not Fido2CredentialRecord credentialRecord)
             {

@@ -104,7 +104,7 @@ public delegate ValueTask<TResult?> KeyMaterialResolver<TResult, TContext, TStat
 /// </para>
 /// <list type="bullet">
 /// <item><description>
-/// <see cref="Context.MaterialSemantics.Direct"/> - Software implementation (BouncyCastle, NSec, Microsoft).
+/// <see cref="Context.MaterialSemantics.Direct"/> - Software implementation (BouncyCastle, Libsodium, Microsoft).
 /// </description></item>
 /// <item><description>
 /// <see cref="Context.MaterialSemantics.TpmHandle"/> - TPM operations using the handle bytes.

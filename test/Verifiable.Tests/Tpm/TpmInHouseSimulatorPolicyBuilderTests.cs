@@ -30,13 +30,25 @@ internal sealed class TpmInHouseSimulatorPolicyBuilderTests
     /// <summary>Gets or sets the per-test context (supplies the cancellation token).</summary>
     public TestContext TestContext { get; set; } = null!;
 
+    /// <summary>
+    /// Exercises <see cref="TpmPolicyDigest"/>'s host-side chaining formula (routed through the registered
+    /// synchronous digest seam, <see cref="CryptographicKeyEvents.ComputeDigest"/>) across all three policy hash
+    /// algorithms the simulator supports — not just the SHA-256 the rest of this file's tests default to. This is
+    /// the regression coverage for a buffer-sizing defect the digest-seam migration surfaced: a pooled digest
+    /// buffer can come back larger than the algorithm's actual output length (pool implementations are free to
+    /// over-allocate), and copying the full oversized span into a caller's exactly-sized SHA-384/SHA-512 buffer
+    /// throws rather than truncating to the correct length.
+    /// </summary>
+    /// <param name="policyHash">The policy session hash algorithm under test.</param>
     [TestMethod]
-    public async Task BuiltPolicyExecutesToItsComputedDigest()
+    [DataRow(TpmAlgIdConstants.TPM_ALG_SHA256, DisplayName = "SHA-256")]
+    [DataRow(TpmAlgIdConstants.TPM_ALG_SHA384, DisplayName = "SHA-384")]
+    [DataRow(TpmAlgIdConstants.TPM_ALG_SHA512, DisplayName = "SHA-512")]
+    public async Task BuiltPolicyExecutesToItsComputedDigest(TpmAlgIdConstants policyHash)
     {
         MemoryPool<byte> pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
-        const TpmAlgIdConstants PolicyHash = TpmAlgIdConstants.TPM_ALG_SHA256;
 
         //One description: require the object's authValue, then restrict the session to TPM2_Sign.
         TpmPolicy policy = new TpmPolicyBuilder()
@@ -44,11 +56,14 @@ internal sealed class TpmInHouseSimulatorPolicyBuilderTests
             .WithCommandCode(TpmCcConstants.TPM_CC_Sign)
             .Build();
 
-        byte[] predicted = new byte[TpmPolicyDigest.Size(PolicyHash)];
-        _ = policy.ComputeDigest(PolicyHash, predicted);
+        //An exactly-sized destination (the shape every production caller uses) is the case that reproduces the
+        //buffer-sizing defect: ComputeDigest must not throw when the pooled digest buffer it hashes into
+        //internally comes back larger than this array.
+        byte[] predicted = new byte[TpmPolicyDigest.Size(policyHash)];
+        _ = policy.ComputeDigest(policyHash, predicted);
 
         TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
-            PolicyHash, TestContext.CancellationToken).ConfigureAwait(false);
+            policyHash, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (policy) failed: '{startResult.ResponseCode}'.");
 
         using StartAuthSessionResponse session = startResult.Value;

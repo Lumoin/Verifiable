@@ -255,7 +255,7 @@ internal sealed class FullLifecycleTests
                 s, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
             static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
             IssuerLookup,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
             saltReuseSeam: null,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);

@@ -127,6 +127,12 @@ public static partial class TpmCcConstantsExtensions
         TpmCcConstants.TPM_CC_NV_UndefineSpace
             => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 2),
 
+        //Section 31.8 - TPM2_NV_Increment.
+        //Handle area: @authHandle, nvIndex (2 handles; authHandle requires auth).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_NV_Increment
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 2),
+
         //Section 28.5 - TPM2_EvictControl.
         //Handle area: @auth, objectHandle (2 handles; auth requires auth).
         //Response: no handles.
@@ -157,6 +163,42 @@ public static partial class TpmCcConstantsExtensions
         //Response: no handles.
         TpmCcConstants.TPM_CC_Certify
             => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 2),
+
+        //Section 18.3 - TPM2_CertifyCreation.
+        //Handle area: @signHandle (USER auth), objectHandle (no auth) - 2 handles, only signHandle requires auth.
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_CertifyCreation
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 2),
+
+        //Section 18.7 - TPM2_GetTime.
+        //Handle area: @privacyAdminHandle (USER auth), @signHandle (USER auth) - 2 handles, both require auth.
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_GetTime
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 2),
+
+        //Section 29.1 - TPM2_ReadClock.
+        //Handle area: none (0 handles) - the only zero-handle attest-adjacent command in this simulator.
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_ReadClock
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 0),
+
+        //Section 29.2 - TPM2_ClockSet.
+        //Handle area: @auth (1 handle, requires auth).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_ClockSet
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
+
+        //Section 31.16 - TPM2_NV_Certify.
+        //Handle area: @signHandle (USER auth), @authHandle (USER auth), nvIndex (no auth) - 3 handles.
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_NV_Certify
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 3),
+
+        //Section 20.1 - TPM2_VerifySignature.
+        //Handle area: keyHandle (1 handle, no auth required - a public-key operation).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_VerifySignature
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
 
         //Section 12.6 - TPM2_MakeCredential.
         //Handle area: handle (1 handle, no auth - uses only the public area).
@@ -229,6 +271,36 @@ public static partial class TpmCcConstantsExtensions
         //Response: no handles.
         TpmCcConstants.TPM_CC_PolicySecret
             => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 2),
+
+        //Section 23.3 - TPM2_PolicySigned.
+        //Handle area: @authObject (validates the signature, no auth required), policySession (no auth) - 2 handles.
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_PolicySigned
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 2),
+
+        //Section 23.16 - TPM2_PolicyAuthorize.
+        //Handle area: policySession (no auth required) - 1 handle.
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_PolicyAuthorize
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
+
+        //Section 23.10 - TPM2_PolicyCounterTimer.
+        //Handle area: policySession (1 handle, no auth required).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_PolicyCounterTimer
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
+
+        //Section 25.2 - TPM2_DictionaryAttackLockReset.
+        //Handle area: lockHandle (1 handle, requires auth).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_DictionaryAttackLockReset
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
+
+        //Section 25.3 - TPM2_DictionaryAttackParameters.
+        //Handle area: lockHandle (1 handle, requires auth).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_DictionaryAttackParameters
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
 
         _ => throw new System.NotSupportedException($"TPMA_CC mapping missing for '{commandCode}'.")
     };

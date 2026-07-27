@@ -127,7 +127,7 @@ internal sealed class Fido2RegistrationCredentialIdLengthBoundaryTests
             ExpectedOrigins = new HashSet<string> { ValidOrigin },
             ExpectedRpIdHash = Fido2TestVectors.WrapRpIdHash(Fido2TestVectors.CreateRpIdHash(), BaseMemoryPool.Shared),
             UserVerification = UserVerificationRequirement.Required,
-            AllowedAlgorithms = [WellKnownCoseAlgorithms.Es256],
+            ExpectedPubKeyCredParams = [new PublicKeyCredentialParameters { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Alg = WellKnownCoseAlgorithms.Es256 }],
             AttestationResult = new NoneAttestationResult(),
             AcceptNoneAttestation = true
         };

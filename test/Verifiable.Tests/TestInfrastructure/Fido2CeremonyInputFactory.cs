@@ -77,7 +77,14 @@ internal static class Fido2CeremonyInputFactory
     /// <param name="backupState">The <c>BS</c> flag value. Defaults to <see langword="false"/>.</param>
     /// <param name="userVerification">The relying party's user-verification policy. Defaults to <see cref="UserVerificationRequirement.Required"/>.</param>
     /// <param name="allowUserPresenceAbsent">Whether the relying party permits an absent <c>UP</c> bit. Defaults to <see langword="false"/>.</param>
-    /// <param name="allowedAlgorithms">The relying party's accepted COSE algorithms. Defaults to a list containing <see cref="ValidAlgorithm"/>.</param>
+    /// <param name="allowedAlgorithms">
+    /// The relying party's offered COSE algorithms, projected into <see cref="RegistrationCeremonyInput.ExpectedPubKeyCredParams"/>
+    /// entries. Defaults to a list containing <see cref="ValidAlgorithm"/>.
+    /// </param>
+    /// <param name="narrowAcceptedAlgorithmsTo">
+    /// Threads straight through to <see cref="RegistrationCeremonyInput.NarrowAcceptedAlgorithmsTo"/>.
+    /// Defaults to <see langword="null"/> — accept exactly what <paramref name="allowedAlgorithms"/> offered.
+    /// </param>
     /// <param name="credentialAlgorithm">The attested credential public key's <c>alg</c>. Defaults to <see cref="ValidAlgorithm"/>; pass <see langword="null"/> to omit it.</param>
     /// <param name="includeAttestedCredentialData">Whether <c>authData</c> carries attested credential data. Defaults to <see langword="true"/>.</param>
     /// <param name="attestationResult">The attestation verification outcome. Defaults to a <see cref="NoneAttestationResult"/>.</param>
@@ -126,6 +133,7 @@ internal static class Fido2CeremonyInputFactory
         UserVerificationRequirement userVerification = UserVerificationRequirement.Required,
         bool allowUserPresenceAbsent = false,
         IReadOnlyList<int>? allowedAlgorithms = null,
+        IReadOnlyList<int>? narrowAcceptedAlgorithmsTo = null,
         int? credentialAlgorithm = ValidAlgorithm,
         bool includeAttestedCredentialData = true,
         AttestationResult? attestationResult = null,
@@ -174,7 +182,8 @@ internal static class Fido2CeremonyInputFactory
             ExpectedTopOrigins = expectedTopOrigins,
             UserVerification = userVerification,
             AllowUserPresenceAbsent = allowUserPresenceAbsent,
-            AllowedAlgorithms = allowedAlgorithms ?? [ValidAlgorithm],
+            ExpectedPubKeyCredParams = BuildPubKeyCredParams(allowedAlgorithms ?? [ValidAlgorithm]),
+            NarrowAcceptedAlgorithmsTo = narrowAcceptedAlgorithmsTo,
             AttestationResult = effectiveAttestationResult,
             AcceptNoneAttestation = acceptNoneAttestation,
             AcceptSelfAttestation = acceptSelfAttestation,
@@ -183,6 +192,20 @@ internal static class Fido2CeremonyInputFactory
             ExtensionOutputProcessor = extensionOutputProcessor,
             RejectUnregisteredExtensionOutputs = rejectUnregisteredExtensionOutputs
         };
+
+        //Projects the bare COSE algorithm identifiers this factory's callers pass into the
+        //PublicKeyCredentialParameters shape RegistrationCeremonyInput.ExpectedPubKeyCredParams now
+        //requires, so every existing "allowedAlgorithms: [...]" call site keeps its int-list convenience.
+        static IReadOnlyList<PublicKeyCredentialParameters> BuildPubKeyCredParams(IReadOnlyList<int> algorithms)
+        {
+            List<PublicKeyCredentialParameters> parameters = new(algorithms.Count);
+            foreach(int algorithm in algorithms)
+            {
+                parameters.Add(new PublicKeyCredentialParameters { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Alg = algorithm });
+            }
+
+            return parameters;
+        }
     }
 
 

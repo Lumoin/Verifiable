@@ -252,6 +252,7 @@ public static class CryptographicKeyEvents
         ArgumentNullException.ThrowIfNull(computeDigest);
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);
+        AssertHousePool(pool);
 
         (DigestValue result, CryptoEvent? evt) = await computeDigest(
             input, outputByteLength, tag, pool, context, cancellationToken).ConfigureAwait(false);
@@ -372,6 +373,7 @@ public static class CryptographicKeyEvents
     {
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);
+        AssertHousePool(pool);
 
         ComputeHmacDelegate? compute =
             CryptographicKeyFactory.GetFunction<ComputeHmacDelegate>(
@@ -425,6 +427,7 @@ public static class CryptographicKeyEvents
     {
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);
+        AssertHousePool(pool);
 
         VerifyHmacDelegate? verify =
             CryptographicKeyFactory.GetFunction<VerifyHmacDelegate>(
@@ -460,6 +463,25 @@ public static class CryptographicKeyEvents
         string? qualifier = null,
         CancellationToken cancellationToken = default) =>
         VerifyHmacAsync(new ReadOnlySequence<byte>(message), keyBytes, expectedMac, tag, pool, context, qualifier, cancellationToken);
+
+
+    /// <summary>
+    /// Asserts, in DEBUG builds only, that <paramref name="candidate"/> is the house
+    /// <see cref="BaseMemoryPool"/> family. <see cref="DigestValue"/> and <see cref="HmacValue"/> derive their
+    /// <c>Length</c> from the rented owner's <c>Memory.Length</c> without slicing, so a pool whose rentals are
+    /// not exact-length (e.g. <see cref="MemoryPool{T}.Shared"/>, which rounds up to a power-of-two bucket)
+    /// silently produces an over-long carrier. This catches a foreign pool arriving as a caller-supplied
+    /// parameter — the one case the <c>BannedSymbols.txt</c> compile-time ban cannot see — as a debug-time
+    /// failure instead of a wire-visible defect. Compiled out in Release builds.
+    /// </summary>
+    /// <param name="candidate">The pool passed by the caller at one of this class's public entry points.</param>
+    [Conditional("DEBUG")]
+    private static void AssertHousePool(MemoryPool<byte> candidate)
+    {
+        Debug.Assert(candidate is BaseMemoryPool,
+            "The memory pool must be Lumoin.Base.BaseMemoryPool (BaseMemoryPool.Shared, or a custom " +
+            "house-configured instance) for the exact-length rentals DigestValue and HmacValue depend on.");
+    }
 
 
     //Minimal IObservable/IObserver implementation — no System.Reactive dependency.

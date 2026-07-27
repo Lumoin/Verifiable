@@ -98,7 +98,7 @@ internal sealed class CtapPinUvAuthProtocolTests
         new(
             id,
             MicrosoftKeyAgreementFunctions.EcdhKeyAgreementDecryptP256Async,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             MicrosoftHmacFunctions.ComputeHmacAsync,
             BouncyCastleSymmetricFunctions.SymmetricEncryptAsync,
             BouncyCastleSymmetricFunctions.SymmetricDecryptAsync,

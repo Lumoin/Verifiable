@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Verifiable.Cryptography;
@@ -216,6 +217,149 @@ internal sealed class JoseTests
 
         Assert.IsFalse(isValid, "Verification with wrong key should fail.");
     }
+
+
+    /// <summary>
+    /// The <see cref="JwsMessage"/>-based <c>VerifyAsync</c> overload shares the compact-string overload's
+    /// documented contract that "callers depend on VerifyAsync returning false, never throwing, on untrusted
+    /// input" (see the guard in <see cref="Jws.VerifyAsync(string, DecodeDelegate, MemoryPool{byte}, PublicKeyMemory, VerificationDelegate, int, CryptoEventSink?, CancellationToken)"/>).
+    /// A resolved <see cref="VerificationDelegate"/> can throw while parsing attacker-tampered key material —
+    /// for example a tampered EC point surfacing as <see cref="PlatformNotSupportedException"/> on Windows CNG
+    /// rather than a graceful rejection — and this overload must fail closed to <see langword="false"/> instead
+    /// of letting that exception escape.
+    /// </summary>
+    [TestMethod]
+    public async Task VerifyAsyncWithJwsMessageReturnsFalseWhenVerificationDelegateThrows()
+    {
+        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256, [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt };
+        var payload = new Dictionary<string, object> { [WellKnownJwtClaimNames.Sub] = "throwing-delegate-test" };
+
+        var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
+        using JwsMessage jwsMessage = await Jws.SignAsync(
+            header,
+            payload,
+            JwtWireFixtures.EncodeJwtPart,
+            TestSetup.Base64UrlEncoder,
+            privateKey,
+            MicrosoftCryptographicFunctions.SignP256Async,
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        bool isValid = await Jws.VerifyAsync(
+            jwsMessage,
+            TestSetup.Base64UrlEncoder,
+            publicKey,
+            ThrowingVerificationDelegate,
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(isValid, "A verification delegate that throws on tampered/untrusted key material must fail closed to false, never escape as an exception.");
+    }
+
+
+    /// <summary>
+    /// <see cref="Jws.VerifySignatureAsync(string, ReadOnlyMemory{byte}, bool, ReadOnlyMemory{byte}, EncodeDelegate, VerificationDelegate, ReadOnlyMemory{byte}, MemoryPool{byte}, CryptoEventSink?, CancellationToken)"/>
+    /// shares the same fail-closed contract as the other <c>Jws</c> verify overloads: a resolved
+    /// <see cref="VerificationDelegate"/> that throws while parsing attacker-tampered key material must not let
+    /// that exception escape past the guard — it must be treated as "signature does not verify".
+    /// </summary>
+    [TestMethod]
+    public async Task VerifySignatureAsyncReturnsFalseWhenVerificationDelegateThrows()
+    {
+        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256, [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt };
+        var payload = new Dictionary<string, object> { [WellKnownJwtClaimNames.Sub] = "verify-signature-throwing-delegate-test" };
+
+        var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
+        using JwsMessage jwsMessage = await Jws.SignAsync(
+            header,
+            payload,
+            JwtWireFixtures.EncodeJwtPart,
+            TestSetup.Base64UrlEncoder,
+            privateKey,
+            MicrosoftCryptographicFunctions.SignP256Async,
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        JwsSignatureComponent signatureComponent = jwsMessage.Signatures[0];
+
+        bool isValid = await Jws.VerifySignatureAsync(
+            signatureComponent.Protected,
+            jwsMessage.Payload,
+            base64UrlPayload: true,
+            signatureComponent.SignatureBytes,
+            TestSetup.Base64UrlEncoder,
+            ThrowingVerificationDelegate,
+            publicKey.AsReadOnlyMemory(),
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(isValid, "A verification delegate that throws on tampered/untrusted key material must fail closed to false, never escape as an exception.");
+    }
+
+
+    /// <summary>
+    /// The explicit-<see cref="VerificationDelegate"/> compact-string
+    /// <see cref="Jws.VerifyAndDecodeAsync(string, DecodeDelegate, JwtPartDecoder, MemoryPool{byte}, PublicKeyMemory, VerificationDelegate, int, CryptoEventSink?, CancellationToken)"/>
+    /// overload shares the same fail-closed contract as the other <c>Jws</c> verify overloads: a resolved
+    /// <see cref="VerificationDelegate"/> that throws while parsing attacker-tampered key material must not let
+    /// that exception escape past the guard — it must be treated as "signature does not verify", returning an
+    /// invalid <see cref="JwsVerificationResult"/> rather than throwing.
+    /// </summary>
+    [TestMethod]
+    public async Task VerifyAndDecodeAsyncWithCompactStringReturnsFalseWhenVerificationDelegateThrows()
+    {
+        var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256, [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt };
+        var payload = new Dictionary<string, object> { [WellKnownJwtClaimNames.Sub] = "verify-and-decode-throwing-delegate-test" };
+
+        var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
+        using JwsMessage jwsMessage = await Jws.SignAsync(
+            header,
+            payload,
+            JwtWireFixtures.EncodeJwtPart,
+            TestSetup.Base64UrlEncoder,
+            privateKey,
+            MicrosoftCryptographicFunctions.SignP256Async,
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        string jws = JwsSerialization.SerializeCompact(jwsMessage, TestSetup.Base64UrlEncoder);
+
+        JwsVerificationResult result = await Jws.VerifyAndDecodeAsync(
+            jws,
+            TestSetup.Base64UrlDecoder,
+            DecodeJwtPart,
+            BaseMemoryPool.Shared,
+            publicKey,
+            ThrowingVerificationDelegate,
+            Jws.DefaultMaxJwsLength,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid, "A verification delegate that throws on tampered/untrusted key material must fail closed to an invalid result, never escape as an exception.");
+    }
+
+
+    /// <summary>
+    /// Simulates a resolved verification backend rejecting attacker-tampered key material with an exception
+    /// (for example a tampered EC point surfacing as <see cref="PlatformNotSupportedException"/> on Windows CNG)
+    /// instead of a graceful "not verified" result — the shape every <c>Jws</c> verify overload's fail-closed
+    /// guard exists to catch. Shared across the guard tests above.
+    /// </summary>
+    private static ValueTask<(bool IsVerified, CryptoEvent? Event)> ThrowingVerificationDelegate(
+        ReadOnlyMemory<byte> dataToVerify,
+        ReadOnlyMemory<byte> signature,
+        ReadOnlyMemory<byte> publicKeyMaterial,
+        FrozenDictionary<string, object>? context = null,
+        CancellationToken cancellationToken = default)
+        => throw new PlatformNotSupportedException("Simulated tampered EC point rejection.");
 
 
     [TestMethod]

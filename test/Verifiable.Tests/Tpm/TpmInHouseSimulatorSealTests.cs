@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
+using Verifiable.Tpm.Extensions.DictionaryAttack;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
@@ -44,6 +45,9 @@ internal sealed class TpmInHouseSimulatorSealTests
 
     /// <summary>The fixed secret sealed and recovered by the test.</summary>
     private static byte[] SecretBytes { get; } = "Tie this secret to the in-house TPM."u8.ToArray();
+
+    /// <summary>The lowered <c>maxTries</c> the F3 lockout regression uses to reach Lockout mode quickly.</summary>
+    private const uint LockoutTestMaxTries = 2;
 
     /// <summary>Gets or sets the per-test context (supplies the cancellation token).</summary>
     public TestContext TestContext { get; set; } = null!;
@@ -110,6 +114,74 @@ internal sealed class TpmInHouseSimulatorSealTests
             "The unsealed data must equal the sealed secret, byte for byte, recovered from the wire blob alone.");
     }
 
+    /// <summary>
+    /// F1 regression (adversarial review, MAJOR auth bypass): a KEYEDHASH object sealed with
+    /// <c>userWithAuth</c> CLEAR, a non-empty authPolicy, and an EMPTY retained userAuth must never be
+    /// recoverable via a plain, empty-password <c>TPM_RS_PW</c> Unseal. <c>userWithAuth</c> CLEAR means only a
+    /// policy session may ever authorize the USER role (TPM 2.0 Library Part 2, clause 8.3.3; Part 3, clause
+    /// 5.6, check 6) — before the fix, <c>OnUnseal</c> never consulted <c>UserWithAuth</c> at all and compared
+    /// the supplied password directly against the (also empty) retained userAuth, so an empty password matched
+    /// and the secret returned in the clear, choosing away the policy gate entirely. The HMAC-authorized path
+    /// (<c>ContinueUnsealOverSessions</c>) already enforces this identical check; this pairs the plain-password
+    /// path with it.
+    /// </summary>
+    [TestMethod]
+    public async Task PlainPasswordUnsealRejectsUserWithAuthClearSealedObject()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
+        uint parentHandle = parent.ObjectHandle.Value;
+
+        //A non-empty authPolicy (an arbitrary 32-octet digest stands in for a real TPM2_PolicyPCR() one; the
+        //fix under test rejects on userWithAuth alone, never inspecting the policy's content) with userWithAuth
+        //CLEAR. The retained userAuth is left empty (no userAuth argument to ForSealedData), matching the
+        //exploit shape exactly: an empty supplied password against an empty retained userAuth.
+        byte[] authPolicy = new byte[32];
+        Array.Fill(authPolicy, (byte)0x5A);
+
+        using Tpm2bSensitiveCreate inSensitive = Tpm2bSensitiveCreate.ForSealedData(SecretBytes, pool);
+        using Tpm2bPublic sealTemplate = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, authPolicy, noDa: true, userWithAuth: false);
+        using CreateInput createInput = new(parentHandle, inSensitive, sealTemplate, Tpm2bData.Empty, TpmlPcrSelection.Empty);
+        using TpmPasswordSession createParentAuth = TpmPasswordSession.CreateEmpty(pool);
+
+        TpmResult<CreateResponse> createResult = await TpmCommandExecutor.ExecuteAsync<CreateResponse>(
+            tpm, createInput, [createParentAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(createResult.IsSuccess, $"Create (seal, userWithAuth CLEAR) failed: '{createResult.ResponseCode}'.");
+
+        using CreateResponse sealedObject = createResult.Value;
+
+        using Tpm2bPrivate inPrivate = Tpm2bPrivate.Create(sealedObject.OutPrivate.Span, pool);
+        using Tpm2bPublic inPublic = ClonePublic(sealedObject.OutPublic, pool);
+        using LoadInput loadInput = new(parentHandle, inPrivate, inPublic);
+        using TpmPasswordSession loadParentAuth = TpmPasswordSession.CreateEmpty(pool);
+
+        TpmResult<LoadResponse> loadResult = await TpmCommandExecutor.ExecuteAsync<LoadResponse>(
+            tpm, loadInput, [loadParentAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(loadResult.IsSuccess, $"Load (sealed object) failed: '{loadResult.ResponseCode}'.");
+
+        using LoadResponse loaded = loadResult.Value;
+
+        //The exploit: an EMPTY-password plain TPM_RS_PW Unseal against the userWithAuth-CLEAR object above.
+        using TpmPasswordSession itemAuth = TpmPasswordSession.CreateEmpty(pool);
+        UnsealInput unsealInput = UnsealInput.ForItem(loaded.ObjectHandle);
+
+        TpmResult<UnsealResponse> unsealResult = await TpmCommandExecutor.ExecuteAsync<UnsealResponse>(
+            tpm, unsealInput, [itemAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        if(unsealResult.IsSuccess)
+        {
+            unsealResult.Value.Dispose();
+        }
+
+        Assert.AreEqual(TpmRcConstants.TPM_RC_POLICY_FAIL, unsealResult.ResponseCode,
+            $"A userWithAuth-CLEAR, policy-gated sealed object must reject a plain-password Unseal with TPM_RC_POLICY_FAIL " +
+            $"(Part 3, clause 5.6, check 6), never authorize it (got '{unsealResult.ResponseCode}').");
+    }
+
     [TestMethod]
     public async Task UnsealWithUnknownItemHandleReturnsHandle()
     {
@@ -163,6 +235,110 @@ internal sealed class TpmInHouseSimulatorSealTests
             tpm, createInput, [parentAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(TpmRcConstants.TPM_RC_TYPE, createResult.ResponseCode);
+    }
+
+    /// <summary>
+    /// F3 regression, plain single-password form (adversarial review, MINOR wrong RC — reviewer's "ALSO CHECK"
+    /// note on the same clause): a locked-out TPM must reject the PLAIN, single-<c>TPM_RS_PW</c>
+    /// <c>TPM2_Create()</c> (<c>OnCreateSealedObject</c>) with <c>TPM_RC_LOCKOUT</c> when the parent is
+    /// DA-protected, exactly like every other DA-protected surface. Before the fix this function ran NO
+    /// DA/Lockout check at all (TPM 2.0 Library Part 3, clause 5.6, check 3), so a locked-out TPM performed the
+    /// Create unconditionally. This pairs with
+    /// <see cref="TpmInHouseSimulatorParameterDecryptionTests.LockedOutTpmRejectsCreateOverPasswordAuthorizedDaProtectedParent"/>,
+    /// which covers the same gate in the two-session (<c>OnCreateSealedObjectOverSessions</c>) form.
+    /// </summary>
+    [TestMethod]
+    public async Task LockedOutTpmRejectsPlainPasswordCreateOverDaProtectedParent()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        //A DA-protected storage parent (noDa: false) — the gate under test is keyed on this bit.
+        using CreatePrimaryInput parentInput = CreatePrimaryInput.ForEccStorageParent(
+            TpmRh.TPM_RH_OWNER, null, TpmEccCurveConstants.TPM_ECC_NIST_P256, pool, noDa: false);
+        using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
+        TpmResult<CreatePrimaryResponse> parentResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            tpm, parentInput, [ownerAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(parentResult.IsSuccess, $"CreatePrimary (DA-protected storage parent) failed: '{parentResult.ResponseCode}'.");
+
+        using CreatePrimaryResponse parent = parentResult.Value;
+        uint parentHandle = parent.ObjectHandle.Value;
+        uint bruteForceItemHandle = 0;
+
+        try
+        {
+            //1. Lower maxTries so a handful of failures reaches Lockout mode quickly.
+            TpmResult<DictionaryAttackParametersResponse> lowerResult = await tpm.DictionaryAttackParametersAsync(
+                ReadOnlyMemory<byte>.Empty, LockoutTestMaxTries, TpmSimulatorState.DefaultRecoveryTimeSeconds,
+                TpmSimulatorState.DefaultLockoutRecoverySeconds, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(lowerResult.IsSuccess, $"Lowering maxTries failed: '{lowerResult.ResponseCode}'.");
+
+            //2. Seal+load a THROWAWAY DA-protected object under the same parent and fail its Unseal password
+            //LockoutTestMaxTries times, engaging the ONE shared lockout counter (Part 1, clause 17.8).
+            byte[] correctAuth = [0x71, 0x72, 0x73, 0x74];
+            using Tpm2bSensitiveCreate bruteForceSensitive = Tpm2bSensitiveCreate.ForSealedData(SecretBytes, correctAuth, pool);
+            using Tpm2bPublic bruteForceTemplate = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, noDa: false);
+            using CreateInput bruteForceCreateInput = new(parentHandle, bruteForceSensitive, bruteForceTemplate, Tpm2bData.Empty, TpmlPcrSelection.Empty);
+            using TpmPasswordSession bruteForceParentAuth = TpmPasswordSession.CreateEmpty(pool);
+
+            TpmResult<CreateResponse> bruteForceCreateResult = await TpmCommandExecutor.ExecuteAsync<CreateResponse>(
+                tpm, bruteForceCreateInput, [bruteForceParentAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(bruteForceCreateResult.IsSuccess, $"Create (throwaway DA-protected object) failed: '{bruteForceCreateResult.ResponseCode}'.");
+
+            using CreateResponse bruteForceObject = bruteForceCreateResult.Value;
+            using Tpm2bPrivate bruteForcePrivate = Tpm2bPrivate.Create(bruteForceObject.OutPrivate.Span, pool);
+            using Tpm2bPublic bruteForcePublic = ClonePublic(bruteForceObject.OutPublic, pool);
+            using LoadInput bruteForceLoadInput = new(parentHandle, bruteForcePrivate, bruteForcePublic);
+            using TpmPasswordSession bruteForceLoadAuth = TpmPasswordSession.CreateEmpty(pool);
+
+            TpmResult<LoadResponse> bruteForceLoadResult = await TpmCommandExecutor.ExecuteAsync<LoadResponse>(
+                tpm, bruteForceLoadInput, [bruteForceLoadAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(bruteForceLoadResult.IsSuccess, $"Load (throwaway DA-protected object) failed: '{bruteForceLoadResult.ResponseCode}'.");
+
+            using LoadResponse bruteForceLoaded = bruteForceLoadResult.Value;
+            bruteForceItemHandle = bruteForceLoaded.ObjectHandle.Value;
+
+            byte[] wrongPassword = [0xFF, 0xEE, 0xDD, 0xCC];
+            for(uint attempt = 1; attempt <= LockoutTestMaxTries; attempt++)
+            {
+                using TpmPasswordSession wrongAuth = TpmPasswordSession.Create(wrongPassword, pool);
+                UnsealInput bruteForceUnsealInput = UnsealInput.ForItem(bruteForceLoaded.ObjectHandle);
+                TpmResult<UnsealResponse> wrongResult = await TpmCommandExecutor.ExecuteAsync<UnsealResponse>(
+                    tpm, bruteForceUnsealInput, [wrongAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                Assert.IsFalse(wrongResult.IsSuccess, $"Attempt {attempt} of {LockoutTestMaxTries} with a wrong password must fail.");
+            }
+
+            TpmResult<TpmDictionaryAttackParameters> lockoutState = await tpm.GetDictionaryAttackParametersAsync(
+                pool, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(lockoutState.IsSuccess, $"GetDictionaryAttackParameters failed: '{lockoutState.ResponseCode}'.");
+            Assert.IsTrue(lockoutState.Value.IsLockedOut, "The TPM must be in Lockout mode before the Create exploit runs.");
+
+            //3. THE EXPLOIT: TPM2_Create() with a SINGLE plain TPM_RS_PW session against the (now globally
+            //locked-out) DA-protected parent — the single-session form OnCreateSealedObject handles directly.
+            using Tpm2bSensitiveCreate exploitSensitive = Tpm2bSensitiveCreate.ForSealedData(SecretBytes, pool);
+            using Tpm2bPublic exploitTemplate = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, noDa: false);
+            using CreateInput exploitCreateInput = new(parentHandle, exploitSensitive, exploitTemplate, Tpm2bData.Empty, TpmlPcrSelection.Empty);
+            using TpmPasswordSession exploitParentAuth = TpmPasswordSession.CreateEmpty(pool);
+
+            TpmResult<CreateResponse> exploitResult = await TpmCommandExecutor.ExecuteAsync<CreateResponse>(
+                tpm, exploitCreateInput, [exploitParentAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+            if(exploitResult.IsSuccess)
+            {
+                exploitResult.Value.Dispose();
+            }
+
+            Assert.AreEqual(TpmRcConstants.TPM_RC_LOCKOUT, exploitResult.ResponseCode,
+                "A locked-out TPM must reject the plain single-password TPM2_Create() over a DA-protected parent " +
+                $"with TPM_RC_LOCKOUT (got '{exploitResult.ResponseCode}').");
+        }
+        finally
+        {
+            await FlushIfPresentAsync(tpm, registry, bruteForceItemHandle).ConfigureAwait(false);
+            await FlushIfPresentAsync(tpm, registry, parentHandle).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -240,6 +416,24 @@ internal sealed class TpmInHouseSimulatorSealTests
         _ = registry.Register(TpmCcConstants.TPM_CC_Unseal, TpmResponseCodec.Unseal);
 
         return registry;
+    }
+
+    /// <summary>Flushes a transient object or session handle when one is present (non-zero), ignoring the result.</summary>
+    private async Task FlushIfPresentAsync(TpmDevice tpm, TpmResponseRegistry registry, uint handle)
+    {
+        if(handle == 0)
+        {
+            return;
+        }
+
+        if(!registry.TryGet(TpmCcConstants.TPM_CC_FlushContext, out _))
+        {
+            _ = registry.Register(TpmCcConstants.TPM_CC_FlushContext, TpmResponseCodec.FlushContext);
+        }
+
+        var flush = FlushContextInput.ForHandle(handle);
+        _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+            tpm, flush, [], null, BaseMemoryPool.Shared, registry, TestContext.CancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

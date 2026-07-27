@@ -30,9 +30,18 @@ namespace Verifiable.Tpm.Automata;
 /// <param name="Symmetric">The symmetric definition negotiated at start (XOR obfuscation or AES-CFB), which keys parameter encryption of the first response parameter.</param>
 /// <param name="SessionKey">The <c>KDFa</c>-derived session key (Part 1, clause 17.6.10 equation 20), used as the HMAC key and the parameter-encryption key seed.</param>
 /// <param name="NonceTpm">The current nonceTPM: seeded by the initial value returned at start and rolled to a fresh value on each command response (Part 1, clause 17.6.7).</param>
+/// <param name="BoundEntityName">
+/// The Name of the entity this session is bound to, captured once at <c>TPM2_StartAuthSession()</c> (empty for an
+/// unbound session, <c>bind == TPM_RH_NULL</c>): a permanent handle's Name is its 4-octet big-endian handle value;
+/// a transient or persistent object's Name is its own retained <see cref="TransientKeyState.Name"/>. A command-HMAC
+/// verification omits the bound entity's authValue from the HMAC key precisely when the entity being authorized NOW
+/// has this same Name (TPM 2.0 Library Part 1, clause 17.6.10 equations 21/22 and 17.6.12 equations 25/26) — binding
+/// already proved knowledge of the authValue once via the session-key KDFa, so re-including it is redundant.
+/// </param>
 public sealed record HmacSessionState(
     uint Handle,
     TpmAlgIdConstants SessionAlg,
     TpmtSymDef Symmetric,
     ReadOnlyMemory<byte> SessionKey,
-    ReadOnlyMemory<byte> NonceTpm);
+    ReadOnlyMemory<byte> NonceTpm,
+    ReadOnlyMemory<byte> BoundEntityName);

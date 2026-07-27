@@ -596,7 +596,7 @@ internal sealed class VcalmStatusEndpointTests
             SerializePresentation = presentation => JsonSerializerExtensions.Serialize(presentation, JsonOptions),
             SerializeProofOptions = SerializeProofOptions,
             Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
             MemoryPool = Pool
         };
     }
@@ -806,7 +806,7 @@ internal sealed class VcalmStatusEndpointTests
             DeserializeCredential = DeserializeCredential,
             SerializeProofOptions = SerializeProofOptions,
             Encoder = TestSetup.Base58Encoder,
-            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync
+            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync
         };
 
 

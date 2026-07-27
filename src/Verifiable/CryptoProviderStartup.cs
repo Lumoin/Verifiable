@@ -24,7 +24,7 @@ namespace Verifiable;
 /// (ECDSA P-256/384/521 signing and verification, RSA-2048/4096 verification and the six
 /// RSA padding/hash family verifications — PKCS#1 v1.5 and PSS at SHA-256/384/512 — plus
 /// CSPRNG entropy and SHA-2 digests). EdDSA verification is deferred until an Ed25519 backend
-/// (<c>Verifiable.NSec</c> or <c>Verifiable.BouncyCastle</c>) is referenced from this project.
+/// (<c>Verifiable.Libsodium</c> or <c>Verifiable.BouncyCastle</c>) is referenced from this project.
 /// secp256k1 (ES256K, RFC 8812 §3) is deferred for the same reason: the CLI wires only the
 /// AOT-clean Microsoft backend, and this project does not reference
 /// <c>Verifiable.BouncyCastle</c>, which secp256k1 needs for key material and signing.
@@ -64,7 +64,7 @@ internal static class CryptoProviderStartup
     /// SHA-256/384/512, RFC 8812 §2 / RFC 8230 §2) that <see cref="Verifiable.JCose.CoseKeyExtensions.ToPublicKeyMemory"/>
     /// resolves from a COSE_Key's <c>alg</c> parameter. RSA-2048/4096 signing and EdDSA (Ed25519)
     /// verification are not wired here — RSA signing has no CLI caller yet, and EdDSA verification
-    /// needs an Ed25519 backend (<c>Verifiable.NSec</c> or <c>Verifiable.BouncyCastle</c>) that this
+    /// needs an Ed25519 backend (<c>Verifiable.Libsodium</c> or <c>Verifiable.BouncyCastle</c>) that this
     /// project does not currently reference.
     /// </summary>
     private static void RegisterSigningAndVerification()
@@ -117,7 +117,7 @@ internal static class CryptoProviderStartup
 
         CryptographicKeyFactory.RegisterFunction(
             typeof(ComputeDigestDelegate),
-            (ComputeDigestDelegate)MicrosoftEntropyFunctions.ComputeDigestAsync);
+            (ComputeDigestDelegate)MicrosoftCryptographicFunctions.ComputeDigestAsync);
 
         //The synchronous SHA-family seam for hashes that are sync by nature (a JWK thumbprint, a PKCE S256
         //challenge, a Concat KDF round, an SD-JWT disclosure digest): public/local-data hashes with no

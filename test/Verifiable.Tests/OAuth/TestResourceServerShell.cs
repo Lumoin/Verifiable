@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
@@ -12,6 +11,7 @@ using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.OAuth;
+using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
@@ -97,11 +97,10 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
     public X509Certificate2? HttpCertificate { get; private set; }
 
     /// <summary>
-    /// Per-request DPoP proof JTI tracker. Maps jti → expiry instant. Tests inspect
-    /// this directly to verify replay-defense behaviour.
+    /// The shipped RS-side DPoP replay tracker (<see cref="InMemoryDpopReplayCache"/>). Tests inspect
+    /// <see cref="InMemoryDpopReplayCache.Count"/> directly to verify replay-defense behaviour.
     /// </summary>
-    public ConcurrentDictionary<string, DateTimeOffset> SeenDpopJtis { get; } =
-        new(StringComparer.Ordinal);
+    public InMemoryDpopReplayCache ReplayCache { get; }
 
 
     public TestResourceServerShell(
@@ -133,6 +132,7 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
         VerifySignature = verifySignature;
         RequiredScope = requiredScope;
         AdvertisedAuthorizationServers = advertised;
+        ReplayCache = new InMemoryDpopReplayCache(timeProvider);
 
         Integration = new ResourceServerIntegration
         {
@@ -140,13 +140,8 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
             ExpectedAudience = expectedAudience,
             ResolveVerificationKeyAsync = resolveVerificationKey,
             TimeProvider = timeProvider,
-            IsDpopProofJtiSeenAsync = (jti, ctx, ct) =>
-                ValueTask.FromResult(SeenDpopJtis.ContainsKey(jti)),
-            PersistDpopProofJtiAsync = (jti, expiresAt, ctx, ct) =>
-            {
-                SeenDpopJtis[jti] = expiresAt;
-                return ValueTask.CompletedTask;
-            }
+            IsDpopProofJtiSeenAsync = ReplayCache.IsSeenAsync,
+            PersistDpopProofJtiAsync = ReplayCache.PersistAsync
         };
     }
 

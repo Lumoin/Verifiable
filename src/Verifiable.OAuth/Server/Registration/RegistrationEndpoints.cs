@@ -42,9 +42,10 @@ namespace Verifiable.OAuth.Server.Registration;
 /// via <see cref="StringBuilder"/> following the precedent set by
 /// <see cref="Metadata.MetadataEndpoints"/>: <c>Verifiable.OAuth</c> must not
 /// reference <c>System.Text.Json</c>. Request body parsing goes through
-/// <see cref="AuthorizationServerIntegration.ParseClientMetadataAsync"/>; the
-/// application's wiring (typically from <c>Verifiable.OAuth.Json</c>) supplies
-/// the JSON layer.
+/// <see cref="AuthorizationServerIntegration.ParseClientMetadataAsync"/>,
+/// for which no default implementation is shipped — the application
+/// supplies its own JSON layer (see
+/// <see cref="ParseClientMetadataServerDelegate"/>).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("RegistrationEndpoints")]

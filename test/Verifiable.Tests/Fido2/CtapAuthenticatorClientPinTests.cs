@@ -27,8 +27,8 @@ internal sealed class CtapAuthenticatorClientPinTests
 
 
     /// <summary>
-    /// <c>getPINRetries</c> reports the seeded <c>pinRetries</c> counter, no other member, and an honest
-    /// <c>powerCycleState: false</c> (CTAP 2.3, line 5422-5437) — the authenticator is not latched.
+    /// <c>getPINRetries</c> reports the seeded <c>pinRetries</c> counter, no other member, and
+    /// <c>powerCycleState: false</c> (CTAP 2.3, line 5422-5437), reflecting that the authenticator is not latched.
     /// </summary>
     [TestMethod]
     public async Task GetPinRetriesReportsSeededCounter()

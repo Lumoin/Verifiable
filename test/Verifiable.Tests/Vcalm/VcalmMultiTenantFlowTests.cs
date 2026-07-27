@@ -565,7 +565,7 @@ internal sealed class VcalmMultiTenantFlowTests
             SerializePresentation = presentation => JsonSerializerExtensions.Serialize(presentation, JsonOptions),
             SerializeProofOptions = SerializeProofOptions,
             Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
             MemoryPool = Pool
         };
 
@@ -645,7 +645,7 @@ internal sealed class VcalmMultiTenantFlowTests
             DeserializeCredential = DeserializeCredential,
             SerializeProofOptions = SerializeProofOptions,
             Encoder = TestSetup.Base58Encoder,
-            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync
+            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync
         };
 
 
@@ -740,7 +740,7 @@ internal sealed class VcalmMultiTenantFlowTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             Pool,
             new ExchangeContext(),
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -852,7 +852,7 @@ internal sealed class VcalmMultiTenantFlowTests
             DeserializePresentation = DeserializePresentation,
             SerializeProofOptions = SerializeProofOptions,
             Encoder = TestSetup.Base58Encoder,
-            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
             MemoryPool = Pool
         };
 

@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Text.Json;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 
@@ -57,7 +58,14 @@ internal static class EntityStatementJwsReader
             header = new UnverifiedJwtHeader(headerDeserializer(headerBytes.Memory.Span));
             payload = new UnverifiedJwtPayload(payloadDeserializer(payloadBytes.Memory.Span));
         }
-        catch(Exception ex) when(ex is FormatException or InvalidOperationException)
+        //The header/payload bytes are attacker-controlled: a tampered chain
+        //element can decode from base64url to syntactically invalid JSON
+        //(a wire-type violation such as an unterminated literal), which the
+        //caller-supplied deserializer surfaces as JsonException rather than
+        //the FormatException the deserializer delegate contract otherwise
+        //uses. Both are structural decode failures and must fail closed the
+        //same way — never let hostile input escape as an unhandled exception.
+        catch(Exception ex) when(ex is FormatException or InvalidOperationException or JsonException)
         {
             return null;
         }

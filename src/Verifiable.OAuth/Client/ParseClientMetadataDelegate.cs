@@ -15,9 +15,11 @@ namespace Verifiable.OAuth.Client;
 /// the metadata.
 /// </para>
 /// <para>
-/// The library does not pick a JSON serializer. The default
-/// implementation lives in <c>Verifiable.OAuth.Json</c>; applications
-/// using a different JSON layer wire their own delegate.
+/// The library does not pick a JSON serializer, and no default
+/// implementation of this delegate is shipped. Applications supply their
+/// own, following the shape of
+/// <see cref="Verifiable.OAuth.OAuthResponseParsers.ParseParResponse"/> and
+/// <see cref="Verifiable.OAuth.OAuthResponseParsers.ParseTokenResponse"/>.
 /// </para>
 /// </remarks>
 /// <param name="documentBody">The JSON body returned by the AS.</param>

@@ -52,7 +52,7 @@ internal sealed class WebPlusDidBuilderTests
     {
         return new WebPlusDidBuilder(
             Serialize,
-            BouncyCastleEntropyFunctions.ComputeBlake3DigestAsync,
+            BouncyCastleCryptographicFunctions.ComputeBlake3DigestAsync,
             CryptoTags.Blake3Digest,
             MultihashHeaders.Blake3.ToArray(),
             Blake3DigestLength,

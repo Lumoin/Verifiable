@@ -21,6 +21,7 @@ using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
+using Verifiable.Tests.X509;
 using static Verifiable.Tests.TestInfrastructure.MdocTestFixtures;
 
 namespace Verifiable.Tests.OAuth;
@@ -415,14 +416,12 @@ internal static class MdocVpFixture
             X509AuthorityKeyIdentifierExtension.CreateFromCertificate(
                 issuerCert, includeKeyIdentifier: true, includeIssuerAndSerial: false));
 
-        //Test-side CA certificate factory carve-out: the serial number is an X.509 structural
-        //field of the leaf CertificateRequest.Create call, not fixture key material.
-        byte[] serialNumber = RandomNumberGenerator.GetBytes(16);
+        using Salt serialNumber = X509ChainTestRing.CreateSerialNumber(16);
         return request.Create(
             issuerCert,
             notBefore: new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero),
             notAfter: new DateTimeOffset(2031, 1, 1, 0, 0, 0, TimeSpan.Zero),
-            serialNumber).CopyWithPrivateKey(leafKey);
+            serialNumber.AsReadOnlySpan()).CopyWithPrivateKey(leafKey);
     }
 
 

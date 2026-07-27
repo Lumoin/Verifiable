@@ -737,7 +737,7 @@ internal sealed class VcalmMultiStepExchangeTests
             SerializePresentation = SerializePresentation,
             SerializeProofOptions = SerializeProofOptions,
             Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
             MemoryPool = Pool
         };
 
@@ -765,7 +765,7 @@ internal sealed class VcalmMultiStepExchangeTests
                 SerializePresentation = SerializePresentation,
                 SerializeProofOptions = SerializeProofOptions,
                 Decoder = TestSetup.Base58Decoder,
-                ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync,
+                ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
                 MemoryPool = Pool
             };
         }
@@ -828,7 +828,7 @@ internal sealed class VcalmMultiStepExchangeTests
             DeserializePresentation = DeserializePresentation,
             SerializeProofOptions = SerializeProofOptions,
             Encoder = TestSetup.Base58Encoder,
-            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
             MemoryPool = Pool
         };
 
@@ -865,7 +865,7 @@ internal sealed class VcalmMultiStepExchangeTests
             DeserializeCredential = DeserializeCredential,
             SerializeProofOptions = SerializeProofOptions,
             Encoder = TestSetup.Base58Encoder,
-            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync
+            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync
         };
 
         return new IssuerSigningContext(descriptor, issuerDid);
@@ -904,7 +904,7 @@ internal sealed class VcalmMultiStepExchangeTests
             DeserializeCredential = DeserializeCredential,
             SerializeProofOptions = SerializeProofOptions,
             Encoder = TestSetup.Base58Encoder,
-            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync
+            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync
         };
 
         return new IssuerSigningContext(descriptor, issuerDid);
@@ -966,7 +966,7 @@ internal sealed class VcalmMultiStepExchangeTests
             SerializePresentation = SerializePresentation,
             SerializeProofOptions = SerializeProofOptions,
             Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
             MemoryPool = Pool
         };
 

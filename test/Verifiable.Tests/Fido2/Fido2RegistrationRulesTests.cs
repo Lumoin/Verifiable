@@ -296,6 +296,61 @@ internal sealed class Fido2RegistrationRulesTests
 
 
     /// <summary>
+    /// Narrowing to a strict subset of the offered algorithms that still contains the credential's actual
+    /// algorithm succeeds step 20's algorithm check — the explicit, named opt-in
+    /// <see cref="RegistrationCeremonyInput.NarrowAcceptedAlgorithmsTo"/> provides for a relying party
+    /// that legitimately accepts fewer algorithms than it offered.
+    /// </summary>
+    [TestMethod]
+    public async Task NarrowedAcceptedAlgorithmsWithinOfferedSetStillContainingCredentialAlgorithmSucceeds()
+    {
+        using RegistrationCeremonyInput input = Fido2CeremonyInputFactory.CreateValidRegistrationInput(
+            allowedAlgorithms: [WellKnownCoseAlgorithms.Es256, WellKnownCoseAlgorithms.Rs256],
+            narrowAcceptedAlgorithmsTo: [WellKnownCoseAlgorithms.Es256]);
+
+        ClaimIssueResult result = await IssueClaimsAsync(input);
+
+        AssertClaimOutcomes(result);
+    }
+
+
+    /// <summary>
+    /// Narrowing to a strict subset of the offered algorithms that no longer contains the credential's
+    /// actual algorithm fails step 20's algorithm check specifically — narrowing genuinely restricts
+    /// acceptance, it is not a no-op.
+    /// </summary>
+    [TestMethod]
+    public async Task NarrowedAcceptedAlgorithmsExcludingCredentialAlgorithmFailsCredentialAlgorithmClaim()
+    {
+        using RegistrationCeremonyInput input = Fido2CeremonyInputFactory.CreateValidRegistrationInput(
+            allowedAlgorithms: [WellKnownCoseAlgorithms.Es256, WellKnownCoseAlgorithms.Rs256],
+            narrowAcceptedAlgorithmsTo: [WellKnownCoseAlgorithms.Rs256]);
+
+        ClaimIssueResult result = await IssueClaimsAsync(input);
+
+        AssertClaimOutcomes(result, (Fido2ClaimIds.Fido2RegistrationCredentialAlgorithm, ClaimOutcome.Failure));
+    }
+
+
+    /// <summary>
+    /// <see cref="RegistrationCeremonyInput.NarrowAcceptedAlgorithmsTo"/> can only ever shrink the
+    /// accepted set: naming an algorithm the relying party never actually offered throws rather than
+    /// silently widening acceptance back out — the one place R-1's by-construction guarantee could
+    /// otherwise be defeated.
+    /// </summary>
+    [TestMethod]
+    public void NarrowingToAnAlgorithmNeverOfferedThrows()
+    {
+        using RegistrationCeremonyInput input = Fido2CeremonyInputFactory.CreateValidRegistrationInput(
+            allowedAlgorithms: [WellKnownCoseAlgorithms.Es256],
+            narrowAcceptedAlgorithmsTo: [WellKnownCoseAlgorithms.Rs256]);
+
+        ArgumentException exception = Assert.ThrowsExactly<ArgumentException>(() => { _ = input.AllowedAlgorithms; });
+        Assert.Contains(nameof(RegistrationCeremonyInput.NarrowAcceptedAlgorithmsTo), exception.Message, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
     /// A credential public key with no <c>alg</c> parameter never reaches step 20's algorithm check: the
     /// WebAuthn L3
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-attested-credential-data">section 6.5.1</see>

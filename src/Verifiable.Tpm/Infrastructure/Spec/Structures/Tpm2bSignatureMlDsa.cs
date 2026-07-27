@@ -83,7 +83,7 @@ public readonly struct Tpm2bSignatureMlDsa: IDisposable, IEquatable<Tpm2bSignatu
             return Empty;
         }
 
-        pool ??= MemoryPool<byte>.Shared;
+        pool ??= BaseMemoryPool.Shared;
         var owner = pool.Rent(signature.Length);
         signature.CopyTo(owner.Memory.Span);
         return new Tpm2bSignatureMlDsa(owner, owner.Memory[..signature.Length]);
@@ -129,7 +129,7 @@ public readonly struct Tpm2bSignatureMlDsa: IDisposable, IEquatable<Tpm2bSignatu
             throw new InvalidOperationException($"ML-DSA signature size {size} exceeds maximum {MaxMlDsaSigSize}.");
         }
 
-        pool ??= MemoryPool<byte>.Shared;
+        pool ??= BaseMemoryPool.Shared;
         var owner = pool.Rent(size);
         reader.ReadBytes(size).CopyTo(owner.Memory.Span);
         return new Tpm2bSignatureMlDsa(owner, owner.Memory[..size]);

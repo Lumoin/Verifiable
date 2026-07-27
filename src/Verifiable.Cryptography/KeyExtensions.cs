@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Collections.Frozen;
+using System.Diagnostics;
 using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Cryptography;
@@ -48,6 +49,7 @@ public static class KeyExtensions
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(signingFunction);
         ArgumentNullException.ThrowIfNull(signaturePool);
+        AssertHousePool(signaturePool);
 
         return privateKey.WithKeyBytesAsync((privateKeyBytes, dataToSign, signaturePool) => signingFunction(privateKeyBytes, dataToSign, signaturePool), dataToSign, signaturePool);
     }
@@ -75,6 +77,7 @@ public static class KeyExtensions
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(signingDelegate);
         ArgumentNullException.ThrowIfNull(signaturePool);
+        AssertHousePool(signaturePool);
 
         (Signature signature, CryptoEvent? evt) = await privateKey.WithKeyBytesAsync(
             (privateKeyBytes, dataToSign, signaturePool) =>
@@ -183,6 +186,7 @@ public static class KeyExtensions
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(hmacDelegate);
         ArgumentNullException.ThrowIfNull(pool);
+        AssertHousePool(pool);
 
         (HmacValue result, CryptoEvent? _) = await key.WithKeyBytesAsync(
             (keyBytes, args) => args.HmacDelegate(
@@ -242,6 +246,7 @@ public static class KeyExtensions
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(verifyDelegate);
         ArgumentNullException.ThrowIfNull(pool);
+        AssertHousePool(pool);
 
         (bool isValid, CryptoEvent? _) = await key.WithKeyBytesAsync(
             (keyBytes, args) => args.VerifyDelegate(
@@ -275,4 +280,23 @@ public static class KeyExtensions
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default) =>
         key.VerifyHmacAsync(new System.Buffers.ReadOnlySequence<byte>(message), expectedMacBytes, verifyDelegate, pool, context, cancellationToken);
+
+
+    /// <summary>
+    /// Asserts, in DEBUG builds only, that <paramref name="candidate"/> is the house
+    /// <see cref="BaseMemoryPool"/> family. <see cref="Signature"/> and <see cref="HmacValue"/> derive their
+    /// <c>Length</c> from the rented owner's <c>Memory.Length</c> without slicing, so a pool whose rentals are
+    /// not exact-length (e.g. <see cref="MemoryPool{T}.Shared"/>, which rounds up to a power-of-two bucket)
+    /// silently produces an over-long carrier. This catches a foreign pool arriving as a caller-supplied
+    /// parameter — the one case the <c>BannedSymbols.txt</c> compile-time ban cannot see — as a debug-time
+    /// failure instead of a wire-visible defect. Compiled out in Release builds.
+    /// </summary>
+    /// <param name="candidate">The pool passed by the caller at one of this class's public entry points.</param>
+    [Conditional("DEBUG")]
+    private static void AssertHousePool(MemoryPool<byte> candidate)
+    {
+        Debug.Assert(candidate is BaseMemoryPool,
+            "The memory pool must be Lumoin.Base.BaseMemoryPool (BaseMemoryPool.Shared, or a custom " +
+            "house-configured instance) for the exact-length rentals Signature and HmacValue depend on.");
+    }
 }

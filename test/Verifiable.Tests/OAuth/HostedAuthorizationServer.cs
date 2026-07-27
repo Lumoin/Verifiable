@@ -510,8 +510,9 @@ internal sealed class HostedAuthorizationServer
 
             //Dynamic registration delegates. The parser uses JsonDocument to
             //read the few fields the canonical test exercises directly into a
-            //ClientMetadata record; production deployments wire their full
-            //JSON layer through Verifiable.OAuth.Json instead.
+            //ClientMetadata record; no default ParseClientMetadataServerDelegate
+            //is shipped, so production deployments wire their own full JSON
+            //layer instead.
             ParseClientMetadataAsync = (body, ct) =>
             {
                 using JsonDocument doc = JsonDocument.Parse(body);
@@ -566,13 +567,15 @@ internal sealed class HostedAuthorizationServer
                 });
             },
 
-            //Bearer-token validation for RFC 7592 management calls. Test
-            //wiring stores the plaintext token and compares ordinally;
-            //production deployments hash and use FixedTimeEquals.
+            //Bearer-token validation for RFC 7592 management calls. Test wiring stores the
+            //plaintext token (a production deployment would store a hash instead) but the
+            //comparison itself uses the library's constant-time helper — an ordinal compare
+            //exits on the first differing character, letting a network attacker recover the
+            //token incrementally by timing.
             ValidateRegistrationAccessTokenAsync = (tenantId, clientId, presented, _, _) =>
                 ValueTask.FromResult(
                     host.RegistrationAccessTokens.TryGetValue(clientId, out string? stored)
-                    && string.Equals(stored, presented, StringComparison.Ordinal))
+                    && FixedTimeComparison.AreEqual(stored, presented))
         };
 
         AuthorizationServerCryptography cryptography = new()
@@ -636,7 +639,7 @@ internal sealed class HostedAuthorizationServer
         {
             Encoder = TestSetup.Base64UrlEncoder,
             Decoder = TestSetup.Base64UrlDecoder,
-            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
 
             //The library signs access tokens via the registered token producers.
             //TestHostShell supplies the two JSON serialization delegates; tests
@@ -692,7 +695,7 @@ internal sealed class HostedAuthorizationServer
                 s, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
             computeSdJwtHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(
                 t, TestSetup.Base64UrlEncoder),
-            computeDigest: MicrosoftEntropyFunctions.ComputeDigestAsync,
+            computeDigest: MicrosoftCryptographicFunctions.ComputeDigestAsync,
             vpValidators: BuildVpValidators(vpValidator, mdocSeams, sdCwtSeams, timeProvider),
             keyAgreementDecryptDelegate:
                 BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementDecryptP256Async,
@@ -780,7 +783,7 @@ internal sealed class HostedAuthorizationServer
                 s, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
             computeSdJwtHashInput: static t => SdJwtSerializer.GetSdJwtForHashing(
                 t, TestSetup.Base64UrlEncoder),
-            computeDigest: MicrosoftEntropyFunctions.ComputeDigestAsync,
+            computeDigest: MicrosoftCryptographicFunctions.ComputeDigestAsync,
             saltReuseSeam: saltReuseSeam);
 
         //The OAuth family configuration the endpoints read — cryptography, codecs,

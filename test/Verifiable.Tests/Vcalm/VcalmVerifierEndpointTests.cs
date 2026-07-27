@@ -1042,7 +1042,7 @@ internal sealed class VcalmVerifierEndpointTests
             SerializePresentation = SerializePresentation,
             SerializeProofOptions = SerializeProofOptions,
             Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
             MemoryPool = Pool,
             //§3.4 ecdsa-sd-2023 derived-proof seams: the CBOR derived-proof parser, the P-256
             //verification function, and the base64url codec the SD verifier composes. When wired, a
@@ -1157,7 +1157,7 @@ internal sealed class VcalmVerifierEndpointTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             Pool,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -1203,7 +1203,7 @@ internal sealed class VcalmVerifierEndpointTests
             DeserializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             Pool,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -1270,7 +1270,7 @@ internal sealed class VcalmVerifierEndpointTests
             DeserializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             Pool,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);

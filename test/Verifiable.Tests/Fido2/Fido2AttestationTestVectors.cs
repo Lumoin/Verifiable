@@ -11,6 +11,7 @@ using Verifiable.Cryptography.Pki;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Tests.TestDataProviders;
+using Verifiable.Tests.X509;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -116,12 +117,12 @@ internal static class Fido2AttestationTestVectors
         request.CertificateExtensions.Add(
             X509AuthorityKeyIdentifierExtension.CreateFromCertificate(issuerCertificate, includeKeyIdentifier: true, includeIssuerAndSerial: false));
 
-        byte[] serialNumber = RandomNumberGenerator.GetBytes(16);
+        using Salt serialNumber = X509ChainTestRing.CreateSerialNumber(16);
         return request.Create(
             issuerCertificate,
             notBefore: DefaultLeafNotBefore,
             notAfter: DefaultLeafNotAfter,
-            serialNumber).CopyWithPrivateKey(intermediateKey);
+            serialNumber.AsReadOnlySpan()).CopyWithPrivateKey(intermediateKey);
     }
 
 
@@ -216,12 +217,12 @@ internal static class Fido2AttestationTestVectors
             }
         }
 
-        byte[] serialNumber = RandomNumberGenerator.GetBytes(16);
+        using Salt serialNumber = X509ChainTestRing.CreateSerialNumber(16);
         return request.Create(
             issuerCertificate,
             notBefore: notBefore ?? DefaultLeafNotBefore,
             notAfter: notAfter ?? DefaultLeafNotAfter,
-            serialNumber).CopyWithPrivateKey(leafKey);
+            serialNumber.AsReadOnlySpan()).CopyWithPrivateKey(leafKey);
     }
 
 
@@ -381,13 +382,13 @@ internal static class Fido2AttestationTestVectors
             ?? throw new ArgumentException("Issuer certificate must carry an ECDsa private key.", nameof(issuerCertificate));
         X509SignatureGenerator issuerSignatureGenerator = X509SignatureGenerator.CreateForECDsa(issuerKey);
 
-        byte[] serialNumber = RandomNumberGenerator.GetBytes(16);
+        using Salt serialNumber = X509ChainTestRing.CreateSerialNumber(16);
         return request.Create(
             issuerCertificate.SubjectName,
             issuerSignatureGenerator,
             notBefore ?? DefaultLeafNotBefore,
             notAfter ?? DefaultLeafNotAfter,
-            serialNumber).CopyWithPrivateKey(leafKey);
+            serialNumber.AsReadOnlySpan()).CopyWithPrivateKey(leafKey);
     }
 
 

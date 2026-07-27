@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>An adapter for Verifiable to use libsodium</Title>
+    <Description>An adapter for Verifiable to use libsodium</Description>
+    <PackageTags>DID VC decentralized-identifier verifiable credential, signing, encryption</PackageTags>
+    <!--
+      Ed25519 secret-key scratch memory is allocated via Lumoin.Base.Sodium's SodiumBacking.Allocate
+      and consumed by pinning its IMemoryOwner<byte>.Memory: reading the resulting MemoryHandle.Pointer
+      (a void*) to obtain the nint the crypto_sign_seed_keypair/crypto_sign_detached/
+      crypto_sign_ed25519_sk_to_curve25519 P/Invokes expect requires unsafe context.
+    -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="libsodium" />
+    <PackageReference Include="Lumoin.Base.Sodium" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verifiable.Foundation\Verifiable.Foundation.csproj" />
+    <ProjectReference Include="..\Verifiable.Core\Verifiable.Core.csproj" />
+  </ItemGroup>
+
+</Project>

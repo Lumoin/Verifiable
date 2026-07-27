@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Formats.Cbor;
+using Lumoin.Base;
 using Verifiable.Cbor;
 using Verifiable.Cbor.StatusList;
 using Verifiable.Core.StatusList;
@@ -64,7 +65,7 @@ internal sealed class StatusListCborConverterTests
     /// <remarks>The returned memory pool is a singleton instance that can be used to efficiently rent and
     /// return byte buffers. Using the shared pool helps reduce memory allocations and improve performance in scenarios
     /// that require temporary buffers.</remarks>
-    private static MemoryPool<byte> Pool => MemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
     /// <summary>
     /// Provides the default options for CBOR serialization.

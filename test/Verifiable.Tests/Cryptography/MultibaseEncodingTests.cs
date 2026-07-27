@@ -2,8 +2,8 @@ using SimpleBase;
 using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Libsodium;
 using Verifiable.Microsoft;
-using Verifiable.NSec;
 using Verifiable.Tests.DataProviders;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -178,7 +178,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void Ed25519WithMultibaseBtc58Succeeds()
         {
-            var keys = NSecKeyMaterialCreator.CreateEd25519Keys(BaseMemoryPool.Shared);
+            var keys = LibsodiumKeyMaterialCreator.CreateEd25519Keys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;
             using var privateKey = keys.PrivateKey;
 
@@ -206,12 +206,12 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void X25519WithMultibaseBtc58Succeeds()
         {
-            var keys = NSecKeyMaterialCreator.CreateEd25519Keys(BaseMemoryPool.Shared);
+            var keys = LibsodiumKeyMaterialCreator.CreateEd25519Keys(BaseMemoryPool.Shared);
             using var publicKeyEd25519 = keys.PublicKey;
             using var privateKeyEd25519 = keys.PrivateKey;
 
-            using var x25519PublicKeyOwner = Sodium.ConvertEd25519PublicKeyToCurve25519PublicKey(publicKeyEd25519.AsReadOnlySpan(), BaseMemoryPool.Shared);
-            var x25519PrivateKey = Sodium.ConvertEd25519PrivateKeyToCurve25519PrivateKey(privateKeyEd25519.AsReadOnlySpan().ToArray());
+            using var x25519PublicKeyOwner = LibsodiumKeyConversion.ConvertEd25519PublicKeyToCurve25519PublicKey(publicKeyEd25519.AsReadOnlySpan(), BaseMemoryPool.Shared);
+            using var x25519PrivateKeyOwner = LibsodiumKeyConversion.ConvertEd25519PrivateKeyToCurve25519PrivateKey(privateKeyEd25519.AsReadOnlySpan(), BaseMemoryPool.Shared);
 
             //Use high-level API for public key encoding.
             var multibaseEncodedPublicKey = MultibaseSerializer.EncodeKey(
@@ -221,7 +221,7 @@ namespace Verifiable.Tests.Cryptography
 
             //Private keys require manual encoding with appropriate header.
             var multibaseEncodedPrivateKey = MultibaseSerializer.Encode(
-                x25519PrivateKey,
+                x25519PrivateKeyOwner.Memory.Span,
                 MulticodecHeaders.X25519PrivateKey,
                 MultibaseAlgorithms.Base58Btc,
                 Base58.Bitcoin.Encode);

@@ -11,6 +11,7 @@ using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
+using Verifiable.Tests.X509;
 
 namespace Verifiable.Tests.Mdoc;
 
@@ -451,13 +452,13 @@ internal sealed class MdocIacaTrustEndToEndTests
             X509KeyUsageFlags.DigitalSignature, critical: true));
         request.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(request.PublicKey, critical: false));
 
-        //Certificate serial number: required argument for CertificateRequest.Create; cert-factory carve-out (see class remarks).
-        byte[] serialNumber = RandomNumberGenerator.GetBytes(16);
+        //Certificate serial number: drawn through the registered entropy seam; cert-factory carve-out (see class remarks).
+        using Salt serialNumber = X509ChainTestRing.CreateSerialNumber(16);
         return request.Create(
             issuerCert,
             notBefore: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
             notAfter: new DateTimeOffset(2029, 1, 1, 0, 0, 0, TimeSpan.Zero),
-            serialNumber).CopyWithPrivateKey(leafKey);
+            serialNumber.AsReadOnlySpan()).CopyWithPrivateKey(leafKey);
     }
 
 

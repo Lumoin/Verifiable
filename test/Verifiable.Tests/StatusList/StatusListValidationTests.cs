@@ -1,4 +1,5 @@
 using System.Buffers;
+using Lumoin.Base;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.StatusList;
 
@@ -48,7 +49,7 @@ internal sealed class StatusListValidationTests
     /// <remarks>The returned memory pool is a singleton instance that can be used to efficiently rent and
     /// return byte buffers. Using a shared pool helps reduce memory allocations and improve performance in scenarios
     /// that require frequent buffer management.</remarks>
-    private static MemoryPool<byte> Pool => MemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
 
     [TestMethod]

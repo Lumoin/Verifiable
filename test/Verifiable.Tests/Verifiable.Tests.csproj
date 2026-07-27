@@ -81,8 +81,8 @@
     <ProjectReference Include="..\..\src\Verifiable.JCose\Verifiable.JCose.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Json\Verifiable.Json.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Keri\Verifiable.Keri.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable.Libsodium\Verifiable.Libsodium.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Microsoft\Verifiable.Microsoft.csproj" />
-    <ProjectReference Include="..\..\src\Verifiable.NSec\Verifiable.NSec.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.OAuth\Verifiable.OAuth.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Vcalm\Verifiable.Vcalm.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.WebFinger\Verifiable.WebFinger.csproj" />

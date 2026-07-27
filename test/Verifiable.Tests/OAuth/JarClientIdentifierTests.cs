@@ -59,6 +59,18 @@ internal sealed class JarClientIdentifierTests
             (Dictionary<string, object>)payload,
             TestSetup.DefaultSerializationOptions);
 
+    /// <summary>Header deserializer mirroring the authorization server's wiring.</summary>
+    private static readonly JwtHeaderDeserializer HeaderDeserializer = static bytes =>
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            bytes, TestSetup.DefaultSerializationOptions)
+        ?? throw new FormatException("Header JSON parsed to null.");
+
+    /// <summary>Payload deserializer mirroring the authorization server's wiring.</summary>
+    private static readonly JwtPayloadDeserializer PayloadDeserializer = static bytes =>
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            bytes, TestSetup.DefaultSerializationOptions)
+        ?? throw new FormatException("Payload JSON parsed to null.");
+
     private const string VerifierClientId = "https://verifier.example.com";
 
 
@@ -940,17 +952,16 @@ internal sealed class JarClientIdentifierTests
             chainValues.Add((string)entry);
         }
 
-        //Step 2: resolve the JAR signing key via the new one-call API. The driver
-        //walks the chain (parse, per-link sig verify, TrustChainValidator), confirms
-        //chain[0].sub matches the expected subject, and extracts the signing key
-        //from chain[0]'s jwks.
-        ValidateTrustChainAsyncDelegate validateChain =
-            Tests.Federation.InlineTrustChainValidationDriver.Build(
-                async (position, compactJws, ct) => position switch
-                {
-                    0 => await Tests.Federation.FederationTestRing.VerifyAsync(verifierNode, compactJws, ct).ConfigureAwait(false),
-                    _ => await Tests.Federation.FederationTestRing.VerifyAsync(anchorNode, compactJws, ct).ConfigureAwait(false),
-                });
+        //Step 2: resolve the JAR signing key via the production validator. It
+        //walks the chain (parse, per-link key resolution from the chain's own
+        //jwks + signature verify, TrustChainValidator), confirms chain[0].sub
+        //matches the expected subject, and extracts the signing key from
+        //chain[0]'s jwks — no test-known node supplies the verification key.
+        ValidateTrustChainAsyncDelegate validateChain = TrustChainValidation.BuildInlineValidator(
+            HeaderDeserializer,
+            PayloadDeserializer,
+            Decoder,
+            FederationKeyResolver.BuildInChainResolver(Decoder, Pool));
 
         using PublicKeyMemory resolvedKey = await FederationBoundJarKeyResolver.ResolveAsync(
             chainValues,

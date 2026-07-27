@@ -35,7 +35,7 @@ internal sealed class WebVhChainVerificationTests
     private static readonly EncodeDelegate Base58Encoder = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase));
     private static readonly DecodeDelegate Base58Decoder = DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase));
     private static readonly VerifyChainIntegrityDelegate<WebVhRawEntry, WebVhProof> Verify =
-        WebVhChainVerification.Create(WebVhLogEntryJson.Canonicalizer.EntryHashInput, MicrosoftEntropyFunctions.ComputeDigestAsync, Base58Encoder, Base58Decoder, BaseMemoryPool.Shared);
+        WebVhChainVerification.Create(WebVhLogEntryJson.Canonicalizer.EntryHashInput, MicrosoftCryptographicFunctions.ComputeDigestAsync, Base58Encoder, Base58Decoder, BaseMemoryPool.Shared);
 
 
     public TestContext TestContext { get; set; } = null!;

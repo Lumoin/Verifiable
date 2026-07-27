@@ -359,7 +359,7 @@ internal sealed class DiscoveryEndpointTests
         //sub is spec-required; the rest reflect the standard contributors'
         //wire output. Any change to ContributionProfiles.StandardRules must
         //also update the StandardClaimsSupported list in MetadataEndpoints
-        //so discovery's advertisement stays honest.
+        //so discovery advertises exactly the claims the contributors emit.
         Assert.Contains(WellKnownJwtClaimNames.Sub, values);
 
         //Profile family.

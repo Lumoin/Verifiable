@@ -70,6 +70,24 @@ public sealed class Tpm2bAttest: ITpmWireType, IDisposable
     }
 
     /// <summary>
+    /// Gets the raw marshaled attestation bytes as memory, for asynchronous consumers such as the registered
+    /// digest and verification seams. The memory aliases this instance's pooled storage — it is valid until
+    /// <see cref="Dispose"/> and must not be copied out into untracked arrays.
+    /// </summary>
+    /// <returns>The raw attestation bytes.</returns>
+    public ReadOnlyMemory<byte> GetRawMemory()
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+
+        if(RawStorage is null)
+        {
+            return ReadOnlyMemory<byte>.Empty;
+        }
+
+        return RawStorage.Memory.Slice(0, RawLength);
+    }
+
+    /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
     public int GetSerializedSize()

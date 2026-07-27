@@ -2,6 +2,7 @@ using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using Lumoin.Base;
 using Verifiable.Tpm;
 using Verifiable.Tpm.EventLog;
 using Verifiable.Tpm.Extensions.EventLog;
@@ -238,7 +239,7 @@ internal static class TcgEventLogFormatter
     {
         error = null;
 
-        using var pool = MemoryPool<byte>.Shared;
+        using var pool = BaseMemoryPool.Shared;
         var result = TpmEventLogExtensions.ReadAndParseEventLog(pool);
 
         if(result.IsSuccess)

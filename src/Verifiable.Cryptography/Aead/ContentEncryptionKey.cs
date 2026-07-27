@@ -44,8 +44,8 @@ namespace Verifiable.Cryptography.Aead;
 /// larger than <c>UseNonce</c>'s stack-only <see cref="ReadOnlySpan{T}"/> return.
 /// </para>
 /// <para>
-/// The two patterns reflect different structural choices, each honest about what
-/// it can enforce given its type relationship to <see cref="SensitiveMemory"/>.
+/// The two patterns reflect different structural choices, each enforcing only what
+/// its type relationship to <see cref="SensitiveMemory"/> allows.
 /// Consistency is preserved at the level of intent codification: both types name
 /// the consumption method, increment an observable <c>UseCount</c>, and fire OTel
 /// telemetry. They differ on whether a second consumption proceeds with a counter

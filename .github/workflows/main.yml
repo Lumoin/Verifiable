@@ -52,8 +52,8 @@ env:
     Verifiable.Json
     Verifiable.JsonPointer
     Verifiable.Keri
+    Verifiable.Libsodium
     Verifiable.Microsoft
-    Verifiable.NSec
     Verifiable.OAuth
     Verifiable.Server
     Verifiable.Tpm

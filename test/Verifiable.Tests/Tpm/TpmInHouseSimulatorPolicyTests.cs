@@ -1,7 +1,7 @@
 using System;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Tpm;
@@ -133,6 +133,42 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     }
 
     [TestMethod]
+    public async Task PolicySecretNullTicketTagSatisfiesIsPolicySecret()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+
+        TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
+            TpmAlgIdConstants.TPM_ALG_SHA256, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession failed: '{startResult.ResponseCode}'.");
+
+        using StartAuthSessionResponse session = startResult.Value;
+        uint sessionHandle = session.SessionHandle.Value;
+        try
+        {
+            //Regression pin for R-1: TpmtTkAuth.IsPolicySecret()/IsPolicySigned() must reference the shared,
+            //correct TpmStConstants.TPM_ST_AUTH_SECRET/TPM_ST_AUTH_SIGNED values (0x8023/0x8025), not the
+            //previously-wrong private consts (0x8003/0x8002 — 0x8002 is actually TPM_ST_SESSIONS). A ticket parsed
+            //back off the production wire from a genuine PolicySecret response must satisfy IsPolicySecret();
+            //this failed under the old, incorrect private consts.
+            TpmResult<PolicySecretResponse> secretResult = await tpm.PolicySecretAsync(
+                (uint)TpmRh.TPM_RH_ENDORSEMENT, sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(secretResult.IsSuccess, $"PolicySecret failed: '{secretResult.ResponseCode}'.");
+
+            using(secretResult.Value)
+            {
+                Assert.IsTrue(secretResult.Value.PolicyTicket.IsPolicySecret(), "A PolicySecret-produced ticket must satisfy IsPolicySecret().");
+                Assert.IsFalse(secretResult.Value.PolicyTicket.IsPolicySigned(), "A PolicySecret-produced ticket must not satisfy IsPolicySigned().");
+            }
+        }
+        finally
+        {
+            _ = await tpm.FlushContextAsync(sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    [TestMethod]
     public async Task PolicyOrRejectsBranchCountBelowTwo()
     {
         MemoryPool<byte> pool = BaseMemoryPool.Shared;
@@ -214,8 +250,11 @@ internal sealed class TpmInHouseSimulatorPolicyTests
         int[] pcrIndices = [0];
 
         //On a trial session the TPM uses the caller's pcrDigest verbatim, so the prediction does not depend on
-        //live PCR contents — the test stays deterministic.
-        byte[] pcrDigest = SHA256.HashData("policy-pcr-test"u8);
+        //live PCR contents — the test stays deterministic. Computed through the registered digest seam (not a
+        //direct framework hash), matching this file's ComputeNvNameAsync convention.
+        using DigestValue pcrDigestValue = await CryptographicKeyEvents.ComputeDigestAsync(
+            "policy-pcr-test"u8.ToArray(), 32, CryptoTags.Sha256Digest, pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        byte[] pcrDigest = pcrDigestValue.AsReadOnlySpan().ToArray();
 
         TpmResult<StartAuthSessionResponse> startResult = await tpm.StartTrialPolicySessionAsync(
             PolicyHash, TestContext.CancellationToken).ConfigureAwait(false);
@@ -426,7 +465,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
                 using PolicyGetDigestResponse digest = digestResult.Value;
 
                 //policyDigest = H(zeros || TPM_CC_PolicyNV || H(operandB || offset || operation) || nvName).
-                byte[] nvName = ComputeNvName(NvIndex, PolicyHash, attributes, DataSize, pool);
+                byte[] nvName = await ComputeNvNameAsync(NvIndex, PolicyHash, attributes, DataSize, pool, TestContext.CancellationToken).ConfigureAwait(false);
                 byte[] predicted = new byte[size];
                 Span<byte> zero = stackalloc byte[size];
                 zero.Clear();
@@ -445,6 +484,263 @@ internal sealed class TpmInHouseSimulatorPolicyTests
         {
             _ = await UndefineNvAsync(tpm, registry, pool, NvIndex).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Verifies that a REAL (non-trial) TPM2_PolicyNV session compares the retained Index data at the offset and,
+    /// on a true comparison, authorizes and folds the digest exactly as the host predicts — closing the tracked
+    /// gap where the simulator's PolicyNV always succeeded regardless of the Index's actual contents.
+    /// </summary>
+    [TestMethod]
+    public async Task PolicyNvLiveComparisonAcceptsATrueOperandOnAWrittenIndex()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        const TpmAlgIdConstants PolicyHash = TpmAlgIdConstants.TPM_ALG_SHA256;
+        const uint NvIndex = 0x0100_0013;
+        const ushort Offset = 0;
+        const ushort DataSize = 8;
+        const TpmEoConstants Operation = TpmEoConstants.TPM_EO_EQ;
+        int size = TpmPolicyDigest.Size(PolicyHash);
+        byte[] writtenData = [0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80];
+        TpmaNv attributes = TpmaNv.TPMA_NV_AUTHWRITE | TpmaNv.TPMA_NV_AUTHREAD | TpmaNv.TPMA_NV_NO_DA;
+
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_NV_DefineSpace, TpmResponseCodec.NvDefineSpace);
+        _ = registry.Register(TpmCcConstants.TPM_CC_NV_Write, TpmResponseCodec.NvWrite);
+        _ = registry.Register(TpmCcConstants.TPM_CC_NV_UndefineSpace, TpmResponseCodec.NvUndefineSpace);
+
+        _ = await UndefineNvAsync(tpm, registry, pool, NvIndex).ConfigureAwait(false);
+        TpmResult<NvDefineSpaceResponse> defineResult = await DefineNvAsync(tpm, registry, pool, NvIndex, attributes, DataSize).ConfigureAwait(false);
+        Assert.IsTrue(defineResult.IsSuccess, $"NV_DefineSpace failed: '{defineResult.ResponseCode}'.");
+        try
+        {
+            await WriteNvAsync(tpm, registry, pool, NvIndex, writtenData).ConfigureAwait(false);
+            TpmaNv writtenAttributes = attributes | TpmaNv.TPMA_NV_WRITTEN;
+
+            TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
+                PolicyHash, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (real) failed: '{startResult.ResponseCode}'.");
+
+            using StartAuthSessionResponse session = startResult.Value;
+            uint sessionHandle = session.SessionHandle.Value;
+            try
+            {
+                //operandB equals the written data at offset 0, so TPM_EO_EQ must hold against the live Index.
+                TpmResult<PolicyNvResponse> nvResult = await tpm.PolicyNvAsync(
+                    NvIndex, NvIndex, sessionHandle, writtenData, Offset, Operation, TestContext.CancellationToken).ConfigureAwait(false);
+                Assert.IsTrue(nvResult.IsSuccess, $"PolicyNV (true comparison) failed: '{nvResult.ResponseCode}'.");
+
+                TpmResult<PolicyGetDigestResponse> digestResult = await tpm.PolicyGetDigestAsync(
+                    sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+                Assert.IsTrue(digestResult.IsSuccess, $"PolicyGetDigest failed: '{digestResult.ResponseCode}'.");
+
+                using PolicyGetDigestResponse digest = digestResult.Value;
+
+                byte[] nvName = await ComputeNvNameAsync(NvIndex, PolicyHash, writtenAttributes, DataSize, pool, TestContext.CancellationToken).ConfigureAwait(false);
+                byte[] predicted = new byte[size];
+                Span<byte> zero = stackalloc byte[size];
+                zero.Clear();
+                TpmPolicyDigest.ExtendForNv(zero, writtenData, Offset, (ushort)Operation, nvName, PolicyHash, predicted);
+
+                Assert.IsTrue(
+                    digest.PolicyDigest.AsReadOnlySpan().SequenceEqual(predicted),
+                    "The simulator's policyDigest after a live, true PolicyNV comparison must match the host-computed value.");
+            }
+            finally
+            {
+                _ = await tpm.FlushContextAsync(sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _ = await UndefineNvAsync(tpm, registry, pool, NvIndex).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Verifies that a REAL (non-trial) TPM2_PolicyNV session rejects with TPM_RC_POLICY when the retained Index
+    /// data does not satisfy the comparison, and leaves the session's policyDigest untouched.
+    /// </summary>
+    [TestMethod]
+    public async Task PolicyNvLiveComparisonRejectsAFalseOperand()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        const TpmAlgIdConstants PolicyHash = TpmAlgIdConstants.TPM_ALG_SHA256;
+        const uint NvIndex = 0x0100_0014;
+        const ushort Offset = 0;
+        const ushort DataSize = 8;
+        byte[] writtenData = [0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80];
+        byte[] mismatchingOperand = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
+        TpmaNv attributes = TpmaNv.TPMA_NV_AUTHWRITE | TpmaNv.TPMA_NV_AUTHREAD | TpmaNv.TPMA_NV_NO_DA;
+
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_NV_DefineSpace, TpmResponseCodec.NvDefineSpace);
+        _ = registry.Register(TpmCcConstants.TPM_CC_NV_Write, TpmResponseCodec.NvWrite);
+        _ = registry.Register(TpmCcConstants.TPM_CC_NV_UndefineSpace, TpmResponseCodec.NvUndefineSpace);
+
+        _ = await UndefineNvAsync(tpm, registry, pool, NvIndex).ConfigureAwait(false);
+        TpmResult<NvDefineSpaceResponse> defineResult = await DefineNvAsync(tpm, registry, pool, NvIndex, attributes, DataSize).ConfigureAwait(false);
+        Assert.IsTrue(defineResult.IsSuccess, $"NV_DefineSpace failed: '{defineResult.ResponseCode}'.");
+        try
+        {
+            await WriteNvAsync(tpm, registry, pool, NvIndex, writtenData).ConfigureAwait(false);
+
+            TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
+                PolicyHash, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (real) failed: '{startResult.ResponseCode}'.");
+
+            using StartAuthSessionResponse session = startResult.Value;
+            uint sessionHandle = session.SessionHandle.Value;
+            try
+            {
+                TpmResult<PolicyNvResponse> nvResult = await tpm.PolicyNvAsync(
+                    NvIndex, NvIndex, sessionHandle, mismatchingOperand, Offset, TpmEoConstants.TPM_EO_EQ, TestContext.CancellationToken).ConfigureAwait(false);
+                Assert.IsFalse(nvResult.IsSuccess, "PolicyNV must reject a false comparison against the live Index data.");
+                Assert.AreEqual(TpmRcConstants.TPM_RC_POLICY, nvResult.ResponseCode, "A false PolicyNV comparison must reject with TPM_RC_POLICY.");
+            }
+            finally
+            {
+                _ = await tpm.FlushContextAsync(sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _ = await UndefineNvAsync(tpm, registry, pool, NvIndex).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Exploit-becomes-regression test: an undefined <c>TPM_EO</c> value (0x0100, outside the 12 Table 22 defines)
+    /// on a REAL policy session must reject with <c>TPM_RC_VALUE</c> through the production wire path, not throw
+    /// an unhandled exception out of <c>TpmSimulator.SubmitAsync</c> (TPM 2.0 Library Part 3, clause 5.1: an
+    /// undefined selector is rejected at unmarshal).
+    /// </summary>
+    [TestMethod]
+    public async Task PolicyNvWithAnUndefinedOperationReturnsValueOnARealSession()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        const TpmAlgIdConstants PolicyHash = TpmAlgIdConstants.TPM_ALG_SHA256;
+        const uint NvIndex = 0x0100_0015;
+        const ushort Offset = 0;
+        const ushort DataSize = 8;
+        const TpmEoConstants UndefinedOperation = (TpmEoConstants)0x0100;
+        byte[] writtenData = [0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80];
+        TpmaNv attributes = TpmaNv.TPMA_NV_AUTHWRITE | TpmaNv.TPMA_NV_AUTHREAD | TpmaNv.TPMA_NV_NO_DA;
+
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_NV_DefineSpace, TpmResponseCodec.NvDefineSpace);
+        _ = registry.Register(TpmCcConstants.TPM_CC_NV_Write, TpmResponseCodec.NvWrite);
+        _ = registry.Register(TpmCcConstants.TPM_CC_NV_UndefineSpace, TpmResponseCodec.NvUndefineSpace);
+
+        _ = await UndefineNvAsync(tpm, registry, pool, NvIndex).ConfigureAwait(false);
+        TpmResult<NvDefineSpaceResponse> defineResult = await DefineNvAsync(tpm, registry, pool, NvIndex, attributes, DataSize).ConfigureAwait(false);
+        Assert.IsTrue(defineResult.IsSuccess, $"NV_DefineSpace failed: '{defineResult.ResponseCode}'.");
+        try
+        {
+            await WriteNvAsync(tpm, registry, pool, NvIndex, writtenData).ConfigureAwait(false);
+
+            TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
+                PolicyHash, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (real) failed: '{startResult.ResponseCode}'.");
+
+            using StartAuthSessionResponse session = startResult.Value;
+            uint sessionHandle = session.SessionHandle.Value;
+            try
+            {
+                TpmResult<PolicyNvResponse> nvResult = await tpm.PolicyNvAsync(
+                    NvIndex, NvIndex, sessionHandle, writtenData, Offset, UndefinedOperation, TestContext.CancellationToken).ConfigureAwait(false);
+
+                Assert.IsFalse(nvResult.IsSuccess, "An undefined TPM_EO must be rejected, not silently accepted.");
+                Assert.AreEqual(TpmRcConstants.TPM_RC_VALUE, nvResult.ResponseCode, "An undefined TPM_EO must reject with TPM_RC_VALUE at unmarshal.");
+            }
+            finally
+            {
+                _ = await tpm.FlushContextAsync(sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _ = await UndefineNvAsync(tpm, registry, pool, NvIndex).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Verifies a TRIAL session rejects the same undefined <c>TPM_EO</c> identically to a REAL session (the FIX
+    /// 1 uniformity requirement): the parse-time check runs before the trial/real branch, so the trial session's
+    /// "skip the comparison, fold unconditionally" path never gets a chance to silently accept it.
+    /// </summary>
+    [TestMethod]
+    public async Task PolicyNvWithAnUndefinedOperationReturnsValueOnATrialSessionToo()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        const TpmAlgIdConstants PolicyHash = TpmAlgIdConstants.TPM_ALG_SHA256;
+        const uint NvIndex = 0x0100_0016;
+        const ushort Offset = 0;
+        const ushort DataSize = 8;
+        const TpmEoConstants UndefinedOperation = (TpmEoConstants)0x0100;
+        byte[] operandB = [0x10, 0x20, 0x30, 0x40];
+        TpmaNv attributes = TpmaNv.TPMA_NV_AUTHWRITE | TpmaNv.TPMA_NV_AUTHREAD | TpmaNv.TPMA_NV_NO_DA;
+
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_NV_DefineSpace, TpmResponseCodec.NvDefineSpace);
+        _ = registry.Register(TpmCcConstants.TPM_CC_NV_UndefineSpace, TpmResponseCodec.NvUndefineSpace);
+
+        //A trial session needs only the Index's Name, not its data, so the Index can stay unwritten.
+        _ = await UndefineNvAsync(tpm, registry, pool, NvIndex).ConfigureAwait(false);
+        TpmResult<NvDefineSpaceResponse> defineResult = await DefineNvAsync(tpm, registry, pool, NvIndex, attributes, DataSize).ConfigureAwait(false);
+        Assert.IsTrue(defineResult.IsSuccess, $"NV_DefineSpace failed: '{defineResult.ResponseCode}'.");
+        try
+        {
+            TpmResult<StartAuthSessionResponse> startResult = await tpm.StartTrialPolicySessionAsync(
+                PolicyHash, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (trial) failed: '{startResult.ResponseCode}'.");
+
+            using StartAuthSessionResponse session = startResult.Value;
+            uint sessionHandle = session.SessionHandle.Value;
+            try
+            {
+                TpmResult<PolicyNvResponse> nvResult = await tpm.PolicyNvAsync(
+                    NvIndex, NvIndex, sessionHandle, operandB, Offset, UndefinedOperation, TestContext.CancellationToken).ConfigureAwait(false);
+
+                Assert.IsFalse(nvResult.IsSuccess, "A trial session must reject an undefined TPM_EO too, not silently fold it.");
+                Assert.AreEqual(TpmRcConstants.TPM_RC_VALUE, nvResult.ResponseCode, "A trial session's undefined TPM_EO must also reject with TPM_RC_VALUE at unmarshal.");
+            }
+            finally
+            {
+                _ = await tpm.FlushContextAsync(sessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _ = await UndefineNvAsync(tpm, registry, pool, NvIndex).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Writes <paramref name="data"/> in full to <paramref name="nvIndex"/>, authorized by the Index's own (empty)
+    /// auth value, setting TPMA_NV_WRITTEN.
+    /// </summary>
+    /// <param name="tpm">The TPM device.</param>
+    /// <param name="registry">The response codec registry.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="nvIndex">The NV Index handle.</param>
+    /// <param name="data">The data to write.</param>
+    private async Task WriteNvAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, uint nvIndex, byte[] data)
+    {
+        using TpmPasswordSession writeAuth = TpmPasswordSession.CreateEmpty(pool);
+        var writeInput = new NvWriteInput(nvIndex, nvIndex, new Tpm2bMaxBuffer(data), Offset: 0);
+
+        TpmResult<NvWriteResponse> writeResult = await TpmCommandExecutor.ExecuteAsync<NvWriteResponse>(
+            tpm, writeInput, [writeAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(writeResult.IsSuccess, $"NV_Write failed: '{writeResult.ResponseCode}'.");
     }
 
     /// <summary>
@@ -488,15 +784,17 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     }
 
     /// <summary>
-    /// Computes an NV Index Name (<c>nameAlg || H(TPMS_NV_PUBLIC)</c>) from its public-area fields.
+    /// Computes an NV Index Name (<c>nameAlg || H(TPMS_NV_PUBLIC)</c>) from its public-area fields, through the
+    /// registered digest seam (not a direct framework hash).
     /// </summary>
     /// <param name="nvIndex">The NV Index handle.</param>
     /// <param name="nameAlg">The Name hash algorithm (SHA-256).</param>
     /// <param name="attributes">The Index attributes, exactly as stored (include TPMA_NV_WRITTEN once written).</param>
     /// <param name="dataSize">The data area size.</param>
     /// <param name="pool">The memory pool.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The Name bytes.</returns>
-    private static byte[] ComputeNvName(uint nvIndex, TpmAlgIdConstants nameAlg, TpmaNv attributes, ushort dataSize, MemoryPool<byte> pool)
+    private static async Task<byte[]> ComputeNvNameAsync(uint nvIndex, TpmAlgIdConstants nameAlg, TpmaNv attributes, ushort dataSize, MemoryPool<byte> pool, CancellationToken cancellationToken)
     {
         using var nvPublic = new TpmsNvPublic(nvIndex, nameAlg, attributes, Tpm2bDigest.Empty, dataSize);
         int publicSize = nvPublic.SerializedSize;
@@ -505,9 +803,12 @@ internal sealed class TpmInHouseSimulatorPolicyTests
         var writer = new TpmWriter(publicArea);
         nvPublic.WriteTo(ref writer);
 
+        using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
+            owner.Memory[..publicSize], 32, CryptoTags.Sha256Digest, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
         byte[] name = new byte[sizeof(ushort) + 32];
         BinaryPrimitives.WriteUInt16BigEndian(name, (ushort)nameAlg);
-        _ = SHA256.HashData(publicArea, name.AsSpan(sizeof(ushort)));
+        digest.AsReadOnlySpan().CopyTo(name.AsSpan(sizeof(ushort)));
 
         return name;
     }

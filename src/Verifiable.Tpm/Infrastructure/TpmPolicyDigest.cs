@@ -1,7 +1,6 @@
 using System;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Security.Cryptography;
 using Verifiable.Cryptography;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
 
@@ -196,6 +195,112 @@ public static class TpmPolicyDigest
     }
 
     /// <summary>
+    /// Extends a policyDigest for TPM2_PolicySigned:
+    /// <c>policyDigestnew = H(policyDigestold || TPM_CC_PolicySigned || authObjectName)</c> followed by
+    /// <c>policyDigest = H(policyDigestnew || policyRef)</c> (TPM 2.0 Part 3, Section 23.3, equation 14;
+    /// <c>PolicyContextUpdate</c>).
+    /// </summary>
+    /// <remarks>
+    /// Mirrors <see cref="ExtendForSecret"/> exactly, folding <see cref="TpmCcConstants.TPM_CC_PolicySigned"/>
+    /// instead of <see cref="TpmCcConstants.TPM_CC_PolicySecret"/>: the second <paramref name="policyRef"/> hash
+    /// <b>always</b> runs, even when <paramref name="policyRef"/> is empty, and this fold happens identically for
+    /// trial and real (non-trial) sessions — a trial session predicts the same digest a real, signature-verified
+    /// authorization would produce, without ever checking the signature itself.
+    /// </remarks>
+    /// <param name="current">The current policyDigest (<see cref="Size"/> bytes; all zero for a fresh session).</param>
+    /// <param name="authName">The Name of the key that will validate (or, for a trial session, is merely claimed to validate) the signature.</param>
+    /// <param name="policyRef">The policy qualifier; pass empty for none (the second hash still runs).</param>
+    /// <param name="policyHashAlgorithm">The session's policy hash algorithm.</param>
+    /// <param name="destination">Receives the new policyDigest; must be at least <see cref="Size"/> bytes.</param>
+    /// <returns>The number of digest bytes written.</returns>
+    public static int ExtendForSigned(
+        ReadOnlySpan<byte> current,
+        ReadOnlySpan<byte> authName,
+        ReadOnlySpan<byte> policyRef,
+        TpmAlgIdConstants policyHashAlgorithm,
+        Span<byte> destination)
+    {
+        //Step 1: H( current || TPM_CC_PolicySigned || authName ).
+        int length = current.Length + sizeof(uint) + authName.Length;
+        using IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
+        Span<byte> buffer = owner.Memory.Span[..length];
+        int offset = 0;
+        current.CopyTo(buffer);
+        offset += current.Length;
+        BinaryPrimitives.WriteUInt32BigEndian(buffer[offset..], (uint)TpmCcConstants.TPM_CC_PolicySigned);
+        offset += sizeof(uint);
+        authName.CopyTo(buffer[offset..]);
+
+        int written = Hash(buffer, policyHashAlgorithm, destination);
+        buffer.Clear();
+
+        //Step 2: H( policyDigest || policyRef ). Always runs, exactly like ExtendForSecret's second fold.
+        int length2 = written + policyRef.Length;
+        using IMemoryOwner<byte> owner2 = BaseMemoryPool.Shared.Rent(length2);
+        Span<byte> buffer2 = owner2.Memory.Span[..length2];
+        destination[..written].CopyTo(buffer2);
+        policyRef.CopyTo(buffer2[written..]);
+
+        int written2 = Hash(buffer2, policyHashAlgorithm, destination);
+        buffer2.Clear();
+
+        return written2;
+    }
+
+    /// <summary>
+    /// Computes the policyDigest for TPM2_PolicyAuthorize:
+    /// <c>policyDigestnew = H(0...0 || TPM_CC_PolicyAuthorize || keySignName)</c> followed by
+    /// <c>policyDigest = H(policyDigestnew || policyRef)</c> (TPM 2.0 Part 3, Section 23.16, equation 35;
+    /// <c>PolicyContextUpdate</c> composed with a <c>PolicyDigestClear</c> reset that precedes it).
+    /// </summary>
+    /// <remarks>
+    /// Combines <see cref="ExtendForOr"/>'s reset shape (the accumulated digest is <b>discarded</b>, never folded
+    /// in — <paramref name="destination"/> starts from an all-zero digest of the session-hash width, exactly like
+    /// <see cref="ExtendForOr"/> ignoring its own prior digest) with <see cref="ExtendForSecret"/>'s "always run a
+    /// second <paramref name="policyRef"/> hash" shape. This reset is the mechanism that lets an object's fixed
+    /// authPolicy accept a policy an authority can revise at will: the result depends only on
+    /// <paramref name="keySignName"/> and <paramref name="policyRef"/>, never on whatever policy actually produced
+    /// the approved digest TPM2_PolicyAuthorize checked before this fold runs.
+    /// </remarks>
+    /// <param name="keySignName">The Name of the key that signed the approval.</param>
+    /// <param name="policyRef">The policy qualifier; pass empty for none (the second hash still runs).</param>
+    /// <param name="policyHashAlgorithm">The session's policy hash algorithm.</param>
+    /// <param name="destination">Receives the new policyDigest; must be at least <see cref="Size"/> bytes.</param>
+    /// <returns>The number of digest bytes written.</returns>
+    public static int ExtendForAuthorize(
+        ReadOnlySpan<byte> keySignName,
+        ReadOnlySpan<byte> policyRef,
+        TpmAlgIdConstants policyHashAlgorithm,
+        Span<byte> destination)
+    {
+        int size = Size(policyHashAlgorithm);
+
+        //Step 1: H( zeros(size) || TPM_CC_PolicyAuthorize || keySignName ). The digest is RESET to zero first
+        //(PolicyDigestClear) — the accumulated policyDigest is never folded in, unlike ExtendForSigned/ExtendForSecret.
+        int length = size + sizeof(uint) + keySignName.Length;
+        using IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
+        Span<byte> buffer = owner.Memory.Span[..length];
+        buffer[..size].Clear();
+        BinaryPrimitives.WriteUInt32BigEndian(buffer[size..], (uint)TpmCcConstants.TPM_CC_PolicyAuthorize);
+        keySignName.CopyTo(buffer[(size + sizeof(uint))..]);
+
+        int written = Hash(buffer, policyHashAlgorithm, destination);
+        buffer.Clear();
+
+        //Step 2: H( policyDigest || policyRef ). Always runs, exactly like ExtendForSecret/ExtendForSigned's second fold.
+        int length2 = written + policyRef.Length;
+        using IMemoryOwner<byte> owner2 = BaseMemoryPool.Shared.Rent(length2);
+        Span<byte> buffer2 = owner2.Memory.Span[..length2];
+        destination[..written].CopyTo(buffer2);
+        policyRef.CopyTo(buffer2[written..]);
+
+        int written2 = Hash(buffer2, policyHashAlgorithm, destination);
+        buffer2.Clear();
+
+        return written2;
+    }
+
+    /// <summary>
     /// Computes the policyDigest for TPM2_PolicyOR:
     /// <c>policyDigest = H(0...0 || TPM_CC_PolicyOR || branchDigest0 || branchDigest1 || ...)</c>.
     /// </summary>
@@ -303,17 +408,95 @@ public static class TpmPolicyDigest
     }
 
     /// <summary>
+    /// Extends a policyDigest for TPM2_PolicyCounterTimer:
+    /// <c>argHash = H(operandB || offset || operation)</c>, then
+    /// <c>policyDigest = H(policyDigestold || TPM_CC_PolicyCounterTimer || argHash)</c> (TPM 2.0 Part 3,
+    /// Section 23.10).
+    /// </summary>
+    /// <remarks>
+    /// The same argHash shape as <see cref="ExtendForNv"/>, one fold shallower: PolicyCounterTimer has no named
+    /// entity to bind (the compared value is the TPM's own live time state, not an NV Index), so the outer fold
+    /// carries no trailing Name term.
+    /// </remarks>
+    /// <param name="current">The current policyDigest (<see cref="Size"/> bytes; all zero for a fresh session).</param>
+    /// <param name="operandB">The comparison operand.</param>
+    /// <param name="offset">The octet offset into the marshaled TPMS_TIME_INFO.</param>
+    /// <param name="operation">The TPM_EO comparison operation value.</param>
+    /// <param name="policyHashAlgorithm">The session's policy hash algorithm.</param>
+    /// <param name="destination">Receives the new policyDigest; must be at least <see cref="Size"/> bytes.</param>
+    /// <returns>The number of digest bytes written.</returns>
+    public static int ExtendForCounterTimer(
+        ReadOnlySpan<byte> current,
+        ReadOnlySpan<byte> operandB,
+        ushort offset,
+        ushort operation,
+        TpmAlgIdConstants policyHashAlgorithm,
+        Span<byte> destination)
+    {
+        int size = Size(policyHashAlgorithm);
+
+        //argHash = H( operandB || offset || operation ).
+        int argLength = operandB.Length + sizeof(ushort) + sizeof(ushort);
+        using IMemoryOwner<byte> argOwner = BaseMemoryPool.Shared.Rent(argLength);
+        Span<byte> argBuffer = argOwner.Memory.Span[..argLength];
+        operandB.CopyTo(argBuffer);
+        BinaryPrimitives.WriteUInt16BigEndian(argBuffer[operandB.Length..], offset);
+        BinaryPrimitives.WriteUInt16BigEndian(argBuffer[(operandB.Length + sizeof(ushort))..], operation);
+
+        Span<byte> argHash = stackalloc byte[size];
+        _ = Hash(argBuffer, policyHashAlgorithm, argHash);
+        argBuffer.Clear();
+
+        //policyDigest = H( current || TPM_CC_PolicyCounterTimer || argHash ).
+        int length = current.Length + sizeof(uint) + size;
+        using IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
+        Span<byte> buffer = owner.Memory.Span[..length];
+        int bufferOffset = 0;
+        current.CopyTo(buffer);
+        bufferOffset += current.Length;
+        BinaryPrimitives.WriteUInt32BigEndian(buffer[bufferOffset..], (uint)TpmCcConstants.TPM_CC_PolicyCounterTimer);
+        bufferOffset += sizeof(uint);
+        argHash.CopyTo(buffer[bufferOffset..]);
+
+        int written = Hash(buffer, policyHashAlgorithm, destination);
+        buffer.Clear();
+
+        return written;
+    }
+
+    /// <summary>
     /// Hashes <paramref name="data"/> into <paramref name="destination"/> with the policy hash algorithm.
+    /// Routed through the registered <strong>synchronous</strong> digest seam
+    /// (<see cref="CryptographicKeyEvents.ComputeDigest"/>) rather than a direct framework hash call — every
+    /// caller in this file (<see cref="Verifiable.Tpm.Extensions.Policy.TpmPolicyBuilder"/>-composed policy
+    /// prediction, and this simulator's own pure, state-derived <c>OnPolicy*</c> transition functions) is
+    /// synchronous by construction with no TPM device round-trip in the digest step itself, matching the
+    /// sync-by-nature shape this assembly's own <c>ComputeLivePcrDigest</c> (in <c>TpmLifecycleTransitions</c>)
+    /// already uses for the same reason, and the project's documented convention that the sync seam is for
+    /// "a hash of public or local data that can never have a hardware-async backend".
     /// </summary>
     /// <param name="data">The bytes to hash.</param>
     /// <param name="policyHashAlgorithm">The policy hash algorithm.</param>
-    /// <param name="destination">The buffer that receives the digest.</param>
+    /// <param name="destination">The buffer that receives the digest; must be at least the algorithm's digest size.</param>
     /// <returns>The number of digest bytes written.</returns>
-    private static int Hash(ReadOnlySpan<byte> data, TpmAlgIdConstants policyHashAlgorithm, Span<byte> destination) => policyHashAlgorithm switch
+    /// <exception cref="NotSupportedException">Thrown for a policy hash algorithm this formula does not support.</exception>
+    private static int Hash(ReadOnlySpan<byte> data, TpmAlgIdConstants policyHashAlgorithm, Span<byte> destination)
     {
-        TpmAlgIdConstants.TPM_ALG_SHA256 => SHA256.HashData(data, destination),
-        TpmAlgIdConstants.TPM_ALG_SHA384 => SHA384.HashData(data, destination),
-        TpmAlgIdConstants.TPM_ALG_SHA512 => SHA512.HashData(data, destination),
-        _ => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported.")
-    };
+        (Tag tag, int length) = policyHashAlgorithm switch
+        {
+            TpmAlgIdConstants.TPM_ALG_SHA256 => (CryptoTags.Sha256Digest, 32),
+            TpmAlgIdConstants.TPM_ALG_SHA384 => (CryptoTags.Sha384Digest, 48),
+            TpmAlgIdConstants.TPM_ALG_SHA512 => (CryptoTags.Sha512Digest, 64),
+            _ => throw new NotSupportedException($"Policy hash algorithm '{policyHashAlgorithm}' is not supported.")
+        };
+
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(data, length, tag, BaseMemoryPool.Shared);
+
+        //Defensive: a pooled digest buffer is not contractually guaranteed to be exactly the requested length
+        //(pool implementations are free to over-allocate), so slice before copying into the caller's buffer
+        //rather than relying on this pool's current exact-sizing behaviour.
+        digest.AsReadOnlySpan()[..length].CopyTo(destination);
+
+        return length;
+    }
 }

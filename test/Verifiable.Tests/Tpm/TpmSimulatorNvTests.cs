@@ -207,7 +207,7 @@ internal sealed class TpmSimulatorNvTests
     }
 
     [TestMethod]
-    public async Task NvReadWithOwnerAuthHandleReturnsAuthType()
+    public async Task NvReadWithOwnerAuthHandleAgainstIndexWithoutOwnerReadReturnsAuthorization()
     {
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
@@ -216,14 +216,50 @@ internal sealed class TpmSimulatorNvTests
 
         await DefineDaIndexAsync(device, pool, registry).ConfigureAwait(false);
 
-        //Only Index authorization (authHandle == nvIndex) is modelled; an owner-authorized read against the
-        //Index is rejected as an unmodelled authorization type.
+        //The owner-authorized read arm (TPM 2.0 Library Part 3, clause 31.13) is now modelled, gated on
+        //TPMA_NV_OWNERREAD; DaProtectedAttributes deliberately lacks that bit, so the read is refused before
+        //the supplied authorization is ever compared against the owner authValue. CorrectAuth here is WRONG
+        //as an owner authorization (the simulator's owner authValue is empty by default) - this pins only the
+        //"gate fires ahead of a mismatching compare" half of R-8's guarantee. The complementary half - the
+        //gate ALSO firing ahead of a MATCHING compare, so a correct owner authorization cannot make the gate
+        //check get skipped - is
+        //<see cref="NvReadWithCorrectOwnerAuthHandleAgainstIndexWithoutOwnerReadReturnsAuthorization"/>.
         using TpmPasswordSession session = TpmPasswordSession.Create(CorrectAuth, pool);
         var readInput = new NvReadInput(AuthHandle: (uint)TpmRh.TPM_RH_OWNER, NvIndex: NvIndexHandle, Size: 8, Offset: 0);
         TpmResult<NvReadResponse> result = await TpmCommandExecutor.ExecuteAsync<NvReadResponse>(
             device, readInput, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(TpmRcConstants.TPM_RC_AUTH_TYPE, result.ResponseCode);
+        Assert.AreEqual(TpmRcConstants.TPM_RC_NV_AUTHORIZATION, result.ResponseCode);
+    }
+
+    /// <summary>
+    /// Companion to <see cref="NvReadWithOwnerAuthHandleAgainstIndexWithoutOwnerReadReturnsAuthorization"/>:
+    /// proves R-8's gate-order guarantee (TPM 2.0 Library Part 3, clause 31.13) with a genuinely CORRECT owner
+    /// authorization (empty, matching the simulator's default owner authValue) rather than a wrong one. An
+    /// implementation that checks <c>TPMA_NV_OWNERREAD</c> only along the failure path - i.e. skips the gate
+    /// once the supplied authorization happens to match, and proceeds straight to the read - would pass every
+    /// wrong-owner-auth test yet incorrectly succeed here; this is the case that catches it.
+    /// </summary>
+    [TestMethod]
+    public async Task NvReadWithCorrectOwnerAuthHandleAgainstIndexWithoutOwnerReadReturnsAuthorization()
+    {
+        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmResponseRegistry registry = CreateNvRegistry();
+
+        await DefineDaIndexAsync(device, pool, registry).ConfigureAwait(false);
+
+        //The simulator's owner authValue is empty by default (no command in this slice changes it), so an
+        //EMPTY supplied authorization is the genuinely CORRECT owner authorization here.
+        using TpmPasswordSession session = TpmPasswordSession.CreateEmpty(pool);
+        var readInput = new NvReadInput(AuthHandle: (uint)TpmRh.TPM_RH_OWNER, NvIndex: NvIndexHandle, Size: 8, Offset: 0);
+        TpmResult<NvReadResponse> result = await TpmCommandExecutor.ExecuteAsync<NvReadResponse>(
+            device, readInput, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(
+            TpmRcConstants.TPM_RC_NV_AUTHORIZATION, result.ResponseCode,
+            "TPMA_NV_OWNERREAD clear must refuse the read even when the supplied owner authorization is correct.");
     }
 
     [TestMethod]

@@ -40,6 +40,18 @@ internal static class Oid4VpSchemeFixtures
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
 
+    /// <summary>Header deserializer mirroring the authorization server's wiring.</summary>
+    private static readonly JwtHeaderDeserializer HeaderDeserializer = static bytes =>
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            bytes, TestSetup.DefaultSerializationOptions)
+        ?? throw new FormatException("Header JSON parsed to null.");
+
+    /// <summary>Payload deserializer mirroring the authorization server's wiring.</summary>
+    private static readonly JwtPayloadDeserializer PayloadDeserializer = static bytes =>
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            bytes, TestSetup.DefaultSerializationOptions)
+        ?? throw new FormatException("Payload JSON parsed to null.");
+
 
     /// <summary>x509_san_dns: the AS signs the JAR with the leaf cert key, advertised in the x5c header.</summary>
     public static SchemeFixture X509 => new("x509_san_dns", CreateX509SchemeAsync);
@@ -196,12 +208,11 @@ internal static class Oid4VpSchemeFixtures
         MintedChain mintedChain = await FederationTestRing.BuildDirectChainAsync(
             verifierNode, anchorNode, now, now.AddHours(1), cancellationToken).ConfigureAwait(false);
 
-        ValidateTrustChainAsyncDelegate validateChain = InlineTrustChainValidationDriver.Build(
-            async (position, jws, ct) => position switch
-            {
-                0 => await FederationTestRing.VerifyAsync(verifierNode, jws, ct).ConfigureAwait(false),
-                _ => await FederationTestRing.VerifyAsync(anchorNode, jws, ct).ConfigureAwait(false),
-            });
+        ValidateTrustChainAsyncDelegate validateChain = TrustChainValidation.BuildInlineValidator(
+            HeaderDeserializer,
+            PayloadDeserializer,
+            TestSetup.Base64UrlDecoder,
+            FederationKeyResolver.BuildInChainResolver(TestSetup.Base64UrlDecoder, Pool));
 
         JwtHeader jarHeader = new()
         {

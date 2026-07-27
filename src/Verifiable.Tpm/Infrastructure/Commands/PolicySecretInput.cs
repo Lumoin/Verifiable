@@ -50,6 +50,6 @@ public readonly record struct PolicySecretInput(uint AuthHandle, uint PolicySess
         writer.WriteUInt16(0);  //nonceTPM (empty).
         writer.WriteUInt16(0);  //cpHashA (empty).
         writer.WriteUInt16(0);  //policyRef (empty).
-        writer.WriteUInt32(0);  //expiration = 0 (immediate; no ticket).
+        writer.WriteInt32(0);  //expiration = 0 (immediate; no ticket).
     }
 }

@@ -9,8 +9,10 @@ namespace Verifiable.OAuth.Client;
 /// The serialization-boundary delegate
 /// <c>OAuthDynamicRegistrationClient.RegisterAsync</c> invokes after the
 /// HTTP POST against the AS's registration endpoint. The library does not
-/// pick a JSON library; the default implementation lives in
-/// <c>Verifiable.OAuth.Json</c>.
+/// pick a JSON library, and no default implementation of this delegate is
+/// shipped. The application supplies it, following the shape of
+/// <see cref="Verifiable.OAuth.OAuthResponseParsers.ParseParResponse"/> and
+/// <see cref="Verifiable.OAuth.OAuthResponseParsers.ParseTokenResponse"/>.
 /// </para>
 /// </remarks>
 /// <param name="documentBody">The response body the AS returned.</param>

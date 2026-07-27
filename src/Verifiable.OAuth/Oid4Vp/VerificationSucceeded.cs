@@ -42,6 +42,9 @@ public sealed record VerificationSucceeded(
     /// entry's <see cref="CredentialStatusOutcome.IsValid"/> is <see langword="false"/> for a revoked
     /// (<c>0x01</c>) or suspended (<c>0x02</c>) credential; the raw
     /// <see cref="CredentialStatusOutcome.Status"/> distinguishes those and application-specific values.
+    /// An entry's <see cref="CredentialStatusOutcome.ShouldRefresh"/> is independent of validity — it is
+    /// the status list's <c>ttl</c> caching hint, not a rejection, so a valid credential can still carry
+    /// a <see langword="true"/> value there when its status list is due for a re-fetch.
     /// </para>
     /// <para>
     /// An <em>undeterminable</em> status (a status list whose subject does not match the reference URI,

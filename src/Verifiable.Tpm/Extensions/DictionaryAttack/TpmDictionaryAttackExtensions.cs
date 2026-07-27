@@ -6,7 +6,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
+using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
+using Verifiable.Tpm.Infrastructure.Spec.Handles;
 using Verifiable.Tpm.Infrastructure.Spec.Structures;
 using Verifiable.Tpm.Structures.Spec.Constants;
 
@@ -39,6 +41,83 @@ public static class TpmDictionaryAttackExtensions
 
             return GetDictionaryAttackParametersCoreAsync(device, pool, cancellationToken);
         }
+
+        /// <summary>
+        /// Runs <c>TPM2_DictionaryAttackLockReset</c>, resetting <c>failedTries</c> to zero and taking the TPM out
+        /// of general Lockout mode, authorized by the lockout hierarchy's authorization value. Permitted even
+        /// while the TPM is already in general Lockout mode; refused with <c>TPM_RC_LOCKOUT</c> instead when
+        /// lockoutAuth itself is currently disabled by a prior failed attempt.
+        /// </summary>
+        /// <param name="lockoutAuthSupplied">The caller-supplied lockoutAuth value.</param>
+        /// <param name="cancellationToken">A token observed across the exchange.</param>
+        /// <returns>A result indicating success or an error.</returns>
+        public ValueTask<TpmResult<DictionaryAttackLockResetResponse>> DictionaryAttackLockResetAsync(
+            ReadOnlyMemory<byte> lockoutAuthSupplied,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(device);
+
+            return DictionaryAttackLockResetCoreAsync(device, lockoutAuthSupplied, cancellationToken);
+        }
+
+        /// <summary>
+        /// Runs <c>TPM2_DictionaryAttackParameters</c>, setting <c>maxTries</c>/<c>recoveryTime</c>/
+        /// <c>lockoutRecovery</c>, authorized by the lockout hierarchy's authorization value. Deliberately does
+        /// not reset <c>failedTries</c> — lowering <paramref name="newMaxTries"/> to at or below the current
+        /// failure count takes the TPM into Lockout mode immediately, as a side effect.
+        /// </summary>
+        /// <param name="lockoutAuthSupplied">The caller-supplied lockoutAuth value.</param>
+        /// <param name="newMaxTries">The new tolerated-failure count before Lockout mode engages.</param>
+        /// <param name="newRecoveryTime">The new self-heal interval, in seconds; zero disables dictionary-attack protection.</param>
+        /// <param name="newLockoutRecovery">The new lockoutAuth recovery wait, in seconds; zero means only a TPM Reset re-arms lockoutAuth.</param>
+        /// <param name="cancellationToken">A token observed across the exchange.</param>
+        /// <returns>A result indicating success or an error.</returns>
+        public ValueTask<TpmResult<DictionaryAttackParametersResponse>> DictionaryAttackParametersAsync(
+            ReadOnlyMemory<byte> lockoutAuthSupplied,
+            uint newMaxTries,
+            uint newRecoveryTime,
+            uint newLockoutRecovery,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(device);
+
+            return DictionaryAttackParametersCoreAsync(device, lockoutAuthSupplied, newMaxTries, newRecoveryTime, newLockoutRecovery, cancellationToken);
+        }
+    }
+
+    private static async ValueTask<TpmResult<DictionaryAttackLockResetResponse>> DictionaryAttackLockResetCoreAsync(
+        TpmDevice device,
+        ReadOnlyMemory<byte> lockoutAuthSupplied,
+        CancellationToken cancellationToken)
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_DictionaryAttackLockReset, TpmResponseCodec.DictionaryAttackLockReset);
+
+        using TpmPasswordSession lockoutSession = TpmPasswordSession.Create(lockoutAuthSupplied.Span, pool);
+        var input = new DictionaryAttackLockResetInput(TpmRh.TPM_RH_LOCKOUT);
+
+        return await TpmCommandExecutor.ExecuteAsync<DictionaryAttackLockResetResponse>(
+            device, input, [lockoutSession], null, pool, registry, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async ValueTask<TpmResult<DictionaryAttackParametersResponse>> DictionaryAttackParametersCoreAsync(
+        TpmDevice device,
+        ReadOnlyMemory<byte> lockoutAuthSupplied,
+        uint newMaxTries,
+        uint newRecoveryTime,
+        uint newLockoutRecovery,
+        CancellationToken cancellationToken)
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_DictionaryAttackParameters, TpmResponseCodec.DictionaryAttackParameters);
+
+        using TpmPasswordSession lockoutSession = TpmPasswordSession.Create(lockoutAuthSupplied.Span, pool);
+        var input = new DictionaryAttackParametersInput(TpmRh.TPM_RH_LOCKOUT, newMaxTries, newRecoveryTime, newLockoutRecovery);
+
+        return await TpmCommandExecutor.ExecuteAsync<DictionaryAttackParametersResponse>(
+            device, input, [lockoutSession], null, pool, registry, cancellationToken).ConfigureAwait(false);
     }
 
     private static async ValueTask<TpmResult<TpmDictionaryAttackParameters>> GetDictionaryAttackParametersCoreAsync(

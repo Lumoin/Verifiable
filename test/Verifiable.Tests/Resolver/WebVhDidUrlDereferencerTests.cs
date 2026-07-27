@@ -555,7 +555,7 @@ internal sealed class WebVhDidUrlDereferencerTests
             SerializePresentation,
             SerializeProofOptions,
             Base58Decoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             BaseMemoryPool.Shared);
 
         DidResolver composed = DidResolverComposition.Build(

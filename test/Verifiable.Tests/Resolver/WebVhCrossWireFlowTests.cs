@@ -347,7 +347,7 @@ internal sealed class WebVhCrossWireFlowTests
             SerializePresentation,
             SerializeProofOptions,
             Base58Decoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             BaseMemoryPool.Shared);
 
         return DidResolverComposition.Build(

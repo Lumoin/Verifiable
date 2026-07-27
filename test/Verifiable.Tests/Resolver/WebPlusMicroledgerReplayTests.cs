@@ -259,7 +259,7 @@ internal sealed class WebPlusMicroledgerReplayTests
             Parser = WebPlusDidDocumentJson.Parser,
             Canonicalizer = WebPlusDidDocumentJson.Canonicalizer,
             ProofExtractor = WebPlusDidDocumentJson.ProofExtractor,
-            ComputeDigest = BouncyCastleEntropyFunctions.ComputeBlake3DigestAsync,
+            ComputeDigest = BouncyCastleCryptographicFunctions.ComputeBlake3DigestAsync,
             DigestTag = CryptoTags.Blake3Digest,
             MultihashCode = MultihashHeaders.Blake3.ToArray(),
             DigestLength = Blake3DigestLength,
@@ -267,7 +267,7 @@ internal sealed class WebPlusMicroledgerReplayTests
             Base64UrlDecoder = TestSetup.Base64UrlDecoder,
             Base58Decoder = TestSetup.Base58Decoder,
             HashedKeyMatcher = WebPlusHashedKey.CreateMatcher(
-                MultihashHeaders.Blake3.ToArray(), Blake3DigestLength, BouncyCastleEntropyFunctions.ComputeBlake3DigestAsync, CryptoTags.Blake3Digest, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared),
+                MultihashHeaders.Blake3.ToArray(), Blake3DigestLength, BouncyCastleCryptographicFunctions.ComputeBlake3DigestAsync, CryptoTags.Blake3Digest, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared),
             MemoryPool = BaseMemoryPool.Shared,
             TimeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch)
         };

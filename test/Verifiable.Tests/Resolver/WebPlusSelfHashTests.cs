@@ -162,7 +162,7 @@ internal sealed class WebPlusSelfHashTests
         byte[] jcs = Jcs.CanonicalizeToUtf8Bytes(RootDidDocument);
 
         bool valid = await WebPlusSelfHash.VerifyAsync(
-            jcs, RootSelfHash.AsMemory(), MultihashHeaders.Blake3.ToArray(), Blake3DigestLength, BouncyCastleEntropyFunctions.ComputeBlake3DigestAsync, CryptoTags.Blake3Digest, Base64UrlEncoder, BaseMemoryPool.Shared, CancellationToken.None);
+            jcs, RootSelfHash.AsMemory(), MultihashHeaders.Blake3.ToArray(), Blake3DigestLength, BouncyCastleCryptographicFunctions.ComputeBlake3DigestAsync, CryptoTags.Blake3Digest, Base64UrlEncoder, BaseMemoryPool.Shared, CancellationToken.None);
 
         Assert.IsTrue(valid, "The root DID document's selfHash must reproduce from its JCS bytes.");
     }
@@ -179,7 +179,7 @@ internal sealed class WebPlusSelfHashTests
         byte[] jcs = Jcs.CanonicalizeToUtf8Bytes(NonRootDidDocument);
 
         bool valid = await WebPlusSelfHash.VerifyAsync(
-            jcs, NonRootSelfHash.AsMemory(), MultihashHeaders.Blake3.ToArray(), Blake3DigestLength, BouncyCastleEntropyFunctions.ComputeBlake3DigestAsync, CryptoTags.Blake3Digest, Base64UrlEncoder, BaseMemoryPool.Shared, CancellationToken.None);
+            jcs, NonRootSelfHash.AsMemory(), MultihashHeaders.Blake3.ToArray(), Blake3DigestLength, BouncyCastleCryptographicFunctions.ComputeBlake3DigestAsync, CryptoTags.Blake3Digest, Base64UrlEncoder, BaseMemoryPool.Shared, CancellationToken.None);
 
         Assert.IsTrue(valid, "The non-root DID document's selfHash must reproduce from its JCS bytes.");
     }
@@ -198,7 +198,7 @@ internal sealed class WebPlusSelfHashTests
         byte[] jcs = Jcs.CanonicalizeToUtf8Bytes(tampered);
 
         bool valid = await WebPlusSelfHash.VerifyAsync(
-            jcs, RootSelfHash.AsMemory(), MultihashHeaders.Blake3.ToArray(), Blake3DigestLength, BouncyCastleEntropyFunctions.ComputeBlake3DigestAsync, CryptoTags.Blake3Digest, Base64UrlEncoder, BaseMemoryPool.Shared, CancellationToken.None);
+            jcs, RootSelfHash.AsMemory(), MultihashHeaders.Blake3.ToArray(), Blake3DigestLength, BouncyCastleCryptographicFunctions.ComputeBlake3DigestAsync, CryptoTags.Blake3Digest, Base64UrlEncoder, BaseMemoryPool.Shared, CancellationToken.None);
 
         Assert.IsFalse(valid, "A tampered document must not verify against the original selfHash.");
     }

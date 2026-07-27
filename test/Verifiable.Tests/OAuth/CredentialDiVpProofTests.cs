@@ -40,7 +40,7 @@ namespace Verifiable.Tests.OAuth;
 /// <see cref="FlowTests.DataIntegrityPresentationFlowTests"/> verbatim: <see cref="KeyDidBuilder"/>
 /// for the holder, <c>SignAsync</c> with <c>Challenge</c>/<c>Domain</c> and the <c>authentication</c>
 /// proof purpose, JCS canonicalization, base58btc proof values, and
-/// <see cref="MicrosoftEntropyFunctions.ComputeDigestAsync"/>.
+/// <see cref="MicrosoftCryptographicFunctions.ComputeDigestAsync"/>.
 /// </remarks>
 [TestClass]
 internal sealed class CredentialDiVpProofTests
@@ -602,7 +602,7 @@ internal sealed class CredentialDiVpProofTests
             SerializePresentation = SerializePresentation,
             SerializeProofOptions = SerializeProofOptions,
             Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
             MemoryPool = Pool
         };
 
@@ -721,7 +721,7 @@ internal sealed class CredentialDiVpProofTests
     //Builds a DidResolver whose did:web handler dereferences the holder did.json through the genuine
     //OutboundFetch chokepoint over a REAL HTTPS socket. WebDidResolver.Resolve computes the canonical
     //https://<authority>/.well-known/did.json URL; the policy on the threaded ExchangeContext gates
-    //that genuine URL (so SecureDefault's loopback block fires honestly). The single-hop transport then
+    //that genuine URL (so SecureDefault's loopback block fires against the real request, not a stand-in). The single-hop transport then
     //dials the in-process loopback Kestrel over HTTPS with the pinned handler carried on httpClient
     //(LoopbackTls.CreatePinnedHttpClient) — the resolved did:web authority is 'localhost:{port}', which
     //already matches the listener's own https scheme, so no scheme rewrite is needed. The fetch + parse —
@@ -844,7 +844,7 @@ internal sealed class CredentialDiVpProofTests
             DeserializePresentation,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             Pool,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);

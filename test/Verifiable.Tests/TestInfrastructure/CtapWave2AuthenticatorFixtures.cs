@@ -11,6 +11,7 @@ using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
+using Verifiable.Fido2.Ctap.Authenticator.Custody;
 using Verifiable.JCose;
 
 namespace Verifiable.Tests.TestInfrastructure;
@@ -125,6 +126,57 @@ internal static class CtapWave2AuthenticatorFixtures
             simulateUserPresence: simulateUserPresence,
             enterpriseAttestationProvisioning: enterpriseAttestationProvisioning,
             encodePackedCertifiedAttestationStatement: PackedAttestationStatementCborWriter.WriteCertified);
+
+
+    /// <summary>
+    /// Builds a state-custody-composed simulator wired with the shipped CBOR codecs and the ES256-only
+    /// credential backend, through <see cref="CtapAuthenticatorSimulator.CreateWithCustodyAsync"/> — the
+    /// custody counterpart of <see cref="CreateSimulator"/>. Unlike <see cref="CreateSimulator"/>,
+    /// <paramref name="aaguid"/> is REQUIRED (never drawn at random): a custody-composed simulator's
+    /// rehydration fingerprint check compares a loaded snapshot's AAGUID against this value, so a fixture
+    /// that rebuilds a "second instance" from the same custody bundle must supply the identical value both
+    /// times.
+    /// </summary>
+    /// <param name="runId">The stable identifier for this simulated authenticator and the custody bundle's own key.</param>
+    /// <param name="custody">The state-custody seam bundle to load from, persist to, and wipe through.</param>
+    /// <param name="aaguid">The authenticator-wide AAGUID — REQUIRED, see the summary.</param>
+    /// <param name="firmwareVersion">The authenticator model's firmware version — part of the rehydration fingerprint alongside <paramref name="aaguid"/>.</param>
+    /// <param name="signatureCounterCustody">
+    /// The NV-counter-backed signature-counter custody seam bundle (contract R-9, wavenv), or <see langword="null"/>
+    /// (the default) to keep every credential's signature counter riding the whole-snapshot cache exactly as
+    /// before that wave — entirely independent of <paramref name="custody"/>.
+    /// </param>
+    /// <param name="cancellationToken">A cancellation token for the load attempt.</param>
+    public static ValueTask<CtapAuthenticatorSimulator> CreateSimulatorWithCustodyAsync(
+        string runId, CtapStateCustody custody, Guid aaguid, int firmwareVersion = 1, CtapSignatureCounterCustody? signatureCounterCustody = null,
+        CancellationToken cancellationToken = default) =>
+        CtapAuthenticatorSimulator.CreateWithCustodyAsync(
+            runId,
+            custody,
+            CtapGetInfoResponseCborWriter.Write,
+            CtapMakeCredentialRequestCborReader.Read,
+            CtapMakeCredentialResponseCborWriter.Write,
+            CtapGetAssertionRequestCborReader.Read,
+            CtapGetAssertionResponseCborWriter.Write,
+            CredentialPublicKeyCborWriter.Write,
+            PackedAttestationStatementCborWriter.Write,
+            decodeClientPinRequest: CtapClientPinRequestCborReader.Read,
+            encodeClientPinResponse: CtapClientPinResponseCborWriter.Write,
+            decodeAuthenticatorConfigRequest: CtapAuthenticatorConfigRequestCborReader.Read,
+            decodeCredentialManagementRequest: CtapCredentialManagementRequestCborReader.Read,
+            encodeCredentialManagementResponse: CtapCredentialManagementResponseCborWriter.Write,
+            decodeBioEnrollmentRequest: CtapBioEnrollmentRequestCborReader.Read,
+            encodeBioEnrollmentResponse: CtapBioEnrollmentResponseCborWriter.Write,
+            decodeLargeBlobsRequest: CtapLargeBlobsRequestCborReader.Read,
+            encodeLargeBlobsResponse: CtapLargeBlobsResponseCborWriter.Write,
+            encodeMakeCredentialExtensionOutputs: CtapMakeCredentialExtensionOutputsCborWriter.Write,
+            encodeGetAssertionExtensionOutputs: CtapGetAssertionExtensionOutputsCborWriter.Write,
+            aaguid: aaguid,
+            credentialSigningBackend: CtapCredentialSigningBackend.CreateEs256Default(),
+            encodePackedCertifiedAttestationStatement: PackedAttestationStatementCborWriter.WriteCertified,
+            firmwareVersion: firmwareVersion,
+            signatureCounterCustody: signatureCounterCustody,
+            cancellationToken: cancellationToken);
 
 
     /// <summary>Builds an <c>authenticatorMakeCredential</c> request model with sensible wave-2 defaults.</summary>

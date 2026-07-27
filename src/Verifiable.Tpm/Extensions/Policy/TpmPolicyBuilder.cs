@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
+using Verifiable.Tpm.Infrastructure.Spec.Structures;
 using Verifiable.Tpm.Structures.Spec.Constants;
 
 namespace Verifiable.Tpm.Extensions.Policy;
@@ -85,6 +86,20 @@ public sealed class TpmPolicyBuilder
     }
 
     /// <summary>
+    /// Appends a TPM2_PolicyCounterTimer assertion.
+    /// </summary>
+    /// <param name="operandB">The value to compare the live TPMS_TIME_INFO against.</param>
+    /// <param name="offset">The octet offset into the marshaled TPMS_TIME_INFO.</param>
+    /// <param name="operation">The TPM_EO comparison operation.</param>
+    /// <returns>This builder.</returns>
+    public TpmPolicyBuilder WithCounterTimer(ReadOnlyMemory<byte> operandB, ushort offset, TpmEoConstants operation)
+    {
+        Assertions.Add(new CounterTimerPolicyAssertion(operandB, offset, operation));
+
+        return this;
+    }
+
+    /// <summary>
     /// Appends a TPM2_PolicyOR assertion over precomputed branch digests.
     /// </summary>
     /// <param name="branchDigests">The OR branch policy digests (build each branch as a <see cref="TpmPolicy"/> and pass its computed digest).</param>
@@ -92,6 +107,54 @@ public sealed class TpmPolicyBuilder
     public TpmPolicyBuilder WithOr(IReadOnlyList<ReadOnlyMemory<byte>> branchDigests)
     {
         Assertions.Add(new OrPolicyAssertion(branchDigests));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a TPM2_PolicySigned assertion. Replay always uses an empty caller nonceTPM and cpHashA (a
+    /// session-unbound, command-unbound authorization).
+    /// </summary>
+    /// <param name="authObject">The handle of the key whose public part validates the signature.</param>
+    /// <param name="authName">The Name of that key (<c>nameAlg || H(TPMT_PUBLIC)</c>).</param>
+    /// <param name="policyRef">The opaque policy qualifier, or empty for none.</param>
+    /// <param name="sign">The signing delegate invoked at replay time with the freshly built <c>aHash</c>.</param>
+    /// <param name="signingContext">Caller-supplied context passed to <paramref name="sign"/> verbatim (no closure capture).</param>
+    /// <param name="signatureScheme">The signing scheme (<c>TPM_ALG_ECDSA</c>, <c>TPM_ALG_RSASSA</c>, or <c>TPM_ALG_RSAPSS</c>).</param>
+    /// <param name="schemeHashAlg">The hash algorithm the signature carries (H_authAlg).</param>
+    /// <param name="expiration">The signed expiration; 0 = no expiry.</param>
+    /// <returns>This builder.</returns>
+    public TpmPolicyBuilder WithSigned(
+        uint authObject,
+        ReadOnlyMemory<byte> authName,
+        ReadOnlyMemory<byte> policyRef,
+        TpmPolicySignedSigningDelegate sign,
+        object? signingContext,
+        TpmAlgIdConstants signatureScheme,
+        TpmAlgIdConstants schemeHashAlg,
+        int expiration = 0)
+    {
+        ArgumentNullException.ThrowIfNull(sign);
+        Assertions.Add(new SignedPolicyAssertion(authObject, authName, policyRef, expiration, signatureScheme, schemeHashAlg, sign, signingContext));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a TPM2_PolicyAuthorize assertion.
+    /// </summary>
+    /// <param name="approvedPolicy">The policyDigest being approved; must equal the session's current policyDigest at replay time.</param>
+    /// <param name="policyRef">The opaque policy qualifier, or empty for none.</param>
+    /// <param name="keySign">The Name of the key that signed the approval.</param>
+    /// <param name="checkTicket">The verification ticket (a genuine TPM2_VerifySignature() ticket, or <see cref="TpmtTkVerified.Null"/> for a trial session); a borrow whose owner outlives the replay.</param>
+    /// <returns>This builder.</returns>
+    public TpmPolicyBuilder WithAuthorize(
+        ReadOnlyMemory<byte> approvedPolicy,
+        ReadOnlyMemory<byte> policyRef,
+        ReadOnlyMemory<byte> keySign,
+        TpmtTkVerified checkTicket)
+    {
+        Assertions.Add(new AuthorizePolicyAssertion(approvedPolicy, policyRef, keySign, checkTicket));
 
         return this;
     }

@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
+using Verifiable.Fido2.Ctap.Authenticator.Custody;
 using Verifiable.Foundation.Automata;
 using Verifiable.JCose;
 
@@ -44,7 +45,7 @@ public static class CtapAuthenticatorTransitions
     /// resetting this timer — deliberately NOT relied on here: this simulator is transport-agnostic
     /// behind <see cref="Ctap2TransceiveDelegate"/> and has no way to know, from inside a command
     /// handler, which transport carried the request. Applying the 30-second bound unconditionally is the
-    /// strictest honest reading available to a transport-agnostic authenticator.
+    /// strictest reading of the specification available to a transport-agnostic authenticator.
     /// </remarks>
     private static TimeSpan GetNextAssertionTimerDuration => TimeSpan.FromSeconds(30);
 
@@ -217,7 +218,7 @@ public static class CtapAuthenticatorTransitions
     /// <c>authenticatorGetNextAssertion</c> itself: CTAP 2.3's stateful-commands rules permit an
     /// authenticator to fail a stateful command when "no other authenticator operation occurs in between"
     /// is violated (section 2.3, "Implementation Considerations for Stateful Commands"); this simulator
-    /// adopts that permission as its own strictest, most honest reading — <c>authenticatorGetInfo</c>,
+    /// adopts that permission at its strictest, most literal reading — <c>authenticatorGetInfo</c>,
     /// <c>authenticatorMakeCredential</c>, and any unrecognized command byte CLEAR a remembered sequence
     /// outright (even when the intervening command itself goes on to fail its own validation), and a
     /// fresh <c>authenticatorGetAssertion</c> REPLACES it with whatever that new request produces.
@@ -1058,7 +1059,8 @@ public static class CtapAuthenticatorTransitions
                 request.Rp.Id, request.User.Id, request.User.Name, request.User.DisplayName, requested.SelectedAlgorithm!.Value, residentKey,
                 userPresent, userVerified, request.ClientDataHash, attestationFormat,
                 CredProtectLevel: credProtectLevel, CredProtectRequested: credProtectRequested, MinPinLengthOutputValue: minPinLengthOutputValue,
-                HmacSecretRequested: hmacSecretRequested, LargeBlobKeyRequested: largeBlobKeyRequested, HmacSecretMc: hmacSecretMcRequest),
+                HmacSecretRequested: hmacSecretRequested, LargeBlobKeyRequested: largeBlobKeyRequested, CreationSequence: state.NextCredentialSequence,
+                HmacSecretMc: hmacSecretMcRequest),
             ResponseIntent = null
         };
 
@@ -1796,8 +1798,14 @@ public static class CtapAuthenticatorTransitions
             return Reject(state, WellKnownCtapStatusCodes.PinAuthBlocked, "ClientPin:SetPinLatched");
         }
 
-        if(state.CurrentStoredPin is not null)
+        if(state.IsPinEstablished)
         {
+            //Wavepin review fix F-1: consults IsPinEstablished (CurrentStoredPin OR the durable tier's own
+            //"provisioned, local hash unknown" signal), never CurrentStoredPin alone — a PIN genuinely
+            //provisioned on the persistent tier whose local hash a rehydration never (re)learned must
+            //refuse establishment exactly like an ordinarily-known one; setPIN's first-establishment path
+            //unconditionally provisions the persistent tier, so letting it run here would silently rotate
+            //a real PIN's authorization value with zero proof of the old one.
             return Reject(state, WellKnownCtapStatusCodes.PinAuthInvalid, "ClientPin:SetPinAlreadySet");
         }
 
@@ -1849,6 +1857,9 @@ public static class CtapAuthenticatorTransitions
             CurrentStoredPin = completed.NewPinHash,
             PinCodePointLength = completed.NewPinCodePointLength,
             PinRetries = CtapAuthenticatorState.MaxPinRetries,
+            //Already false here (OnSetPinRequested's own IsPinEstablished gate guarantees it), restated
+            //explicitly for the same reason ApplyChangePinSuccess restates it.
+            IsPinProvisionedWithUnknownLocalHash = false,
             ResponseIntent = new ClientPinResponseReady(new CtapClientPinResponse())
         };
 
@@ -1892,8 +1903,12 @@ public static class CtapAuthenticatorTransitions
             return Reject(state, WellKnownCtapStatusCodes.InvalidParameter, "ClientPin:ChangePinUnsupportedProtocol");
         }
 
-        if(state.CurrentStoredPin is null)
+        if(!state.IsPinEstablished)
         {
+            //Wavepin review fix F-1/F-2: consults IsPinEstablished, not CurrentStoredPin alone, so
+            //changePIN stays available when the persistent tier reports a genuinely provisioned PIN whose
+            //local hash a rehydration never learned — its own current-PIN check is custody-verified
+            //against the durable tier, so the unknown local hash does not block it.
             return Reject(state, WellKnownCtapStatusCodes.PinNotSet, "ClientPin:ChangePinNoPinSet");
         }
 
@@ -1951,7 +1966,8 @@ public static class CtapAuthenticatorTransitions
 
         if(completed.Kind is CtapChangePinOutcomeKind.CurrentPinDecryptFailed or CtapChangePinOutcomeKind.CurrentPinMismatch)
         {
-            (CtapAuthenticatorState mismatchState, byte statusCode) = ApplyPinMismatch(state, completed.ProtocolId, completed.RegeneratedKeyPair!);
+            (CtapAuthenticatorState mismatchState, byte statusCode) =
+                ApplyPinMismatch(state, completed.ProtocolId, completed.RegeneratedKeyPair!, completed.Verdict);
             string label = completed.Kind == CtapChangePinOutcomeKind.CurrentPinDecryptFailed
                 ? "ClientPin:ChangePinCurrentPinDecryptFailed"
                 : "ClientPin:ChangePinMismatch";
@@ -1959,7 +1975,11 @@ public static class CtapAuthenticatorTransitions
             return Reject(mismatchState, statusCode, label);
         }
 
-        CtapAuthenticatorState matchedState = state with { PinRetries = CtapAuthenticatorState.MaxPinRetries, ConsecutivePinMismatches = 0 };
+        CtapAuthenticatorState matchedState = state with
+        {
+            PinRetries = completed.Verdict?.RetriesRemaining ?? CtapAuthenticatorState.MaxPinRetries,
+            ConsecutivePinMismatches = 0
+        };
 
         return completed.Kind switch
         {
@@ -2004,6 +2024,9 @@ public static class CtapAuthenticatorTransitions
             ProtocolOneToken = completed.FreshProtocolOneToken!,
             ProtocolTwoToken = completed.FreshProtocolTwoToken!,
             IsForcePinChangeRequired = false,
+            //Wavepin review fix F-1: the fresh hash above is now the KNOWN local one — a possible
+            //true-from-rehydration flag no longer describes reality once changePIN itself just learned it.
+            IsPinProvisionedWithUnknownLocalHash = false,
             ResponseIntent = new ClientPinResponseReady(new CtapClientPinResponse())
         };
 
@@ -2057,8 +2080,9 @@ public static class CtapAuthenticatorTransitions
             return Reject(state, WellKnownCtapStatusCodes.InvalidParameter, "ClientPin:GetPinTokenRpIdPresent");
         }
 
-        if(state.CurrentStoredPin is null)
+        if(!state.IsPinEstablished)
         {
+            //Wavepin review fix F-1/F-2: see OnChangePinRequested's identical IsPinEstablished rationale.
             return Reject(state, WellKnownCtapStatusCodes.PinNotSet, "ClientPin:GetPinTokenNoPinSet");
         }
 
@@ -2151,8 +2175,9 @@ public static class CtapAuthenticatorTransitions
             return Reject(state, gateStatus, "ClientPin:PinUvAuthTokenPermissionDenied");
         }
 
-        if(state.CurrentStoredPin is null)
+        if(!state.IsPinEstablished)
         {
+            //Wavepin review fix F-1/F-2: see OnChangePinRequested's identical IsPinEstablished rationale.
             return Reject(state, WellKnownCtapStatusCodes.PinNotSet, "ClientPin:PinUvAuthTokenNoPinSet");
         }
 
@@ -2459,7 +2484,8 @@ public static class CtapAuthenticatorTransitions
 
         if(completed.Kind is CtapPinTokenIssuanceOutcomeKind.CurrentPinDecryptFailed or CtapPinTokenIssuanceOutcomeKind.CurrentPinMismatch)
         {
-            (CtapAuthenticatorState mismatchState, byte statusCode) = ApplyPinMismatch(state, completed.ProtocolId, completed.RegeneratedKeyPair!);
+            (CtapAuthenticatorState mismatchState, byte statusCode) =
+                ApplyPinMismatch(state, completed.ProtocolId, completed.RegeneratedKeyPair!, completed.Verdict);
             string label = completed.Kind == CtapPinTokenIssuanceOutcomeKind.CurrentPinDecryptFailed
                 ? "ClientPin:PinTokenIssuanceCurrentPinDecryptFailed"
                 : "ClientPin:PinTokenIssuanceMismatch";
@@ -2469,7 +2495,11 @@ public static class CtapAuthenticatorTransitions
 
         if(completed.Kind == CtapPinTokenIssuanceOutcomeKind.ForcePinChangeRequired)
         {
-            CtapAuthenticatorState forcedState = state with { PinRetries = CtapAuthenticatorState.MaxPinRetries, ConsecutivePinMismatches = 0 };
+            CtapAuthenticatorState forcedState = state with
+            {
+                PinRetries = completed.Verdict?.RetriesRemaining ?? CtapAuthenticatorState.MaxPinRetries,
+                ConsecutivePinMismatches = 0
+            };
 
             return Reject(forcedState, completed.ForcePinChangeDeniedStatusCode!.Value, "ClientPin:PinTokenIssuanceForcePinChangeRequired");
         }
@@ -2480,7 +2510,7 @@ public static class CtapAuthenticatorTransitions
         CtapAuthenticatorState nextState = state with
         {
             NextAction = NullAction.Instance,
-            PinRetries = CtapAuthenticatorState.MaxPinRetries,
+            PinRetries = completed.Verdict?.RetriesRemaining ?? CtapAuthenticatorState.MaxPinRetries,
             UvRetries = CtapAuthenticatorState.MaxUvRetries,
             ConsecutivePinMismatches = 0,
             ProtocolOneToken = completed.FreshProtocolOneToken!,
@@ -3494,23 +3524,29 @@ public static class CtapAuthenticatorTransitions
     /// <summary>
     /// Applies the mismatch counter/latch semantics shared by <c>changePIN</c>, <c>getPinToken</c>, and
     /// <c>getPinUvAuthTokenUsingPinWithPermissions</c> (CTAP 2.3, lines 5678-5685/5893/5995, identical
-    /// structure in all three): decrements <c>pinRetries</c>, increments the consecutive-mismatch
-    /// counter, disposes the mismatched protocol's stale key-agreement pair and installs the freshly
-    /// regenerated one, and resolves the status code in the spec's own order — retries exhausted
-    /// (<see cref="WellKnownCtapStatusCodes.PinBlocked"/>) beats three consecutive mismatches
-    /// (<see cref="WellKnownCtapStatusCodes.PinAuthBlocked"/>, which also latches) beats the ordinary
-    /// case (<see cref="WellKnownCtapStatusCodes.PinInvalid"/>). Every caller applies this identically
+    /// structure in all three): decrements <c>pinRetries</c> (or, once a <see cref="CtapPinRetriesCustody"/>
+    /// bundle is composed, mirrors <paramref name="verdict"/>'s own <c>RetriesRemaining</c> instead —
+    /// contract R-4, wavepin), increments the BOOT-SCOPED consecutive-mismatch counter (byte-identical in
+    /// both modes, contract R-1/R-5), disposes the mismatched protocol's stale key-agreement pair and
+    /// installs the freshly regenerated one, and resolves the status code in the spec's own order —
+    /// retries exhausted (<see cref="WellKnownCtapStatusCodes.PinBlocked"/>) beats three consecutive
+    /// mismatches (<see cref="WellKnownCtapStatusCodes.PinAuthBlocked"/>, which also latches) beats the
+    /// ordinary case (<see cref="WellKnownCtapStatusCodes.PinInvalid"/>) — with custody composed, contract
+    /// R-5's own priority rule reads <paramref name="verdict"/>'s <c>IsBlocked</c> directly rather than
+    /// re-deriving "retries exhausted" from the mirrored count. Every caller applies this identically
     /// whether the triggering condition was a decoded-hash mismatch or a <c>pinHashEnc</c> decrypt error
     /// (CTAP 2.3 lines 5671/5883/5985: "If an error results, or a mismatch is detected") — the caller has
     /// already minted <paramref name="regeneratedKeyPair"/> either way.
     /// </summary>
     private static (CtapAuthenticatorState State, byte StatusCode) ApplyPinMismatch(
-        CtapAuthenticatorState state, CtapPinUvAuthProtocolId protocolId, CtapPinUvAuthKeyAgreementKeyPair regeneratedKeyPair)
+        CtapAuthenticatorState state, CtapPinUvAuthProtocolId protocolId, CtapPinUvAuthKeyAgreementKeyPair regeneratedKeyPair,
+        CtapPinAttemptVerdict? verdict)
     {
-        int retries = state.PinRetries - 1;
+        int retries = verdict?.RetriesRemaining ?? state.PinRetries - 1;
+        bool isBlocked = verdict?.IsBlocked ?? retries == 0;
         int mismatches = state.ConsecutivePinMismatches + 1;
 
-        (byte statusCode, bool isLatched) = retries == 0
+        (byte statusCode, bool isLatched) = isBlocked
             ? (WellKnownCtapStatusCodes.PinBlocked, state.IsPowerCycleRequired)
             : mismatches >= 3
                 ? (WellKnownCtapStatusCodes.PinAuthBlocked, true)
@@ -3648,7 +3684,7 @@ public static class CtapAuthenticatorTransitions
             NextAction = new CtapSignAssertionAction(
                 credential.RpId, credential.CredentialId, credential.CredentialKey, credential.Algorithm,
                 newSignCount, userPresent, userVerified, clientDataHash, responseUser, numberOfCredentials, rememberOnCompletion, largeBlobKeyOutput,
-                hmacSecretRequest),
+                credential.CreationSequence, hmacSecretRequest),
             ResponseIntent = null
         };
 

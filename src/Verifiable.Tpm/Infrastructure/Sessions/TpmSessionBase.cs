@@ -89,6 +89,19 @@ public abstract class TpmSessionBase
     public TpmtSymDef Symmetric { get; protected init; } = TpmtSymDef.Null;
 
     /// <summary>
+    /// Gets this session's current nonceTPM — the value stored since the last response, before any roll this
+    /// command's own response may cause (TPM 2.0 Library Part 1, clause 17.6.7).
+    /// </summary>
+    /// <remarks>
+    /// Used only by the executor to fold an OTHER session's nonceTPM into the FIRST authorizing session's command
+    /// HMAC when that other session carries the <c>decrypt</c> or <c>encrypt</c> attribute (clause 19.6.3.4); the
+    /// base implementation returns an empty buffer for sessions that track no TPM nonce (password sessions) or
+    /// none meaningful to this fold (policy sessions, which have no command-HMAC key to fold into in the first
+    /// place).
+    /// </remarks>
+    public virtual ReadOnlyMemory<byte> NonceTpm => ReadOnlyMemory<byte>.Empty;
+
+    /// <summary>
     /// Generates a fresh caller nonce for the upcoming command.
     /// </summary>
     /// <param name="pool">The memory pool for allocating the new nonce.</param>
@@ -176,6 +189,14 @@ public abstract class TpmSessionBase
     /// <param name="cpHash">The command parameter hash.</param>
     /// <param name="pool">The memory pool.</param>
     /// <param name="cancellationToken">Token to observe while awaiting HMAC computation.</param>
+    /// <param name="foldedSessionNonces">
+    /// The nonceTPMdecrypt/nonceTPMencrypt fold (TPM 2.0 Library Part 1, clause 19.6.3.4): when this session is the
+    /// FIRST session in the command's authorization area and it authorizes an entity, the concatenated nonceTPM of
+    /// any OTHER session in the command carrying the <c>decrypt</c> or <c>encrypt</c> attribute (a decrypt/encrypt
+    /// session that IS this session is never folded into its own HMAC — its nonceTPM already counts once as
+    /// nonceOlder). Empty for every other session, and empty here until a caller composes multi-session commands
+    /// that need it (the executor does not yet detect and pass it).
+    /// </param>
     /// <returns>
     /// The precomputed HMAC bytes wrapped in <see cref="Tpm2bAuth"/>, or
     /// <see langword="null"/> for sessions that do not compute an HMAC
@@ -187,7 +208,8 @@ public abstract class TpmSessionBase
     public abstract ValueTask<Tpm2bAuth?> PrepareAuthHmacAsync(
         ReadOnlyMemory<byte> cpHash,
         MemoryPool<byte> pool,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        ReadOnlyMemory<byte> foldedSessionNonces = default);
 
     /// <summary>
     /// Writes TPMS_AUTH_COMMAND to the buffer using the precomputed auth HMAC.

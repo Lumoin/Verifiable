@@ -2,7 +2,9 @@ using System.Formats.Cbor;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Org.BouncyCastle.Asn1;
+using Verifiable.Cryptography;
 using Verifiable.Fido2;
+using Verifiable.Tests.X509;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -169,13 +171,13 @@ internal static class AndroidKeyAttestationTestVectors
             ?? throw new ArgumentException("Issuer certificate must carry an ECDsa private key.", nameof(issuerCertificate));
         X509SignatureGenerator issuerSignatureGenerator = X509SignatureGenerator.CreateForECDsa(issuerKey);
 
-        byte[] serialNumber = RandomNumberGenerator.GetBytes(16);
+        using Salt serialNumber = X509ChainTestRing.CreateSerialNumber(16);
         return request.Create(
             issuerCertificate.SubjectName,
             issuerSignatureGenerator,
             DefaultNotBefore,
             DefaultNotAfter,
-            serialNumber).CopyWithPrivateKey(credentialKey);
+            serialNumber.AsReadOnlySpan()).CopyWithPrivateKey(credentialKey);
     }
 
 

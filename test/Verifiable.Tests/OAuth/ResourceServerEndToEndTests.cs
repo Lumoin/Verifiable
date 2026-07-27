@@ -258,7 +258,7 @@ internal sealed class ResourceServerEndToEndTests
         Assert.IsTrue(doc.RootElement.TryGetProperty("cnf", out JsonElement cnf));
         Assert.AreEqual(thumbprint, cnf.GetProperty("jkt").GetString());
 
-        Assert.HasCount(1, rs.SeenDpopJtis);
+        Assert.AreEqual(1, rs.ReplayCache.Count);
     }
 
 

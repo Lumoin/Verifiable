@@ -523,11 +523,12 @@ public static class SdCwtSerializer
     {
         ArgumentException.ThrowIfNullOrEmpty(algorithm);
 
-        using HashAlgorithm hasher = CreateHashAlgorithm(algorithm);
-        byte[] hash = new byte[hasher.HashSize / 8];
-        hasher.TryComputeHash(disclosureCbor, hash, out _);
+        (Tag tag, int length, string? qualifier) = ResolveDigestTag(algorithm);
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(disclosureCbor, length, tag, BaseMemoryPool.Shared, qualifier);
 
-        return hash;
+        //The pooled digest buffer may be larger than the requested length (pool implementations are free to
+        //over-allocate); slice to the algorithm's exact output size before copying out.
+        return digest.AsReadOnlySpan()[..length].ToArray();
     }
 
 
@@ -559,31 +560,30 @@ public static class SdCwtSerializer
     {
         ArgumentException.ThrowIfNullOrEmpty(algorithm);
 
-        using HashAlgorithm hasher = CreateHashAlgorithm(algorithm);
-        byte[] hash = new byte[hasher.HashSize / 8];
-        hasher.TryComputeHash(sdClaimsCbor, hash, out _);
+        (Tag tag, int length, string? qualifier) = ResolveDigestTag(algorithm);
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(sdClaimsCbor, length, tag, BaseMemoryPool.Shared, qualifier);
 
-        return hash;
+        //The pooled digest buffer may be larger than the requested length (pool implementations are free to
+        //over-allocate); slice to the algorithm's exact output size before copying out.
+        return digest.AsReadOnlySpan()[..length].ToArray();
     }
 
 
-    private static HashAlgorithm CreateHashAlgorithm(string algorithm)
+    /// <summary>
+    /// Maps an SD-CWT digest algorithm name (in any format <see cref="WellKnownHashAlgorithms"/> recognizes,
+    /// e.g. the IANA <c>"sha-256"</c> spelling draft-ietf-spice-sd-cwt uses) to the registered digest seam's
+    /// <see cref="Tag"/>, output byte length, and <see cref="CryptographicKeyEvents.ComputeDigest"/> qualifier.
+    /// Fails closed with <see cref="ArgumentException"/> for an unrecognized algorithm rather than defaulting
+    /// to SHA-256.
+    /// </summary>
+    /// <param name="algorithm">The hash algorithm name.</param>
+    /// <returns>The digest <see cref="Tag"/>, output byte length, and seam qualifier for <paramref name="algorithm"/>.</returns>
+    /// <exception cref="ArgumentException">Thrown for an unsupported algorithm name.</exception>
+    private static (Tag Tag, int Length, string? Qualifier) ResolveDigestTag(string algorithm) => algorithm switch
     {
-        if(WellKnownHashAlgorithms.IsSha256(algorithm))
-        {
-            return SHA256.Create();
-        }
-
-        if(WellKnownHashAlgorithms.IsSha384(algorithm))
-        {
-            return SHA384.Create();
-        }
-
-        if(WellKnownHashAlgorithms.IsSha512(algorithm))
-        {
-            return SHA512.Create();
-        }
-
-        throw new ArgumentException($"Unsupported hash algorithm: '{algorithm}'.", nameof(algorithm));
-    }
+        _ when WellKnownHashAlgorithms.IsSha256(algorithm) => (CryptoTags.Sha256Digest, WellKnownHashAlgorithms.Sha256SizeBytes, null),
+        _ when WellKnownHashAlgorithms.IsSha384(algorithm) => (CryptoTags.Sha384Digest, WellKnownHashAlgorithms.Sha384SizeBytes, nameof(HashAlgorithmName.SHA384)),
+        _ when WellKnownHashAlgorithms.IsSha512(algorithm) => (CryptoTags.Sha512Digest, WellKnownHashAlgorithms.Sha512SizeBytes, nameof(HashAlgorithmName.SHA512)),
+        _ => throw new ArgumentException($"Unsupported hash algorithm: '{algorithm}'.", nameof(algorithm))
+    };
 }

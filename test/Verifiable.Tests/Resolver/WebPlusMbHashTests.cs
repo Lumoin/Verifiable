@@ -47,9 +47,9 @@ internal sealed class WebPlusMbHashTests
     public async Task ComputesDeterministicSha256MbHash()
     {
         string first = await WebPlusMbHash.ComputeAsync(
-            "did:webplus test input"u8.ToArray(), MultihashHeaders.Sha2Bits256.ToArray(), Bits256DigestLength, MicrosoftEntropyFunctions.ComputeDigestAsync, CryptoTags.Sha256Digest, Base64UrlEncoder, BaseMemoryPool.Shared, CancellationToken.None);
+            "did:webplus test input"u8.ToArray(), MultihashHeaders.Sha2Bits256.ToArray(), Bits256DigestLength, MicrosoftCryptographicFunctions.ComputeDigestAsync, CryptoTags.Sha256Digest, Base64UrlEncoder, BaseMemoryPool.Shared, CancellationToken.None);
         string second = await WebPlusMbHash.ComputeAsync(
-            "did:webplus test input"u8.ToArray(), MultihashHeaders.Sha2Bits256.ToArray(), Bits256DigestLength, MicrosoftEntropyFunctions.ComputeDigestAsync, CryptoTags.Sha256Digest, Base64UrlEncoder, BaseMemoryPool.Shared, CancellationToken.None);
+            "did:webplus test input"u8.ToArray(), MultihashHeaders.Sha2Bits256.ToArray(), Bits256DigestLength, MicrosoftCryptographicFunctions.ComputeDigestAsync, CryptoTags.Sha256Digest, Base64UrlEncoder, BaseMemoryPool.Shared, CancellationToken.None);
 
         Assert.AreEqual(first, second);
         Assert.StartsWith("uEi", first, "A base64url SHA-256 MBHash begins with the 'u' prefix and the 0x12 0x20 header ('Ei').");
@@ -63,7 +63,7 @@ internal sealed class WebPlusMbHashTests
     {
         string placeholder = WebPlusMbHash.Placeholder(MultihashHeaders.Sha2Bits256, Bits256DigestLength, Base64UrlEncoder, BaseMemoryPool.Shared);
         string computed = await WebPlusMbHash.ComputeAsync(
-            "content"u8.ToArray(), MultihashHeaders.Sha2Bits256.ToArray(), Bits256DigestLength, MicrosoftEntropyFunctions.ComputeDigestAsync, CryptoTags.Sha256Digest, Base64UrlEncoder, BaseMemoryPool.Shared, CancellationToken.None);
+            "content"u8.ToArray(), MultihashHeaders.Sha2Bits256.ToArray(), Bits256DigestLength, MicrosoftCryptographicFunctions.ComputeDigestAsync, CryptoTags.Sha256Digest, Base64UrlEncoder, BaseMemoryPool.Shared, CancellationToken.None);
 
         Assert.AreNotEqual(placeholder, computed);
     }

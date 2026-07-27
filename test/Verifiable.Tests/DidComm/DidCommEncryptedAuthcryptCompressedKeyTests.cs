@@ -216,8 +216,8 @@ internal sealed class DidCommEncryptedAuthcryptCompressedKeyTests
         using PrivateKeyMemory recipientPrivate = recipient.PrivateKey;
 
         //Build a COMPRESSED recipient public key (what the DID-doc converter yields for a resolved EC key),
-        //tagged honestly as EcCompressed. The agreement decides to decompress from the SEC1 prefix byte and
-        //takes the curve from the tag's CryptoAlgorithm; the EcCompressed tag here asserts the honest-tag
+        //tagged accurately as EcCompressed. The agreement decides to decompress from the SEC1 prefix byte and
+        //takes the curve from the tag's CryptoAlgorithm; the EcCompressed tag here asserts the tag-matches-bytes
         //invariant (bytes and tag agree), it is not itself the decompression trigger.
         ReadOnlySpan<byte> uncompressed = recipientUncompressed.AsReadOnlySpan();
         byte[] compressedBytes = EllipticCurveUtilities.Compress(

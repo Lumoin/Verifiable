@@ -269,7 +269,7 @@ internal sealed class CredentialIssuanceFlowTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -282,7 +282,7 @@ internal sealed class CredentialIssuanceFlowTests
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -352,7 +352,7 @@ internal sealed class CredentialIssuanceFlowTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -365,7 +365,7 @@ internal sealed class CredentialIssuanceFlowTests
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -428,7 +428,7 @@ internal sealed class CredentialIssuanceFlowTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -446,7 +446,7 @@ internal sealed class CredentialIssuanceFlowTests
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -503,7 +503,7 @@ internal sealed class CredentialIssuanceFlowTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -521,7 +521,7 @@ internal sealed class CredentialIssuanceFlowTests
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);

@@ -497,7 +497,7 @@ internal sealed class DidResolutionHttpBindingTests
             SerializePresentation,
             SerializeProofOptions,
             Base58Decoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             BaseMemoryPool.Shared);
 
         return DidResolverComposition.Build(

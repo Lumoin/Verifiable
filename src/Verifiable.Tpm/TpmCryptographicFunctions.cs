@@ -4,7 +4,6 @@ using System.Buffers.Binary;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
@@ -21,7 +20,7 @@ namespace Verifiable.Tpm;
 /// <see cref="Verifiable.Cryptography.PrivateKey"/> and the rest of the library. The key material never leaves
 /// the TPM: the bytes the delegate receives are the key's <b>handle</b>, not a secret, and the actual signing
 /// is delegated to <c>TPM2_Sign</c>. This is the hardware-bound counterpart of the software backends
-/// (<c>MicrosoftCryptographicFunctions</c>, <c>NSecCryptographicFunctions</c>).
+/// (<c>MicrosoftCryptographicFunctions</c>, <c>LibsodiumCryptographicFunctions</c>).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -35,9 +34,6 @@ namespace Verifiable.Tpm;
 /// </remarks>
 public static class TpmCryptographicFunctions
 {
-    /// <summary>The largest digest this function produces (SHA-512), used to size the stack hash buffer.</summary>
-    private const int MaxDigestLength = 64;
-
     /// <summary>Context key: the <see cref="TpmDevice"/> the signing command is submitted to.</summary>
     public const string DeviceContextKey = "tpm.device";
 
@@ -128,9 +124,20 @@ public static class TpmCryptographicFunctions
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_Sign, TpmResponseCodec.Sign);
 
-        //Hashing happens in a synchronous helper so the stack digest buffer never crosses an await.
         using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(signaturePool);
-        using SignInput signInput = BuildSignInput(handle, dataToSign.Span, scheme, hash, signaturePool);
+
+        //The pre-hash routes through the registered async digest seam (this method is already async, so the
+        //seam is reachable with no sync-over-async bridge) rather than a direct framework hash call, matching
+        //this assembly's own TpmCommandExecutor/TpmSimulator/TpmLifecycleTransitions digest sites.
+        int digestLength = GetDigestSize(hash);
+        using IMemoryOwner<byte> digestOwner = signaturePool.Rent(digestLength);
+        Memory<byte> digestBuffer = digestOwner.Memory[..digestLength];
+        await ComputeDigestAsync(dataToSign, hash, digestBuffer, signaturePool, cancellationToken).ConfigureAwait(false);
+
+        //SignInput copies the digest into its own pooled buffer; the temporary one is cleared once that copy
+        //is made, matching the project's uniform containment story for transient crypto material.
+        using SignInput signInput = BuildSignInput(handle, digestBuffer.Span, scheme, hash, signaturePool);
+        digestBuffer.Span.Clear();
 
         TpmResult<SignResponse> result = await TpmCommandExecutor.ExecuteAsync<SignResponse>(
             device, signInput, [keyAuth], null, signaturePool, registry, cancellationToken).ConfigureAwait(false);
@@ -154,52 +161,83 @@ public static class TpmCryptographicFunctions
     }
 
     /// <summary>
-    /// Hashes <paramref name="message"/> on the stack and builds the matching <see cref="SignInput"/>; kept
-    /// synchronous so the stack digest span never spans an <c>await</c>. <see cref="SignInput"/> copies the
-    /// digest into pooled memory it owns.
+    /// Builds the <see cref="SignInput"/> around an already-computed <paramref name="digest"/>.
+    /// <see cref="SignInput"/> copies the digest into pooled memory it owns; the caller
+    /// (<see cref="SignAsync"/>) is responsible for clearing its own temporary digest buffer once this
+    /// returns.
     /// </summary>
     /// <param name="handle">The signing key handle.</param>
-    /// <param name="message">The message to hash and sign.</param>
+    /// <param name="digest">The pre-computed message digest.</param>
     /// <param name="scheme">The TPM signing scheme.</param>
-    /// <param name="hash">The hash algorithm.</param>
+    /// <param name="hash">The hash algorithm the digest was computed under.</param>
     /// <param name="pool">The memory pool for the command's buffers.</param>
     /// <returns>A configured <see cref="SignInput"/>.</returns>
-    private static SignInput BuildSignInput(uint handle, ReadOnlySpan<byte> message, TpmAlgIdConstants scheme, TpmAlgIdConstants hash, MemoryPool<byte> pool)
+    private static SignInput BuildSignInput(uint handle, ReadOnlySpan<byte> digest, TpmAlgIdConstants scheme, TpmAlgIdConstants hash, MemoryPool<byte> pool)
     {
-        //Hash into a pooled buffer (cleared on release) rather than the stack, so transient crypto material has
-        //a uniform containment story; SignInput copies the digest into its own pooled buffer.
-        using IMemoryOwner<byte> digestOwner = pool.Rent(MaxDigestLength);
-        Span<byte> digestBuffer = digestOwner.Memory.Span;
-        int digestLength = ComputeDigest(message, hash, digestBuffer);
-        ReadOnlySpan<byte> digest = digestBuffer[..digestLength];
         TpmiDhObject keyHandle = TpmiDhObject.FromValue(handle);
 
-        SignInput input = scheme switch
+        return scheme switch
         {
             TpmAlgIdConstants.TPM_ALG_ECDSA => SignInput.ForEcdsa(keyHandle, digest, hash, pool),
             TpmAlgIdConstants.TPM_ALG_RSASSA => SignInput.ForRsaSsa(keyHandle, digest, hash, pool),
             TpmAlgIdConstants.TPM_ALG_RSAPSS => SignInput.ForRsaPss(keyHandle, digest, hash, pool),
             _ => throw new NotSupportedException($"Signing scheme '{scheme}' is not supported by the TPM signing function.")
         };
-
-        digestBuffer.Clear();
-
-        return input;
     }
 
     /// <summary>
-    /// Hashes a message into <paramref name="destination"/> with the hash algorithm named by a
-    /// <see cref="TpmAlgIdConstants"/> value.
+    /// Hashes <paramref name="message"/> through the registered async digest seam
+    /// (<see cref="CryptographicKeyEvents.ComputeDigestAsync(ReadOnlyMemory{byte}, int, Tag, MemoryPool{byte}, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>)
+    /// into <paramref name="destination"/>, rather than a direct framework hash call — this TPM host-side
+    /// pre-hash before <c>TPM2_Sign</c> is exactly the kind of trust/custody digest the async seam exists
+    /// for (it may be TPM2_Hash- or KMS-backed), matching this assembly's own
+    /// <see cref="Infrastructure.TpmCommandExecutor"/>/<c>TpmSimulator</c>/<c>TpmLifecycleTransitions</c>
+    /// digest sites.
     /// </summary>
-    /// <param name="data">The message bytes.</param>
+    /// <param name="message">The message bytes.</param>
     /// <param name="hash">The TPM hash algorithm identifier.</param>
-    /// <param name="destination">The buffer that receives the digest; must be at least the digest size.</param>
-    /// <returns>The number of digest bytes written.</returns>
-    private static int ComputeDigest(ReadOnlySpan<byte> data, TpmAlgIdConstants hash, Span<byte> destination) => hash switch
+    /// <param name="destination">The buffer that receives the digest; must be exactly the digest size.</param>
+    /// <param name="pool">The memory pool the digest computation rents pooled buffers from.</param>
+    /// <param name="cancellationToken">A token observed while awaiting the digest.</param>
+    private static async ValueTask ComputeDigestAsync(
+        ReadOnlyMemory<byte> message, TpmAlgIdConstants hash, Memory<byte> destination, MemoryPool<byte> pool, CancellationToken cancellationToken)
     {
-        TpmAlgIdConstants.TPM_ALG_SHA256 => SHA256.HashData(data, destination),
-        TpmAlgIdConstants.TPM_ALG_SHA384 => SHA384.HashData(data, destination),
-        TpmAlgIdConstants.TPM_ALG_SHA512 => SHA512.HashData(data, destination),
+        Tag tag = BuildDigestTag(hash);
+        using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
+            message, destination.Length, tag, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        //The pooled digest buffer may be larger than the requested length (pool implementations are free to
+        //over-allocate); slice to the exact requested size before copying into the caller's destination.
+        digest.AsReadOnlySpan()[..destination.Length].CopyTo(destination.Span);
+    }
+
+    /// <summary>
+    /// Maps a <see cref="TpmAlgIdConstants"/> hash algorithm identifier to the digest seam's <see cref="Tag"/>.
+    /// Fails closed with <see cref="NotSupportedException"/> for an algorithm the TPM signing function does
+    /// not support, rather than defaulting to SHA-256.
+    /// </summary>
+    /// <param name="hash">The TPM hash algorithm identifier.</param>
+    /// <returns>The digest <see cref="Tag"/> for <paramref name="hash"/>.</returns>
+    private static Tag BuildDigestTag(TpmAlgIdConstants hash) => hash switch
+    {
+        TpmAlgIdConstants.TPM_ALG_SHA256 => CryptoTags.Sha256Digest,
+        TpmAlgIdConstants.TPM_ALG_SHA384 => CryptoTags.Sha384Digest,
+        TpmAlgIdConstants.TPM_ALG_SHA512 => CryptoTags.Sha512Digest,
+        _ => throw new NotSupportedException($"Hash algorithm '{hash}' is not supported by the TPM signing function.")
+    };
+
+    /// <summary>
+    /// Maps a <see cref="TpmAlgIdConstants"/> hash algorithm identifier to its digest output size in bytes.
+    /// Fails closed with <see cref="NotSupportedException"/> for an algorithm the TPM signing function does
+    /// not support, rather than defaulting to SHA-256.
+    /// </summary>
+    /// <param name="hash">The TPM hash algorithm identifier.</param>
+    /// <returns>The digest output size in bytes for <paramref name="hash"/>.</returns>
+    private static int GetDigestSize(TpmAlgIdConstants hash) => hash switch
+    {
+        TpmAlgIdConstants.TPM_ALG_SHA256 => 32,
+        TpmAlgIdConstants.TPM_ALG_SHA384 => 48,
+        TpmAlgIdConstants.TPM_ALG_SHA512 => 64,
         _ => throw new NotSupportedException($"Hash algorithm '{hash}' is not supported by the TPM signing function.")
     };
 }

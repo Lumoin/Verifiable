@@ -273,8 +273,8 @@ internal static class TestSetup
             typeof(ComputeDigestDelegate),
             (ComputeDigestDelegate)((input, outputByteLength, tag, pool, context, cancellationToken) =>
                 tag.TryGet<CryptoAlgorithm>(out CryptoAlgorithm algorithm) && algorithm == CryptoAlgorithm.Blake3
-                    ? BouncyCastleEntropyFunctions.ComputeBlake3DigestAsync(input, outputByteLength, tag, pool, context, cancellationToken)
-                    : MicrosoftEntropyFunctions.ComputeDigestAsync(input, outputByteLength, tag, pool, context, cancellationToken)));
+                    ? BouncyCastleCryptographicFunctions.ComputeBlake3DigestAsync(input, outputByteLength, tag, pool, context, cancellationToken)
+                    : MicrosoftCryptographicFunctions.ComputeDigestAsync(input, outputByteLength, tag, pool, context, cancellationToken)));
 
         //The synchronous SHA-family seam for hashes that are sync by nature (JWK thumbprint, PKCE S256, Concat KDF,
         //SD-JWT disclosure digests): public/local-data hashes with no hardware-async backend. SHA-256 is the
@@ -616,10 +616,10 @@ internal static class TestSetup
     /// Deliberately excludes ML-KEM-512/768/1024: <see cref="InitializeKeyAgreementFunctions"/> passes
     /// <c>kemDecapsulationMatcher: null</c>, so no consumer can bind a minted ML-KEM key today — registering
     /// its keygen would produce a <see cref="KeyMaterialGeneratedEvent"/> for a key nothing downstream uses.
-    /// NSec is not registered either: despite <c>Verifiable.NSec</c> also implementing Ed25519/X25519 key
+    /// Libsodium is not registered either: despite <c>Verifiable.Libsodium</c> also implementing Ed25519/X25519 key
     /// creation, <see cref="TestKeyMaterialProvider"/> sources both exclusively from
     /// <c>BouncyCastleKeyMaterialCreator</c>, and neither <see cref="InitializeCryptoFunctions"/> nor
-    /// <see cref="InitializeKeyAgreementFunctions"/> routes Ed25519/X25519 signing or exchange to NSec.
+    /// <see cref="InitializeKeyAgreementFunctions"/> routes Ed25519/X25519 signing or exchange to Libsodium.
     /// </remarks>
     private static void InitializeKeyCreationFunctions()
     {

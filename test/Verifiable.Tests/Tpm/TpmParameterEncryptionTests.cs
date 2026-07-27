@@ -58,7 +58,7 @@ internal sealed class TpmParameterEncryptionTests
 
         //Reference: mask = KDFa("XOR") via the project's own KDF (KdfaTests pins KDFa to known answers), XORed
         //by hand; XorAsync must apply that exact mask.
-        byte[] expected = (byte[])plaintext.Clone();
+        byte[] expected = plaintext.AsSpan().ToArray();
         using(IMemoryOwner<byte> mask = await Kdfa.DeriveAsync(
             algorithm, Key, "XOR", NonceNewer, NonceOlder, dataLength * 8, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false))
         {
@@ -69,7 +69,7 @@ internal sealed class TpmParameterEncryptionTests
             }
         }
 
-        byte[] actual = (byte[])plaintext.Clone();
+        byte[] actual = plaintext.AsSpan().ToArray();
         await TpmParameterEncryption.XorAsync(
             algorithm, Key, NonceNewer, NonceOlder, actual, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -82,7 +82,7 @@ internal sealed class TpmParameterEncryptionTests
     {
         byte[] plaintext = new byte[40];
         RandomNumberGenerator.Fill(plaintext);
-        byte[] working = (byte[])plaintext.Clone();
+        byte[] working = plaintext.AsSpan().ToArray();
 
         //Obfuscate then recover with the identical key and nonces (the same call serves encrypt and decrypt).
         await TpmParameterEncryption.XorAsync(
@@ -143,12 +143,12 @@ internal sealed class TpmParameterEncryptionTests
     [TestMethod]
     public void AesCfb128MatchesNistSp80038aVectors()
     {
-        byte[] ciphertext = (byte[])NistPlaintext.Clone();
+        byte[] ciphertext = NistPlaintext.AsSpan().ToArray();
         TpmParameterEncryption.AesCfb(NistKey, NistIv, ciphertext, encrypting: true);
         Assert.IsTrue(ciphertext.AsSpan().SequenceEqual(NistCipher),
             "AES-CFB128 encryption must match the NIST SP800-38A F.3.13 vector.");
 
-        byte[] recovered = (byte[])NistCipher.Clone();
+        byte[] recovered = NistCipher.AsSpan().ToArray();
         TpmParameterEncryption.AesCfb(NistKey, NistIv, recovered, encrypting: false);
         Assert.IsTrue(recovered.AsSpan().SequenceEqual(NistPlaintext),
             "AES-CFB128 decryption must invert the NIST SP800-38A F.3.13 vector.");
@@ -204,7 +204,7 @@ internal sealed class TpmParameterEncryptionTests
             plaintext[i] = (byte)(0x11 + i);
         }
 
-        byte[] working = (byte[])plaintext.Clone();
+        byte[] working = plaintext.AsSpan().ToArray();
         TpmParameterEncryption.AesCfb(key, iv, working, encrypting: true);
         TpmParameterEncryption.AesCfb(key, iv, working, encrypting: false);
         Assert.IsTrue(working.AsSpan().SequenceEqual(plaintext),
@@ -218,7 +218,7 @@ internal sealed class TpmParameterEncryptionTests
         //and key size are used with the direction flipped.
         byte[] plaintext = new byte[40];
         RandomNumberGenerator.Fill(plaintext);
-        byte[] working = (byte[])plaintext.Clone();
+        byte[] working = plaintext.AsSpan().ToArray();
 
         await TpmParameterEncryption.CfbAsync(
             HashAlgorithmName.SHA256, 128, Key, NonceNewer, NonceOlder, working, encrypting: true, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);

@@ -99,6 +99,28 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// hmac-secret" MUST NOT is checked live by the two features' isolation, not merely by hmac-secret's
 /// former absence.
 /// </param>
+/// <param name="CredentialKeyCustodyExport">
+/// A custody-exportable copy of <see cref="CredentialKey"/>'s raw private-key-material bytes, captured at
+/// mint time by <see cref="CtapCredentialSigningBackend"/>'s own key-generation delegate, or
+/// <see langword="null"/> when the composed backend does not populate one. Pooled, owned by this record —
+/// SECRET material, the same custody discipline as every other field here.
+/// </param>
+/// <remarks>
+/// <para>
+/// <strong>Why <see cref="CredentialKeyCustodyExport"/> exists.</strong> <see cref="CredentialKey"/>'s
+/// type, <c>PrivateKey</c>, deliberately exposes no public API to read its own raw key bytes back out
+/// (<c>SensitiveMemoryKey.KeyMaterial</c> is <see langword="protected"/>, reachable only by
+/// <c>Verifiable.Cryptography</c> types themselves) — a private key, once wrapped, is meant to be used
+/// only through its bound signing delegate, never exported. A state-custody snapshot (wavect R-2) still
+/// needs to persist and later restore a credential's signing capability across a real process boundary,
+/// which requires the raw bytes at least once. Rather than punching a hole in <c>PrivateKey</c>'s own
+/// custody discipline, the shipped <see cref="CtapCredentialSigningBackend.CreateEs256Default"/> backend
+/// captures an independent copy of the same bytes AT MINT TIME, while it still holds the un-wrapped
+/// <c>PrivateKeyMemory</c> alongside the <see cref="CredentialKey"/> it wraps around it — see that
+/// backend's own remarks. This field carries that copy for the lifetime of the credential record; nothing
+/// on the ordinary signing/assertion path reads it, so its presence changes no wire-visible behavior.
+/// </para>
+/// </remarks>
 [DebuggerDisplay("CtapCredentialRecord(RpId={RpId}, Resident={IsResident}, SignCount={SignCount}, CreationSequence={CreationSequence}, CredProtectLevel={CredProtectLevel})")]
 public sealed record CtapCredentialRecord(
     CredentialId CredentialId,
@@ -115,11 +137,12 @@ public sealed record CtapCredentialRecord(
     int CredProtectLevel,
     IMemoryOwner<byte> CredRandomWithUV,
     IMemoryOwner<byte> CredRandomWithoutUV,
-    IMemoryOwner<byte>? LargeBlobKey = null): IDisposable
+    IMemoryOwner<byte>? LargeBlobKey = null,
+    PooledMemory? CredentialKeyCustodyExport = null): IDisposable
 {
     /// <summary>
     /// Releases the credential identifier, user handle, private key, both CredRandom values, and (when
-    /// present) largeBlobKey this record owns.
+    /// present) largeBlobKey and the custody-exportable key-material copy this record owns.
     /// </summary>
     public void Dispose()
     {
@@ -129,5 +152,6 @@ public sealed record CtapCredentialRecord(
         CredRandomWithUV.Dispose();
         CredRandomWithoutUV.Dispose();
         LargeBlobKey?.Dispose();
+        CredentialKeyCustodyExport?.Dispose();
     }
 }

@@ -24,8 +24,8 @@ namespace Verifiable.Cryptography.Provider;
 ///   </item>
 ///   <item>
 ///     <description>
-///       <c>libsodium</c> — native library wrapped by NSec; version reflects the
-///       native binary.
+///       <c>libsodium</c> — native library wrapped by this project's own
+///       <c>Verifiable.Libsodium</c> binding; version reflects the native binary.
 ///     </description>
 ///   </item>
 ///   <item>

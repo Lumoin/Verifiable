@@ -4,6 +4,7 @@ using System.Collections.Immutable;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
 using Verifiable.OAuth.Server;
@@ -59,6 +60,18 @@ internal sealed class FederationAutomaticRegistrationFlowTests
 
     private const string RpEntityId = "https://rp.example.com";
     private const string FederationRedirectUri = "https://rp.example.com/cb";
+
+    /// <summary>Header deserializer mirroring the authorization server's wiring.</summary>
+    private static readonly JwtHeaderDeserializer HeaderDeserializer = static bytes =>
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            bytes, TestSetup.DefaultSerializationOptions)
+        ?? throw new FormatException("Header JSON parsed to null.");
+
+    /// <summary>Payload deserializer mirroring the authorization server's wiring.</summary>
+    private static readonly JwtPayloadDeserializer PayloadDeserializer = static bytes =>
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            bytes, TestSetup.DefaultSerializationOptions)
+        ?? throw new FormatException("Payload JSON parsed to null.");
 
 
     [TestMethod]
@@ -173,10 +186,11 @@ internal sealed class FederationAutomaticRegistrationFlowTests
 
         List<string> compactChain = [rpEc.CompactJws, anchorAboutRp.CompactJws, anchorEc.CompactJws];
 
-        ValidateTrustChainAsyncDelegate validateChain = InlineTrustChainValidationDriver.Build(
-            async (position, jws, ct) => position == 0
-                ? await FederationTestRing.VerifyAsync(rpNode, jws, ct).ConfigureAwait(false)
-                : await FederationTestRing.VerifyAsync(anchorNode, jws, ct).ConfigureAwait(false));
+        ValidateTrustChainAsyncDelegate validateChain = TrustChainValidation.BuildInlineValidator(
+            HeaderDeserializer,
+            PayloadDeserializer,
+            TestSetup.Base64UrlDecoder,
+            FederationKeyResolver.BuildInChainResolver(TestSetup.Base64UrlDecoder, Pool));
 
         FederationAutomaticRegistrationResult result = await FederationAutomaticRegistration.ResolveAsync(
             compactChain,

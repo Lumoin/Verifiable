@@ -1,6 +1,6 @@
 using System.Formats.Cbor;
-using System.Security.Cryptography;
 using System.Text;
+using Verifiable.Cryptography;
 
 namespace Verifiable.Cbor.Mdoc;
 
@@ -160,7 +160,10 @@ public static class Oid4VpMdocSessionTranscriptEncoder
     /// Computes <c>SHA-256(CBOR([identifier, mdoc_generated_nonce]))</c>
     /// per OID4VP 1.0 Appendix B.2.6.1. Both <c>clientIdToHash</c> and
     /// <c>responseUriToHash</c> follow this exact shape — only the
-    /// identifier value differs.
+    /// identifier value differs. Routed through the registered digest
+    /// seam (<see cref="CryptographicKeyEvents.ComputeDigest"/>) rather
+    /// than a direct framework hash call, so the library never picks a
+    /// hash implementation the consumer did not wire.
     /// </summary>
     private static byte[] HashIdentifierWithNonce(string identifier, ReadOnlySpan<byte> mdocGeneratedNonce)
     {
@@ -172,6 +175,11 @@ public static class Oid4VpMdocSessionTranscriptEncoder
 
         byte[] encoded = writer.Encode();
 
-        return SHA256.HashData(encoded);
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(
+            encoded, WellKnownHashAlgorithms.Sha256SizeBytes, CryptoTags.Sha256Digest, BaseMemoryPool.Shared);
+
+        //The pooled digest buffer may be larger than the requested length (pool implementations are free to
+        //over-allocate); slice to the algorithm's exact output size before copying out.
+        return digest.AsReadOnlySpan()[..WellKnownHashAlgorithms.Sha256SizeBytes].ToArray();
     }
 }

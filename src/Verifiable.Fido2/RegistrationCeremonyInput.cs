@@ -105,10 +105,45 @@ public sealed record RegistrationCeremonyInput: IDisposable
     public bool AllowUserPresenceAbsent { get; init; }
 
     /// <summary>
-    /// The COSE algorithm identifiers the relying party's <c>pubKeyCredParams</c> requested, for
-    /// step 20's algorithm match.
+    /// The exact <c>pubKeyCredParams</c> list the relying party offered in the
+    /// <c>PublicKeyCredentialCreationOptions</c> this ceremony's challenge was issued for — typically
+    /// <see cref="PublicKeyCredentialCreationOptions.PubKeyCredParams"/> itself, passed straight
+    /// through.
     /// </summary>
-    public required IReadOnlyList<int> AllowedAlgorithms { get; init; }
+    /// <remarks>
+    /// <see cref="AllowedAlgorithms"/> derives step 20's algorithm-match set from this list via
+    /// <see cref="Fido2OptionsDescriptors.ProjectAlgorithms"/>, so a relying party can no longer
+    /// hand-author an accepted-algorithm list independently of what it actually offered — the two are
+    /// mechanically coupled by construction rather than left to agree by caller discipline. A relying
+    /// party that genuinely needs to accept fewer algorithms than it offered uses the explicit,
+    /// named <see cref="NarrowAcceptedAlgorithmsTo"/> opt-in instead of writing a divergent list here.
+    /// </remarks>
+    public required IReadOnlyList<PublicKeyCredentialParameters> ExpectedPubKeyCredParams { get; init; }
+
+    /// <summary>
+    /// An explicit, named opt-in for accepting a STRICT SUBSET of <see cref="ExpectedPubKeyCredParams"/>'s
+    /// algorithms, or <see langword="null"/> (the default) to accept exactly what was offered.
+    /// </summary>
+    /// <remarks>
+    /// This is the one legitimate way to narrow acceptance below the full offered set — for example, a
+    /// relying party that offered an algorithm at options-issuance time but has since revoked trust in
+    /// it before this particular ceremony completed. <see cref="AllowedAlgorithms"/> throws
+    /// <see cref="ArgumentException"/> if this list contains any algorithm identifier that was not
+    /// actually offered in <see cref="ExpectedPubKeyCredParams"/> — narrowing can only ever shrink the
+    /// accepted set, never widen it, closing off the very drift this type exists to prevent.
+    /// </remarks>
+    public IReadOnlyList<int>? NarrowAcceptedAlgorithmsTo { get; init; }
+
+    /// <summary>
+    /// The COSE algorithm identifiers step 20's algorithm match accepts: every algorithm offered in
+    /// <see cref="ExpectedPubKeyCredParams"/>, or — when <see cref="NarrowAcceptedAlgorithmsTo"/> is set —
+    /// that explicit, validated subset instead. Computed on every access; never independently settable.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// <see cref="NarrowAcceptedAlgorithmsTo"/> names an algorithm that <see cref="ExpectedPubKeyCredParams"/>
+    /// never offered.
+    /// </exception>
+    public IReadOnlyList<int> AllowedAlgorithms => ResolveAllowedAlgorithms();
 
     /// <summary>
     /// The outcome of the attestation statement format's verification procedure, or
@@ -183,6 +218,38 @@ public sealed record RegistrationCeremonyInput: IDisposable
     /// only supplies one to route processor allocations through its own pool.
     /// </summary>
     public MemoryPool<byte> ExtensionProcessingPool { get; init; } = BaseMemoryPool.Shared;
+
+
+    /// <summary>
+    /// Computes <see cref="AllowedAlgorithms"/>: the full set of algorithms
+    /// <see cref="ExpectedPubKeyCredParams"/> offered, unless <see cref="NarrowAcceptedAlgorithmsTo"/>
+    /// requests a validated, strictly narrower subset.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// <see cref="NarrowAcceptedAlgorithmsTo"/> names an algorithm <see cref="ExpectedPubKeyCredParams"/>
+    /// never offered.
+    /// </exception>
+    private IReadOnlyList<int> ResolveAllowedAlgorithms()
+    {
+        IReadOnlyList<int> offeredAlgorithms = Fido2OptionsDescriptors.ProjectAlgorithms(ExpectedPubKeyCredParams);
+        if(NarrowAcceptedAlgorithmsTo is not IReadOnlyList<int> narrowedAlgorithms)
+        {
+            return offeredAlgorithms;
+        }
+
+        foreach(int narrowedAlgorithm in narrowedAlgorithms)
+        {
+            if(!offeredAlgorithms.Contains(narrowedAlgorithm))
+            {
+                throw new ArgumentException(
+                    $"'{nameof(NarrowAcceptedAlgorithmsTo)}' named algorithm '{narrowedAlgorithm}', which was never offered in '{nameof(ExpectedPubKeyCredParams)}'. " +
+                    $"Narrowing may only shrink the accepted-algorithm set, never widen it.",
+                    nameof(NarrowAcceptedAlgorithmsTo));
+            }
+        }
+
+        return narrowedAlgorithms;
+    }
 
 
     /// <summary>

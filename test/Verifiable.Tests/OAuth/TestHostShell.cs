@@ -1852,8 +1852,9 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// Minimal client-side <see cref="ClientMetadata"/> parser used by the
     /// test transport. Reads only the fields the canonical lifecycle test
     /// exercises (<c>client_id</c>, <c>redirect_uris</c>, <c>scope</c>,
-    /// <c>client_name</c>); production wiring uses
-    /// <c>Verifiable.OAuth.Json</c>.
+    /// <c>client_name</c>); no default implementation of
+    /// <see cref="ParseClientMetadataDelegate"/> is shipped, so production
+    /// wiring supplies its own JSON layer here too.
     /// </summary>
     private static ValueTask<ClientMetadata> ParseClientMetadataJson(string body, CancellationToken cancellationToken)
     {
