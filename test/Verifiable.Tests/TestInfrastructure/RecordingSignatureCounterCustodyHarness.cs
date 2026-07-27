@@ -7,7 +7,7 @@ using Verifiable.Fido2.Ctap.Authenticator.Custody;
 namespace Verifiable.Tests.TestInfrastructure;
 
 /// <summary>
-/// Wraps an inner <see cref="CtapSignatureCounterCustody"/> bundle (typically <see cref="TpmNvSignatureCounterCustody"/>
+/// Wraps an inner <see cref="CtapSignatureCounterCustody"/> bundle (typically <c>TpmNvSignatureCounterCustody</c>
 /// over a real in-house simulated TPM) with two test-only observation/injection hooks, both held as
 /// INSTANCE state on this harness rather than closed-over locals — the same no-closure-capture discipline
 /// <c>TpmSealedStateCustodyBinding</c>'s bound instance methods follow in production code:

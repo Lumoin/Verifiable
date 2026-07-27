@@ -1,7 +1,6 @@
 using System.Collections.Frozen;
 using System.Collections.Generic;
-using Verifiable.Tpm.Infrastructure.Spec.Constants;
-using Verifiable.Tpm.Structures.Spec.Constants;
+using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable.Tpm.Automata;
 

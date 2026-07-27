@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Extensions.DictionaryAttack;
 using Verifiable.Tpm.Infrastructure;
-using Verifiable.Tpm.Infrastructure.Spec.Constants;
+using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable.Tests.Tpm;
 

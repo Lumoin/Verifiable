@@ -1,11 +1,12 @@
 using System;
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
-using Verifiable.Tpm.Infrastructure.Spec.Attributes;
-using Verifiable.Tpm.Infrastructure.Spec.Constants;
-using Verifiable.Tpm.Infrastructure.Spec.Handles;
-using Verifiable.Tpm.Infrastructure.Spec.Structures;
+using Verifiable.Tpm.Spec.Attributes;
+using Verifiable.Tpm.Spec.Constants;
+using Verifiable.Tpm.Spec.Handles;
+using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Infrastructure.Sessions;
 
@@ -105,6 +106,7 @@ public sealed class TpmPolicySession: TpmSessionBase, IDisposable
     /// A satisfied plain policy session carries no HMAC, so this returns the shared empty
     /// <see cref="Tpm2bAuth"/> (size 0). The cpHash is unused.
     /// </remarks>
+    [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Tpm2bAuth.CreateEmpty returns the shared, non-owned empty singleton (never a freshly rented buffer); the caller must not dispose it.")]
     public override ValueTask<Tpm2bAuth?> PrepareAuthHmacAsync(
         ReadOnlyMemory<byte> cpHash,
         MemoryPool<byte> pool,

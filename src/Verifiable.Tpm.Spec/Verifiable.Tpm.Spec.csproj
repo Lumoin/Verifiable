@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Implements the TPM 2.0 Library specification's wire vocabulary</Title>
+    <Description>Includes the TPM 2.0 Library Part 2 structures, constants, attributes and handles, plus the wire marshaling primitives that read and write them. Passive spec data only - no device, no I/O, no state machine.</Description>
+    <PackageTags>TPM trusted-platform-module wire-format</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verifiable.Foundation\Verifiable.Foundation.csproj" />
+    <ProjectReference Include="..\Verifiable.Cryptography\Verifiable.Cryptography.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -3,7 +3,7 @@ using System.Buffers;
 using System.Diagnostics;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
-using Verifiable.Tpm.Infrastructure.Spec.Structures;
+using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Extensions.Seal;
 

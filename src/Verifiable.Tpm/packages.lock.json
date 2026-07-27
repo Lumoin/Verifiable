@@ -125,6 +125,13 @@
           "Lumoin.Base": "[0.0.7, )"
         }
       },
+      "verifiable.tpm.spec": {
+        "type": "Project",
+        "dependencies": {
+          "Verifiable.Cryptography": "[0.0.0, )",
+          "Verifiable.Foundation": "[0.0.0, )"
+        }
+      },
       "Lumoin.Base": {
         "type": "CentralTransitive",
         "requested": "[0.0.7, )",

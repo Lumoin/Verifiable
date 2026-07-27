@@ -3,7 +3,7 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using Verifiable.Tpm.Infrastructure.Spec.Constants;
+using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable.Tpm.EventLog;
 

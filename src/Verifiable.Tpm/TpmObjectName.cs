@@ -7,7 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
-using Verifiable.Tpm.Infrastructure.Spec.Constants;
+using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable.Tpm;
 

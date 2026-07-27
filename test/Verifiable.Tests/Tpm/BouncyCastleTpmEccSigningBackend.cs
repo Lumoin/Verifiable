@@ -13,7 +13,7 @@ using Org.BouncyCastle.Math;
 using Org.BouncyCastle.Security;
 using Verifiable.Cryptography;
 using Verifiable.Tpm.Automata;
-using Verifiable.Tpm.Structures.Spec.Constants;
+using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable.Tests.Tpm;
 

@@ -3,13 +3,14 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Fido2.Ctap.Authenticator.Custody;
+using Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 using Verifiable.Foundation;
 
 namespace Verifiable.Tests.TestInfrastructure;
 
 /// <summary>
 /// An in-memory, dictionary-backed test double for the three caller-supplied blob-store delegates
-/// <see cref="Verifiable.Fido2.Ctap.Authenticator.Custody.TpmSealedStateCustody.Create"/> composes
+/// <see cref="Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody.TpmSealedStateCustody.Create"/> composes
 /// (<see cref="TryFetchSealedSnapshotBlobAsyncDelegate"/>, <see cref="StoreSealedSnapshotBlobAsyncDelegate"/>,
 /// <see cref="DeleteSealedSnapshotBlobAsyncDelegate"/>): persists/loads/wipes the OPAQUE, TPM-sealed blob
 /// bytes in a plain dictionary keyed by run id — the same role <see cref="DictionaryBackedCtapStateCustodyStore"/>

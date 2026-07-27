@@ -6,7 +6,7 @@ using Lumoin.Base;
 using Verifiable.Tpm;
 using Verifiable.Tpm.EventLog;
 using Verifiable.Tpm.Extensions.EventLog;
-using Verifiable.Tpm.Infrastructure.Spec.Constants;
+using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable;
 

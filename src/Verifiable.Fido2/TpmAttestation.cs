@@ -8,11 +8,9 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
-using Verifiable.Tpm;
-using Verifiable.Tpm.Infrastructure;
-using Verifiable.Tpm.Infrastructure.Spec.Constants;
-using Verifiable.Tpm.Infrastructure.Spec.Structures;
-using Verifiable.Tpm.Structures.Spec.Constants;
+using Verifiable.Tpm.Spec;
+using Verifiable.Tpm.Spec.Constants;
+using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Fido2;
 

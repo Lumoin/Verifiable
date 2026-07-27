@@ -2,9 +2,8 @@ using System;
 using System.Buffers.Binary;
 using System.Security.Cryptography;
 using Verifiable.Tpm.Infrastructure;
-using Verifiable.Tpm.Infrastructure.Spec.Constants;
-using Verifiable.Tpm.Infrastructure.Spec.Handles;
-using Verifiable.Tpm.Structures.Spec.Constants;
+using Verifiable.Tpm.Spec.Constants;
+using Verifiable.Tpm.Spec.Handles;
 
 namespace Verifiable.Tests.Tpm;
 

@@ -1,6 +1,5 @@
 using System;
-using Verifiable.Tpm.Infrastructure.Spec.Constants;
-using Verifiable.Tpm.Structures.Spec.Constants;
+using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 
