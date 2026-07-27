@@ -131,7 +131,7 @@ internal sealed class JweAuthcryptDecryptGuardTests
         };
 
         //The §2.1 gate rejects on the content algorithm before the AEAD delegate is invoked; the
-        //matching delegate is supplied so the test is honest about which cipher each enc names.
+        //matching delegate is supplied so the test names the cipher each enc value selects.
         AeadEncryptDelegate aeadEncryptDelegate = encName == nameof(WellKnownJweEncryptionAlgorithms.XC20P)
             ? BouncyCastleKeyAgreementFunctions.XChaCha20Poly1305EncryptAsync
             : BouncyCastleKeyAgreementFunctions.AesGcmEncryptAsync;

@@ -214,7 +214,7 @@ internal sealed class TpmInHouseSimulatorSignTests
 
         //creationHash is H_nameAlg(creationData) (TPM 2.0 Part 2, clause 15.1). Recompute it from the exported
         //creationData bytes.
-        byte[] expectedCreationHash = await ComputeSha256Async(primary.CreationData.GetRawBytes().ToArray(), pool, TestContext.CancellationToken).ConfigureAwait(false);
+        byte[] expectedCreationHash = await ComputeSha256Async(primary.CreationData.GetRawMemory(), pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(expectedCreationHash.AsSpan().SequenceEqual(primary.CreationHash.AsReadOnlySpan()), "creationHash must be H(creationData).");
 
         //creationData for a primary under the owner hierarchy: a NULL parentNameAlg and the owner handle as the

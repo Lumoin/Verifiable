@@ -1,4 +1,5 @@
 using System.Buffers;
+using Lumoin.Base;
 using Verifiable.Core.StatusList;
 
 using StatusListType = Verifiable.Core.StatusList.StatusList;
@@ -33,7 +34,7 @@ internal sealed class StatusListTokenTests
     /// </summary>
     /// <remarks>The shared memory pool minimizes memory allocations by reusing buffers. This property is
     /// thread-safe and intended for scenarios where high-performance buffer management is required.</remarks>
-    private static MemoryPool<byte> Pool => MemoryPool<byte>.Shared;
+    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
 
     [TestMethod]

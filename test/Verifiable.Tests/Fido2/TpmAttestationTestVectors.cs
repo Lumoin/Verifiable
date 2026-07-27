@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
+using Verifiable.Tests.X509;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Spec.Attributes;
 using Verifiable.Tpm.Infrastructure.Spec.Constants;
@@ -121,12 +122,12 @@ internal static class TpmAttestationTestVectors
                 critical: emptySubject));
         }
 
-        byte[] serialNumber = RandomNumberGenerator.GetBytes(16);
+        using Salt serialNumber = X509ChainTestRing.CreateSerialNumber(16);
         X509Certificate2 certificate = request.Create(
             issuerCertificate,
             notBefore: notBefore ?? DefaultNotBefore,
             notAfter: notAfter ?? DefaultNotAfter,
-            serialNumber);
+            serialNumber.AsReadOnlySpan());
 
         if(!attachPrivateKey)
         {
@@ -214,7 +215,7 @@ internal static class TpmAttestationTestVectors
             | TpmaObject.USER_WITH_AUTH | TpmaObject.SIGN_ENCRYPT;
 
         using TpmtPublic pubArea = TpmtPublic.CreateEccSigningKey(
-            nameAlg, Attributes, TpmEccCurveConstants.TPM_ECC_NIST_P256, TpmtEccScheme.Ecdsa(nameAlg), point);
+            nameAlg, Attributes, TpmEccCurveConstants.TPM_ECC_NIST_P256, TpmtEccScheme.Ecdsa(nameAlg), point, BaseMemoryPool.Shared);
 
         byte[] buffer = new byte[pubArea.GetSerializedSize()];
         var writer = new TpmWriter(buffer);

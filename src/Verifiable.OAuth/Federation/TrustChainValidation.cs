@@ -110,8 +110,24 @@ public static class TrustChainValidation
                         ? statementToVerify
                         : parsedStatements[i + 1];
 
-                PublicKeyMemory? verificationKey = await keyResolver(
-                    statementToVerify, parsedHeaders[i], issuerStatement, cancellationToken).ConfigureAwait(false);
+                //The jwks the resolver reads from is itself attacker-controlled
+                //chain content: a tampered coordinate, an unsupported key type,
+                //or a missing required member surfaces as FormatException,
+                //ArgumentException, or NotSupportedException from the resolver's
+                //JWK-to-key conversion. Those are resolution failures, not host
+                //failures — they must reject the chain the same way a null
+                //resolution does, never escape as an unhandled exception.
+                PublicKeyMemory? verificationKey;
+                try
+                {
+                    verificationKey = await keyResolver(
+                        statementToVerify, parsedHeaders[i], issuerStatement, cancellationToken).ConfigureAwait(false);
+                }
+                catch(Exception ex) when(ex is FormatException or ArgumentException or NotSupportedException)
+                {
+                    return TrustChainValidationOutcome.Rejected(
+                        $"Key resolution raised for the statement at position {i}: {ex.Message}");
+                }
 
                 if(verificationKey is null)
                 {

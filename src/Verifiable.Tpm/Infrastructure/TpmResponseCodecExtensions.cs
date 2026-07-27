@@ -140,6 +140,12 @@ public static class TpmResponseCodecExtensions
         public static TpmResponseCodec PolicyNv => TpmResponseCodec.NoParameters(PolicyNvResponse.Instance);
 
         /// <summary>
+        /// Codec for TPM2_PolicyCounterTimer response. This command has no response handles and no response
+        /// parameters (TPM 2.0 Library Part 3, Section 23.10).
+        /// </summary>
+        public static TpmResponseCodec PolicyCounterTimer => TpmResponseCodec.NoParameters(PolicyCounterTimerResponse.Instance);
+
+        /// <summary>
         /// Codec for TPM2_PolicyGetDigest response.
         /// </summary>
         /// <remarks>
@@ -173,6 +179,31 @@ public static class TpmResponseCodecExtensions
         public static TpmResponseCodec PolicySecret => TpmResponseCodec.Create(PolicySecretResponse.Parse);
 
         /// <summary>
+        /// Codec for TPM2_PolicySigned response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>timeout (TPM2B_TIMEOUT) - empty in this wave's deferred-ticket form.</description></item>
+        ///   <item><description>policyTicket (TPMT_TK_AUTH) - a NULL ticket in this wave's deferred-ticket form.</description></item>
+        /// </list>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 23.3 - TPM2_PolicySigned.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec PolicySigned => TpmResponseCodec.Create(PolicySignedResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_PolicyAuthorize response.
+        /// </summary>
+        /// <remarks>
+        /// TPM2_PolicyAuthorize has no response parameters beyond the header (TPM 2.0 Part 3, Section 23.16).
+        /// </remarks>
+        public static TpmResponseCodec PolicyAuthorize => TpmResponseCodec.NoParameters(PolicyAuthorizeResponse.Instance);
+
+        /// <summary>
         /// Codec for TPM2_NV_DefineSpace response. This command has no response handles and no response
         /// parameters (TPM 2.0 Library Part 3, Section 31.3).
         /// </summary>
@@ -197,6 +228,12 @@ public static class TpmResponseCodecExtensions
         /// parameters (TPM 2.0 Library Part 3, Section 31.4).
         /// </summary>
         public static TpmResponseCodec NvUndefineSpace => TpmResponseCodec.NoParameters(NvUndefineSpaceResponse.Instance);
+
+        /// <summary>
+        /// Codec for TPM2_NV_Increment response. This command has no response handles and no response
+        /// parameters (TPM 2.0 Library Part 3, Section 31.8).
+        /// </summary>
+        public static TpmResponseCodec NvIncrement => TpmResponseCodec.NoParameters(NvIncrementResponse.Instance);
 
         /// <summary>
         /// Codec for TPM2_EvictControl response. This command has no response handles and no response parameters
@@ -361,6 +398,107 @@ public static class TpmResponseCodecExtensions
         public static TpmResponseCodec Certify => TpmResponseCodec.Create(CertifyResponse.Parse);
 
         /// <summary>
+        /// Codec for TPM2_CertifyCreation response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>certifyInfo (TPM2B_ATTEST) - the signed attestation (a marshaled TPMS_ATTEST of type TPM_ST_ATTEST_CREATION).</description></item>
+        ///   <item><description>signature (TPMT_SIGNATURE) - sigAlg (2) selecting a TPMU_SIGNATURE member.</description></item>
+        /// </list>
+        /// <para>
+        /// The first response parameter, <c>certifyInfo</c>, is a sized buffer and so would be encrypt-eligible,
+        /// but an attestation is public by design, so it is left non-encryptable.
+        /// </para>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 18.3 - TPM2_CertifyCreation.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec CertifyCreation => TpmResponseCodec.Create(CertifyCreationResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_GetTime response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>timeInfo (TPM2B_ATTEST) - the signed attestation (a marshaled TPMS_ATTEST of type TPM_ST_ATTEST_TIME).</description></item>
+        ///   <item><description>signature (TPMT_SIGNATURE) - sigAlg (2) selecting a TPMU_SIGNATURE member.</description></item>
+        /// </list>
+        /// <para>
+        /// The first response parameter, <c>timeInfo</c>, is a sized buffer and so would be encrypt-eligible, but
+        /// an attestation is public by design, so it is left non-encryptable.
+        /// </para>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 18.7 - TPM2_GetTime.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec GetTime => TpmResponseCodec.Create(GetTimeResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_ReadClock response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>currentTime (TPMS_TIME_INFO) - the current Time/Clock/resetCount/restartCount/Safe snapshot, uncertified and unsigned.</description></item>
+        /// </list>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 29.1 - TPM2_ReadClock.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec ReadClock => TpmResponseCodec.Create(ReadClockResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_ClockSet response. This command has no response handles and no response parameters
+        /// (TPM 2.0 Library Part 3, Section 29.2).
+        /// </summary>
+        public static TpmResponseCodec ClockSet => TpmResponseCodec.NoParameters(ClockSetResponse.Instance);
+
+        /// <summary>
+        /// Codec for TPM2_NV_Certify response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>certifyInfo (TPM2B_ATTEST) - the signed attestation (a marshaled TPMS_ATTEST of type TPM_ST_ATTEST_NV).</description></item>
+        ///   <item><description>signature (TPMT_SIGNATURE) - sigAlg (2) selecting a TPMU_SIGNATURE member.</description></item>
+        /// </list>
+        /// <para>
+        /// The first response parameter, <c>certifyInfo</c>, is a sized buffer and so would be encrypt-eligible,
+        /// but an attestation is public by design, so it is left non-encryptable.
+        /// </para>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 31.16 - TPM2_NV_Certify.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec NvCertify => TpmResponseCodec.Create(NvCertifyResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_VerifySignature response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>validation (TPMT_TK_VERIFIED) - the validation ticket. Unlike every attest-producing command, there is no TPM2B_ATTEST and no TPMT_SIGNATURE.</description></item>
+        /// </list>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 20.1 - TPM2_VerifySignature.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec VerifySignature => TpmResponseCodec.Create(VerifySignatureResponse.Parse);
+
+        /// <summary>
         /// Codec for TPM2_MakeCredential response.
         /// </summary>
         /// <remarks>
@@ -434,6 +572,18 @@ public static class TpmResponseCodecExtensions
         /// </para>
         /// </remarks>
         public static TpmResponseCodec EcdhZGen => TpmResponseCodec.Create(EcdhZGenResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_DictionaryAttackLockReset response. This command has no response handles and no
+        /// response parameters (TPM 2.0 Library Part 3, Section 25.2).
+        /// </summary>
+        public static TpmResponseCodec DictionaryAttackLockReset => TpmResponseCodec.NoParameters(DictionaryAttackLockResetResponse.Instance);
+
+        /// <summary>
+        /// Codec for TPM2_DictionaryAttackParameters response. This command has no response handles and no
+        /// response parameters (TPM 2.0 Library Part 3, Section 25.3).
+        /// </summary>
+        public static TpmResponseCodec DictionaryAttackParameters => TpmResponseCodec.NoParameters(DictionaryAttackParametersResponse.Instance);
 
         /// <summary>
         /// Codec for TPM2_ReadPublic response.

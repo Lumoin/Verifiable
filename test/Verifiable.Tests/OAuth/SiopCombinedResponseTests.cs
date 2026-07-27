@@ -314,7 +314,7 @@ internal sealed class SiopCombinedResponseTests
                 s, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
             static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
             IssuerLookup,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             Pool,

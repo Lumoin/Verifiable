@@ -127,7 +127,7 @@ internal sealed class CtapAuthenticatorCapstoneFlowTests
             ExpectedOrigins = new HashSet<string> { Origin },
             ExpectedRpIdHash = CtapWave2CapstoneFixtures.ComputeExpectedRpIdHash(RpId, pool),
             UserVerification = UserVerificationRequirement.Discouraged,
-            AllowedAlgorithms = [WellKnownCoseAlgorithms.Es256]
+            ExpectedPubKeyCredParams = creationOptions.PubKeyCredParams!
         };
 
         SelectAttestationVerifierDelegate selectAttestationVerifier = Fido2AttestationSelectors.FromFormats(
@@ -290,7 +290,7 @@ internal sealed class CtapAuthenticatorCapstoneFlowTests
             ExpectedOrigins = new HashSet<string> { Origin },
             ExpectedRpIdHash = CtapWave2CapstoneFixtures.ComputeExpectedRpIdHash(RpId, pool),
             UserVerification = UserVerificationRequirement.Discouraged,
-            AllowedAlgorithms = [WellKnownCoseAlgorithms.Es256]
+            ExpectedPubKeyCredParams = creationOptions.PubKeyCredParams!
         };
 
         SelectAttestationVerifierDelegate selectAttestationVerifier = Fido2AttestationSelectors.FromFormats(

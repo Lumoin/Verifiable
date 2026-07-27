@@ -31,7 +31,7 @@ internal sealed class WebVhHashTests
     {
         EncodeDelegate base58Encoder = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase));
 
-        string hash = await WebVhHash.ComputeBase58Async(Jcs.CanonicalizeToUtf8Bytes(PreliminaryLogEntry), MicrosoftEntropyFunctions.ComputeDigestAsync, base58Encoder, BaseMemoryPool.Shared, CancellationToken.None);
+        string hash = await WebVhHash.ComputeBase58Async(Jcs.CanonicalizeToUtf8Bytes(PreliminaryLogEntry), MicrosoftCryptographicFunctions.ComputeDigestAsync, base58Encoder, BaseMemoryPool.Shared, CancellationToken.None);
 
         Assert.AreEqual(ExpectedEntryHash, hash);
     }
@@ -43,7 +43,7 @@ internal sealed class WebVhHashTests
     {
         EncodeDelegate base58Encoder = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase));
 
-        string hash = await WebVhHash.ComputeBase58Async("did:webvh test input"u8.ToArray(), MicrosoftEntropyFunctions.ComputeDigestAsync, base58Encoder, BaseMemoryPool.Shared, CancellationToken.None);
+        string hash = await WebVhHash.ComputeBase58Async("did:webvh test input"u8.ToArray(), MicrosoftCryptographicFunctions.ComputeDigestAsync, base58Encoder, BaseMemoryPool.Shared, CancellationToken.None);
 
         Assert.StartsWith("Qm", hash, "A base58btc SHA-256 multihash begins with the 0x12 0x20 prefix, which encodes to 'Qm'.");
         Assert.AreEqual(46, hash.Length, "A base58btc-encoded 34-byte SHA-256 multihash is 46 characters.");
@@ -56,8 +56,8 @@ internal sealed class WebVhHashTests
     {
         EncodeDelegate base58Encoder = DefaultCoderSelector.SelectEncoder(typeof(PublicKeyMultibase));
 
-        string first = await WebVhHash.ComputeBase58Async("same input"u8.ToArray(), MicrosoftEntropyFunctions.ComputeDigestAsync, base58Encoder, BaseMemoryPool.Shared, CancellationToken.None);
-        string second = await WebVhHash.ComputeBase58Async("same input"u8.ToArray(), MicrosoftEntropyFunctions.ComputeDigestAsync, base58Encoder, BaseMemoryPool.Shared, CancellationToken.None);
+        string first = await WebVhHash.ComputeBase58Async("same input"u8.ToArray(), MicrosoftCryptographicFunctions.ComputeDigestAsync, base58Encoder, BaseMemoryPool.Shared, CancellationToken.None);
+        string second = await WebVhHash.ComputeBase58Async("same input"u8.ToArray(), MicrosoftCryptographicFunctions.ComputeDigestAsync, base58Encoder, BaseMemoryPool.Shared, CancellationToken.None);
 
         Assert.AreEqual(first, second);
     }

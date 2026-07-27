@@ -37,7 +37,7 @@ internal sealed class CredentialStatusGateTests
         var token = new StatusListToken(ListUri, Now, list);
 
         CredentialStatusOutcome outcome = await CredentialStatusGate.CheckAsync(
-            new StatusListReference(CredentialIndex, ListUri), ResolverFor(token), Now, TestContext.CancellationToken).ConfigureAwait(false);
+            new StatusListReference(CredentialIndex, ListUri), ResolverFor(token), Now, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(outcome.IsValid);
         Assert.AreEqual(StatusTypes.Valid, outcome.Status);
@@ -52,7 +52,7 @@ internal sealed class CredentialStatusGateTests
         var token = new StatusListToken(ListUri, Now, list);
 
         CredentialStatusOutcome outcome = await CredentialStatusGate.CheckAsync(
-            new StatusListReference(CredentialIndex, ListUri), ResolverFor(token), Now, TestContext.CancellationToken).ConfigureAwait(false);
+            new StatusListReference(CredentialIndex, ListUri), ResolverFor(token), Now, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(outcome.IsValid);
         Assert.AreEqual(StatusTypes.Invalid, outcome.Status);
@@ -67,7 +67,7 @@ internal sealed class CredentialStatusGateTests
         var token = new StatusListToken(ListUri, Now, list);
 
         CredentialStatusOutcome outcome = await CredentialStatusGate.CheckAsync(
-            new StatusListReference(CredentialIndex, ListUri), ResolverFor(token), Now, TestContext.CancellationToken).ConfigureAwait(false);
+            new StatusListReference(CredentialIndex, ListUri), ResolverFor(token), Now, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(outcome.IsValid);
         Assert.AreEqual(StatusTypes.Suspended, outcome.Status);
@@ -84,7 +84,7 @@ internal sealed class CredentialStatusGateTests
         try
         {
             await CredentialStatusGate.CheckAsync(
-                new StatusListReference(CredentialIndex, ListUri), ResolverFor(tokenForAnotherList), Now, TestContext.CancellationToken).ConfigureAwait(false);
+                new StatusListReference(CredentialIndex, ListUri), ResolverFor(tokenForAnotherList), Now, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         }
         catch(StatusListValidationException exception)
         {
@@ -92,5 +92,56 @@ internal sealed class CredentialStatusGateTests
         }
 
         Assert.IsNotNull(caught, "A status list token whose subject does not match the reference URI must not pass.");
+    }
+
+
+    /// <summary>
+    /// A stale-but-unexpired Status List Token must still read as valid: <c>ttl</c> (draft-ietf-oauth-status-list
+    /// §5.1/§8.3 step 4.2.4) is a caching hint, not a validity requirement, so its breach alone must never
+    /// invalidate the credential. The staleness verdict must nonetheless be reachable from the gate's own
+    /// result, computed against the caller-supplied <c>resolvedAt</c> cache timestamp — this is the exact
+    /// composition a caching resolver (an RP's local cache, an Orleans status-list grain) would use.
+    /// </summary>
+    [TestMethod]
+    public async Task StaleButUnexpiredTokenIsValidAndFlaggedForRefresh()
+    {
+        using var list = StatusListType.Create(64, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
+        var token = new StatusListToken(ListUri, Now, list)
+        {
+            TimeToLive = 60,
+            ExpirationTime = Now.AddDays(1)
+        };
+
+        DateTimeOffset cachedAt = Now;
+        DateTimeOffset checkedAt = Now.AddMinutes(5);
+
+        CredentialStatusOutcome outcome = await CredentialStatusGate.CheckAsync(
+            new StatusListReference(CredentialIndex, ListUri), ResolverFor(token), checkedAt, cachedAt, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(outcome.IsValid, "ttl breach alone must not invalidate a still-unexpired credential status.");
+        Assert.AreEqual(StatusTypes.Valid, outcome.Status);
+        Assert.IsTrue(outcome.ShouldRefresh, "A token resolved well past its ttl must surface a refresh signal.");
+    }
+
+
+    /// <summary>
+    /// When the caller performs no caching of its own — the common case, and the default when
+    /// <c>resolvedAt</c> is omitted — a token that carries a <c>ttl</c> must not spuriously read as
+    /// stale: it was, by construction, just resolved.
+    /// </summary>
+    [TestMethod]
+    public async Task WithoutACallerSuppliedResolvedAtTheOutcomeIsNeverFlaggedForRefresh()
+    {
+        using var list = StatusListType.Create(64, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
+        var token = new StatusListToken(ListUri, Now, list)
+        {
+            TimeToLive = 1
+        };
+
+        CredentialStatusOutcome outcome = await CredentialStatusGate.CheckAsync(
+            new StatusListReference(CredentialIndex, ListUri), ResolverFor(token), Now, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(outcome.IsValid);
+        Assert.IsFalse(outcome.ShouldRefresh, "A token with no caller-tracked resolution time must not be reported stale.");
     }
 }

@@ -58,6 +58,18 @@ public sealed class Tpm2bCreationData: IDisposable, ITpmWireType
     }
 
     /// <summary>
+    /// Gets the raw creation data bytes as memory, for asynchronous consumers such as the registered digest
+    /// seam. The memory aliases this instance's pooled storage — it is valid until <see cref="Dispose"/> and
+    /// must not be copied out into untracked arrays.
+    /// </summary>
+    /// <returns>The raw creation data bytes.</returns>
+    public ReadOnlyMemory<byte> GetRawMemory()
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        return RawStorage.Memory.Slice(0, RawLength);
+    }
+
+    /// <summary>
     /// Parses creation data from a TPM reader.
     /// </summary>
     /// <param name="reader">The reader.</param>

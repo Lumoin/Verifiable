@@ -460,11 +460,14 @@ public delegate ValueTask<Federation.ExplicitRegistrationContribution?> ResolveE
 /// <remarks>
 /// <para>
 /// Required when <see cref="WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi"/>
-/// is advertised. The default JSON implementation lives in
-/// <c>Verifiable.OAuth.Json</c> and is wired by the application — the
-/// <c>Verifiable.OAuth</c> serialization firewall keeps STJ out of the
-/// library, so the request body's arbitrary <c>properties</c> / <c>context</c>
-/// objects are deserialised by the application's JSON stack.
+/// is advertised. The <c>Verifiable.OAuth</c> serialization firewall keeps
+/// STJ out of this library, so the request body's arbitrary
+/// <c>properties</c> / <c>context</c> objects are deserialised by the
+/// application's JSON stack. The shipped default,
+/// <c>Verifiable.Json.AuthZen.AuthZenJsonParsing.ParseAccessEvaluationRequest</c>,
+/// is wired by <c>Verifiable.Json.AuthZen.AuthZenJsonExtensions.UseDefaultAuthZenJsonParsing</c>
+/// (that project depends on this one, so it cannot be named by
+/// <c>cref</c> here).
 /// </para>
 /// <para>
 /// Return <see langword="null"/> when the body does not parse as a valid
@@ -489,10 +492,13 @@ public delegate ValueTask<AuthZen.AccessEvaluationRequest?> ParseAccessEvaluatio
 /// <para>
 /// Required for the <c>access_evaluations_endpoint</c> when
 /// <see cref="WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi"/> is
-/// advertised. As with the single-evaluation parser, the default JSON
-/// implementation lives in <c>Verifiable.OAuth.Json</c> and is wired by the
-/// application — the <c>Verifiable.OAuth</c> serialization firewall keeps STJ
-/// out of the library. The parser maps <c>options.evaluations_semantic</c>
+/// advertised. As with the single-evaluation parser, the
+/// <c>Verifiable.OAuth</c> serialization firewall keeps STJ out of this
+/// library; the shipped default,
+/// <c>Verifiable.Json.AuthZen.AuthZenJsonParsing.ParseAccessEvaluationsRequest</c>,
+/// is wired by <c>Verifiable.Json.AuthZen.AuthZenJsonExtensions.UseDefaultAuthZenJsonParsing</c>
+/// (that project depends on this one, so it cannot be named by
+/// <c>cref</c> here). The parser maps <c>options.evaluations_semantic</c>
 /// through <see cref="AuthZen.AuthZenEvaluationsSemanticValues.TryParse"/>;
 /// the library resolves the per-item defaults and short-circuit semantic.
 /// </para>
@@ -519,11 +525,14 @@ public delegate ValueTask<AuthZen.AccessEvaluationsRequest?> ParseAccessEvaluati
 /// which dimension is being enumerated.
 /// </summary>
 /// <remarks>
-/// As with the other AuthZEN parsers, the default JSON implementation lives in
-/// <c>Verifiable.OAuth.Json</c> and is wired by the application — the
-/// <c>Verifiable.OAuth</c> serialization firewall keeps STJ out of the
-/// library. Return <see langword="null"/> when the body does not parse; the
-/// endpoint then responds HTTP 400.
+/// As with the other AuthZEN parsers, the <c>Verifiable.OAuth</c>
+/// serialization firewall keeps STJ out of this library; the shipped
+/// default,
+/// <c>Verifiable.Json.AuthZen.AuthZenJsonParsing.ParseAccessSearchRequest</c>,
+/// is wired by <c>Verifiable.Json.AuthZen.AuthZenJsonExtensions.UseDefaultAuthZenJsonParsing</c>
+/// (that project depends on this one, so it cannot be named by
+/// <c>cref</c> here). Return <see langword="null"/> when the body does not
+/// parse; the endpoint then responds HTTP 400.
 /// </remarks>
 /// <param name="requestBody">The raw JSON request body (UTF-8 decoded from the POST body).</param>
 /// <param name="context">The per-request context bag.</param>
@@ -960,13 +969,15 @@ public delegate ValueTask<Oid4Vci.PreAuthorizedCodeDecision> ValidatePreAuthoriz
 /// </summary>
 /// <remarks>
 /// Required when <see cref="WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint"/> is
-/// advertised. The default JSON implementation lives in <c>Verifiable.OAuth.Json</c> and is
-/// wired by the application — the <c>Verifiable.OAuth</c> serialization firewall keeps
-/// <c>System.Text.Json</c> out of the library, so the request body's
+/// advertised. The <c>Verifiable.OAuth</c> serialization firewall keeps
+/// <c>System.Text.Json</c> out of this library, so the request body's
 /// <c>credential_configuration_id</c> / <c>credential_identifier</c> / <c>proofs</c> are
-/// deserialised by the application's JSON stack. Return <see langword="null"/> when the body
-/// does not parse as a valid Credential Request; the endpoint then responds
-/// <c>400 invalid_credential_request</c>.
+/// deserialised by the application's JSON stack. The shipped default,
+/// <c>Verifiable.Json.Oid4Vci.CredentialRequestJsonParsing.ParseCredentialRequest</c>, is
+/// wired by <c>Verifiable.Json.Oid4Vci.CredentialRequestJsonExtensions.UseDefaultCredentialRequestJsonParsing</c>
+/// (that project depends on this one, so it cannot be named by <c>cref</c> here). Return
+/// <see langword="null"/> when the body does not parse as a valid Credential Request; the
+/// endpoint then responds <c>400 invalid_credential_request</c>.
 /// </remarks>
 /// <param name="requestBody">The raw JSON request body (UTF-8 decoded from the POST body).</param>
 /// <param name="context">The per-request context bag.</param>
@@ -1171,9 +1182,12 @@ public delegate ValueTask<Oid4Vci.CredentialOffer?> ResolveCredentialOfferDelega
 /// </summary>
 /// <remarks>
 /// Required when the server processes <c>authorization_details</c> (RFC 9396 §2; OID4VCI 1.0
-/// §5.1.1 / §6.1.1). The default JSON implementation lives in <c>Verifiable.OAuth.Json</c> and is
-/// wired by the application — the <c>Verifiable.OAuth</c> serialization firewall keeps
-/// <c>System.Text.Json</c> out of the library. Return <see langword="null"/> when the value is
+/// §5.1.1 / §6.1.1). The <c>Verifiable.OAuth</c> serialization firewall keeps
+/// <c>System.Text.Json</c> out of this library; the shipped default,
+/// <c>Verifiable.Json.Oid4Vci.AuthorizationDetailsJsonParsing.ParseAuthorizationDetails</c>, is
+/// wired by <c>Verifiable.Json.Oid4Vci.AuthorizationDetailsJsonExtensions.UseDefaultAuthorizationDetailsJsonParsing</c>
+/// (that project depends on this one, so it cannot be named by <c>cref</c> here). Return
+/// <see langword="null"/> when the value is
 /// not a well-formed JSON array of objects each carrying a string <c>type</c>; the endpoint then
 /// responds <c>invalid_authorization_details</c>. The per-type shape checks (supported type,
 /// required fields) are the library's, applied after the parse by the
@@ -1278,10 +1292,12 @@ public delegate ValueTask<string?> SignCredentialIssuerMetadataDelegate(
 /// </summary>
 /// <remarks>
 /// Required when <see cref="WellKnownCapabilityIdentifiers.OAuthGlobalTokenRevocation"/>
-/// is advertised. The default JSON implementation lives in
-/// <c>Verifiable.OAuth.Json</c> and is wired by the application — the
-/// <c>Verifiable.OAuth</c> serialization firewall keeps <c>System.Text.Json</c>
-/// out of the library. Return <see langword="null"/> when the body does not parse
+/// is advertised. The <c>Verifiable.OAuth</c> serialization firewall keeps
+/// <c>System.Text.Json</c> out of this library; the shipped default,
+/// <c>Verifiable.Json.Logout.GlobalTokenRevocationJsonParsing.ParseGlobalTokenRevocationRequest</c>,
+/// is wired by <c>Verifiable.Json.Logout.GlobalTokenRevocationJsonExtensions.UseDefaultGlobalTokenRevocationJsonParsing</c>
+/// (that project depends on this one, so it cannot be named by <c>cref</c> here). Return
+/// <see langword="null"/> when the body does not parse
 /// as a valid request (no <c>sub_id</c>, or an unreadable Subject Identifier); the
 /// endpoint then responds HTTP 400.
 /// </remarks>

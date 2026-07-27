@@ -120,7 +120,8 @@ public sealed class TpmPasswordSession: TpmSessionBase, IDisposable
     public override ValueTask<Tpm2bAuth?> PrepareAuthHmacAsync(
         ReadOnlyMemory<byte> cpHash,
         MemoryPool<byte> pool,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ReadOnlyMemory<byte> foldedSessionNonces = default)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 

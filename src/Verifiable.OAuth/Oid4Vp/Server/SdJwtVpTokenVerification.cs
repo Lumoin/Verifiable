@@ -72,7 +72,7 @@ public static class SdJwtVpTokenVerification
     /// <param name="computeDigest">
     /// Computes a digest. Wired to a provider-side implementation registered on
     /// <see cref="CryptographicKeyFactory"/> such as
-    /// <c>MicrosoftEntropyFunctions.ComputeDigestAsync</c>. The algorithm is carried in
+    /// <c>MicrosoftCryptographicFunctions.ComputeDigestAsync</c>. The algorithm is carried in
     /// the <see cref="Tag"/> argument constructed per-call from the credential's
     /// <c>_sd_alg</c> claim.
     /// </param>

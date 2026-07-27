@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using Verifiable.Cryptography;
 
 namespace Verifiable.Tests.X509;
 
@@ -38,6 +39,32 @@ namespace Verifiable.Tests.X509;
 internal static class X509ChainTestRing
 {
     private static readonly HashAlgorithmName SignatureHashAlg = HashAlgorithmName.SHA256;
+
+    /// <summary>
+    /// The number of CSPRNG bytes drawn for a certificate serial number.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc5280#section-4.1.2.2">RFC 5280 §4.1.2.2</see> caps the
+    /// serial at 20 octets; issuance profiles require at least 64 bits of CSPRNG output in it, because a
+    /// predictable serial hands an attacker control of to-be-signed bytes — the lever chosen-prefix
+    /// collision forgeries against the signature hash need.
+    /// </summary>
+    internal const int SerialNumberByteLength = 8;
+
+
+    /// <summary>
+    /// Draws a fresh certificate serial number through the registered entropy seam, so the draw carries
+    /// CBOM provenance and entropy-tracking events instead of an untracked direct framework CSPRNG call.
+    /// </summary>
+    /// <param name="byteLength">
+    /// The number of CSPRNG bytes to draw. Defaults to <see cref="SerialNumberByteLength"/>; callers may
+    /// draw wider serials, up to the 20-octet cap
+    /// <see href="https://www.rfc-editor.org/rfc/rfc5280#section-4.1.2.2">RFC 5280 §4.1.2.2</see> places
+    /// on a certificate serial number.
+    /// </param>
+    /// <returns>The serial number; the caller disposes it after certificate creation.</returns>
+    internal static Salt CreateSerialNumber(int byteLength = SerialNumberByteLength)
+    {
+        return CryptographicKeyEvents.GenerateSalt(byteLength, CryptoTags.X509CertificateSerialNumber, BaseMemoryPool.Shared);
+    }
 
 
     /// <summary>
@@ -151,8 +178,7 @@ internal static class X509ChainTestRing
                     X509AuthorityKeyIdentifierExtension.CreateFromSubjectKeyIdentifier(issuerSubjectKeyId));
             }
 
-            //X.509 cert-factory carve-out: serial number handed straight to CertificateRequest.Create.
-            byte[] serial = RandomNumberGenerator.GetBytes(8);
+            using Salt serial = CreateSerialNumber();
 
             //CertificateRequest.Create(issuer, ...) requires the issuer cert
             //to carry its private key. CreateSelfSigned (used for the root)
@@ -167,7 +193,7 @@ internal static class X509ChainTestRing
                 issuerWithKey,
                 notBefore: now.AddDays(-1).UtcDateTime,
                 notAfter: now.AddYears(5).UtcDateTime,
-                serialNumber: serial);
+                serialNumber: serial.AsReadOnlySpan());
 
             //Stored cert is public-only; SigningKey holds the ECDsa.
             X509Certificate2 cert = X509CertificateLoader.LoadCertificate(publicOnly.RawData);
@@ -245,8 +271,7 @@ internal static class X509ChainTestRing
                     X509AuthorityKeyIdentifierExtension.CreateFromSubjectKeyIdentifier(issuerSubjectKeyId));
             }
 
-            //X.509 cert-factory carve-out: serial number handed straight to CertificateRequest.Create.
-            byte[] serial = RandomNumberGenerator.GetBytes(8);
+            using Salt serial = CreateSerialNumber();
 
             using X509Certificate2 issuerWithKey =
                 issuer.Certificate.HasPrivateKey
@@ -257,7 +282,7 @@ internal static class X509ChainTestRing
                 issuerWithKey,
                 notBefore: now.AddDays(-1).UtcDateTime,
                 notAfter: now.AddYears(1).UtcDateTime,
-                serialNumber: serial);
+                serialNumber: serial.AsReadOnlySpan());
 
             X509Certificate2 cert = X509CertificateLoader.LoadCertificate(publicOnly.RawData);
 
@@ -308,7 +333,15 @@ internal static class X509ChainTestRing
     }
 
 
-    private static X509SubjectKeyIdentifierExtension? FindSubjectKeyIdentifier(X509Certificate2 cert)
+    /// <summary>
+    /// Finds a certificate's own Subject Key Identifier extension, if present. Shared by the intermediate/leaf
+    /// builders here and by test-only certificate minting elsewhere in this assembly that needs to chain an
+    /// Authority Key Identifier to an issuer's Subject Key Identifier (for example an in-house TPM simulator's
+    /// EK/AK certificate profile).
+    /// </summary>
+    /// <param name="cert">The certificate to search.</param>
+    /// <returns>The Subject Key Identifier extension, or <see langword="null"/> when absent.</returns>
+    internal static X509SubjectKeyIdentifierExtension? FindSubjectKeyIdentifier(X509Certificate2 cert)
     {
         foreach(X509Extension ext in cert.Extensions)
         {

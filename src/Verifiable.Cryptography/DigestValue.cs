@@ -58,6 +58,22 @@ namespace Verifiable.Cryptography;
 /// enable substitution attacks. Pooled ownership and deterministic disposal
 /// enforce disciplined use.
 /// </para>
+/// <para>
+/// <strong>How to obtain one:</strong>
+/// Never hash by calling a framework hash API directly — that bypasses the CBOM
+/// provenance stamping, OTel instrumentation, and pool discipline every shipped digest
+/// carries. Use the registered <see cref="ComputeDigestDelegate"/> (via
+/// <see cref="Compute"/> for a synchronous, caller-supplied hash function, or through
+/// <c>CryptographicKeyFactory.RegisterFunction(typeof(ComputeDigestDelegate), ...)</c> for the
+/// algorithm-agile async seam a resolver consumes). The shipped provider entry points are
+/// <c>BouncyCastleCryptographicFunctions.ComputeDigest</c> /
+/// <c>BouncyCastleCryptographicFunctions.ComputeBlake3DigestAsync</c> (BLAKE3, and SHA-256/384/512
+/// via BouncyCastle's own <c>IDigest</c> implementations) and
+/// <c>MicrosoftCryptographicFunctions.ComputeDigestAsync</c> (SHA-256/384/512/1 via
+/// <c>System.Security.Cryptography</c>). Register one of these — or a caller-supplied
+/// implementation of the same delegate — at application startup; do not compose a fresh
+/// hashing delegate around <c>SHA256.HashData</c> or similar when one of these already exists.
+/// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class DigestValue: SensitiveMemory, IEquatable<DigestValue>
@@ -119,11 +135,25 @@ public sealed class DigestValue: SensitiveMemory, IEquatable<DigestValue>
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(outputByteLength, 0);
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);
+        AssertHousePool(pool);
 
         IMemoryOwner<byte> owner = pool.Rent(outputByteLength);
         hashFunction(input, owner.Memory.Span);
 
         return new DigestValue(owner, tag, lifetime);
+
+        //Length derives from the rented owner's Memory.Length without slicing (see Length above), so a
+        //pool whose rentals are not exact-length (e.g. System.Buffers.MemoryPool<byte>.Shared, which rounds
+        //up to a power-of-two bucket) silently produces an over-long digest. This assert turns a foreign
+        //pool arriving as a parameter into a debug-time failure instead of a wire-visible defect; compiled
+        //out in Release builds.
+        [Conditional("DEBUG")]
+        static void AssertHousePool(MemoryPool<byte> candidate)
+        {
+            Debug.Assert(candidate is BaseMemoryPool,
+                "DigestValue.Compute requires a Lumoin.Base.BaseMemoryPool (BaseMemoryPool.Shared or a " +
+                "custom house-configured instance) for exact-length rentals.");
+        }
     }
 
 

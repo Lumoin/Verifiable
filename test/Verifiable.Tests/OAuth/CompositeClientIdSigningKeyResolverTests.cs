@@ -46,6 +46,18 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
         static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
 
+    /// <summary>Header deserializer mirroring the authorization server's wiring.</summary>
+    private static readonly JwtHeaderDeserializer HeaderDeserializer = static bytes =>
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            bytes, TestSetup.DefaultSerializationOptions)
+        ?? throw new FormatException("Header JSON parsed to null.");
+
+    /// <summary>Payload deserializer mirroring the authorization server's wiring.</summary>
+    private static readonly JwtPayloadDeserializer PayloadDeserializer = static bytes =>
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            bytes, TestSetup.DefaultSerializationOptions)
+        ?? throw new FormatException("Payload JSON parsed to null.");
+
     private const string VerifierClientId = "https://verifier.example.com";
 
 
@@ -70,14 +82,14 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
             verifierNode, clientIdWithPrefix, mintedChain.CompactJwsByPosition, now,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        //Compose a composite resolver with only the openid_federation handler.
-        ValidateTrustChainAsyncDelegate validateChain =
-            Federation.InlineTrustChainValidationDriver.Build(
-                async (position, jws, ct) => position switch
-                {
-                    0 => await Federation.FederationTestRing.VerifyAsync(verifierNode, jws, ct).ConfigureAwait(false),
-                    _ => await Federation.FederationTestRing.VerifyAsync(anchorNode, jws, ct).ConfigureAwait(false),
-                });
+        //Compose a composite resolver with only the openid_federation handler,
+        //wired to the production trust-chain validator: every verification
+        //key is resolved from the chain's own jwks, not from a test-known node.
+        ValidateTrustChainAsyncDelegate validateChain = TrustChainValidation.BuildInlineValidator(
+            HeaderDeserializer,
+            PayloadDeserializer,
+            Decoder,
+            FederationKeyResolver.BuildInChainResolver(Decoder, Pool));
 
         ResolveClientIdSigningKeyAsyncDelegate composite = CompositeClientIdSigningKeyResolver.Build(
             new Dictionary<ClientIdPrefix, ResolveClientIdSigningKeyAsyncDelegate>

@@ -4,3 +4,4 @@ P:System.DateTimeOffset.Now;Use TimeProvider.GetUtcNow() instead.
 P:System.DateTimeOffset.UtcNow;Use TimeProvider.GetUtcNow() instead.
 M:System.IO.File.GetCreationTime(System.String);Use GetCreationTimeUtc instead.
 M:System.IO.File.GetLastWriteTime(System.String);Use GetLastWriteTimeUtc instead.
+P:System.Buffers.MemoryPool`1.Shared;The memory pool is caller-supplied, never ambient. Use Lumoin.Base.BaseMemoryPool.Shared as the known-pool fallback (registry-driven paths only) or thread the caller's MemoryPool<byte> through instead. System.Buffers.MemoryPool<byte>.Shared rents power-of-two buckets and lacks BaseMemoryPool's security properties (tiering, native backing, zero-on-free); Verifiable's SensitiveMemory carriers (DigestValue, Signature, HmacValue, SharedSecret) derive Length from the rented owner without slicing, so a non-exact-length rental silently produces over-long values.

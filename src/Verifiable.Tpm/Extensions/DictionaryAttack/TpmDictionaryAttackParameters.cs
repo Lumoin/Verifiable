@@ -32,8 +32,11 @@ public sealed record TpmDictionaryAttackParameters(
 {
     /// <summary>
     /// Gets a value indicating whether the TPM is currently in dictionary-attack lockout, i.e. the
-    /// failure counter has reached the tolerated maximum. Always <see langword="false"/> when
-    /// <see cref="MaxAuthFail"/> is zero (DA protection disabled).
+    /// failure counter has reached the tolerated maximum (mirrors <see cref="Verifiable.Tpm.Automata.
+    /// TpmSimulatorState.IsInLockout"/>, the server-side truth this reports). <see cref="MaxAuthFail"/>
+    /// zero is fail-CLOSED, not disabled: with <see cref="LockoutCounter"/> a <see cref="uint"/> (always
+    /// <c>&gt;= 0</c>), <c>LockoutCounter &gt;= 0</c> holds unconditionally, so the TPM reports permanent
+    /// lockout until <see cref="MaxAuthFail"/> is raised again.
     /// </summary>
-    public bool IsLockedOut => MaxAuthFail > 0 && LockoutCounter >= MaxAuthFail;
+    public bool IsLockedOut => LockoutCounter >= MaxAuthFail;
 }

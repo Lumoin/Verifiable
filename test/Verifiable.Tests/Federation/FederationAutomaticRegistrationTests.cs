@@ -1,5 +1,7 @@
 using System.Buffers;
 using Verifiable.Cryptography;
+using Verifiable.Json;
+using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -9,8 +11,9 @@ namespace Verifiable.Tests.Federation;
 /// Tests for <see cref="FederationAutomaticRegistration"/> — the OpenID
 /// Federation 1.0 §12.1 automatic-registration engine. Each test builds a
 /// real signed trust chain via <see cref="FederationTestRing"/>, validates it
-/// through the production <see cref="InlineTrustChainValidationDriver"/>
-/// (parse + per-link signature verify + <see cref="TrustChainValidator"/>),
+/// through the production <see cref="TrustChainValidation.BuildInlineValidator"/>
+/// (parse + <see cref="FederationKeyResolver.BuildInChainResolver"/> per-link
+/// key resolution and signature verify + <see cref="TrustChainValidator"/>),
 /// and asserts the engine's admit/refuse decision and derived metadata.
 /// </summary>
 [TestClass]
@@ -24,6 +27,18 @@ internal sealed class FederationAutomaticRegistrationTests
         WellKnownEntityTypeIdentifiers.OpenIdRelyingParty;
 
     private static readonly TimeSpan ClockSkew = TimeSpan.FromMinutes(5);
+
+    /// <summary>Header deserializer mirroring the authorization server's wiring.</summary>
+    private static readonly JwtHeaderDeserializer HeaderDeserializer = static bytes =>
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            bytes, TestSetup.DefaultSerializationOptions)
+        ?? throw new FormatException("Header JSON parsed to null.");
+
+    /// <summary>Payload deserializer mirroring the authorization server's wiring.</summary>
+    private static readonly JwtPayloadDeserializer PayloadDeserializer = static bytes =>
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            bytes, TestSetup.DefaultSerializationOptions)
+        ?? throw new FormatException("Payload JSON parsed to null.");
 
 
     [TestMethod]
@@ -426,13 +441,11 @@ internal sealed class FederationAutomaticRegistrationTests
             intermediateAboutSubjectExtraClaims: GrantTypesPolicy(policyOperator, intermediatePolicyGrantTypes),
             anchorAboutIntermediateExtraClaims: GrantTypesPolicy(policyOperator, anchorPolicyGrantTypes)).ConfigureAwait(false);
 
-        ValidateTrustChainAsyncDelegate validateChain = InlineTrustChainValidationDriver.Build(
-            async (position, jws, ct) => position switch
-            {
-                0 => await FederationTestRing.VerifyAsync(subjectNode, jws, ct).ConfigureAwait(false),
-                1 or 2 => await FederationTestRing.VerifyAsync(intermediateNode, jws, ct).ConfigureAwait(false),
-                _ => await FederationTestRing.VerifyAsync(anchorNode, jws, ct).ConfigureAwait(false),
-            });
+        ValidateTrustChainAsyncDelegate validateChain = TrustChainValidation.BuildInlineValidator(
+            HeaderDeserializer,
+            PayloadDeserializer,
+            TestSetup.Base64UrlDecoder,
+            FederationKeyResolver.BuildInChainResolver(TestSetup.Base64UrlDecoder, Pool));
 
         return new LongChainFixture(
             subjectNode, intermediateNode, anchorNode,
@@ -526,10 +539,11 @@ internal sealed class FederationAutomaticRegistrationTests
         List<string> compactJwsByPosition =
             [subjectEc.CompactJws, anchorAboutSubject.CompactJws, anchorEc.CompactJws];
 
-        ValidateTrustChainAsyncDelegate validateChain = InlineTrustChainValidationDriver.Build(
-            async (position, jws, ct) => position == 0
-                ? await FederationTestRing.VerifyAsync(subjectNode, jws, ct).ConfigureAwait(false)
-                : await FederationTestRing.VerifyAsync(anchorNode, jws, ct).ConfigureAwait(false));
+        ValidateTrustChainAsyncDelegate validateChain = TrustChainValidation.BuildInlineValidator(
+            HeaderDeserializer,
+            PayloadDeserializer,
+            TestSetup.Base64UrlDecoder,
+            FederationKeyResolver.BuildInChainResolver(TestSetup.Base64UrlDecoder, Pool));
 
         return new ChainFixture(subjectNode, anchorNode, subjectId, anchorId, compactJwsByPosition, validateChain);
     }

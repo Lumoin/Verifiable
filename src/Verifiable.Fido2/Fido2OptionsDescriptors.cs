@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Verifiable.Fido2;
@@ -49,5 +50,31 @@ internal static class Fido2OptionsDescriptors
         }
 
         return descriptors;
+    }
+
+
+    /// <summary>
+    /// Projects a <c>pubKeyCredParams</c> list into the bare COSE algorithm identifiers it carries, in
+    /// the same order — the mechanical projection <see cref="RegistrationCeremonyInput.AllowedAlgorithms"/>
+    /// derives step 20's algorithm-match set from, so a relying party can never hand-author an accepted-
+    /// algorithm list independently of the <c>pubKeyCredParams</c> it actually offered.
+    /// </summary>
+    /// <param name="pubKeyCredParams">
+    /// The exact <c>pubKeyCredParams</c> list a creation-options document offered — typically
+    /// <see cref="PublicKeyCredentialCreationOptions.PubKeyCredParams"/> itself.
+    /// </param>
+    /// <returns>One COSE algorithm identifier per entry, in the same order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="pubKeyCredParams"/> is <see langword="null"/>.</exception>
+    public static IReadOnlyList<int> ProjectAlgorithms(IReadOnlyList<PublicKeyCredentialParameters> pubKeyCredParams)
+    {
+        ArgumentNullException.ThrowIfNull(pubKeyCredParams);
+
+        List<int> algorithms = new(pubKeyCredParams.Count);
+        foreach(PublicKeyCredentialParameters parameter in pubKeyCredParams)
+        {
+            algorithms.Add(parameter.Alg);
+        }
+
+        return algorithms;
     }
 }

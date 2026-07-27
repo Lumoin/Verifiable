@@ -132,6 +132,35 @@ public sealed record TpmCreateResponse(
     int CreationByProductsLength): TpmResponseIntent(ResponseCode);
 
 /// <summary>
+/// The successful response to <c>TPM2_Create()</c> over one or two sessions: a <c>TPM_ST_SESSIONS</c>-tagged
+/// response carrying the (unencrypted — response encryption is out of this wave's scope for
+/// <c>TPM2_Create()</c>) <c>outPrivate ‖ outPublic ‖ creationData ‖ creationHash ‖ creationTicket</c> parameter
+/// area followed by the response session area, in command-session order — a <c>TPM_RS_PW</c> parent-auth
+/// session's placeholder entry (an empty nonce, echoed attributes, an empty HMAC, since it carries no key) when
+/// <see cref="HasPasswordPlaceholder"/> is set, then every real (HMAC-table) session's entry in
+/// <see cref="Entries"/> (its rolled nonceTPM, echoed attributes, and its own response HMAC) — the request-decrypt
+/// counterpart of <see cref="TpmUnsealOverSessionsResponse"/> (TPM 2.0 Library Part 3, clause 12.1; Part 1,
+/// clauses 18.7 and 19.4).
+/// </summary>
+/// <remarks>
+/// <see cref="ParameterArea"/> is a pooled buffer; <see cref="TpmSimulator"/> frames the session-tagged envelope
+/// and then disposes it, as the terminal owner, along with each entry's own <c>Hmac</c> buffer.
+/// </remarks>
+/// <param name="ResponseCode">The command response code (success).</param>
+/// <param name="ParameterArea">The framed <c>outPrivate ‖ outPublic ‖ creationData ‖ creationHash ‖ creationTicket</c> response parameter area; disposed after framing.</param>
+/// <param name="ParameterLength">The number of valid octets in <paramref name="ParameterArea"/>.</param>
+/// <param name="HasPasswordPlaceholder">Whether session index 0 is a <c>TPM_RS_PW</c> session needing the empty-nonce, empty-HMAC password placeholder entry.</param>
+/// <param name="PasswordPlaceholderAttributes">The password session's command session-attributes byte, framed in its entry. Meaningful only when <see cref="HasPasswordPlaceholder"/> is set.</param>
+/// <param name="Entries">Every real session's framed response entry, in command-session order (after the password placeholder, when present); each entry's <c>Hmac</c> buffer is disposed after framing.</param>
+public sealed record TpmCreateOverSessionsResponse(
+    TpmRcConstants ResponseCode,
+    IMemoryOwner<byte> ParameterArea,
+    int ParameterLength,
+    bool HasPasswordPlaceholder,
+    byte PasswordPlaceholderAttributes,
+    ImmutableArray<TpmCreateFramedSessionEntry> Entries): TpmResponseIntent(ResponseCode);
+
+/// <summary>
 /// The successful response to <c>TPM2_Load()</c>: the transient handle of the loaded object followed by its Name
 /// (TPM 2.0 Library Part 3, clause 12.2).
 /// </summary>
@@ -179,7 +208,8 @@ public sealed record TpmNvReadDataResponse(TpmRcConstants ResponseCode, ReadOnly
 /// </summary>
 /// <remarks>
 /// <see cref="CertifyInfo"/> is a pooled buffer holding the marshaled <c>TPMS_ATTEST</c> and <see cref="Signature"/>
-/// owns pooled memory; <see cref="TpmSimulator"/> frames the sized attest and the ECDSA <c>r</c>/<c>s</c> and then
+/// owns pooled memory; <see cref="TpmSimulator"/> frames the sized attest and, depending on
+/// <see cref="SignatureScheme"/>, either the ECDSA <c>r</c>/<c>s</c> pair or the single RSA signature, and then
 /// disposes both, as the terminal owner.
 /// </remarks>
 /// <param name="ResponseCode">The command response code (success).</param>
@@ -195,6 +225,112 @@ public sealed record TpmCertifyResponse(
     Signature Signature,
     TpmAlgIdConstants SignatureScheme,
     TpmAlgIdConstants HashAlg): TpmResponseIntent(ResponseCode);
+
+/// <summary>
+/// The successful response to <c>TPM2_CertifyCreation()</c>: the signed attestation as a <c>TPM2B_ATTEST</c>
+/// followed by the <c>TPMT_SIGNATURE</c> over its digest (TPM 2.0 Library Part 3, clause 18.3) — the same shape
+/// as <see cref="TpmCertifyResponse"/>.
+/// </summary>
+/// <remarks>
+/// <see cref="CertifyInfo"/> is a pooled buffer holding the marshaled <c>TPMS_ATTEST</c> and <see cref="Signature"/>
+/// owns pooled memory; <see cref="TpmSimulator"/> frames the sized attest and, depending on
+/// <see cref="SignatureScheme"/>, either the ECDSA <c>r</c>/<c>s</c> pair or the single RSA signature, and then
+/// disposes both, as the terminal owner.
+/// </remarks>
+/// <param name="ResponseCode">The command response code (success).</param>
+/// <param name="CertifyInfo">The pooled buffer holding the marshaled <c>TPMS_ATTEST</c>; disposed after framing.</param>
+/// <param name="CertifyInfoLength">The number of valid octets in <paramref name="CertifyInfo"/>.</param>
+/// <param name="Signature">The signature over the attestation digest; disposed after framing.</param>
+/// <param name="SignatureScheme">The signing algorithm (<c>TPM_ALG_ECDSA</c>, <c>TPM_ALG_RSASSA</c>, or <c>TPM_ALG_RSAPSS</c>), the <c>TPMU_SIGNATURE</c> selector.</param>
+/// <param name="HashAlg">The signing scheme's hash algorithm, framed inside the signature.</param>
+public sealed record TpmCertifyCreationResponse(
+    TpmRcConstants ResponseCode,
+    IMemoryOwner<byte> CertifyInfo,
+    int CertifyInfoLength,
+    Signature Signature,
+    TpmAlgIdConstants SignatureScheme,
+    TpmAlgIdConstants HashAlg): TpmResponseIntent(ResponseCode);
+
+/// <summary>
+/// The successful response to <c>TPM2_GetTime()</c>: the signed attestation as a <c>TPM2B_ATTEST</c> followed by
+/// the <c>TPMT_SIGNATURE</c> over its digest (TPM 2.0 Library Part 3, clause 18.7) — the same shape as
+/// <see cref="TpmCertifyResponse"/>.
+/// </summary>
+/// <remarks>
+/// <see cref="TimeInfo"/> is a pooled buffer holding the marshaled <c>TPMS_ATTEST</c> and <see cref="Signature"/>
+/// owns pooled memory; <see cref="TpmSimulator"/> frames the sized attest and, depending on
+/// <see cref="SignatureScheme"/>, either the ECDSA <c>r</c>/<c>s</c> pair or the single RSA signature, and then
+/// disposes both, as the terminal owner.
+/// </remarks>
+/// <param name="ResponseCode">The command response code (success).</param>
+/// <param name="TimeInfo">The pooled buffer holding the marshaled <c>TPMS_ATTEST</c>; disposed after framing.</param>
+/// <param name="TimeInfoLength">The number of valid octets in <paramref name="TimeInfo"/>.</param>
+/// <param name="Signature">The signature over the attestation digest; disposed after framing.</param>
+/// <param name="SignatureScheme">The signing algorithm (<c>TPM_ALG_ECDSA</c>, <c>TPM_ALG_RSASSA</c>, or <c>TPM_ALG_RSAPSS</c>), the <c>TPMU_SIGNATURE</c> selector.</param>
+/// <param name="HashAlg">The signing scheme's hash algorithm, framed inside the signature.</param>
+public sealed record TpmGetTimeResponse(
+    TpmRcConstants ResponseCode,
+    IMemoryOwner<byte> TimeInfo,
+    int TimeInfoLength,
+    Signature Signature,
+    TpmAlgIdConstants SignatureScheme,
+    TpmAlgIdConstants HashAlg): TpmResponseIntent(ResponseCode);
+
+/// <summary>
+/// The successful response to <c>TPM2_ReadClock()</c>: the current <c>TPMS_TIME_INFO</c>, uncertified and
+/// unsigned (TPM 2.0 Library Part 3, clause 29.1).
+/// </summary>
+/// <remarks>
+/// <see cref="CurrentTime"/> is a value type read straight from state, so nothing is disposed after framing.
+/// </remarks>
+/// <param name="ResponseCode">The command response code (success).</param>
+/// <param name="CurrentTime">The current Time/Clock/resetCount/restartCount/Safe snapshot.</param>
+public sealed record TpmReadClockResponse(TpmRcConstants ResponseCode, TpmsTimeInfo CurrentTime): TpmResponseIntent(ResponseCode);
+
+/// <summary>
+/// The successful response to <c>TPM2_NV_Certify()</c>: the signed attestation as a <c>TPM2B_ATTEST</c> followed
+/// by the <c>TPMT_SIGNATURE</c> over its digest (TPM 2.0 Library Part 3, clause 31.16) — the same shape as
+/// <see cref="TpmCertifyResponse"/>.
+/// </summary>
+/// <remarks>
+/// <see cref="CertifyInfo"/> is a pooled buffer holding the marshaled <c>TPMS_ATTEST</c> and <see cref="Signature"/>
+/// owns pooled memory; <see cref="TpmSimulator"/> frames the sized attest and, depending on
+/// <see cref="SignatureScheme"/>, either the ECDSA <c>r</c>/<c>s</c> pair or the single RSA signature, and then
+/// disposes both, as the terminal owner.
+/// </remarks>
+/// <param name="ResponseCode">The command response code (success).</param>
+/// <param name="CertifyInfo">The pooled buffer holding the marshaled <c>TPMS_ATTEST</c>; disposed after framing.</param>
+/// <param name="CertifyInfoLength">The number of valid octets in <paramref name="CertifyInfo"/>.</param>
+/// <param name="Signature">The signature over the attestation digest; disposed after framing.</param>
+/// <param name="SignatureScheme">The signing algorithm (<c>TPM_ALG_ECDSA</c>, <c>TPM_ALG_RSASSA</c>, or <c>TPM_ALG_RSAPSS</c>), the <c>TPMU_SIGNATURE</c> selector.</param>
+/// <param name="HashAlg">The signing scheme's hash algorithm, framed inside the signature.</param>
+public sealed record TpmNvCertifyResponse(
+    TpmRcConstants ResponseCode,
+    IMemoryOwner<byte> CertifyInfo,
+    int CertifyInfoLength,
+    Signature Signature,
+    TpmAlgIdConstants SignatureScheme,
+    TpmAlgIdConstants HashAlg): TpmResponseIntent(ResponseCode);
+
+/// <summary>
+/// The successful response to <c>TPM2_VerifySignature()</c>: a <c>TPMT_TK_VERIFIED</c> validation ticket (TPM 2.0
+/// Library Part 3, clause 20.1) — unlike every other attest-producing command in this file, there is no
+/// <c>TPM2B_ATTEST</c> and no <c>TPMT_SIGNATURE</c>.
+/// </summary>
+/// <remarks>
+/// <see cref="TicketDigest"/> is a pooled buffer holding the ticket's HMAC digest; <see cref="TpmSimulator"/>
+/// frames the fixed <c>tag</c>/<c>hierarchy</c> fields followed by the digest as a <c>TPM2B_DIGEST</c> and then
+/// disposes it, as the terminal owner.
+/// </remarks>
+/// <param name="ResponseCode">The command response code (success).</param>
+/// <param name="Hierarchy">The hierarchy containing the verifying key's Name, framed in the ticket's <c>hierarchy</c> field.</param>
+/// <param name="TicketDigest">The pooled buffer holding the ticket HMAC digest; disposed after framing.</param>
+/// <param name="TicketDigestLength">The number of valid octets in <paramref name="TicketDigest"/>.</param>
+public sealed record TpmVerifySignatureResponse(
+    TpmRcConstants ResponseCode,
+    uint Hierarchy,
+    IMemoryOwner<byte> TicketDigest,
+    int TicketDigestLength): TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_PCR_Read()</c>: the PCR update counter, the selection actually read, and
@@ -221,7 +357,8 @@ public sealed record TpmPcrReadResponse(
 /// </summary>
 /// <remarks>
 /// <see cref="Quoted"/> is a pooled buffer holding the marshaled <c>TPMS_ATTEST</c> and <see cref="Signature"/>
-/// owns pooled memory; <see cref="TpmSimulator"/> frames the sized attest and the ECDSA <c>r</c>/<c>s</c> and then
+/// owns pooled memory; <see cref="TpmSimulator"/> frames the sized attest and, depending on
+/// <see cref="SignatureScheme"/>, either the ECDSA <c>r</c>/<c>s</c> pair or the single RSA signature, and then
 /// disposes both, as the terminal owner.
 /// </remarks>
 /// <param name="ResponseCode">The command response code (success).</param>
@@ -243,21 +380,16 @@ public sealed record TpmQuoteResponse(
 /// initial nonce (TPM 2.0 Library Part 3, clause 11.1).
 /// </summary>
 /// <remarks>
-/// <para>
-/// A policy or trial session leaves <see cref="NonceTpm"/> empty: its nonceTPM value is immaterial to the
-/// policyDigest the assertions drive, so <see cref="TpmSimulator"/> frames a deterministic zero nonce of
-/// <see cref="NonceLength"/> octets, which those tests do not inspect.
-/// </para>
-/// <para>
-/// A bound HMAC session instead supplies the real nonceTPM in <see cref="NonceTpm"/>: it is the value the
-/// session-key <c>KDFa</c> consumed (Part 1, clause 17.6.10), so the host must receive it verbatim to derive the
-/// same key. <see cref="NonceTpm"/> references the durable session state, so nothing is disposed after framing.
-/// </para>
+/// <see cref="NonceTpm"/> is always the real, retained nonceTPM the effectful loop drew from the injected RNG,
+/// for every session kind: a bound HMAC session's session-key <c>KDFa</c> consumed it (Part 1, clause 17.6.10),
+/// and a policy or trial session's <c>TPM2_PolicySigned()</c> <c>aHash</c> later binds to it (Part 3, Section
+/// 23.3) — so neither can be a placeholder. <see cref="NonceTpm"/> references the durable session state, so
+/// nothing is disposed after framing.
 /// </remarks>
 /// <param name="ResponseCode">The command response code (success).</param>
 /// <param name="SessionHandle">The started session handle, framed in the response handle area.</param>
-/// <param name="NonceLength">The width in octets of the nonceTPM to frame (the session hash digest width).</param>
-/// <param name="NonceTpm">The nonceTPM octets to frame verbatim (a bound HMAC session), or empty to frame a zero nonce of <paramref name="NonceLength"/> octets (a policy or trial session).</param>
+/// <param name="NonceLength">The width in octets of <paramref name="NonceTpm"/> (the session hash digest width).</param>
+/// <param name="NonceTpm">The real nonceTPM octets to frame verbatim.</param>
 public sealed record TpmStartAuthSessionResponse(
     TpmRcConstants ResponseCode,
     uint SessionHandle,
@@ -293,38 +425,35 @@ public sealed record TpmEncryptedRandomResponse(
     int HmacLength): TpmResponseIntent(ResponseCode);
 
 /// <summary>
-/// The successful response to a policy-gated <c>TPM2_Unseal()</c> over two sessions: a <c>TPM_ST_SESSIONS</c>-tagged
-/// response carrying the encrypted <c>outData</c> (<c>TPM2B_SENSITIVE_DATA</c>) parameter followed by the response
-/// session area with BOTH sessions' entries in command order — the policy session's entry (a zero nonce of its hash
-/// width, echoed attributes, and an empty HMAC, since a satisfied plain policy session carries no key) then the
-/// encrypt session's entry (its rolled nonceTPM, echoed attributes, and the response HMAC) (TPM 2.0 Library Part 3,
-/// clause 12.7; Part 1, clauses 18.7 and 19).
+/// The successful response to <c>TPM2_Unseal()</c> over one or two sessions: a <c>TPM_ST_SESSIONS</c>-tagged
+/// response carrying the (possibly encrypted) <c>outData</c> (<c>TPM2B_SENSITIVE_DATA</c>) parameter followed by
+/// the response session area, in command-session order — a satisfied plain policy session's placeholder entry (a
+/// zero nonce of its hash width, echoed attributes, an empty HMAC, since it carries no key) when
+/// <see cref="HasPolicyPlaceholder"/> is set, then every real (HMAC-table) session's entry in <see cref="Entries"/>
+/// (its rolled nonceTPM, echoed attributes, and its own response HMAC) (TPM 2.0 Library Part 3, clause 12.7; Part
+/// 1, clauses 18.7 and 19).
 /// </summary>
 /// <remarks>
-/// <see cref="ParameterArea"/> and <see cref="Hmac"/> are pooled buffers; <see cref="TpmSimulator"/> frames the
-/// session-tagged envelope and then disposes both, as the terminal owner. The parameter area holds the recovered
-/// secret the encryption protects, so it is zeroed before disposal. <see cref="EncryptNonceTpm"/> references the
-/// durable encrypt session's rolled nonce, so it is not disposed.
+/// <see cref="ParameterArea"/> is a pooled buffer; <see cref="TpmSimulator"/> frames the session-tagged envelope
+/// and then disposes it, as the terminal owner, along with each entry's own <c>Hmac</c> buffer. The parameter area
+/// holds the recovered secret, encrypted when a session carries the <c>encrypt</c> attribute, so it is zeroed
+/// before disposal regardless.
 /// </remarks>
 /// <param name="ResponseCode">The command response code (success).</param>
-/// <param name="ParameterArea">The framed <c>TPM2B_SENSITIVE_DATA</c> (<c>outData</c>) with its data portion encrypted; disposed after framing.</param>
+/// <param name="ParameterArea">The framed <c>TPM2B_SENSITIVE_DATA</c> (<c>outData</c>), its data portion encrypted when a session carries the <c>encrypt</c> attribute; disposed after framing.</param>
 /// <param name="ParameterLength">The number of valid octets in <paramref name="ParameterArea"/>.</param>
-/// <param name="PolicyNonceLength">The width in octets of the policy session's response nonce (a zero placeholder of its hash digest width).</param>
-/// <param name="PolicyAttributes">The policy session's response session-attributes byte, framed in its entry.</param>
-/// <param name="EncryptNonceTpm">The encrypt session's rolled nonceTPM framed as its response nonce (nonceNewer).</param>
-/// <param name="EncryptAttributes">The encrypt session's response session-attributes byte, framed and folded into <paramref name="Hmac"/>.</param>
-/// <param name="Hmac">The encrypt session's response HMAC; disposed after framing.</param>
-/// <param name="HmacLength">The number of valid octets in <paramref name="Hmac"/>.</param>
+/// <param name="HasPolicyPlaceholder">Whether session index 0 needs the zero-nonce, empty-HMAC policy placeholder entry.</param>
+/// <param name="PolicyNonceLength">The width in octets of the policy session's response nonce (a zero placeholder of its hash digest width). Meaningful only when <see cref="HasPolicyPlaceholder"/> is set.</param>
+/// <param name="PolicyAttributes">The policy session's response session-attributes byte, framed in its entry. Meaningful only when <see cref="HasPolicyPlaceholder"/> is set.</param>
+/// <param name="Entries">Every real session's framed response entry, in command-session order (after the policy placeholder, when present); each entry's <c>Hmac</c> buffer is disposed after framing.</param>
 public sealed record TpmUnsealOverSessionsResponse(
     TpmRcConstants ResponseCode,
     IMemoryOwner<byte> ParameterArea,
     int ParameterLength,
+    bool HasPolicyPlaceholder,
     int PolicyNonceLength,
     byte PolicyAttributes,
-    ReadOnlyMemory<byte> EncryptNonceTpm,
-    byte EncryptAttributes,
-    IMemoryOwner<byte> Hmac,
-    int HmacLength): TpmResponseIntent(ResponseCode);
+    ImmutableArray<TpmUnsealFramedSessionEntry> Entries): TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_PolicyGetDigest()</c>: the session's current policyDigest as a
@@ -351,6 +480,21 @@ public sealed record TpmPolicyGetDigestResponse(
 /// </remarks>
 /// <param name="ResponseCode">The command response code (success).</param>
 public sealed record TpmPolicySecretResponse(TpmRcConstants ResponseCode): TpmResponseIntent(ResponseCode);
+
+/// <summary>
+/// The successful response to <c>TPM2_PolicySigned()</c>: an empty timeout followed by a NULL policy
+/// authorization ticket (TPM 2.0 Library Part 3, clause 23.3).
+/// </summary>
+/// <remarks>
+/// The response always frames an empty <c>TPM2B_TIMEOUT</c> and a NULL <c>TPMT_TK_AUTH</c> (tag
+/// <c>TPM_ST_AUTH_SIGNED</c>, hierarchy <c>TPM_RH_NULL</c>, empty digest — the tag is set even on a NULL ticket,
+/// Part 2, Section 10.7.2's NULL-ticket convention), regardless of the sign of the caller's <c>expiration</c>: the
+/// real <c>TPMT_TK_AUTH</c> mint (a negative expiration on a non-trial session) ships with the future
+/// PolicyTicket/non-immediate-PolicySecret wave — this mirrors PolicySecret's shipped immediate-form slice. The
+/// intent owns no memory, so nothing is disposed after framing.
+/// </remarks>
+/// <param name="ResponseCode">The command response code (success).</param>
+public sealed record TpmPolicySignedResponse(TpmRcConstants ResponseCode): TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_MakeCredential()</c>: the integrity-protected, encrypted credential blob

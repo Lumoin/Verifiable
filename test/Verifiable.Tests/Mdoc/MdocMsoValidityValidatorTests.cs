@@ -172,8 +172,7 @@ internal sealed class MdocMsoValidityValidatorTests
     {
         //Defensive: the Failed factory shouldn't accept None as a reason —
         //a result is either successful (use Success) or failed (use a real
-        //reason). Catching the misuse keeps the result type's invariant
-        //honest.
+        //reason). Catching the misuse enforces that invariant.
         Assert.ThrowsExactly<ArgumentException>(() =>
             MdocValidityResult.Failed(MdocValidityFailureReason.None));
     }

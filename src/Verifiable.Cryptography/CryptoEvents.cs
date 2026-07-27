@@ -35,7 +35,7 @@ namespace Verifiable.Cryptography;
 /// When an OTel trace is active this threads the event into the distributed
 /// trace automatically — including through claims assessment, DB writes, and
 /// remote calls. When no trace is active, <see cref="TraceParent"/> is
-/// <see langword="null"/>, which is honest: no trace is active, so no trace
+/// <see langword="null"/>: no trace is active, so no trace
 /// context is available.
 /// </para>
 /// <para>
@@ -204,7 +204,7 @@ public sealed record KeyMaterialGeneratedEvent: CryptoEvent
 
     /// <summary>
     /// The library or backend that performed the generation, e.g. "BouncyCastle",
-    /// "MicrosoftCng", "NSec". Opaque string — the library cannot introspect
+    /// "MicrosoftCng", "Libsodium". Opaque string — the library cannot introspect
     /// third-party key generation internals.
     /// </summary>
     public string Backend { get; init; } = string.Empty;

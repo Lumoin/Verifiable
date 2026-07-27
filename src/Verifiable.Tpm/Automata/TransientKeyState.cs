@@ -26,6 +26,13 @@ namespace Verifiable.Tpm.Automata;
 /// </para>
 /// </remarks>
 /// <param name="Handle">The transient handle assigned to the object.</param>
+/// <param name="Hierarchy">
+/// The permanent hierarchy handle the object was created under (TPM 2.0 Library Part 1, clause 16). Every
+/// object this simulator creates today is a primary directly under a permanent hierarchy, so the hierarchy's
+/// own Qualified Name is trivially its 4-octet big-endian handle value; retaining it here lets a later
+/// <c>TPM2_Certify()</c> / <c>TPM2_Quote()</c> compute this object's real Qualified Name
+/// (<see cref="TpmObjectName.ComputeQualifiedNameAsync"/>) instead of collapsing it to the plain Name.
+/// </param>
 /// <param name="KeyType">The key's algorithm (<c>TPM_ALG_ECC</c> or <c>TPM_ALG_RSA</c>), selecting the signing backend.</param>
 /// <param name="Curve">The ECC curve the key lives on (unused for an RSA key).</param>
 /// <param name="PrivateKey">The retained private key: an ECC scalar (unsigned big-endian at the curve field width) or an RSA private key in the backend's encoding.</param>
@@ -43,11 +50,31 @@ namespace Verifiable.Tpm.Automata;
 /// exchange of <c>TPM2_MakeCredential</c> / <c>TPM2_ActivateCredential</c> (Part 1, clause 24; Part 3, clauses 12.6
 /// and 12.5) — can use it without reconstructing it from the private scalar.
 /// </param>
+/// <param name="PublicModulus">
+/// The object's exported public modulus (big-endian) for an RSA key, empty for an elliptic-curve key — the
+/// mirror image of <see cref="PublicPoint"/>. Retained only by the RSA storage-parent effect (a standard RSA
+/// endorsement key, TCG EK Credential Profile, Annex B.3.3, Template L-1), so an RSA-OAEP secret-transport
+/// command can use it without reconstructing it from the private key; an RSA signing key's exported modulus is
+/// not retained here (it needs no OAEP transport). The public exponent is not carried alongside it: every
+/// template this simulator builds passes <c>exponent = 0</c> (TPM 2.0 Library Part 2, Table 215's wire
+/// convention for the default 2^16+1), so a consumer of <see cref="PublicModulus"/> assumes the default
+/// exponent rather than threading a fourth field through — a documented modelling simplification, not a
+/// spec-mandated one.
+/// </param>
+/// <param name="AuthPolicy">
+/// The authorization policy digest carried in the object's public area (TPM 2.0 Library Part 1, clause 19.7),
+/// empty when the object is authorized by its authValue alone. Durable model state like <see cref="PrivateKey"/>
+/// and <see cref="Name"/>, retained so a USER-role use of the object (for example
+/// <c>TPM2_ActivateCredential()</c>'s <c>keyHandle</c>) can be gated on a policy session reproducing it.
+/// </param>
 public sealed record TransientKeyState(
     uint Handle,
+    uint Hierarchy,
     TpmAlgIdConstants KeyType,
     TpmEccCurveConstants Curve,
     ReadOnlyMemory<byte> PrivateKey,
     ReadOnlyMemory<byte> Name,
     TpmaObject Attributes,
-    ReadOnlyMemory<byte> PublicPoint);
+    ReadOnlyMemory<byte> PublicPoint,
+    ReadOnlyMemory<byte> PublicModulus,
+    ReadOnlyMemory<byte> AuthPolicy);

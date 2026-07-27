@@ -170,11 +170,16 @@ internal sealed class TpmDictionaryAttackExtensionsTests
         Assert.IsFalse(parameters.IsLockedOut);
     }
 
+    /// <summary>
+    /// Verifies <c>maxAuthFail == 0</c> is fail-CLOSED (permanently locked out), not the "DA protection
+    /// disabled" fail-open reading a naive zero-guard would give — <c>LockoutCounter</c> is a <c>uint</c>, so
+    /// <c>LockoutCounter &gt;= 0</c> holds even at a zero counter (TPM 2.0 Library Part 1, clause 17.8.3).
+    /// </summary>
     [TestMethod]
-    public void IsLockedOutFalseWhenProtectionDisabled()
+    public void IsLockedOutTrueWhenMaxAuthFailIsZeroEvenWithAZeroCounter()
     {
-        var parameters = new TpmDictionaryAttackParameters(5u, 0u, TimeSpan.FromSeconds(7200), TimeSpan.FromSeconds(86400));
+        var parameters = new TpmDictionaryAttackParameters(0u, 0u, TimeSpan.FromSeconds(7200), TimeSpan.FromSeconds(86400));
 
-        Assert.IsFalse(parameters.IsLockedOut);
+        Assert.IsTrue(parameters.IsLockedOut);
     }
 }

@@ -297,15 +297,24 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
         request.CertificateExtensions.Add(
             new X509KeyUsageExtension(X509KeyUsageFlags.KeyEncipherment | X509KeyUsageFlags.KeyAgreement, critical: true));
 
-        //A random serial number is junk/noise data, not identity material — any unique value would serve.
-        byte[] serialNumber = RandomNumberGenerator.GetBytes(8);
+        //Authority Key Identifier (non-critical), matching the manufacturer CA's own Subject Key Identifier
+        //(TCG EK Credential Profile §3.2.12: "MUST match the Subject Key Identifier of the issuer"). Required for
+        //cross-platform (non-Windows, OpenSSL-based) chain validation to disambiguate the issuer when more than
+        //one certificate shares the CA's subject name.
+        X509SubjectKeyIdentifierExtension? issuerSubjectKeyId = X509ChainTestRing.FindSubjectKeyIdentifier(manufacturerCa.Certificate);
+        if(issuerSubjectKeyId is not null)
+        {
+            request.CertificateExtensions.Add(X509AuthorityKeyIdentifierExtension.CreateFromSubjectKeyIdentifier(issuerSubjectKeyId));
+        }
+
+        using Salt serialNumber = X509ChainTestRing.CreateSerialNumber();
         using X509Certificate2 caWithKey = manufacturerCa.Certificate.CopyWithPrivateKey(manufacturerCa.SigningKey);
 
         return request.Create(
             caWithKey,
             notBefore: now.AddDays(-1).UtcDateTime,
             notAfter: now.AddYears(2).UtcDateTime,
-            serialNumber: serialNumber);
+            serialNumber: serialNumber.AsReadOnlySpan());
     }
 
     /// <summary>

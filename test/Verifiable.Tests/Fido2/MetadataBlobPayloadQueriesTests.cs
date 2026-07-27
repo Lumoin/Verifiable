@@ -178,7 +178,7 @@ internal sealed class MetadataBlobPayloadQueriesTests
     /// <summary>
     /// A status report carrying a non-null <c>certificate</c> round-trips through the reader and is
     /// retrievable from the deciding <see cref="MetadataStatusEvaluation.DecidingStatusReport"/> — the
-    /// minimum honest evidence for FIDO Metadata Service v3.1 section 3.1.3's batch-identification
+    /// minimum evidence required for FIDO Metadata Service v3.1 section 3.1.3's batch-identification
     /// SHOULD ("the relying party SHOULD check the certificate field and use it to identify the
     /// compromised authenticator batch"), distinct from the coarser blanket default-policy rejection
     /// <c>MetadataBlobVerificationTests.AttestationKeyCompromiseRejectsTrustUnderDefaultPolicy</c> proves.

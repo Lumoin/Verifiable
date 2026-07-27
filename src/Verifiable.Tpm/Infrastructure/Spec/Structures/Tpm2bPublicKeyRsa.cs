@@ -96,7 +96,7 @@ public readonly struct Tpm2bPublicKeyRsa: IDisposable, IEquatable<Tpm2bPublicKey
             throw new InvalidOperationException($"RSA public key size {size} exceeds maximum {MaxRsaKeyBytes}.");
         }
 
-        pool ??= MemoryPool<byte>.Shared;
+        pool ??= BaseMemoryPool.Shared;
         var owner = pool.Rent(size);
         reader.ReadBytes(size).CopyTo(owner.Memory.Span);
         return new Tpm2bPublicKeyRsa(owner, owner.Memory[..size]);
@@ -120,7 +120,7 @@ public readonly struct Tpm2bPublicKeyRsa: IDisposable, IEquatable<Tpm2bPublicKey
             return Empty;
         }
 
-        pool ??= MemoryPool<byte>.Shared;
+        pool ??= BaseMemoryPool.Shared;
         var owner = pool.Rent(modulus.Length);
         modulus.CopyTo(owner.Memory.Span);
         return new Tpm2bPublicKeyRsa(owner, owner.Memory[..modulus.Length]);

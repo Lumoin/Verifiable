@@ -209,7 +209,7 @@ internal static partial class VerifiableOperations
                     ExpectedOrigins = new HashSet<string>(StringComparer.Ordinal) { origin },
                     ExpectedRpIdHash = expectedRpIdHash,
                     UserVerification = userVerificationRequirement,
-                    AllowedAlgorithms = SupportedCoseAlgorithms
+                    ExpectedPubKeyCredParams = SupportedPubKeyCredParams
                 };
 
                 SelectAttestationVerifierDelegate selectVerifier = BuildAttestationVerifierSelector(requireTeeEnforcedAuthorizations);
@@ -467,6 +467,30 @@ internal static partial class VerifiableOperations
         WellKnownCoseAlgorithms.Ps384,
         WellKnownCoseAlgorithms.Ps512
     ];
+
+
+    /// <summary>
+    /// <see cref="SupportedCoseAlgorithms"/>, projected into <see cref="PublicKeyCredentialParameters"/>
+    /// entries — this verb's <see cref="RegistrationCeremonyInput.ExpectedPubKeyCredParams"/>. This CLI
+    /// verb has no options-issuance step of its own (it verifies an externally supplied
+    /// attestationObject/clientDataJSON pair against files, never a ceremony it started), so there is no
+    /// prior "offer" to derive from; this list simply restates the RP's own supported-algorithm policy in
+    /// the <c>pubKeyCredParams</c> vocabulary <see cref="RegistrationCeremonyInput"/> now requires.
+    /// </summary>
+    private static IReadOnlyList<PublicKeyCredentialParameters> SupportedPubKeyCredParams { get; } = BuildSupportedPubKeyCredParams();
+
+
+    /// <summary>Builds <see cref="SupportedPubKeyCredParams"/>.</summary>
+    private static List<PublicKeyCredentialParameters> BuildSupportedPubKeyCredParams()
+    {
+        List<PublicKeyCredentialParameters> parameters = new(SupportedCoseAlgorithms.Count);
+        foreach(int algorithm in SupportedCoseAlgorithms)
+        {
+            parameters.Add(new PublicKeyCredentialParameters { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Alg = algorithm });
+        }
+
+        return parameters;
+    }
 
 
     /// <summary>

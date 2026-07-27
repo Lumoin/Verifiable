@@ -1,5 +1,7 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -269,6 +271,7 @@ public static class Jws
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(signingDelegate);
         ArgumentNullException.ThrowIfNull(signaturePool);
+        AssertHousePool(signaturePool);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -346,6 +349,7 @@ public static class Jws
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(signingDelegate);
         ArgumentNullException.ThrowIfNull(signaturePool);
+        AssertHousePool(signaturePool);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -379,8 +383,8 @@ public static class Jws
 
     /// <summary>
     /// Verifies a JWS message using registry-resolved verification function.
-    /// Allocates the signing-input buffer from
-    /// <see cref="MemoryPool{T}.Shared"/>; the overload taking an explicit
+    /// Allocates the signing-input buffer from <see cref="BaseMemoryPool.Shared"/>,
+    /// the library's known house pool; the overload taking an explicit
     /// <c>pool</c> uses caller-supplied pooling instead.
     /// </summary>
     /// <param name="message">The JWS message to verify.</param>
@@ -396,7 +400,7 @@ public static class Jws
         EncodeDelegate base64UrlEncoder,
         PublicKeyMemory publicKey,
         CancellationToken cancellationToken)
-        => VerifyAsync(message, base64UrlEncoder, publicKey, MemoryPool<byte>.Shared, cancellationToken);
+        => VerifyAsync(message, base64UrlEncoder, publicKey, BaseMemoryPool.Shared, cancellationToken);
 
 
     /// <summary>
@@ -470,6 +474,7 @@ public static class Jws
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(verificationDelegate);
         ArgumentNullException.ThrowIfNull(pool);
+        AssertHousePool(pool);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -488,11 +493,34 @@ public static class Jws
         using IMemoryOwner<byte> dataToVerifyOwner = RentSigningInput(
             signature.Protected, payloadSegment, pool, out int signingInputLength);
 
-        (bool isVerified, CryptoEvent? evt) = await verificationDelegate(
-            dataToVerifyOwner.Memory[..signingInputLength],
-            signature.SignatureBytes,
-            publicKey.AsReadOnlyMemory(),
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        //publicKey can itself be attacker-tampered content resolved from
+        //untrusted wire input (e.g. a chain-vouched jwks coordinate the caller
+        //re-derived after a signature check). A backend that strictly parses
+        //curve/key material (ECDsa.Create, key import) throws
+        //CryptographicException/ArgumentException/FormatException for bytes
+        //that do not decode to a valid key rather than failing gracefully;
+        //on Windows CNG a point that does not lie on the named curve
+        //surfaces, confusingly, as PlatformNotSupportedException rather than
+        //CryptographicException — still a rejected-key-material outcome, not
+        //a genuine platform capability gap. Per this method's contract,
+        //callers depend on VerifyAsync returning false — never throwing —
+        //on untrusted input, so a delegate's parse failure is treated the
+        //same as "signature does not verify".
+        bool isVerified;
+        CryptoEvent? evt;
+        try
+        {
+            (isVerified, evt) = await verificationDelegate(
+                dataToVerifyOwner.Memory[..signingInputLength],
+                signature.SignatureBytes,
+                publicKey.AsReadOnlyMemory(),
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+        catch(Exception ex) when(ex is CryptographicException or ArgumentException
+            or FormatException or PlatformNotSupportedException)
+        {
+            return false;
+        }
 
         if(evt is not null)
         {
@@ -579,17 +607,41 @@ public static class Jws
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
         ArgumentNullException.ThrowIfNull(verificationDelegate);
         ArgumentNullException.ThrowIfNull(pool);
+        AssertHousePool(pool);
 
         cancellationToken.ThrowIfCancellationRequested();
 
         using IMemoryOwner<byte> dataToVerifyOwner = RentSigningInput(
             protectedSegment, payload.Span, base64UrlPayload, base64UrlEncoder, pool, out int signingInputLength);
 
-        (bool isVerified, CryptoEvent? evt) = await verificationDelegate(
-            dataToVerifyOwner.Memory[..signingInputLength],
-            signature,
-            publicKey,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        //publicKey can itself be attacker-tampered content resolved from
+        //untrusted wire input (e.g. a chain-vouched jwks coordinate the caller
+        //re-derived after a signature check). A backend that strictly parses
+        //curve/key material (ECDsa.Create, key import) throws
+        //CryptographicException/ArgumentException/FormatException for bytes
+        //that do not decode to a valid key rather than failing gracefully;
+        //on Windows CNG a point that does not lie on the named curve
+        //surfaces, confusingly, as PlatformNotSupportedException rather than
+        //CryptographicException — still a rejected-key-material outcome, not
+        //a genuine platform capability gap. Per this method's contract,
+        //callers depend on VerifyAsync returning false — never throwing —
+        //on untrusted input, so a delegate's parse failure is treated the
+        //same as "signature does not verify".
+        bool isVerified;
+        CryptoEvent? evt;
+        try
+        {
+            (isVerified, evt) = await verificationDelegate(
+                dataToVerifyOwner.Memory[..signingInputLength],
+                signature,
+                publicKey,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+        catch(Exception ex) when(ex is CryptographicException or ArgumentException
+            or FormatException or PlatformNotSupportedException)
+        {
+            return false;
+        }
 
         if(evt is not null)
         {
@@ -711,6 +763,7 @@ public static class Jws
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(verificationDelegate);
+        AssertHousePool(pool);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxJwsLength);
         EnsureJwsLengthAccepted(jws, maxJwsLength);
 
@@ -744,11 +797,34 @@ public static class Jws
         using IMemoryOwner<byte> dataToVerifyOwner = RentSigningInput(
             parts[0], parts[1], pool, out int signingInputLength);
 
-        (bool isVerified, CryptoEvent? evt) = await verificationDelegate(
-            dataToVerifyOwner.Memory[..signingInputLength],
-            signature.Memory,
-            publicKey.AsReadOnlyMemory(),
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        //publicKey can itself be attacker-tampered content resolved from
+        //untrusted wire input (e.g. a chain-vouched jwks coordinate the caller
+        //re-derived after a signature check). A backend that strictly parses
+        //curve/key material (ECDsa.Create, key import) throws
+        //CryptographicException/ArgumentException/FormatException for bytes
+        //that do not decode to a valid key rather than failing gracefully;
+        //on Windows CNG a point that does not lie on the named curve
+        //surfaces, confusingly, as PlatformNotSupportedException rather than
+        //CryptographicException — still a rejected-key-material outcome, not
+        //a genuine platform capability gap. Per this method's contract,
+        //callers depend on VerifyAsync returning false — never throwing —
+        //on untrusted input, so a delegate's parse failure is treated the
+        //same as "signature does not verify".
+        bool isVerified;
+        CryptoEvent? evt;
+        try
+        {
+            (isVerified, evt) = await verificationDelegate(
+                dataToVerifyOwner.Memory[..signingInputLength],
+                signature.Memory,
+                publicKey.AsReadOnlyMemory(),
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+        catch(Exception ex) when(ex is CryptographicException or ArgumentException
+            or FormatException or PlatformNotSupportedException)
+        {
+            return false;
+        }
 
         if(evt is not null)
         {
@@ -857,6 +933,7 @@ public static class Jws
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(verificationDelegate);
+        AssertHousePool(pool);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxJwsLength);
         EnsureJwsLengthAccepted(jws, maxJwsLength);
 
@@ -887,11 +964,34 @@ public static class Jws
 
         if(headerAcceptable)
         {
-            (bool isVerified, CryptoEvent? evt) = await verificationDelegate(
-                dataToVerifyOwner.Memory[..signingInputLength],
-                signatureOwner.Memory,
-                publicKey.AsReadOnlyMemory(),
-                cancellationToken: cancellationToken).ConfigureAwait(false);
+            //publicKey can itself be attacker-tampered content resolved from
+            //untrusted wire input (e.g. a chain-vouched jwks coordinate the caller
+            //re-derived after a signature check). A backend that strictly parses
+            //curve/key material (ECDsa.Create, key import) throws
+            //CryptographicException/ArgumentException/FormatException for bytes
+            //that do not decode to a valid key rather than failing gracefully;
+            //on Windows CNG a point that does not lie on the named curve
+            //surfaces, confusingly, as PlatformNotSupportedException rather than
+            //CryptographicException — still a rejected-key-material outcome, not
+            //a genuine platform capability gap. Per this method's contract,
+            //callers depend on VerifyAsync returning false — never throwing —
+            //on untrusted input, so a delegate's parse failure is treated the
+            //same as "signature does not verify".
+            bool isVerified;
+            CryptoEvent? evt;
+            try
+            {
+                (isVerified, evt) = await verificationDelegate(
+                    dataToVerifyOwner.Memory[..signingInputLength],
+                    signatureOwner.Memory,
+                    publicKey.AsReadOnlyMemory(),
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+            catch(Exception ex) when(ex is CryptographicException or ArgumentException
+                or FormatException or PlatformNotSupportedException)
+            {
+                return new JwsVerificationResult(false, header, payload);
+            }
 
             if(evt is not null)
             {
@@ -948,6 +1048,7 @@ public static class Jws
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(resolver);
         ArgumentNullException.ThrowIfNull(binder);
+        AssertHousePool(pool);
 
         TaggedMemory<byte> headerBytes = partEncoder(header);
         TaggedMemory<byte> payloadBytes = partEncoder(payload);
@@ -1038,6 +1139,7 @@ public static class Jws
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(resolver);
         ArgumentNullException.ThrowIfNull(binder);
+        AssertHousePool(pool);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxJwsLength);
         EnsureJwsLengthAccepted(jws, maxJwsLength);
 
@@ -1150,6 +1252,7 @@ public static class Jws
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(resolver);
         ArgumentNullException.ThrowIfNull(binder);
+        AssertHousePool(pool);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxJwsLength);
         EnsureJwsLengthAccepted(jws, maxJwsLength);
 
@@ -1370,5 +1473,25 @@ public static class Jws
         }
 
         return new Dictionary<string, object>();
+    }
+
+
+    /// <summary>
+    /// Asserts, in DEBUG builds only, that <paramref name="candidate"/> is the house
+    /// <see cref="BaseMemoryPool"/> family. <see cref="Signature"/> derives its <c>Length</c> from the rented
+    /// owner's <c>Memory.Length</c> without slicing, so a pool whose rentals are not exact-length (e.g.
+    /// <see cref="MemoryPool{T}.Shared"/>, which rounds up to a power-of-two bucket) silently produces an
+    /// over-long wire signature — the exact failure mode a P-384 or P-521 JWS hits under the framework pool.
+    /// This catches a foreign pool arriving as a caller-supplied parameter — the one case the
+    /// <c>BannedSymbols.txt</c> compile-time ban cannot see — as a debug-time failure instead of a wire-visible
+    /// defect. Compiled out in Release builds.
+    /// </summary>
+    /// <param name="candidate">The pool passed by the caller at one of this class's public entry points.</param>
+    [Conditional("DEBUG")]
+    private static void AssertHousePool(MemoryPool<byte> candidate)
+    {
+        Debug.Assert(candidate is BaseMemoryPool,
+            "The memory pool must be Lumoin.Base.BaseMemoryPool (BaseMemoryPool.Shared, or a custom " +
+            "house-configured instance) for the exact-length rentals Signature depends on.");
     }
 }

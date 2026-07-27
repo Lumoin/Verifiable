@@ -86,6 +86,44 @@ public sealed class CertifyInput: ITpmCommandInput, IDisposable
     }
 
     /// <summary>
+    /// Creates a TPM2_Certify input for RSASSA (RSA PKCS#1 v1.5) signing.
+    /// </summary>
+    /// <param name="objectHandle">The handle of the object to certify.</param>
+    /// <param name="signHandle">The handle of the RSA signing key.</param>
+    /// <param name="qualifyingData">The caller nonce echoed into the attestation.</param>
+    /// <param name="schemeHashAlg">The hash algorithm for the RSASSA scheme.</param>
+    /// <param name="pool">The memory pool for the qualifying-data buffer.</param>
+    /// <returns>A new <see cref="CertifyInput"/>.</returns>
+    public static CertifyInput ForRsaSsa(
+        TpmiDhObject objectHandle,
+        TpmiDhObject signHandle,
+        ReadOnlySpan<byte> qualifyingData,
+        TpmAlgIdConstants schemeHashAlg,
+        MemoryPool<byte> pool)
+    {
+        return Create(objectHandle, signHandle, qualifyingData, TpmAlgIdConstants.TPM_ALG_RSASSA, schemeHashAlg, pool);
+    }
+
+    /// <summary>
+    /// Creates a TPM2_Certify input for RSAPSS signing.
+    /// </summary>
+    /// <param name="objectHandle">The handle of the object to certify.</param>
+    /// <param name="signHandle">The handle of the RSA signing key.</param>
+    /// <param name="qualifyingData">The caller nonce echoed into the attestation.</param>
+    /// <param name="schemeHashAlg">The hash algorithm for the RSAPSS scheme.</param>
+    /// <param name="pool">The memory pool for the qualifying-data buffer.</param>
+    /// <returns>A new <see cref="CertifyInput"/>.</returns>
+    public static CertifyInput ForRsaPss(
+        TpmiDhObject objectHandle,
+        TpmiDhObject signHandle,
+        ReadOnlySpan<byte> qualifyingData,
+        TpmAlgIdConstants schemeHashAlg,
+        MemoryPool<byte> pool)
+    {
+        return Create(objectHandle, signHandle, qualifyingData, TpmAlgIdConstants.TPM_ALG_RSAPSS, schemeHashAlg, pool);
+    }
+
+    /// <summary>
     /// Creates a TPM2_Certify input for the given signing scheme.
     /// </summary>
     /// <param name="objectHandle">The handle of the object to certify.</param>

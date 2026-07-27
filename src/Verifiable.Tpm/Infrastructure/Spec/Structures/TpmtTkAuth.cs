@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using Verifiable.Tpm.Infrastructure.Spec.Constants;
 using Verifiable.Tpm.Infrastructure.Spec.Handles;
 
 namespace Verifiable.Tpm.Infrastructure.Spec.Structures;
@@ -32,10 +33,6 @@ namespace Verifiable.Tpm.Infrastructure.Spec.Structures;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public readonly record struct TpmtTkAuth(ushort Tag, uint Hierarchy, ReadOnlyMemory<byte> Digest)
 {
-    //TPM_ST_AUTH_SIGNED = 0x8002, TPM_ST_AUTH_SECRET = 0x8003.
-    private const ushort TpmStAuthSigned = 0x8002;
-    private const ushort TpmStAuthSecret = 0x8003;
-
     private string DebuggerDisplay
     {
         get
@@ -58,10 +55,10 @@ public readonly record struct TpmtTkAuth(ushort Tag, uint Hierarchy, ReadOnlyMem
     /// <summary>
     /// Determines if this is from TPM2_PolicySigned().
     /// </summary>
-    public bool IsPolicySigned() => Tag == TpmStAuthSigned;
+    public bool IsPolicySigned() => Tag == (ushort)TpmStConstants.TPM_ST_AUTH_SIGNED;
 
     /// <summary>
     /// Determines if this is from TPM2_PolicySecret().
     /// </summary>
-    public bool IsPolicySecret() => Tag == TpmStAuthSecret;
+    public bool IsPolicySecret() => Tag == (ushort)TpmStConstants.TPM_ST_AUTH_SECRET;
 }

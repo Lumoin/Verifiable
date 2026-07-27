@@ -9,7 +9,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Cryptography;
 
 /// <summary>
-/// Pins the honest-tag invariant on the base58/multicodec decode path: a NIST EC public key encoded as a
+/// Pins the tag-matches-bytes invariant on the base58/multicodec decode path: a NIST EC public key encoded as a
 /// did:key base58btc multicodec multibase string decodes through
 /// <see cref="CryptoFormatConversions.DefaultBase58ToAlgorithmConverter"/> to its expected curve AND carries
 /// <see cref="EncodingScheme.EcCompressed"/> — the multicodec EC encoding is a compressed SEC1 point, so the

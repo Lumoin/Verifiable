@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Model.Mdoc;
 
@@ -35,12 +36,11 @@ namespace Verifiable.Core.Model.Mdoc;
 /// items the wallet presented).
 /// </para>
 /// <para>
-/// Inline <see cref="SHA256"/> / <see cref="SHA384"/> / <see cref="SHA512"/>
-/// computation matches the precedent set by
+/// Digest computation routes through the registered synchronous digest seam
+/// (<see cref="CryptographicKeyEvents.ComputeDigest"/>), matching the precedent set by
 /// <see cref="Verifiable.Cbor.Mdoc.MdocCborIssuance"/> and the SD-CWT
-/// pipeline. A future refactor to route through the registry-resolved
-/// digest delegate is a project-wide direction noted alongside the result-
-/// object direction.
+/// pipeline — the library never picks a hash implementation the consumer
+/// did not wire.
 /// </para>
 /// </remarks>
 public static class MdocMsoDigestBindingValidator
@@ -159,17 +159,26 @@ public static class MdocMsoDigestBindingValidator
     /// Computes the digest of <paramref name="input"/> under the
     /// ISO/IEC 18013-5 §9.1.2.5 algorithm name. Caller has already
     /// validated <paramref name="digestAlgorithm"/> via
-    /// <see cref="IsSupportedDigestAlgorithm"/>.
+    /// <see cref="IsSupportedDigestAlgorithm"/>. Routed through the
+    /// registered digest seam (<see cref="CryptographicKeyEvents.ComputeDigest"/>)
+    /// rather than a direct framework hash call, so the library never
+    /// picks a hash implementation the consumer did not wire.
     /// </summary>
     private static byte[] ComputeDigest(string digestAlgorithm, ReadOnlySpan<byte> input)
     {
-        return digestAlgorithm switch
+        (Tag tag, int length, string? qualifier) = digestAlgorithm switch
         {
-            MdocMsoWellKnownKeys.DigestAlgorithmSha256 => SHA256.HashData(input),
-            MdocMsoWellKnownKeys.DigestAlgorithmSha384 => SHA384.HashData(input),
-            MdocMsoWellKnownKeys.DigestAlgorithmSha512 => SHA512.HashData(input),
+            MdocMsoWellKnownKeys.DigestAlgorithmSha256 => (CryptoTags.Sha256Digest, WellKnownHashAlgorithms.Sha256SizeBytes, (string?)null),
+            MdocMsoWellKnownKeys.DigestAlgorithmSha384 => (CryptoTags.Sha384Digest, WellKnownHashAlgorithms.Sha384SizeBytes, nameof(HashAlgorithmName.SHA384)),
+            MdocMsoWellKnownKeys.DigestAlgorithmSha512 => (CryptoTags.Sha512Digest, WellKnownHashAlgorithms.Sha512SizeBytes, nameof(HashAlgorithmName.SHA512)),
             _ => throw new InvalidOperationException(
                 $"Unsupported MSO digestAlgorithm '{digestAlgorithm}' reached ComputeDigest after the gate.")
         };
+
+        using DigestValue digest = CryptographicKeyEvents.ComputeDigest(input, length, tag, BaseMemoryPool.Shared, qualifier);
+
+        //The pooled digest buffer may be larger than the requested length (pool implementations are free to
+        //over-allocate); slice to the algorithm's exact output size before copying out.
+        return digest.AsReadOnlySpan()[..length].ToArray();
     }
 }

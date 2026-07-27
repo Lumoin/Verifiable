@@ -59,10 +59,7 @@ internal sealed class SiopRequestUriFlowTests
 
     //The §9 Request Object payload is read back as a generic claim dictionary so the test asserts on
     //the wire-observable values rather than a typed projection.
-    private static readonly JwtPartDecoder PartDecoder =
-        static bytes => JsonSerializer.Deserialize<Dictionary<string, object>>(
-            bytes, TestSetup.DefaultSerializationOptions)
-            ?? throw new FormatException("§9 Request Object JWT part parsed to null.");
+    private static readonly JwtPartDecoder PartDecoder = JwtPartJson.Default;
 
 
     [TestMethod]

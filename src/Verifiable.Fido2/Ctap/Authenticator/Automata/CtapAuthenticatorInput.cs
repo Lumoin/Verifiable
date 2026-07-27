@@ -2,6 +2,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using Verifiable.Cryptography;
+using Verifiable.Fido2.Ctap.Authenticator.Custody;
 using Verifiable.JCose;
 
 namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
@@ -430,6 +431,15 @@ public enum CtapChangePinOutcomeKind
 /// successful <c>changePIN</c> invalidates every outstanding token system-wide (line 5714).
 /// </param>
 /// <param name="FreshProtocolTwoToken">PIN/UV auth protocol two's freshly reset token state — see <see cref="FreshProtocolOneToken"/>.</param>
+/// <param name="Verdict">
+/// The <see cref="CtapPinRetriesCustody"/> verdict from the current-PIN check that produced this
+/// input, or <see langword="null"/> when no such bundle is composed (contract R-4, wavepin). Present on
+/// EVERY outcome reached only once the current PIN has already matched or been penalized — i.e. every
+/// outcome except <see cref="CtapChangePinOutcomeKind.DecapsulationFailed"/>/
+/// <see cref="CtapChangePinOutcomeKind.VerifyFailed"/>, which never ran the current-PIN check at all —
+/// so the pure fold-back's single <c>matchedState</c>/<c>ApplyPinMismatch</c> computation can mirror
+/// <see cref="CtapPinAttemptVerdict.RetriesRemaining"/> instead of a local decrement/reset.
+/// </param>
 public sealed record PinChangeCompleted(
     CtapChangePinOutcomeKind Kind,
     CtapPinUvAuthProtocolId ProtocolId,
@@ -437,7 +447,8 @@ public sealed record PinChangeCompleted(
     int NewPinCodePointLength,
     DigestValue? NewPinHash,
     CtapPinUvAuthTokenState? FreshProtocolOneToken,
-    CtapPinUvAuthTokenState? FreshProtocolTwoToken): CtapAuthenticatorInput;
+    CtapPinUvAuthTokenState? FreshProtocolTwoToken,
+    CtapPinAttemptVerdict? Verdict = null): CtapAuthenticatorInput;
 
 /// <summary>
 /// The discriminants the shared <c>getPinToken</c>/<c>getPinUvAuthTokenUsingPinWithPermissions</c>
@@ -510,6 +521,15 @@ public enum CtapPinTokenIssuanceOutcomeKind
 /// <c>getPinUvAuthTokenUsingPinWithPermissions</c>), so the pure fold-back cannot resolve it from
 /// <paramref name="Kind"/> alone.
 /// </param>
+/// <param name="Verdict">
+/// The <see cref="CtapPinRetriesCustody"/> verdict from the current-PIN check that produced this
+/// input, or <see langword="null"/> when no such bundle is composed (contract R-4, wavepin). Present on
+/// every outcome reached only once the current PIN has already matched or been penalized — i.e. every
+/// outcome except <see cref="CtapPinTokenIssuanceOutcomeKind.DecapsulationFailed"/>, which never ran the
+/// current-PIN check at all — so the pure fold-back's <c>ForcePinChangeRequired</c>/success reset and
+/// its own <c>ApplyPinMismatch</c> helper can mirror <see cref="CtapPinAttemptVerdict.RetriesRemaining"/>
+/// instead of a local decrement/reset.
+/// </param>
 public sealed record PinTokenIssuanceCompleted(
     CtapPinTokenIssuanceOutcomeKind Kind,
     CtapPinUvAuthProtocolId ProtocolId,
@@ -517,7 +537,8 @@ public sealed record PinTokenIssuanceCompleted(
     CtapPinUvAuthTokenState? FreshProtocolOneToken,
     CtapPinUvAuthTokenState? FreshProtocolTwoToken,
     ReadOnlyMemory<byte>? EncryptedToken,
-    byte? ForcePinChangeDeniedStatusCode = null): CtapAuthenticatorInput;
+    byte? ForcePinChangeDeniedStatusCode = null,
+    CtapPinAttemptVerdict? Verdict = null): CtapAuthenticatorInput;
 
 /// <summary>
 /// The effect fold-back of a <see cref="CtapPerformBuiltInUvAction"/>: the simulated attempt loop's

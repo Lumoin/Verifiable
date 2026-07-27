@@ -111,7 +111,7 @@ namespace Verifiable.Cryptography.Context;
 /// <list type="bullet">
 /// <item><description>
 /// <strong>Direct material</strong> - the bytes ARE the cryptographic key material.
-/// Software implementations (BouncyCastle, NSec, Microsoft) operate on these bytes directly.
+/// Software implementations (BouncyCastle, Libsodium, Microsoft) operate on these bytes directly.
 /// </description></item>
 /// <item><description>
 /// <strong>Handle/reference</strong> - the bytes identify a key stored elsewhere.
@@ -184,7 +184,7 @@ public readonly struct MaterialSemantics: IEquatable<MaterialSemantics>
     /// <remarks>
     /// Use this for software-based cryptographic operations where the key material
     /// resides in memory and is processed by managed or native crypto libraries
-    /// (BouncyCastle, NSec, Microsoft platform crypto).
+    /// (BouncyCastle, Libsodium, Microsoft platform crypto).
     /// </remarks>
     public static MaterialSemantics Direct { get; } = new(0);
 

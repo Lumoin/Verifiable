@@ -312,7 +312,7 @@ public static class FederationEndpoints
                     EntityStatementJsonBuilder.EncodeJwtPart,
                     base64UrlEncoder,
                     privateKey,
-                    System.Buffers.MemoryPool<byte>.Shared,
+                    BaseMemoryPool.Shared,
                     ct).ConfigureAwait(false);
 
                 string compactJws = JwsSerialization.SerializeCompact(jwsMessage, base64UrlEncoder);
@@ -529,7 +529,7 @@ public static class FederationEndpoints
                     EntityStatementJsonBuilder.EncodeJwtPart,
                     base64UrlEncoder,
                     privateKey,
-                    System.Buffers.MemoryPool<byte>.Shared,
+                    BaseMemoryPool.Shared,
                     ct).ConfigureAwait(false);
 
                 string compactJws = JwsSerialization.SerializeCompact(jwsMessage, base64UrlEncoder);
@@ -992,7 +992,7 @@ public static class FederationEndpoints
                     EntityStatementJsonBuilder.EncodeJwtPart,
                     base64UrlEncoder,
                     privateKey,
-                    System.Buffers.MemoryPool<byte>.Shared,
+                    BaseMemoryPool.Shared,
                     ct).ConfigureAwait(false);
 
                 string compactJws = JwsSerialization.SerializeCompact(jwsMessage, base64UrlEncoder);
@@ -1163,7 +1163,7 @@ public static class FederationEndpoints
                     EntityStatementJsonBuilder.EncodeJwtPart,
                     base64UrlEncoder,
                     privateKey,
-                    System.Buffers.MemoryPool<byte>.Shared,
+                    BaseMemoryPool.Shared,
                     ct).ConfigureAwait(false);
 
                 string compactJws = JwsSerialization.SerializeCompact(jwsMessage, base64UrlEncoder);
@@ -1355,7 +1355,7 @@ public static class FederationEndpoints
                     EntityStatementJsonBuilder.EncodeJwtPart,
                     base64UrlEncoder,
                     privateKey,
-                    System.Buffers.MemoryPool<byte>.Shared,
+                    BaseMemoryPool.Shared,
                     ct).ConfigureAwait(false);
 
                 string compactJws = JwsSerialization.SerializeCompact(jwsMessage, base64UrlEncoder);
@@ -1818,7 +1818,7 @@ public static class FederationEndpoints
                     EntityStatementJsonBuilder.EncodeJwtPart,
                     base64UrlEncoder,
                     privateKey,
-                    System.Buffers.MemoryPool<byte>.Shared,
+                    BaseMemoryPool.Shared,
                     ct).ConfigureAwait(false);
 
                 string compactJws = JwsSerialization.SerializeCompact(jwsMessage, base64UrlEncoder);

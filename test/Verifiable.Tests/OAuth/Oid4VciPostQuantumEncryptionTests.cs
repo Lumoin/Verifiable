@@ -30,7 +30,7 @@ namespace Verifiable.Tests.OAuth;
 /// entirely the application's, so a quantum-resistant KEM needs NO library change.
 /// </summary>
 /// <remarks>
-/// HONEST STATUS: the JOSE binding for ML-KEM (the AKP JWK shape for KEM keys and the
+/// STATUS: the JOSE binding for ML-KEM (the AKP JWK shape for KEM keys and the
 /// <c>ML-KEM-768</c> JWE <c>alg</c> value) is DRAFT-stage IETF work, not a final IANA
 /// registration. These tests therefore pin the KEM-agnosticism of the library seams and a
 /// concrete BouncyCastle ML-KEM + AES-GCM composition — not wire interoperability with a

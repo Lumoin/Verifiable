@@ -135,6 +135,23 @@ public static class TpmDeviceExtensions
         }
 
         /// <summary>
+        /// Runs <c>TPM2_PolicyCounterTimer</c>, authorizing the session only when the TPM's live
+        /// <c>TPMS_TIME_INFO</c> (Time, Clock, resetCount, restartCount, Safe), at <paramref name="offset"/>,
+        /// compares to <paramref name="operandB"/> as specified by <paramref name="operation"/>.
+        /// </summary>
+        /// <param name="policySession">The policy session handle.</param>
+        /// <param name="operandB">The value to compare the live TPMS_TIME_INFO against.</param>
+        /// <param name="offset">The octet offset into the marshaled TPMS_TIME_INFO.</param>
+        /// <param name="operation">The TPM_EO comparison operation.</param>
+        /// <param name="cancellationToken">A token observed across the exchange.</param>
+        /// <returns>A result indicating success or an error.</returns>
+        public ValueTask<TpmResult<PolicyCounterTimerResponse>> PolicyCounterTimerAsync(
+            uint policySession, ReadOnlyMemory<byte> operandB, ushort offset, TpmEoConstants operation, CancellationToken cancellationToken = default)
+        {
+            return PolicyCounterTimerCoreAsync(device, policySession, operandB, offset, operation, cancellationToken);
+        }
+
+        /// <summary>
         /// Runs <c>TPM2_PolicySecret</c> (immediate form), binding the policy to the authorization of the entity
         /// at <paramref name="authHandle"/>. The entity is authorized with an empty-auth password session — the
         /// common case for a hierarchy (owner/endorsement/platform) whose authorization value has not been set.
@@ -148,6 +165,67 @@ public static class TpmDeviceExtensions
             uint authHandle, uint policySession, CancellationToken cancellationToken = default)
         {
             return PolicySecretCoreAsync(device, authHandle, policySession, cancellationToken);
+        }
+
+        /// <summary>
+        /// Runs <c>TPM2_PolicySigned</c>, binding the policy session to a signature over
+        /// <c>aHash = H_authAlg(nonceTPM || expiration || cpHashA || policyRef)</c> made by the key at
+        /// <paramref name="authObject"/>. Neither <paramref name="authObject"/> nor <paramref name="policySession"/>
+        /// requires authorization (TPM 2.0 Library Part 3, Section 23.3), so the command carries no authorization
+        /// area at all.
+        /// </summary>
+        /// <param name="authObject">The handle of the key whose public part validates the signature.</param>
+        /// <param name="policySession">The policy session handle being extended.</param>
+        /// <param name="nonceTpm">The policy session's retained nonceTPM, or empty for a session-unbound authorization.</param>
+        /// <param name="cpHashA">The digest of the command parameters being authorized, or empty if unbound.</param>
+        /// <param name="policyRef">The opaque policy qualifier, or empty for none.</param>
+        /// <param name="expiration">The signed expiration; 0 = no expiry, negative = ticket requested (deferred this wave).</param>
+        /// <param name="signature">The signature octets: IEEE P1363 r ‖ s for ECDSA, or the raw RSA signature for RSASSA/RSAPSS.</param>
+        /// <param name="signatureScheme">The signing scheme algorithm (TPM_ALG_ECDSA, TPM_ALG_RSASSA, or TPM_ALG_RSAPSS).</param>
+        /// <param name="schemeHashAlg">The hash algorithm carried inside the signature (H_authAlg, which builds aHash).</param>
+        /// <param name="cancellationToken">A token observed across the exchange.</param>
+        /// <returns>A result containing the timeout and ticket (dispose the response) or an error.</returns>
+        public ValueTask<TpmResult<PolicySignedResponse>> PolicySignedAsync(
+            uint authObject,
+            uint policySession,
+            ReadOnlyMemory<byte> nonceTpm,
+            ReadOnlyMemory<byte> cpHashA,
+            ReadOnlyMemory<byte> policyRef,
+            int expiration,
+            ReadOnlyMemory<byte> signature,
+            TpmAlgIdConstants signatureScheme,
+            TpmAlgIdConstants schemeHashAlg,
+            CancellationToken cancellationToken = default)
+        {
+            return PolicySignedCoreAsync(
+                device, authObject, policySession, nonceTpm, cpHashA, policyRef, expiration, signature, signatureScheme, schemeHashAlg, cancellationToken);
+        }
+
+        /// <summary>
+        /// Runs <c>TPM2_PolicyAuthorize</c>, authorizing the session when its policyDigest equals
+        /// <paramref name="approvedPolicy"/> and <paramref name="checkTicket"/> proves <paramref name="keySign"/> signed
+        /// <c>H(approvedPolicy || policyRef)</c>, then replacing the digest with
+        /// <c>H(H(0...0 || TPM_CC_PolicyAuthorize || keySign) || policyRef)</c> (TPM 2.0 Library Part 3, Section
+        /// 23.16) — letting the session accept a policy the authority can revise at will.
+        /// </summary>
+        /// <param name="policySession">The policy session handle being extended.</param>
+        /// <param name="approvedPolicy">The policy digest being approved; must equal the session's current policyDigest.</param>
+        /// <param name="policyRef">The opaque policy qualifier, or empty for none.</param>
+        /// <param name="keySign">The Name of the key that signed the approval.</param>
+        /// <param name="checkTicket">The verification ticket (a genuine <c>TPM2_VerifySignature()</c> ticket, or <see cref="TpmtTkVerified.Null"/> for a trial session); a borrow the call does not retain.</param>
+        /// <param name="cancellationToken">A token observed across the exchange.</param>
+        /// <returns>A result indicating success or an error.</returns>
+        public ValueTask<TpmResult<PolicyAuthorizeResponse>> PolicyAuthorizeAsync(
+            uint policySession,
+            ReadOnlyMemory<byte> approvedPolicy,
+            ReadOnlyMemory<byte> policyRef,
+            ReadOnlyMemory<byte> keySign,
+            TpmtTkVerified checkTicket,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(checkTicket);
+
+            return PolicyAuthorizeCoreAsync(device, policySession, approvedPolicy, policyRef, keySign, checkTicket, cancellationToken);
         }
 
         /// <summary>
@@ -261,6 +339,19 @@ public static class TpmDeviceExtensions
             device, input, [authSession], null, pool, registry, cancellationToken).ConfigureAwait(false);
     }
 
+    private static async ValueTask<TpmResult<PolicyCounterTimerResponse>> PolicyCounterTimerCoreAsync(
+        TpmDevice device, uint policySession, ReadOnlyMemory<byte> operandB, ushort offset, TpmEoConstants operation, CancellationToken cancellationToken)
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_PolicyCounterTimer, TpmResponseCodec.PolicyCounterTimer);
+
+        var input = new PolicyCounterTimerInput(policySession, operandB, offset, operation);
+
+        return await TpmCommandExecutor.ExecuteAsync<PolicyCounterTimerResponse>(
+            device, input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
+    }
+
     private static async ValueTask<TpmResult<PolicySecretResponse>> PolicySecretCoreAsync(
         TpmDevice device, uint authHandle, uint policySession, CancellationToken cancellationToken)
     {
@@ -275,6 +366,57 @@ public static class TpmDeviceExtensions
 
         return await TpmCommandExecutor.ExecuteAsync<PolicySecretResponse>(
             device, input, [authSession], null, pool, registry, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async ValueTask<TpmResult<PolicySignedResponse>> PolicySignedCoreAsync(
+        TpmDevice device,
+        uint authObject,
+        uint policySession,
+        ReadOnlyMemory<byte> nonceTpm,
+        ReadOnlyMemory<byte> cpHashA,
+        ReadOnlyMemory<byte> policyRef,
+        int expiration,
+        ReadOnlyMemory<byte> signature,
+        TpmAlgIdConstants signatureScheme,
+        TpmAlgIdConstants schemeHashAlg,
+        CancellationToken cancellationToken)
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_PolicySigned, TpmResponseCodec.PolicySigned);
+
+        //PolicySigned carries no authorization at all: neither authObject nor policySession needs one (a
+        //public-key operation, TPM 2.0 Library Part 3, Section 23.3), so the executor is given no sessions and
+        //frames TPM_ST_NO_SESSIONS, exactly as TPM2_VerifySignature() does.
+        using PolicySignedInput input = PolicySignedInput.Create(
+            authObject, policySession, nonceTpm.Span, cpHashA.Span, policyRef.Span, expiration, signature.Span, signatureScheme, schemeHashAlg, pool);
+
+        return await TpmCommandExecutor.ExecuteAsync<PolicySignedResponse>(
+            device, input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async ValueTask<TpmResult<PolicyAuthorizeResponse>> PolicyAuthorizeCoreAsync(
+        TpmDevice device,
+        uint policySession,
+        ReadOnlyMemory<byte> approvedPolicy,
+        ReadOnlyMemory<byte> policyRef,
+        ReadOnlyMemory<byte> keySign,
+        TpmtTkVerified checkTicket,
+        CancellationToken cancellationToken)
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_PolicyAuthorize, TpmResponseCodec.PolicyAuthorize);
+
+        //PolicyAuthorize carries no authorization at all: policySession needs none (Part 3, Section 23.16), so
+        //the executor is given no sessions and frames TPM_ST_NO_SESSIONS. The ticket type itself guarantees the
+        //TPM_ST_VERIFIED tag a genuine TPM2_VerifySignature() ticket (real or NULL) always carries.
+        using PolicyAuthorizeInput input = PolicyAuthorizeInput.Create(
+            policySession, approvedPolicy.Span, policyRef.Span, keySign.Span,
+            (ushort)checkTicket.Tag, (uint)checkTicket.Hierarchy, checkTicket.Digest, pool);
+
+        return await TpmCommandExecutor.ExecuteAsync<PolicyAuthorizeResponse>(
+            device, input, [], null, pool, registry, cancellationToken).ConfigureAwait(false);
     }
 
     private static async ValueTask<TpmResult<PolicyGetDigestResponse>> PolicyGetDigestCoreAsync(

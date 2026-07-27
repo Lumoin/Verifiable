@@ -79,6 +79,44 @@ public sealed class QuoteInput: ITpmCommandInput, IDisposable
     }
 
     /// <summary>
+    /// Creates a TPM2_Quote input for RSASSA (RSA PKCS#1 v1.5) signing.
+    /// </summary>
+    /// <param name="signHandle">The handle of the RSA signing key.</param>
+    /// <param name="qualifyingData">The caller nonce echoed into the attestation.</param>
+    /// <param name="schemeHashAlg">The hash algorithm for the RSASSA scheme.</param>
+    /// <param name="pcrSelection">The PCRs to quote. Ownership is transferred.</param>
+    /// <param name="pool">The memory pool for the qualifying-data buffer.</param>
+    /// <returns>A new <see cref="QuoteInput"/>.</returns>
+    public static QuoteInput ForRsaSsa(
+        TpmiDhObject signHandle,
+        ReadOnlySpan<byte> qualifyingData,
+        TpmAlgIdConstants schemeHashAlg,
+        TpmlPcrSelection pcrSelection,
+        MemoryPool<byte> pool)
+    {
+        return Create(signHandle, qualifyingData, TpmAlgIdConstants.TPM_ALG_RSASSA, schemeHashAlg, pcrSelection, pool);
+    }
+
+    /// <summary>
+    /// Creates a TPM2_Quote input for RSAPSS signing.
+    /// </summary>
+    /// <param name="signHandle">The handle of the RSA signing key.</param>
+    /// <param name="qualifyingData">The caller nonce echoed into the attestation.</param>
+    /// <param name="schemeHashAlg">The hash algorithm for the RSAPSS scheme.</param>
+    /// <param name="pcrSelection">The PCRs to quote. Ownership is transferred.</param>
+    /// <param name="pool">The memory pool for the qualifying-data buffer.</param>
+    /// <returns>A new <see cref="QuoteInput"/>.</returns>
+    public static QuoteInput ForRsaPss(
+        TpmiDhObject signHandle,
+        ReadOnlySpan<byte> qualifyingData,
+        TpmAlgIdConstants schemeHashAlg,
+        TpmlPcrSelection pcrSelection,
+        MemoryPool<byte> pool)
+    {
+        return Create(signHandle, qualifyingData, TpmAlgIdConstants.TPM_ALG_RSAPSS, schemeHashAlg, pcrSelection, pool);
+    }
+
+    /// <summary>
     /// Creates a TPM2_Quote input for the given signing scheme.
     /// </summary>
     /// <param name="signHandle">The handle of the signing key.</param>

@@ -4,6 +4,7 @@ using System.Security.Cryptography.X509Certificates;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Microsoft;
+using Verifiable.Tests.X509;
 
 namespace Verifiable.Tests.TestDataProviders;
 
@@ -187,15 +188,13 @@ internal static class TestCertificateChainProvider
         leafRequest.CertificateExtensions.Add(
             X509AuthorityKeyIdentifierExtension.CreateFromSubjectKeyIdentifier(caSubjectKeyId));
 
-        //Serial number is a junk/noise payload, not key material; a fresh random value
-        //per chain is appropriate and carries no fixture-determinism requirement.
-        byte[] serialNumber = RandomNumberGenerator.GetBytes(8);
+        using Salt serialNumber = X509ChainTestRing.CreateSerialNumber();
 
         using X509Certificate2 leafCertPublicOnly = leafRequest.Create(
             caCert,
             notBefore: now.AddDays(-1).UtcDateTime,
             notAfter: now.AddYears(10).UtcDateTime,
-            serialNumber);
+            serialNumber.AsReadOnlySpan());
 
         byte[] caDer = caCert.RawData;
         byte[] leafDer = leafCertPublicOnly.RawData;

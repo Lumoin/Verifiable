@@ -77,6 +77,30 @@ internal class TpmReaderTests
     }
 
     [TestMethod]
+    public void ReadInt32ReadsBigEndianTwosComplementNegativeValue()
+    {
+        byte[] buffer = [0xFF, 0xFF, 0xFF, 0xFF];
+        var reader = new TpmReader(buffer);
+
+        int value = reader.ReadInt32();
+
+        Assert.AreEqual(-1, value);
+        Assert.AreEqual(4, reader.Consumed);
+    }
+
+    [TestMethod]
+    public void ReadInt32ReadsBigEndianPositiveValue()
+    {
+        byte[] buffer = [0x12, 0x34, 0x56, 0x78];
+        var reader = new TpmReader(buffer);
+
+        int value = reader.ReadInt32();
+
+        Assert.AreEqual(0x12345678, value);
+        Assert.AreEqual(4, reader.Consumed);
+    }
+
+    [TestMethod]
     public void ReadBytesReturnsCorrectSlice()
     {
         byte[] buffer = [0x01, 0x02, 0x03, 0x04, 0x05];

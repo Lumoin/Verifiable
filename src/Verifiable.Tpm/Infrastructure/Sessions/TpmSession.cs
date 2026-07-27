@@ -161,15 +161,22 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     /// <see langword="null"/> for none. It must match the symmetric definition sent in the StartAuthSession
     /// command.
     /// </param>
+    /// <param name="salt">
+    /// The session salt recovered from a salted <c>TPM2_StartAuthSession</c> (the plaintext value the caller
+    /// encrypted into <c>encryptedSalt</c> — for example via <see cref="Commands.StartAuthSessionInputExtensions"/>'s
+    /// salted factories), or empty for an unsalted session. Folded after <paramref name="bindAuthValue"/> in the
+    /// session-key KDFa (TPM 2.0 Library Part 1, Section 17.6.12, equation 25) — never reversed.
+    /// </param>
     /// <param name="cancellationToken">A token observed across the key-derivation HMACs.</param>
     /// <returns>The established bound session.</returns>
     /// <remarks>
     /// <para>
     /// Per TPM 2.0 Library Part 1, Section 17.6.10 (equation 20) and Section 17.6.12 (equation 25) the session
     /// key is <c>KDFa(sessionAlg, (bindAuthValue || salt), "ATH", nonceTPM, nonceCaller, bits)</c> — the bind
-    /// authorization value first, then the salt. This bound (unsalted) path has no salt, so the KDF key is the
-    /// bind authorization value alone; the salted path appends the salt after it. The context values are the
-    /// initial StartAuthSession nonces (nonceTPM then nonceCaller), not the rolling per-command ones.
+    /// authorization value first, then the salt, each empty when absent. An unsalted (unbound-or-bound) session
+    /// leaves <paramref name="salt"/> empty, so the KDF key reduces to the bind authorization value alone; a
+    /// salted session appends the recovered salt after it. The context values are the initial StartAuthSession
+    /// nonces (nonceTPM then nonceCaller), not the rolling per-command ones.
     /// </para>
     /// </remarks>
     public static async ValueTask<TpmSession> CreateBoundAsync(
@@ -180,6 +187,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
         TpmAlgIdConstants sessionAlg,
         MemoryPool<byte> pool,
         TpmtSymDef? symmetric = null,
+        ReadOnlyMemory<byte> salt = default,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(nonceTPM);
@@ -190,15 +198,53 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
         {
             int size = GetDigestSize(sessionAlg);
 
-            IMemoryOwner<byte> derived = await Kdfa.DeriveAsync(
-                ToHashAlgorithmName(sessionAlg),
-                bindAuthValue,
-                "ATH",
-                nonceTPM.AsReadOnlyMemory(),
-                startNonceCaller,
-                size * 8,
-                pool,
-                cancellationToken).ConfigureAwait(false);
+            //KDFa key = bindAuthValue || salt (Part 1, Section 17.6.12 equation 25), concatenated into a pooled
+            //buffer only when both are non-empty; the degenerate unsalted/unbound cases pass either term alone
+            //with no extra allocation.
+            int keyLength = bindAuthValue.Length + salt.Length;
+            IMemoryOwner<byte>? keyOwner = null;
+            ReadOnlyMemory<byte> key;
+            if(keyLength == 0)
+            {
+                key = ReadOnlyMemory<byte>.Empty;
+            }
+            else if(salt.IsEmpty)
+            {
+                key = bindAuthValue;
+            }
+            else if(bindAuthValue.IsEmpty)
+            {
+                key = salt;
+            }
+            else
+            {
+                keyOwner = pool.Rent(keyLength);
+                bindAuthValue.CopyTo(keyOwner.Memory);
+                salt.CopyTo(keyOwner.Memory[bindAuthValue.Length..]);
+                key = keyOwner.Memory[..keyLength];
+            }
+
+            IMemoryOwner<byte> derived;
+            try
+            {
+                derived = await Kdfa.DeriveAsync(
+                    ToHashAlgorithmName(sessionAlg),
+                    key,
+                    "ATH",
+                    nonceTPM.AsReadOnlyMemory(),
+                    startNonceCaller,
+                    size * 8,
+                    pool,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                if(keyOwner is not null)
+                {
+                    keyOwner.Memory.Span[..keyLength].Clear();
+                    keyOwner.Dispose();
+                }
+            }
 
             try
             {
@@ -228,6 +274,9 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     /// <inheritdoc/>
     public override TpmAlgIdConstants HashAlgorithm => SessionAlg;
 
+    /// <inheritdoc/>
+    public override ReadOnlyMemory<byte> NonceTpm => nonceTPM.AsReadOnlyMemory();
+
     /// <summary>
     /// Sets the authorization value for entities requiring authorization.
     /// </summary>
@@ -256,19 +305,26 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <paramref name="foldedSessionNonces"/> (TPM 2.0 Library Part 1, clause 19.6.3.4) is folded in, when
+    /// non-empty, immediately after nonceOlder and before <see cref="SessionAttributes"/> — the caller is
+    /// responsible for supplying it only when this session is the first in the command's authorization area and
+    /// authorizes an entity, and only the OTHER (decrypt/encrypt) session's nonceTPM, never this session's own.
+    /// </remarks>
     public override async ValueTask<Tpm2bAuth?> PrepareAuthHmacAsync(
         ReadOnlyMemory<byte> cpHash,
         MemoryPool<byte> pool,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ReadOnlyMemory<byte> foldedSessionNonces = default)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        //data = cpHash || nonceNewer || nonceOlder || sessionAttributes.
+        //data = cpHash || nonceNewer || nonceOlder || foldedSessionNonces || sessionAttributes.
         //For command: nonceNewer = nonceCaller, nonceOlder = nonceTPM.
         ReadOnlyMemory<byte> nonceCallerMem = nonceCaller.AsReadOnlyMemory();
         ReadOnlyMemory<byte> nonceTPMMem = nonceTPM.AsReadOnlyMemory();
 
-        int dataSize = cpHash.Length + nonceCallerMem.Length + nonceTPMMem.Length + sizeof(byte);
+        int dataSize = cpHash.Length + nonceCallerMem.Length + nonceTPMMem.Length + foldedSessionNonces.Length + sizeof(byte);
         using IMemoryOwner<byte> dataOwner = pool.Rent(dataSize);
         Memory<byte> dataMemory = dataOwner.Memory[..dataSize];
         Span<byte> dataSpan = dataMemory.Span;
@@ -282,6 +338,9 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
 
         nonceTPMMem.Span.CopyTo(dataSpan[offset..]);
         offset += nonceTPMMem.Length;
+
+        foldedSessionNonces.Span.CopyTo(dataSpan[offset..]);
+        offset += foldedSessionNonces.Length;
 
         dataSpan[offset] = (byte)SessionAttributes;
 
@@ -314,12 +373,20 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
 
     /// <inheritdoc/>
     /// <remarks>
+    /// <para>
     /// On successful verification, this method takes ownership of the nonce from
     /// <paramref name="response"/> via <see cref="TpmsAuthResponse.TakeNonceTPM"/>, adopting it as the new
     /// nonceTPM. It deliberately does <b>not</b> roll nonceCaller: the command's caller nonce must remain
     /// available to decrypt an encrypted first response parameter (which is keyed on it). The next command's
     /// <see cref="RollNonceCaller"/> produces the fresh caller nonce. The caller should still dispose the
     /// response to release the HMAC.
+    /// </para>
+    /// <para>
+    /// The nonceTPMdecrypt/nonceTPMencrypt fold (Part 1, clause 19.6.3.4) never applies here: its own defining text
+    /// and the two named terms are scoped explicitly to "the command" ("but only in the command"), and there is no
+    /// corresponding fold term in the response HMAC's own equation. A response verification composes only
+    /// rpHash‖nonceNewer‖nonceOlder‖sessionAttributes, with no folded-nonces term, regardless of session position.
+    /// </para>
     /// </remarks>
     public override async ValueTask<bool> VerifyAndUpdateAsync(
         TpmsAuthResponse response,

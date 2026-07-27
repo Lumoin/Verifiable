@@ -8,10 +8,12 @@ namespace Verifiable.OAuth.Server;
 /// on the POST and PUT bodies.
 /// </summary>
 /// <remarks>
-/// The library does not pick a JSON serializer. The default implementation
-/// lives in <c>Verifiable.OAuth.Json</c>; applications supplying a
-/// different JSON layer wire their own delegate. The <c>Server</c> suffix
-/// distinguishes this from a future client-side
+/// The library does not pick a JSON serializer, and no default
+/// implementation of this delegate is shipped. Applications supply their
+/// own, following the shape of
+/// <see cref="Verifiable.OAuth.OAuthResponseParsers.ParseParResponse"/> and
+/// <see cref="Verifiable.OAuth.OAuthResponseParsers.ParseTokenResponse"/>.
+/// The <c>Server</c> suffix distinguishes this from a future client-side
 /// <c>ParseClientMetadataDelegate</c> used by RFC 7592 read responses; the
 /// two have the same shape but live in different namespaces.
 /// </remarks>

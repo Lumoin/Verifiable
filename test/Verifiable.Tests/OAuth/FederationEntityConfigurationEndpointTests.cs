@@ -134,6 +134,66 @@ internal sealed class FederationEntityConfigurationEndpointTests
     }
 
 
+    /// <summary>
+    /// Regression for R-10 (waveref): the Entity Configuration signing path in
+    /// <see cref="FederationEndpoints"/> must rent its signing-input and signature
+    /// buffers from a pool that grants EXACT-length rentals. P-384 raw ECDSA
+    /// signatures are 96 bytes (<c>2 * <see cref="EllipticCurveConstants.P384"/>.PointArrayLength</c>)
+    /// — not a power of two — so a pool that rounds rentals up to the next
+    /// power-of-two bucket (<c>System.Buffers.MemoryPool&lt;byte&gt;.Shared</c>) over-rents to
+    /// 128 bytes. Because <see cref="Signature.Length"/> derives from the rented owner's
+    /// <c>Memory.Length</c> without slicing, an over-rent silently produces a 128-byte wire
+    /// signature that no verifier can validate against the 96-byte value the signing
+    /// algorithm actually produced. Before the fix this test failed both assertions
+    /// (a 128-byte signature segment, and a verification failure); after the fix
+    /// (<see cref="BaseMemoryPool"/> at every <c>Jws.SignAsync</c> call site in
+    /// <see cref="FederationEndpoints"/>) both pass.
+    /// </summary>
+    [TestMethod]
+    public async Task EntityConfigurationSignatureIsExactLengthForNonPowerOfTwoAlgorithm()
+    {
+        await using TestHostShell app = new(TimeProvider);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys =
+            TestKeyMaterialProvider.CreateFreshP384KeyMaterial();
+
+        Uri federationEntityId = new("https://p384-verifier.example.com");
+        const string ClientId = "https://p384-verifier.example.com";
+        Uri baseUri = new("https://p384-verifier.example.com");
+
+        using VerifierKeyMaterial keys = app.RegisterFederationCapableClient(
+            ClientId,
+            baseUri,
+            federationEntityId,
+            federationKeys,
+            ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode));
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        string segment = keys.Registration.TenantId.Value;
+
+        string compactEc = await AssertEndpointReturnsAsync(host,
+            $"/connect/{segment}/.well-known/openid-federation",
+            expectedContentType: WellKnownMediaTypes.Application.EntityStatementJwt).ConfigureAwait(false);
+
+        string[] parts = compactEc.Split('.');
+        Assert.HasCount(3, parts, "EC must be a JWS compact serialization with three segments.");
+
+        int expectedSignatureLength = 2 * EllipticCurveConstants.P384.PointArrayLength;
+        using(IMemoryOwner<byte> signatureBytes = TestSetup.Base64UrlDecoder(parts[2], Pool))
+        {
+            Assert.HasCount(expectedSignatureLength, signatureBytes.Memory.ToArray(),
+                $"P-384 JWS signature must be exactly {expectedSignatureLength} raw bytes (r||s); " +
+                "a longer value means the signing pool over-rented and Signature.Length trusted " +
+                "the rented buffer instead of the algorithm's actual output.");
+        }
+
+        bool verified = await VerifyEcAsync(
+            compactEc, federationKeys.PublicKey, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(verified, "EC must verify under the P-384 federation public key.");
+    }
+
+
     [TestMethod]
     public async Task EntityConfigurationAdvertisesSupportedClientRegistrationTypes()
     {

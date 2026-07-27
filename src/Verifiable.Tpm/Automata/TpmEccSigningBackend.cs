@@ -79,8 +79,32 @@ public delegate ValueTask<IMemoryOwner<byte>> TpmEccSharedSecretDelegate(
     CancellationToken cancellationToken);
 
 /// <summary>
-/// The elliptic-curve signing backend the simulator drives for <c>TPM2_CreatePrimary()</c> and
-/// <c>TPM2_Sign()</c>: a key generator paired with a digest signer and an ECDH shared-secret function.
+/// Verifies that a signature over a pre-computed digest is valid for an elliptic-curve public key, modelling
+/// the public-key operation <c>TPM2_VerifySignature()</c> performs (TPM 2.0 Library Part 3, clause 20.1).
+/// </summary>
+/// <remarks>
+/// The digest is verified <strong>directly</strong> — the backend must not hash it again, mirroring
+/// <see cref="TpmEccDigestSignDelegate"/>. The signature is supplied in IEEE P1363 form (<c>r ‖ s</c>, each
+/// component the curve field width), the same shape <see cref="TpmEccDigestSignDelegate"/> produces. Unlike
+/// signing and key generation, verification needs no pooled output buffer — it answers a plain boolean.
+/// </remarks>
+/// <param name="publicPoint">The verifying key's public point, SEC1 uncompressed (<c>0x04 ‖ X ‖ Y</c>).</param>
+/// <param name="digest">The digest the signature is claimed to be over.</param>
+/// <param name="signature">The signature to verify, as IEEE P1363 <c>r ‖ s</c>.</param>
+/// <param name="curve">The ECC curve the public point lives on.</param>
+/// <param name="cancellationToken">A cancellation token.</param>
+/// <returns><see langword="true"/> when the signature verifies against the public point; otherwise <see langword="false"/>.</returns>
+public delegate ValueTask<bool> TpmEccDigestVerifyDelegate(
+    ReadOnlyMemory<byte> publicPoint,
+    ReadOnlyMemory<byte> digest,
+    ReadOnlyMemory<byte> signature,
+    TpmEccCurveConstants curve,
+    CancellationToken cancellationToken);
+
+/// <summary>
+/// The elliptic-curve signing backend the simulator drives for <c>TPM2_CreatePrimary()</c>,
+/// <c>TPM2_Sign()</c>, and <c>TPM2_VerifySignature()</c>: a key generator paired with a digest signer, an ECDH
+/// shared-secret function, and a digest verifier.
 /// </summary>
 /// <remarks>
 /// A seam-bundle the constructor of <see cref="TpmSimulator"/> takes as one optional dependency, the same
@@ -94,10 +118,12 @@ public delegate ValueTask<IMemoryOwner<byte>> TpmEccSharedSecretDelegate(
 /// Computes the ECDH shared value the credential protection of <c>TPM2_MakeCredential</c> /
 /// <c>TPM2_ActivateCredential</c> transports the seed with (TPM 2.0 Library Part 1, clause 24).
 /// </param>
+/// <param name="VerifyDigest">Verifies a digest/signature pair against a public point for <c>TPM2_VerifySignature()</c>.</param>
 public sealed record TpmEccSigningBackend(
     TpmEccKeyGenerationDelegate GenerateKey,
     TpmEccDigestSignDelegate SignDigest,
-    TpmEccSharedSecretDelegate ComputeSharedSecret);
+    TpmEccSharedSecretDelegate ComputeSharedSecret,
+    TpmEccDigestVerifyDelegate VerifyDigest);
 
 /// <summary>
 /// The key material a <see cref="TpmEccKeyGenerationDelegate"/> produces: the private scalar the TPM

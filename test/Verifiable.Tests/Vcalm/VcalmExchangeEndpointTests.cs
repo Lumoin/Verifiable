@@ -538,7 +538,7 @@ internal sealed class VcalmExchangeEndpointTests
                 SerializePresentation = SerializePresentation,
                 SerializeProofOptions = SerializeProofOptions,
                 Decoder = TestSetup.Base58Decoder,
-                ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync,
+                ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
                 MemoryPool = Pool
             };
 
@@ -603,7 +603,7 @@ internal sealed class VcalmExchangeEndpointTests
             DeserializePresentation = DeserializePresentation,
             SerializeProofOptions = SerializeProofOptions,
             Encoder = TestSetup.Base58Encoder,
-            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
             MemoryPool = Pool
         };
 

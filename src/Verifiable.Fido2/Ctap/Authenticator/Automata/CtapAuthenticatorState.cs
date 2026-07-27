@@ -103,7 +103,12 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// <param name="CurrentStoredPin">
 /// The authenticator's stored <c>LEFT(SHA-256(newPin), 16)</c> (CTAP 2.3 §6.5.5.5, line 5592,
 /// <c>CurrentStoredPIN</c>), or <see langword="null"/> when no PIN has been set. Never the PIN itself,
-/// and never a naked byte array.
+/// and never a naked byte array. When a <c>pinRetriesCustody</c> bundle is composed (contract R-1..R-6,
+/// wavepin), this field is a DEMOTED CACHE exactly like <see cref="PinRetries"/> (contract R-4): the
+/// durable persistent tier's own provisioning state can disagree with it after a rehydration whose
+/// snapshot never learned of (or lost) the durable tier's own PIN, which is precisely what
+/// <see cref="IsPinProvisionedWithUnknownLocalHash"/> — reconciled at every composition, never
+/// serialized — exists to record (wavepin review fixes F-1/F-2).
 /// </param>
 /// <param name="PinCodePointLength">
 /// The stored PIN's length in Unicode CODE POINTS (CTAP 2.3 §6.5.5.5, line 5590,
@@ -282,6 +287,41 @@ public sealed record CtapAuthenticatorState(
     int FirmwareVersion)
 {
     /// <summary>
+    /// Whether the persistent-tier custody's own <c>TPM_NT_PIN_FAIL</c> Index reports a genuinely
+    /// provisioned PIN whose LOCAL hash this instance simply does not (yet, or any longer) know —
+    /// <see langword="true"/> exactly in the wavepin review fix F-1 split-brain: a rehydrated (or
+    /// never-populated) <see cref="CurrentStoredPin"/> is <see langword="null"/> while the durable
+    /// tier's own <c>CtapPinAttemptVerdict.IsProvisioned</c> is <see langword="true"/>. Deliberately a
+    /// GET-ONLY property outside the primary constructor's positional parameter list, not a fourth
+    /// snapshot field: it is DERIVED from the composed custody's own TPM-side tier at every
+    /// <see cref="CtapAuthenticatorSimulator.CreateWithCustodyAsync"/> composition (never persisted — a
+    /// value serialized here would itself become exactly the kind of second, independently-replayable
+    /// copy of the truth F-1/F-2's root cause warns against), defaults to
+    /// <see langword="false"/> when unset (every non-custody composition, and <see cref="Initial"/>'s own
+    /// first-boot state), SURVIVES <see cref="PowerCycle"/> untouched (a TPM-derived fact a boot-scoped
+    /// operation has no basis to change), and is explicitly cleared to <see langword="false"/> by both
+    /// <see cref="FactoryReset"/> (a fresh <c>authenticatorReset</c> also retires the persistent tier
+    /// itself, so no PIN — local or durable — remains provisioned) and a successful <c>changePIN</c>
+    /// (<c>ApplyChangePinSuccess</c>, once its own fresh hash becomes the newly KNOWN local one). Consulted
+    /// ALONGSIDE, never in place of, <see cref="CurrentStoredPin"/> by <see cref="IsPinEstablished"/> — a
+    /// plain non-custody composition has no second source of truth to consult at all, so
+    /// <see cref="CurrentStoredPin"/> alone remains authoritative for it.
+    /// </summary>
+    public bool IsPinProvisionedWithUnknownLocalHash { get; init; }
+
+    /// <summary>
+    /// Whether a PIN is considered established for the PIN-family pure pre-checks: <c>setPIN</c>'s
+    /// "already set" gate (CTAP 2.3 §6.5.5.5, line 5568) and <c>changePIN</c>/<c>getPinToken</c>/
+    /// <c>getPinUvAuthTokenUsingPinWithPermissions</c>'s "no PIN set" gate (decision 6). <see langword="true"/>
+    /// when either <see cref="CurrentStoredPin"/> itself is known, OR
+    /// <see cref="IsPinProvisionedWithUnknownLocalHash"/> reports that the composed persistent-tier
+    /// custody has a genuinely provisioned PIN this instance simply never (re)learned the local hash of
+    /// (wavepin review fix F-1: closes the authentication-bypass window where <c>setPIN</c> would
+    /// otherwise treat a merely locally-unknown PIN as "no PIN at all" and overwrite it unauthenticated).
+    /// </summary>
+    public bool IsPinEstablished => CurrentStoredPin is not null || IsPinProvisionedWithUnknownLocalHash;
+
+    /// <summary>
     /// The maximum value <see cref="PinRetries"/> (and, in this simulator, <see cref="UvRetries"/>) is
     /// seeded to and restored to on a correct PIN entry. CTAP 2.3 §6.5.2.3 (line 5069) states
     /// authenticators "MUST allow no more than 8 retries but MAY set a lower maximum" — a CEILING, not
@@ -340,7 +380,7 @@ public sealed record CtapAuthenticatorState(
     /// wire. <see cref="WellKnownWebAuthnExtensionIdentifiers.LargeBlobKey"/> joins because §12.3's own
     /// feature detection requires BOTH this identifier's presence here AND <c>largeBlobs:true</c> in
     /// <c>authenticatorGetInfo</c>'s <c>options</c> (lines 12832-12834) — the command and the extension
-    /// advertise together, or the advertisement is dishonest. <see cref="WellKnownWebAuthnExtensionIdentifiers.HmacSecret"/>
+    /// advertise together, or the advertisement misrepresents what the authenticator supports. <see cref="WellKnownWebAuthnExtensionIdentifiers.HmacSecret"/>
     /// joins because §9 item 1 (snapshot line 9074) MUST-mandates it for every <c>FIDO_2_3</c> claimant,
     /// which this authenticator unconditionally is; <see cref="WellKnownWebAuthnExtensionIdentifiers.HmacSecretMc"/>
     /// joins alongside it (§12.8 is pure delegation over §12.7's own machinery — contract R1) even though
@@ -581,7 +621,12 @@ public sealed record CtapAuthenticatorState(
             EnterpriseAttestationProvisioning: enterpriseAttestationProvisioning,
             IsEnterpriseAttestationEnabled: false,
             PendingUserPresenceWait: null,
-            FirmwareVersion: firmwareVersion);
+            FirmwareVersion: firmwareVersion)
+        {
+            //Not a positional parameter (see the property's own XML doc): a first-boot instance has no
+            //composed custody to disagree with local state at all.
+            IsPinProvisionedWithUnknownLocalHash = false
+        };
     }
 
 
@@ -613,6 +658,10 @@ public sealed record CtapAuthenticatorState(
     /// it survives implicitly) — is unaffected, matching
     /// CTAP 2.3's own distinction between a power cycle (recoverable) and an <c>authenticatorReset</c>
     /// (destructive; see <see cref="FactoryReset"/>).
+    /// <see cref="IsPinProvisionedWithUnknownLocalHash"/> joins this same "unaffected" set — also absent
+    /// from the <c>with</c> block below — since it records a fact about the composed persistent-tier
+    /// custody's own durable TPM state, which a boot-scoped power cycle has no basis to change either way
+    /// (wavepin review fix F-1).
     /// </summary>
     /// <param name="now">
     /// The instant this power cycle occurs — restamps <see cref="PoweredOnAt"/>, since a power cycle IS
@@ -672,7 +721,7 @@ public sealed record CtapAuthenticatorState(
     /// credentials") — zeroes <see cref="NextCredentialSequence"/>, disposes and empties
     /// <see cref="BioEnrollmentTemplatesByTemplateId"/> (a documented profile-security posture over
     /// §6.6's own silence on bio enrollment, bio scout Finding 8 — no MUST is claimed; §6.7.1's own
-    /// feature-detection text and the <c>uv</c>-honesty argument justify the choice), discards all SIX
+    /// feature-detection text and the requirement that <c>uv</c> accurately report enrollment state justify the choice), discards all SIX
     /// remembered stateful-command sequences (joining <see cref="RememberedBioEnrollment"/>,
     /// <see cref="RememberedLargeBlobWrite"/>, and <see cref="PendingUserPresenceWait"/> (R2) to the
     /// existing three), disposes and unsets the stored PIN
@@ -789,7 +838,11 @@ public sealed record CtapAuthenticatorState(
             IsEnterpriseAttestationEnabled = false,
             BioEnrollmentTemplatesByTemplateId = ImmutableDictionary<string, CtapBioEnrollmentTemplateRecord>.Empty,
             RememberedBioEnrollment = null,
-            SerializedLargeBlobArray = PooledMemory.FromBytes(InitialSerializedLargeBlobArray, resolvedPool, Fido2BufferTags.CtapSerializedLargeBlobArrayPayload)
+            SerializedLargeBlobArray = PooledMemory.FromBytes(InitialSerializedLargeBlobArray, resolvedPool, Fido2BufferTags.CtapSerializedLargeBlobArrayPayload),
+            //A fresh authenticatorReset also retires the persistent tier itself (the executor's own
+            //post-command retirement call), so no PIN — local or durable — remains provisioned; this
+            //flag's own XML doc names this exact clearing obligation.
+            IsPinProvisionedWithUnknownLocalHash = false
         };
     }
 

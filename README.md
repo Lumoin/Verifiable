@@ -34,7 +34,7 @@ The core value proposition is documents that can be distinctly identified, crypt
 | **Verifiable.Cbor** | CBOR serialization for COSE envelopes | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Cbor.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Cbor/) |
 | **Verifiable.JsonPointer** | JSON Pointer (RFC 6901) and a first-party JSONata expression engine | [![NuGet](https://img.shields.io/nuget/v/Verifiable.JsonPointer.svg?style=flat)](https://www.nuget.org/packages/Verifiable.JsonPointer/) |
 | **Verifiable.BouncyCastle** | Cross-platform cryptography via BouncyCastle | [![NuGet](https://img.shields.io/nuget/v/Verifiable.BouncyCastle.svg?style=flat)](https://www.nuget.org/packages/Verifiable.BouncyCastle/) |
-| **Verifiable.NSec** | High-performance cryptography via NSec | [![NuGet](https://img.shields.io/nuget/v/Verifiable.NSec.svg?style=flat)](https://www.nuget.org/packages/Verifiable.NSec/) |
+| **Verifiable.Libsodium** | High-performance cryptography via a first-party libsodium binding | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Libsodium.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Libsodium/) |
 | **Verifiable.Microsoft** | .NET standard cryptographic functions | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Microsoft.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Microsoft/) |
 | **Verifiable.Tpm** | Trusted Platform Module integration | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Tpm.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Tpm/) |
 | **Verifiable.Apdu** | ISO/IEC 7816-4 APDUs and ICAO 9303 eMRTD reading | [![NuGet](https://img.shields.io/nuget/v/Verifiable.Apdu.svg?style=flat)](https://www.nuget.org/packages/Verifiable.Apdu/) |
@@ -55,7 +55,7 @@ The core value proposition is documents that can be distinctly identified, crypt
 
 **Passkeys and authenticators.** W3C WebAuthn Level 3 relying-party verification of registration and authentication ceremonies with packed, tpm, android-key, fido-u2f, and none attestation formats and FIDO Metadata Service BLOB validation, plus a CTAP 2.3 authenticator and client pair — clientPIN with PIN/UV auth protocols, credential management, bioEnrollment, largeBlobs, enterprise attestation, and the hmac-secret extension family — testable fully in-process or over a real NFC/APDU wire. Credential keys surface as first-class signing keys.
 
-**Multiple cryptographic backends.** Delegate-based architecture allows plugging in BouncyCastle for cross-platform support, NSec for high performance, .NET cryptographic functions, or hardware security modules.
+**Multiple cryptographic backends.** Delegate-based architecture allows plugging in BouncyCastle for cross-platform support, libsodium for high performance, .NET cryptographic functions, or hardware security modules.
 
 **Hardware security.** TPM 2.0 integration for hardware-backed key storage, PCR reading, event log parsing, attestations, and other TPM functionality to come. The architecture extends to HSMs and cloud KMS services through the delegate pattern.
 

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Immutable;
 using Verifiable.Cryptography;
+using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
 using Verifiable.OAuth.Server;
@@ -213,8 +214,18 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
     private readonly VerifierKeyMaterial intermediateKeys;
     private readonly VerifierKeyMaterial anchorKeys;
 
-    public FederationTestRingNode VerifierNode { get; }
-    public FederationTestRingNode IntermediateNode { get; }
+    /// <summary>Header deserializer mirroring the authorization server's wiring.</summary>
+    private static readonly JwtHeaderDeserializer HeaderDeserializer = static bytes =>
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            bytes, TestSetup.DefaultSerializationOptions)
+        ?? throw new FormatException("Header JSON parsed to null.");
+
+    /// <summary>Payload deserializer mirroring the authorization server's wiring.</summary>
+    private static readonly JwtPayloadDeserializer PayloadDeserializer = static bytes =>
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            bytes, TestSetup.DefaultSerializationOptions)
+        ?? throw new FormatException("Payload JSON parsed to null.");
+
     public FederationTestRingNode AnchorNode { get; }
 
 
@@ -226,7 +237,7 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> intermediateFederationKeys,
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> anchorFederationKeys,
         VerifierKeyMaterial verifierKeys, VerifierKeyMaterial intermediateKeys, VerifierKeyMaterial anchorKeys,
-        FederationTestRingNode verifierNode, FederationTestRingNode intermediateNode, FederationTestRingNode anchorNode)
+        FederationTestRingNode anchorNode)
     {
         this.host = host;
         this.verifierEntityId = verifierEntityId;
@@ -241,8 +252,6 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
         this.verifierKeys = verifierKeys;
         this.intermediateKeys = intermediateKeys;
         this.anchorKeys = anchorKeys;
-        VerifierNode = verifierNode;
-        IntermediateNode = intermediateNode;
         AnchorNode = anchorNode;
     }
 
@@ -372,13 +381,13 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
                 new SubordinateStatementContribution { Jwks = intermediateSubjectJwks });
         };
 
-        //Ring nodes drive per-link signature verification. Each uses the
-        //same P-256 scalar as the corresponding AS-side federation signing
-        //key so signatures produced on the wire verify under the node.
-        FederationTestRingNode verifierNode = FederationTestRing.CreateNodeFromKey(
-            new EntityIdentifier(verifierEntityId.ToString()), verifierFederationKeys.PrivateKey);
-        FederationTestRingNode intermediateNode = FederationTestRing.CreateNodeFromKey(
-            new EntityIdentifier(intermediateEntityId.ToString()), intermediateFederationKeys.PrivateKey);
+        //The anchor's ring node supplies its EntityIdentifier for the
+        //trust-anchor allow-list the property tests pass to
+        //ValidateChainAsync. Per-link signature verification no longer
+        //dispatches through ring nodes by chain position — the production
+        //validator resolves each link's verification key from the chain's
+        //own jwks (see ValidateChainAsync below), so no verifier- or
+        //intermediate-keyed ring node is needed here.
         FederationTestRingNode anchorNode = FederationTestRing.CreateNodeFromKey(
             new EntityIdentifier(anchorEntityId.ToString()), anchorFederationKeys.PrivateKey);
 
@@ -388,7 +397,7 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
             verifierSegment, intermediateSegment, anchorSegment,
             verifierFederationKeys, intermediateFederationKeys, anchorFederationKeys,
             verifierKeys, intermediateKeys, anchorKeys,
-            verifierNode, intermediateNode, anchorNode);
+            anchorNode);
     }
 
 
@@ -426,43 +435,23 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
 
 
     /// <summary>
-    /// Runs the supplied chain through the production TrustChainValidator
-    /// via the test-side <see cref="InlineTrustChainValidationDriver"/>.
-    /// Per-link signature verification dispatches by position:
-    /// 0 = verifier EC (verifier key), 1+2 = intermediate's SS and EC
-    /// (intermediate key), 3+4 = anchor's SS and EC (anchor key).
+    /// Runs the supplied chain through the production
+    /// <see cref="TrustChainValidation.BuildInlineValidator"/>, wired with
+    /// <see cref="FederationKeyResolver.BuildInChainResolver"/> — the same
+    /// composition a deployment wires. Every verification key is resolved
+    /// from the chain's own <c>jwks</c> claims; there is no test-side
+    /// signature shortcut keyed by chain position.
     /// </summary>
     public async Task<TrustChainValidationOutcome> ValidateChainAsync(
         IReadOnlyList<string> chain,
         IReadOnlyCollection<EntityIdentifier> trustAnchors,
         CancellationToken cancellationToken)
     {
-        //Tampered chains can carry malformed base64url segments — verifying
-        //such input via Jws.VerifyAsync throws a FormatException at decode
-        //time. The validator's per-link verifier delegate contract is to
-        //return false on any verification failure, not to throw, so the
-        //fixture wraps verification in try/catch and treats any exception
-        //(decode error, signature mismatch, malformed JWS structure) as
-        //"link did not verify". A real wallet's per-link verifier must do
-        //the same — hostile inputs are part of the threat surface.
-        ValidateTrustChainAsyncDelegate validateChain =
-            InlineTrustChainValidationDriver.Build(
-                async (position, compactJws, ct) =>
-                {
-                    try
-                    {
-                        return position switch
-                        {
-                            0 => await FederationTestRing.VerifyAsync(VerifierNode, compactJws, ct).ConfigureAwait(false),
-                            1 or 2 => await FederationTestRing.VerifyAsync(IntermediateNode, compactJws, ct).ConfigureAwait(false),
-                            _ => await FederationTestRing.VerifyAsync(AnchorNode, compactJws, ct).ConfigureAwait(false),
-                        };
-                    }
-                    catch
-                    {
-                        return false;
-                    }
-                });
+        ValidateTrustChainAsyncDelegate validateChain = TrustChainValidation.BuildInlineValidator(
+            HeaderDeserializer,
+            PayloadDeserializer,
+            TestSetup.Base64UrlDecoder,
+            FederationKeyResolver.BuildInChainResolver(TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared));
 
         return await validateChain(
             chain,
@@ -487,8 +476,6 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        VerifierNode.Dispose();
-        IntermediateNode.Dispose();
         AnchorNode.Dispose();
         verifierKeys.Dispose();
         intermediateKeys.Dispose();

@@ -54,6 +54,36 @@ internal class TpmReaderWriterRoundtripTests
     }
 
     [TestMethod]
+    public void Int32RoundtripsNegativeValue()
+    {
+        const int original = -12345;
+        Span<byte> buffer = stackalloc byte[sizeof(int)];
+
+        var writer = new TpmWriter(buffer);
+        writer.WriteInt32(original);
+
+        var reader = new TpmReader(buffer);
+        int parsed = reader.ReadInt32();
+
+        Assert.AreEqual(original, parsed);
+    }
+
+    [TestMethod]
+    public void Int32RoundtripsPositiveValue()
+    {
+        const int original = 0x12345678;
+        Span<byte> buffer = stackalloc byte[sizeof(int)];
+
+        var writer = new TpmWriter(buffer);
+        writer.WriteInt32(original);
+
+        var reader = new TpmReader(buffer);
+        int parsed = reader.ReadInt32();
+
+        Assert.AreEqual(original, parsed);
+    }
+
+    [TestMethod]
     public void Tpm2bRoundtrips()
     {
         byte[] originalData = [0xDE, 0xAD, 0xBE, 0xEF];

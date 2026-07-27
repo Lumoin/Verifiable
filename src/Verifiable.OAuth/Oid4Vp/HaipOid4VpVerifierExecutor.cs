@@ -1082,7 +1082,7 @@ public static class HaipOid4VpVerifierExecutor
         try
         {
             CredentialStatusOutcome outcome = await CredentialStatusGate.CheckAsync(
-                statusReference, resolveVerifiedStatusListToken, now, cancellationToken).ConfigureAwait(false);
+                statusReference, resolveVerifiedStatusListToken, now, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             credentialStatuses[credentialQueryId] = outcome;
 

@@ -74,6 +74,18 @@ internal sealed class Oid4VpFlowIntegrationTests
     private const string IssuerKeyId = "did:web:issuer.example.com#key-1";
     private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
 
+    /// <summary>Header deserializer mirroring the authorization server's wiring.</summary>
+    private static readonly JwtHeaderDeserializer HeaderDeserializer = static bytes =>
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            bytes, TestSetup.DefaultSerializationOptions)
+        ?? throw new FormatException("Header JSON parsed to null.");
+
+    /// <summary>Payload deserializer mirroring the authorization server's wiring.</summary>
+    private static readonly JwtPayloadDeserializer PayloadDeserializer = static bytes =>
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            bytes, TestSetup.DefaultSerializationOptions)
+        ?? throw new FormatException("Payload JSON parsed to null.");
+
     private static readonly ImmutableHashSet<CapabilityIdentifier> Oid4VpCapabilities =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.VcVerifiablePresentation,
@@ -1437,7 +1449,7 @@ internal sealed class Oid4VpFlowIntegrationTests
                     s, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
                 static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
                 IssuerLookup,
-                MicrosoftEntropyFunctions.ComputeDigestAsync,
+                MicrosoftCryptographicFunctions.ComputeDigestAsync,
                 TestSetup.Base64UrlDecoder,
                 TestSetup.Base64UrlEncoder,
                 Pool,
@@ -1458,7 +1470,7 @@ internal sealed class Oid4VpFlowIntegrationTests
                 parsed.CredentialStatus.Value,
                 (uri, ct) => ValueTask.FromResult(new StatusListToken(statusListUri, now, statusList)),
                 now,
-                TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(beforeRevocation.IsValid, "An unset status bit must read as valid.");
 
             statusList[credentialIndex] = StatusTypes.Invalid;
@@ -1467,7 +1479,7 @@ internal sealed class Oid4VpFlowIntegrationTests
                 parsed.CredentialStatus.Value,
                 (uri, ct) => ValueTask.FromResult(new StatusListToken(statusListUri, now, statusList)),
                 now,
-                TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsFalse(afterRevocation.IsValid, "After flipping the credential's bit the status must read as revoked.");
             Assert.AreEqual(StatusTypes.Invalid, afterRevocation.Status);
         }
@@ -2343,7 +2355,7 @@ internal sealed class Oid4VpFlowIntegrationTests
                 s, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
             static t => SdJwtSerializer.GetSdJwtForHashing(t, TestSetup.Base64UrlEncoder),
             IssuerLookup,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             TestSetup.Base64UrlDecoder,
             TestSetup.Base64UrlEncoder,
             Pool,
@@ -2611,13 +2623,11 @@ internal sealed class Oid4VpFlowIntegrationTests
             walletChainValues.Add((string)entry);
         }
 
-        ValidateTrustChainAsyncDelegate validateChain =
-            Tests.Federation.InlineTrustChainValidationDriver.Build(
-                async (position, compactJws, ct) => position switch
-                {
-                    0 => await FederationTestRing.VerifyAsync(verifierNode, compactJws, ct).ConfigureAwait(false),
-                    _ => await FederationTestRing.VerifyAsync(anchorNode, compactJws, ct).ConfigureAwait(false),
-                });
+        ValidateTrustChainAsyncDelegate validateChain = TrustChainValidation.BuildInlineValidator(
+            HeaderDeserializer,
+            PayloadDeserializer,
+            TestSetup.Base64UrlDecoder,
+            FederationKeyResolver.BuildInChainResolver(TestSetup.Base64UrlDecoder, Pool));
 
         using PublicKeyMemory chainResolvedVerifierKey = await FederationBoundJarKeyResolver.ResolveAsync(
             walletChainValues,
@@ -2874,13 +2884,11 @@ internal sealed class Oid4VpFlowIntegrationTests
             walletChainValues.Add((string)entry);
         }
 
-        ValidateTrustChainAsyncDelegate validateChain =
-            Tests.Federation.InlineTrustChainValidationDriver.Build(
-                async (position, compactJws, ct) => position switch
-                {
-                    0 => await FederationTestRing.VerifyAsync(verifierNode, compactJws, ct).ConfigureAwait(false),
-                    _ => await FederationTestRing.VerifyAsync(anchorNode, compactJws, ct).ConfigureAwait(false),
-                });
+        ValidateTrustChainAsyncDelegate validateChain = TrustChainValidation.BuildInlineValidator(
+            HeaderDeserializer,
+            PayloadDeserializer,
+            TestSetup.Base64UrlDecoder,
+            FederationKeyResolver.BuildInChainResolver(TestSetup.Base64UrlDecoder, Pool));
 
         //Chain validation produces the verifier's federation signing key
         //(chain[0].jwks). RegisterFederationCapableClient keeps the

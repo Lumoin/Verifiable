@@ -100,6 +100,17 @@ public ref struct TpmReader
     }
 
     /// <summary>
+    /// Reads a big-endian signed 32-bit integer (two's complement).
+    /// </summary>
+    /// <returns>The value.</returns>
+    public int ReadInt32()
+    {
+        int value = BinaryPrimitives.ReadInt32BigEndian(remaining);
+        Advance(sizeof(int));
+        return value;
+    }
+
+    /// <summary>
     /// Reads a specified number of bytes.
     /// </summary>
     /// <param name="count">The number of bytes to read.</param>

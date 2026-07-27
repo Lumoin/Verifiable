@@ -2,6 +2,7 @@ using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
@@ -13,6 +14,7 @@ using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Context;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
+using Verifiable.Fido2.Ctap.Authenticator.Custody;
 using Verifiable.Foundation.Automata;
 using Verifiable.JCose;
 
@@ -184,6 +186,39 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// itself documents for resuming a computation without replaying its inputs.
     /// </summary>
     private PushdownAutomaton<CtapAuthenticatorState, CtapAuthenticatorInput, CtapAuthenticatorStackSymbol> Automaton { get; set; }
+
+    /// <summary>
+    /// The state-custody seam bundle this instance persists through and rehydrates from, or
+    /// <see langword="null"/> when this instance was constructed through the ordinary constructor
+    /// (contract R-3: absent custody is today's behavior, byte-identical). Set once, by
+    /// <see cref="CreateWithCustodyAsync"/>, immediately after construction.
+    /// </summary>
+    private CtapStateCustody? Custody { get; set; }
+
+    /// <summary>
+    /// The NV-counter-backed signature-counter custody seam bundle this instance's assertions and mints
+    /// consult, or <see langword="null"/> when this instance was constructed without one (contract R-9,
+    /// wavenv: absent custody is today's in-snapshot signature-counter behavior, byte-identical). Set once,
+    /// by <see cref="CreateWithCustodyAsync"/>, immediately after construction — entirely independent of
+    /// <see cref="Custody"/>: a caller may compose the whole-snapshot bundle without this one.
+    /// </summary>
+    private CtapSignatureCounterCustody? SignatureCounterCustody { get; set; }
+
+    /// <summary>
+    /// The NV-backed persistent-tier PIN-retries custody seam bundle this instance's PIN-path effects
+    /// consult, or <see langword="null"/> when this instance was constructed without one (contract R-1..R-6,
+    /// wavepin: absent custody is today's whole-snapshot-mirrored <c>PinRetries</c> behavior, byte-identical).
+    /// Set once, by <see cref="CreateWithCustodyAsync"/>, immediately after construction — entirely
+    /// independent of <see cref="Custody"/>/<see cref="SignatureCounterCustody"/>: a caller may compose any
+    /// subset of the three seams.
+    /// </summary>
+    private CtapPinRetriesCustody? PinRetriesCustody { get; set; }
+
+    /// <summary>The codec seam that CBOR-encodes a custody snapshot, set alongside <see cref="Custody"/>.</summary>
+    private EncodeCtapAuthenticatorSnapshotDelegate? EncodeSnapshot { get; set; }
+
+    /// <summary>The codec seam that CBOR-decodes a custody snapshot, set alongside <see cref="Custody"/>.</summary>
+    private DecodeCtapAuthenticatorSnapshotDelegate? DecodeSnapshot { get; set; }
 
     /// <summary>The time source threaded to the effectful runner for trace timestamps.</summary>
     private TimeProvider TimeProvider { get; }
@@ -619,6 +654,453 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     }
 
 
+    /// <summary>
+    /// Constructs a CTAP2 authenticator simulator that persists through, and rehydrates from, a state-
+    /// custody backend (contract R-1/R-3): a static factory rather than a further-widened constructor
+    /// overload, since load-or-<see cref="CtapAuthenticatorState.Initial"/> resolution requires an
+    /// asynchronous read a constructor cannot perform. Every parameter beyond <paramref name="custody"/>,
+    /// <paramref name="encodeSnapshot"/>, and <paramref name="decodeSnapshot"/> has exactly the same
+    /// meaning as the identically named constructor parameter — this factory always personalizes the
+    /// FIRST-BOOT identity from them exactly as the constructor would, then overlays the persisted
+    /// subset on top if a snapshot was found.
+    /// </summary>
+    /// <param name="runId">A stable identifier for this simulated authenticator, and the identity <see cref="CtapStateCustody"/>'s delegates key a snapshot by.</param>
+    /// <param name="custody">The state-custody seam bundle to load from, persist to, and wipe through.</param>
+    /// <param name="encodeGetInfoResponse">See the constructor parameter of the same name.</param>
+    /// <param name="decodeMakeCredentialRequest">See the constructor parameter of the same name.</param>
+    /// <param name="encodeMakeCredentialResponse">See the constructor parameter of the same name.</param>
+    /// <param name="decodeGetAssertionRequest">See the constructor parameter of the same name.</param>
+    /// <param name="encodeGetAssertionResponse">See the constructor parameter of the same name.</param>
+    /// <param name="encodeCredentialPublicKey">See the constructor parameter of the same name.</param>
+    /// <param name="encodePackedSelfAttestationStatement">See the constructor parameter of the same name.</param>
+    /// <param name="decodeClientPinRequest">See the constructor parameter of the same name.</param>
+    /// <param name="encodeClientPinResponse">See the constructor parameter of the same name.</param>
+    /// <param name="decodeAuthenticatorConfigRequest">See the constructor parameter of the same name.</param>
+    /// <param name="decodeCredentialManagementRequest">See the constructor parameter of the same name.</param>
+    /// <param name="encodeCredentialManagementResponse">See the constructor parameter of the same name.</param>
+    /// <param name="decodeBioEnrollmentRequest">See the constructor parameter of the same name.</param>
+    /// <param name="encodeBioEnrollmentResponse">See the constructor parameter of the same name.</param>
+    /// <param name="decodeLargeBlobsRequest">See the constructor parameter of the same name.</param>
+    /// <param name="encodeLargeBlobsResponse">See the constructor parameter of the same name.</param>
+    /// <param name="encodeMakeCredentialExtensionOutputs">See the constructor parameter of the same name.</param>
+    /// <param name="encodeGetAssertionExtensionOutputs">See the constructor parameter of the same name.</param>
+    /// <param name="aaguid">
+    /// See the constructor parameter of the same name — for a custody-composed simulator this SHOULD be a
+    /// stable, explicitly supplied value rather than <see langword="null"/>: rehydration's own fingerprint
+    /// check (R-2b) compares a loaded snapshot's AAGUID against this value, so a random draw would fail
+    /// that check on every genuine restart.
+    /// </param>
+    /// <param name="supportedExtensions">See the constructor parameter of the same name.</param>
+    /// <param name="residentCredentialCapacity">See the constructor parameter of the same name.</param>
+    /// <param name="rng">See the constructor parameter of the same name.</param>
+    /// <param name="credentialSigningBackend">See the constructor parameter of the same name.</param>
+    /// <param name="timeProvider">See the constructor parameter of the same name.</param>
+    /// <param name="pinUvAuthKeyAgreementPool">See the constructor parameter of the same name.</param>
+    /// <param name="simulateFingerprintCapture">See the constructor parameter of the same name.</param>
+    /// <param name="simulateBuiltInUv">See the constructor parameter of the same name.</param>
+    /// <param name="simulateUserPresence">See the constructor parameter of the same name.</param>
+    /// <param name="enterpriseAttestationProvisioning">See the constructor parameter of the same name.</param>
+    /// <param name="encodePackedCertifiedAttestationStatement">See the constructor parameter of the same name.</param>
+    /// <param name="firmwareVersion">
+    /// See the constructor parameter of the same name — for a custody-composed simulator this SHOULD be a
+    /// stable, explicitly supplied value, for the same fingerprint reason as <paramref name="aaguid"/>.
+    /// </param>
+    /// <param name="encodeSnapshot">
+    /// The codec seam that CBOR-encodes a custody snapshot. Defaults to the shipped
+    /// <see cref="CtapAuthenticatorSnapshotCborWriter.Write"/> when <see langword="null"/>.
+    /// </param>
+    /// <param name="decodeSnapshot">
+    /// The codec seam that CBOR-decodes a custody snapshot. Defaults to the shipped
+    /// <see cref="CtapAuthenticatorSnapshotCborReader.Read"/> when <see langword="null"/>.
+    /// </param>
+    /// <param name="signatureCounterCustody">
+    /// The NV-counter-backed signature-counter custody seam bundle to mint, advance, and retire per-credential
+    /// counters through (contract R-9, wavenv), or <see langword="null"/> (the default) to keep every
+    /// credential's signature counter riding the whole-snapshot cache exactly as before this wave —
+    /// entirely independent of <paramref name="custody"/>.
+    /// </param>
+    /// <param name="pinRetriesCustody">
+    /// The NV-backed persistent-tier PIN-retries custody seam bundle to provision, verify, penalize, and
+    /// retire CTAP 2.3 §6.5.5.2's <c>pinRetries</c> counter through (contract R-1..R-6, wavepin), or
+    /// <see langword="null"/> (the default) to keep <c>PinRetries</c> riding the whole-snapshot cache
+    /// exactly as before this wave — entirely independent of <paramref name="custody"/>/
+    /// <paramref name="signatureCounterCustody"/>. When supplied, this call re-synchronizes the
+    /// <c>PinRetries</c> mirror from <see cref="CtapPinRetriesCustody.ReadRetriesAsync"/> AFTER any
+    /// snapshot rehydration above, overriding whatever the snapshot said (contract R-4), AND reconciles
+    /// the provisioning-state split-brain the durable tier and the local <c>CurrentStoredPin</c> cache can
+    /// fall into (<see cref="ReconcilePinCustodyState"/>, wavepin review fixes F-1/F-2).
+    /// </param>
+    /// <param name="cancellationToken">A cancellation token for the load attempt.</param>
+    /// <returns>A simulator wired to <paramref name="custody"/> — rehydrated from a snapshot if one existed, otherwise a first-boot instance identical to the ordinary constructor's own result.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="custody"/> is <see langword="null"/>, or any parameter the constructor itself requires is <see langword="null"/>.</exception>
+    /// <exception cref="CtapAuthenticatorSnapshotException">
+    /// A snapshot was found but failed to parse, or its R-2b personalization fingerprint (AAGUID and
+    /// firmware version) does not match this call's own <paramref name="aaguid"/>/<paramref name="firmwareVersion"/> —
+    /// rehydration fails closed (R-2b) rather than silently re-personalizing a differently-composed
+    /// authenticator.
+    /// </exception>
+    public static async ValueTask<CtapAuthenticatorSimulator> CreateWithCustodyAsync(
+        string runId,
+        CtapStateCustody custody,
+        EncodeCtapGetInfoResponseDelegate encodeGetInfoResponse,
+        DecodeCtapMakeCredentialRequestDelegate decodeMakeCredentialRequest,
+        EncodeCtapMakeCredentialResponseDelegate encodeMakeCredentialResponse,
+        DecodeCtapGetAssertionRequestDelegate decodeGetAssertionRequest,
+        EncodeCtapGetAssertionResponseDelegate encodeGetAssertionResponse,
+        EncodeCredentialPublicKeyDelegate encodeCredentialPublicKey,
+        EncodePackedSelfAttestationStatementDelegate encodePackedSelfAttestationStatement,
+        DecodeCtapClientPinRequestDelegate decodeClientPinRequest,
+        EncodeCtapClientPinResponseDelegate encodeClientPinResponse,
+        DecodeCtapAuthenticatorConfigRequestDelegate decodeAuthenticatorConfigRequest,
+        DecodeCtapCredentialManagementRequestDelegate decodeCredentialManagementRequest,
+        EncodeCtapCredentialManagementResponseDelegate encodeCredentialManagementResponse,
+        DecodeCtapBioEnrollmentRequestDelegate decodeBioEnrollmentRequest,
+        EncodeCtapBioEnrollmentResponseDelegate encodeBioEnrollmentResponse,
+        DecodeCtapLargeBlobsRequestDelegate decodeLargeBlobsRequest,
+        EncodeCtapLargeBlobsResponseDelegate encodeLargeBlobsResponse,
+        EncodeCtapMakeCredentialExtensionOutputsDelegate encodeMakeCredentialExtensionOutputs,
+        EncodeCtapGetAssertionExtensionOutputsDelegate encodeGetAssertionExtensionOutputs,
+        Guid? aaguid = null,
+        IReadOnlyList<string>? supportedExtensions = null,
+        int residentCredentialCapacity = 8,
+        FillEntropyDelegate? rng = null,
+        CtapCredentialSigningBackend? credentialSigningBackend = null,
+        TimeProvider? timeProvider = null,
+        MemoryPool<byte>? pinUvAuthKeyAgreementPool = null,
+        SimulateFingerprintCaptureDelegate? simulateFingerprintCapture = null,
+        SimulateBuiltInUvDelegate? simulateBuiltInUv = null,
+        SimulateUserPresenceDelegate? simulateUserPresence = null,
+        CtapEnterpriseAttestationProvisioning? enterpriseAttestationProvisioning = null,
+        EncodePackedCertifiedAttestationStatementDelegate? encodePackedCertifiedAttestationStatement = null,
+        int firmwareVersion = 1,
+        EncodeCtapAuthenticatorSnapshotDelegate? encodeSnapshot = null,
+        DecodeCtapAuthenticatorSnapshotDelegate? decodeSnapshot = null,
+        CtapSignatureCounterCustody? signatureCounterCustody = null,
+        CtapPinRetriesCustody? pinRetriesCustody = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(custody);
+
+        EncodeCtapAuthenticatorSnapshotDelegate resolvedEncodeSnapshot = encodeSnapshot ?? CtapAuthenticatorSnapshotCborWriter.Write;
+        DecodeCtapAuthenticatorSnapshotDelegate resolvedDecodeSnapshot = decodeSnapshot ?? CtapAuthenticatorSnapshotCborReader.Read;
+        MemoryPool<byte> resolvedPool = pinUvAuthKeyAgreementPool ?? BaseMemoryPool.Shared;
+
+        CtapAuthenticatorSimulator simulator = new(
+            runId, encodeGetInfoResponse, decodeMakeCredentialRequest, encodeMakeCredentialResponse, decodeGetAssertionRequest,
+            encodeGetAssertionResponse, encodeCredentialPublicKey, encodePackedSelfAttestationStatement, decodeClientPinRequest,
+            encodeClientPinResponse, decodeAuthenticatorConfigRequest, decodeCredentialManagementRequest,
+            encodeCredentialManagementResponse, decodeBioEnrollmentRequest, encodeBioEnrollmentResponse, decodeLargeBlobsRequest,
+            encodeLargeBlobsResponse, encodeMakeCredentialExtensionOutputs, encodeGetAssertionExtensionOutputs, aaguid,
+            supportedExtensions, residentCredentialCapacity, rng, credentialSigningBackend, timeProvider, pinUvAuthKeyAgreementPool,
+            simulateFingerprintCapture, simulateBuiltInUv, simulateUserPresence, enterpriseAttestationProvisioning,
+            encodePackedCertifiedAttestationStatement, firmwareVersion);
+
+        try
+        {
+            PooledMemory? loaded = await custody.TryLoadSnapshotAsync(runId, resolvedPool, cancellationToken).ConfigureAwait(false);
+            if(loaded is not null)
+            {
+                try
+                {
+                    simulator.RehydratePersistentSubset(loaded.AsReadOnlyMemory(), resolvedDecodeSnapshot, resolvedPool);
+                }
+                finally
+                {
+                    loaded.Dispose();
+                }
+            }
+
+            //Contract R-4 (wavepin): runs AFTER any snapshot rehydration above, so a custody-authoritative
+            //retry budget always wins over whatever the (possibly stale/replayed) snapshot's own PinRetries
+            //field said — the exact move that closes the stale-snapshot rollback hole a bare mirror cannot.
+            //Wavepin review fixes F-1/F-2: the SAME call also reconciles the provisioning-state split-brain
+            //between the durable TPM tier and the local CurrentStoredPin cache, in both directions.
+            if(pinRetriesCustody is not null)
+            {
+                CtapPinAttemptVerdict retriesSnapshot = await pinRetriesCustody.ReadRetriesAsync(cancellationToken).ConfigureAwait(false);
+                simulator.ReconcilePinCustodyState(retriesSnapshot);
+            }
+        }
+        catch
+        {
+            simulator.Dispose();
+            throw;
+        }
+
+        simulator.Custody = custody;
+        simulator.EncodeSnapshot = resolvedEncodeSnapshot;
+        simulator.DecodeSnapshot = resolvedDecodeSnapshot;
+        simulator.SignatureCounterCustody = signatureCounterCustody;
+        simulator.PinRetriesCustody = pinRetriesCustody;
+
+        return simulator;
+    }
+
+
+    /// <summary>
+    /// Overlays <paramref name="retriesSnapshot"/> onto this JUST-COMPOSED instance's current
+    /// <see cref="CtapAuthenticatorState.PinRetries"/> mirror AND reconciles the provisioning-state
+    /// split-brain between the durable TPM tier and the local <see cref="CtapAuthenticatorState.CurrentStoredPin"/>
+    /// cache — ONE state replacement, reassigning <see cref="Automaton"/> around it, the same "reassign
+    /// around a modified snapshot" seam <see cref="PowerCycle"/>/<see cref="RehydratePersistentSubset"/> use
+    /// (contract R-4/wavepin review fixes F-1/F-2).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>PinRetries.</b> Always overlaid from <paramref name="retriesSnapshot"/>'s own
+    /// <see cref="CtapPinAttemptVerdict.RetriesRemaining"/>, overriding whatever the (possibly stale/
+    /// replayed) snapshot's own field said — the move that closes the stale-snapshot rollback hole a bare
+    /// mirror cannot (F-1/F-2's root-cause note).
+    /// </para>
+    /// <para>
+    /// <b>Provisioning-state reconciliation, both directions.</b>
+    /// <see cref="CtapPinAttemptVerdict.IsProvisioned"/> <see langword="true"/> while
+    /// <see cref="CtapAuthenticatorState.CurrentStoredPin"/> is <see langword="null"/> (F-1: the durable
+    /// tier genuinely has a PIN this instance's own local cache never learned — a fresh composition
+    /// against an already-provisioned chip, a discarded snapshot, or any other split) sets
+    /// <see cref="CtapAuthenticatorState.IsPinProvisionedWithUnknownLocalHash"/> so <c>setPIN</c> refuses
+    /// establishment while <c>changePIN</c>/<c>getPinToken</c> stay available (their own current-PIN check
+    /// is custody-verified, so the unknown local hash never blocks them). <see cref="CtapPinAttemptVerdict.IsProvisioned"/>
+    /// <see langword="false"/> while <see cref="CtapAuthenticatorState.CurrentStoredPin"/> is non-null (F-2:
+    /// the durable tier has genuinely lost its PIN — undefined behind this authenticator's back, simulating
+    /// a crash mid-rotation, or attaching custody for the first time onto a PIN that predates it) disposes
+    /// and clears the stale local hash so a fresh <c>setPIN</c> can legitimately re-establish rather than
+    /// bricking behind a "PIN already set" refusal no correct PIN can ever satisfy again. When neither
+    /// disjunct holds (the ordinary case: both tiers agree, either both provisioned or neither), the flag
+    /// is (re)set to <see langword="false"/> — it is derived fresh at every composition, never carried over
+    /// from whatever a previous run last left it at.
+    /// </para>
+    /// </remarks>
+    /// <param name="retriesSnapshot">The just-read, custody-authoritative retries/provisioning verdict.</param>
+    private void ReconcilePinCustodyState(CtapPinAttemptVerdict retriesSnapshot)
+    {
+        CtapAuthenticatorState current = Automaton.CurrentState;
+
+        DigestValue? reconciledStoredPin = current.CurrentStoredPin;
+        int reconciledPinCodePointLength = current.PinCodePointLength;
+        bool isPinProvisionedWithUnknownLocalHash = false;
+
+        if(retriesSnapshot.IsProvisioned && current.CurrentStoredPin is null)
+        {
+            //F-1: a PIN IS set on the durable tier; only the local hash is unknown.
+            isPinProvisionedWithUnknownLocalHash = true;
+        }
+        else if(!retriesSnapshot.IsProvisioned && current.CurrentStoredPin is not null)
+        {
+            //F-2: the durable authority says NO PIN exists — the stale local hash must not survive, or
+            //setPIN would keep refusing establishment against a PIN nothing can ever satisfy again.
+            current.CurrentStoredPin.Dispose();
+            reconciledStoredPin = null;
+            reconciledPinCodePointLength = 0;
+        }
+
+        Automaton = new PushdownAutomaton<CtapAuthenticatorState, CtapAuthenticatorInput, CtapAuthenticatorStackSymbol>(
+            runId: Automaton.RunId,
+            savedState: current with
+            {
+                PinRetries = retriesSnapshot.RetriesRemaining,
+                CurrentStoredPin = reconciledStoredPin,
+                PinCodePointLength = reconciledPinCodePointLength,
+                IsPinProvisionedWithUnknownLocalHash = isPinProvisionedWithUnknownLocalHash
+            },
+            savedStack: Automaton.GetStack(),
+            savedStepCount: Automaton.StepCount,
+            transition: CtapAuthenticatorTransitions.Create(),
+            acceptPredicate: static _ => true,
+            timeProvider: TimeProvider);
+    }
+
+
+    /// <summary>
+    /// Overlays a decoded snapshot's persistent subset onto this JUST-CONSTRUCTED instance's own
+    /// <see cref="CtapAuthenticatorState.Initial"/> state (contract R-1): the volatile fields
+    /// <see cref="CtapAuthenticatorState.Initial"/> already seeded — fresh key-agreement pairs and
+    /// tokens, cleared remembered/pending slots, <c>ConsecutivePinMismatches</c>/<c>IsPowerCycleRequired</c>
+    /// clear, <c>PoweredOnAt</c> stamped to now — are EXACTLY the values <c>PowerCycle</c>'s own volatile-
+    /// refresh semantics would produce, so no separate refresh step is needed here; only the persistent
+    /// subset is replaced.
+    /// </summary>
+    /// <param name="snapshotCbor">The encoded snapshot bytes.</param>
+    /// <param name="decodeSnapshot">The codec seam to parse them with.</param>
+    /// <param name="pool">The memory pool the parsed snapshot's carriers rent from.</param>
+    /// <exception cref="CtapAuthenticatorSnapshotException">
+    /// The bytes failed to parse, or the parsed snapshot's AAGUID/firmware-version fingerprint does not
+    /// match this instance's own personalization (R-2b, fail closed).
+    /// </exception>
+    private void RehydratePersistentSubset(ReadOnlyMemory<byte> snapshotCbor, DecodeCtapAuthenticatorSnapshotDelegate decodeSnapshot, MemoryPool<byte> pool)
+    {
+        CtapAuthenticatorSnapshot snapshot = decodeSnapshot(snapshotCbor, pool);
+        try
+        {
+            CtapAuthenticatorState freshState = Automaton.CurrentState;
+            if(snapshot.Aaguid != freshState.Aaguid || snapshot.FirmwareVersion != freshState.FirmwareVersion)
+            {
+                throw new CtapAuthenticatorSnapshotException(
+                    $"Snapshot personalization fingerprint mismatch: snapshot Aaguid='{snapshot.Aaguid}'/FirmwareVersion='{snapshot.FirmwareVersion}' "
+                    + $"does not match the composed authenticator's Aaguid='{freshState.Aaguid}'/FirmwareVersion='{freshState.FirmwareVersion}'.");
+            }
+
+            //The Initial-seeded placeholders these two fields replace are disposed here — the empty
+            //credential/bio-template dictionaries Initial seeds need no disposal of their own.
+            freshState.SerializedLargeBlobArray.Dispose();
+
+            CtapAuthenticatorState rehydratedState = freshState with
+            {
+                NextCredentialSequence = snapshot.NextCredentialSequence,
+                CurrentStoredPin = snapshot.CurrentStoredPin,
+                PinCodePointLength = snapshot.PinCodePointLength,
+                PinRetries = snapshot.PinRetries,
+                UvRetries = snapshot.UvRetries,
+                IsForcePinChangeRequired = snapshot.IsForcePinChangeRequired,
+                MinPinCodePointLength = snapshot.MinPinCodePointLength,
+                MinPinLengthRpIds = snapshot.MinPinLengthRpIds,
+                IsAlwaysUvEnabled = snapshot.IsAlwaysUvEnabled,
+                IsEnterpriseAttestationEnabled = snapshot.IsEnterpriseAttestationEnabled,
+                SerializedLargeBlobArray = snapshot.SerializedLargeBlobArray,
+                CredentialsByCredentialId = snapshot.CredentialsByCredentialId,
+                BioEnrollmentTemplatesByTemplateId = snapshot.BioEnrollmentTemplatesByTemplateId
+            };
+
+            Automaton = new PushdownAutomaton<CtapAuthenticatorState, CtapAuthenticatorInput, CtapAuthenticatorStackSymbol>(
+                runId: Automaton.RunId,
+                savedState: rehydratedState,
+                savedStack: Automaton.GetStack(),
+                savedStepCount: Automaton.StepCount,
+                transition: CtapAuthenticatorTransitions.Create(),
+                acceptPredicate: static _ => true,
+                timeProvider: TimeProvider);
+        }
+        catch
+        {
+            snapshot.Dispose();
+            throw;
+        }
+    }
+
+
+    /// <summary>
+    /// Determines whether any field in contract R-2's persistent subset differs, by reference for every
+    /// reference-typed member (an unchanged <c>with</c>-copied field keeps the SAME reference, so a
+    /// reference difference is exactly "this step touched it") and by value for every value-typed member.
+    /// </summary>
+    /// <param name="before">The state immediately before the command's effectful loop ran.</param>
+    /// <param name="after">The state immediately after.</param>
+    /// <returns><see langword="true"/> if persisting is required (contract R-4); otherwise <see langword="false"/>.</returns>
+    private static bool PersistentSubsetChanged(CtapAuthenticatorState before, CtapAuthenticatorState after) =>
+        !ReferenceEquals(before.CredentialsByCredentialId, after.CredentialsByCredentialId)
+        || before.NextCredentialSequence != after.NextCredentialSequence
+        || !ReferenceEquals(before.CurrentStoredPin, after.CurrentStoredPin)
+        || before.PinCodePointLength != after.PinCodePointLength
+        || before.PinRetries != after.PinRetries
+        || before.UvRetries != after.UvRetries
+        || before.IsForcePinChangeRequired != after.IsForcePinChangeRequired
+        || before.MinPinCodePointLength != after.MinPinCodePointLength
+        || !ReferenceEquals(before.MinPinLengthRpIds, after.MinPinLengthRpIds)
+        || before.IsAlwaysUvEnabled != after.IsAlwaysUvEnabled
+        || before.IsEnterpriseAttestationEnabled != after.IsEnterpriseAttestationEnabled
+        || !ReferenceEquals(before.BioEnrollmentTemplatesByTemplateId, after.BioEnrollmentTemplatesByTemplateId)
+        || !ReferenceEquals(before.SerializedLargeBlobArray, after.SerializedLargeBlobArray);
+
+
+    /// <summary>
+    /// Applies contract R-4's persist-then-respond custody consequence for one completed command, before
+    /// the caller frames its final response: a no-op when <see cref="Custody"/> is absent (byte-identical
+    /// to no-custody behavior); <see cref="CtapStateCustody.WipeSnapshotAsync"/> — never persist — when
+    /// <paramref name="intent"/> is <see cref="AuthenticatorResetResponseReady"/> (wipe-only, R-4); a
+    /// persist when <paramref name="stateBeforeCommand"/>'s and the automaton's now-current state differ
+    /// anywhere in R-2's persistent subset; otherwise nothing (a pure read never touches custody I/O).
+    /// </summary>
+    /// <param name="stateBeforeCommand">The state captured immediately before this command's effectful loop ran.</param>
+    /// <param name="intent">The command's resolved response intent.</param>
+    /// <param name="pool">The memory pool available to this command's own call — reused for the snapshot encode/copy scratch work rather than reaching for a separate default.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    private async ValueTask ApplyCustodyPostCommandAsync(
+        CtapAuthenticatorState stateBeforeCommand, CtapAuthenticatorResponseIntent intent, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    {
+        if(Custody is null)
+        {
+            return;
+        }
+
+        if(intent is AuthenticatorResetResponseReady)
+        {
+            await Custody.WipeSnapshotAsync(Automaton.RunId, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        CtapAuthenticatorState stateAfterCommand = Automaton.CurrentState;
+        if(!PersistentSubsetChanged(stateBeforeCommand, stateAfterCommand))
+        {
+            return;
+        }
+
+        //EncodeSnapshot returns a SCRUBBING PooledMemory (the snapshot carries raw signing keys, the PIN
+        //digest, and both credRandom secrets); disposing it here clears the plaintext once the store has
+        //taken its own copy — no separate scrub-vs-non-scrub carrier discipline to keep straight.
+        using PooledMemory encoded = EncodeSnapshot!(stateAfterCommand, pool);
+        await Custody.PersistSnapshotAsync(Automaton.RunId, encoded, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Retires <see cref="SignatureCounterCustody"/>'s counter for every credential that disappeared from
+    /// <see cref="CtapAuthenticatorState.CredentialsByCredentialId"/> across one completed command (contract
+    /// R-9, wavenv): a no-op when <see cref="SignatureCounterCustody"/> is absent (byte-identical to
+    /// no-custody behavior). A single reference/key diff against <paramref name="stateBeforeCommand"/>
+    /// covers every removal path uniformly — <c>deleteCredential</c>, a same-(rp, account) resident
+    /// overwrite (<c>OnCredentialMinted</c>'s own overwrite-erase), and <c>authenticatorReset</c>'s full
+    /// wipe (which clears the dictionary in the SAME pure step that declares its own key-material effect,
+    /// so by the time this runs every resident credential the dictionary held before the command is already
+    /// gone) — without special-casing any one of them.
+    /// </summary>
+    /// <param name="stateBeforeCommand">The state captured immediately before this command's effectful loop ran.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    private async ValueTask ApplySignatureCounterRetirementPostCommandAsync(CtapAuthenticatorState stateBeforeCommand, CancellationToken cancellationToken)
+    {
+        if(SignatureCounterCustody is not CtapSignatureCounterCustody signatureCounterCustody)
+        {
+            return;
+        }
+
+        ImmutableDictionary<string, CtapCredentialRecord> before = stateBeforeCommand.CredentialsByCredentialId;
+        ImmutableDictionary<string, CtapCredentialRecord> after = Automaton.CurrentState.CredentialsByCredentialId;
+        if(ReferenceEquals(before, after))
+        {
+            return;
+        }
+
+        foreach(KeyValuePair<string, CtapCredentialRecord> entry in before)
+        {
+            if(!after.ContainsKey(entry.Key))
+            {
+                await signatureCounterCustody.RetireCounterAsync(entry.Value.CreationSequence, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// Retires <see cref="PinRetriesCustody"/>'s persistent tier once an <c>authenticatorReset</c> completes
+    /// (contract R-3/R-9, wavepin: the same post-command retirement SLOT/TIMING
+    /// <see cref="ApplySignatureCounterRetirementPostCommandAsync"/> uses for per-credential signature
+    /// counters, mirrored here for the authenticator-global PIN throttle): a no-op when
+    /// <see cref="PinRetriesCustody"/> is absent (byte-identical to no-custody behavior) or
+    /// <paramref name="intent"/> is anything other than <see cref="AuthenticatorResetResponseReady"/> — the
+    /// SAME trigger condition <see cref="ApplyCustodyPostCommandAsync"/>'s own wipe-only branch uses.
+    /// </summary>
+    /// <param name="intent">The command's resolved response intent.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    private async ValueTask ApplyPinRetriesRetirementPostCommandAsync(CtapAuthenticatorResponseIntent intent, CancellationToken cancellationToken)
+    {
+        if(PinRetriesCustody is not CtapPinRetriesCustody pinRetriesCustody || intent is not AuthenticatorResetResponseReady)
+        {
+            return;
+        }
+
+        await pinRetriesCustody.RetirePinAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+
     /// <inheritdoc />
     public IDisposable Subscribe(IObserver<TraceEntry<CtapAuthenticatorState, CtapAuthenticatorInput>> observer) =>
         Automaton.Subscribe(observer);
@@ -707,12 +1189,23 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             return FrameError(MapDecodeFailureToStatusCode(exception.FailureKind), pool);
         }
 
+        CtapAuthenticatorState stateBeforeCommand = Automaton.CurrentState;
         try
         {
             await RunWithEffectsAsync(input, pool, cancellationToken).ConfigureAwait(false);
 
             CtapAuthenticatorResponseIntent intent = Automaton.CurrentState.ResponseIntent
                 ?? throw new InvalidOperationException("The automaton completed a step without producing a response intent.");
+
+            //Contract R-4 (persist-then-respond): completes BEFORE the response below is returned.
+            await ApplyCustodyPostCommandAsync(stateBeforeCommand, intent, pool, cancellationToken).ConfigureAwait(false);
+
+            //Contract R-9 (wavenv): retires every credential this command removed, also BEFORE the
+            //response below is returned.
+            await ApplySignatureCounterRetirementPostCommandAsync(stateBeforeCommand, cancellationToken).ConfigureAwait(false);
+
+            //Contract R-3/R-9 (wavepin): retires the persistent PIN-retries tier on authenticatorReset, also BEFORE the response below is returned.
+            await ApplyPinRetriesRetirementPostCommandAsync(intent, cancellationToken).ConfigureAwait(false);
 
             return FrameFinalResponse(intent, pool);
         }
@@ -779,6 +1272,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         };
 
         bool parked = false;
+        CtapAuthenticatorState stateBeforeCommand = Automaton.CurrentState;
         try
         {
             try
@@ -809,8 +1303,38 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
                 //discarded by PowerCycle/FactoryReset.
                 parked = true;
 
+                //Contract R-4 (persist-then-respond) still applies on the parked branch: a command can
+                //commit a PERSISTENT-subset change and THEN arm the parkable wait in the SAME step — a
+                //successful built-in-UV resets UvRetries (OnBuiltInUvAttempted) before collecting user
+                //presence — so the parked state already carries a durable change the wire has exposed
+                //(getUvRetries) even though the command has not resolved. Persist it now, before the
+                //pending marker: a process death while parked must not lose it, and rehydration (R-1)
+                //restoring only the persistent subset while discarding the volatile wait is exactly a
+                //power cycle. When nothing persistent changed (the common case — an mc/ga that parks
+                //without a built-in-UV reset), PersistentSubsetChanged is false and no persist happens.
+                await ApplyCustodyPostCommandAsync(stateBeforeCommand, intent, pool, cancellationToken).ConfigureAwait(false);
+
+                //Contract R-9 (wavenv): a park never removes a credential (mint/delete only completes once
+                //the effectful loop resolves), so this is a no-op here in practice — called anyway to keep
+                //every completion path uniform with the rest of this class's own custody wiring.
+                await ApplySignatureCounterRetirementPostCommandAsync(stateBeforeCommand, cancellationToken).ConfigureAwait(false);
+
+                //Contract R-3/R-9 (wavepin): a park never completes authenticatorReset, so this is a no-op
+                //here in practice — called anyway to keep every completion path uniform.
+                await ApplyPinRetriesRetirementPostCommandAsync(intent, cancellationToken).ConfigureAwait(false);
+
                 return FrameDeferralPendingMarker(pool);
             }
+
+            //Contract R-4 (persist-then-respond): completes BEFORE the response below is returned.
+            await ApplyCustodyPostCommandAsync(stateBeforeCommand, intent, pool, cancellationToken).ConfigureAwait(false);
+
+            //Contract R-9 (wavenv): retires every credential this command removed, also BEFORE the
+            //response below is returned.
+            await ApplySignatureCounterRetirementPostCommandAsync(stateBeforeCommand, cancellationToken).ConfigureAwait(false);
+
+            //Contract R-3/R-9 (wavepin): retires the persistent PIN-retries tier on authenticatorReset, also BEFORE the response below is returned.
+            await ApplyPinRetriesRetirementPostCommandAsync(intent, cancellationToken).ConfigureAwait(false);
 
             return FrameFinalResponse(intent, pool);
         }
@@ -882,6 +1406,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             throw new InvalidOperationException("PollDeferredTransceiveAsync was called with no user-presence wait pending.");
         }
 
+        CtapAuthenticatorState stateBeforeCommand = Automaton.CurrentState;
         await RunWithEffectsAsync(new UserPresencePollRequested(TimeProvider.GetUtcNow()), pool, cancellationToken).ConfigureAwait(false);
 
         CtapAuthenticatorResponseIntent intent = Automaton.CurrentState.ResponseIntent
@@ -902,6 +1427,15 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         //call, and a granted-then-completed one is released exactly here, now that the resumed command's
         //own effectful loop has fully returned.
         pendingBeforePoll.Dispose();
+
+        //Contract R-4 (persist-then-respond): completes BEFORE the response below is returned.
+        await ApplyCustodyPostCommandAsync(stateBeforeCommand, intent, pool, cancellationToken).ConfigureAwait(false);
+
+        //Contract R-9 (wavenv): retires every credential this command removed, also BEFORE the response below is returned.
+        await ApplySignatureCounterRetirementPostCommandAsync(stateBeforeCommand, cancellationToken).ConfigureAwait(false);
+
+        //Contract R-3/R-9 (wavepin): retires the persistent PIN-retries tier on authenticatorReset, also BEFORE the response below is returned.
+        await ApplyPinRetriesRetirementPostCommandAsync(intent, cancellationToken).ConfigureAwait(false);
 
         return FrameFinalResponse(intent, pool);
     }
@@ -927,10 +1461,20 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             throw new InvalidOperationException("CancelDeferredTransceiveAsync was called with no user-presence wait pending.");
         }
 
+        CtapAuthenticatorState stateBeforeCommand = Automaton.CurrentState;
         await RunWithEffectsAsync(new UserPresenceCancelRequested(TimeProvider.GetUtcNow()), pool, cancellationToken).ConfigureAwait(false);
 
         CtapAuthenticatorResponseIntent intent = Automaton.CurrentState.ResponseIntent
             ?? throw new InvalidOperationException("The automaton completed a step without producing a response intent.");
+
+        //Contract R-4 (persist-then-respond): completes BEFORE the response below is returned.
+        await ApplyCustodyPostCommandAsync(stateBeforeCommand, intent, pool, cancellationToken).ConfigureAwait(false);
+
+        //Contract R-9 (wavenv): retires every credential this command removed, also BEFORE the response below is returned.
+        await ApplySignatureCounterRetirementPostCommandAsync(stateBeforeCommand, cancellationToken).ConfigureAwait(false);
+
+        //Contract R-3/R-9 (wavepin): retires the persistent PIN-retries tier on authenticatorReset, also BEFORE the response below is returned.
+        await ApplyPinRetriesRetirementPostCommandAsync(intent, cancellationToken).ConfigureAwait(false);
 
         return FrameFinalResponse(intent, pool);
     }
@@ -1234,7 +1778,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
                 Rng, pool, Aaguid, CredentialSigningBackend, EncodeCredentialPublicKey, EncodePackedSelfAttestationStatement,
                 EncodePackedCertifiedAttestationStatement, Automaton.CurrentState.EnterpriseAttestationProvisioning,
                 EncodeMakeCredentialExtensionOutputs, EncodeGetAssertionExtensionOutputs, SimulateFingerprintCapture, SimulateBuiltInUv,
-                SimulateUserPresence, TimeProvider),
+                SimulateUserPresence, TimeProvider, SignatureCounterCustody, PinRetriesCustody),
             TimeProvider,
             cancellationToken).ConfigureAwait(false);
     }
@@ -1418,6 +1962,24 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
                 DigestValue newPinHash = ComputeStoredPinHash(newPin, context.Pool);
 
+                //Contract R-2 (wavepin): with custody composed, setPIN's own persistent-tier provisioning
+                //IS the establishment — a thrown exception here fails the whole command uncaught (no
+                //response ever escapes), mirroring GenerateCredentialAsync's EnsureCounterAsync precedent;
+                //newPinHash has not yet transferred ownership to the returned record, so it is disposed on
+                //this path rather than leaked.
+                if(context.PinRetriesCustody is CtapPinRetriesCustody provisioningCustody)
+                {
+                    try
+                    {
+                        await provisioningCustody.ProvisionPinAsync(newPinHash.AsReadOnlyMemory(), cancellationToken).ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        newPinHash.Dispose();
+                        throw;
+                    }
+                }
+
                 return new PinEstablishmentCompleted(CtapSetPinOutcomeKind.Success, codePointLength, newPinHash);
             }
             catch(Exception exception) when(IsPinCryptoOperationFailure(exception))
@@ -1475,11 +2037,20 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// </para>
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "MintSingleKeyAgreementKeyPair's returned key pair transfers ownership into PinChangeCompleted.RegeneratedKeyPair on a decrypt failure or a mismatch, ComputeStoredPinHash's returned DigestValue transfers into PinChangeCompleted.NewPinHash on Success, and both CtapPinUvAuthTokenState.Initial() calls transfer into PinChangeCompleted.FreshProtocolOneToken/FreshProtocolTwoToken on Success (disposed in the catch block on failure); the analyzer cannot see these transfers through the record construction.")]
+        Justification = "MintSingleKeyAgreementKeyPair's returned key pair transfers ownership into PinChangeCompleted.RegeneratedKeyPair on a decrypt failure or a mismatch, ComputeStoredPinHash's returned DigestValue transfers into PinChangeCompleted.NewPinHash on Success, and both CtapPinUvAuthTokenState.Initial() calls transfer into PinChangeCompleted.FreshProtocolOneToken/FreshProtocolTwoToken on Success (disposed in the catch block on failure); confirmedCurrentPinHash is disposed in the outer finally block on every path; the analyzer cannot see these transfers through the record construction.")]
     private static async ValueTask<CtapAuthenticatorInput> ChangePinAsync(CtapChangePinAction action, CtapActionContext context, CancellationToken cancellationToken)
     {
         CtapPinUvAuthProtocol protocol = CtapPinUvAuthProtocol.CreateDefault(action.ProtocolId);
         IMemoryOwner<byte>? sharedSecret = null;
+
+        //Wavepin review fix F-4: a copy of the just-CONFIRMED current-PIN hash, captured while
+        //decryptedCurrentPinHash below is still in scope, so the forcePINChange same-PIN comparison
+        //further down can compare against it instead of action.CurrentStoredPin (captured BEFORE this
+        //command ran, and therefore possibly stale once a custody bundle is composed — contract R-2's own
+        //"the custody verdict is authoritative" rule means action.CurrentStoredPin no longer reflects the
+        //authoritative current hash once a match is custody-verified). Disposed in the outer finally
+        //block on every path once minted, whether or not it is ever consulted.
+        DigestValue? confirmedCurrentPinHash = null;
         try
         {
             try
@@ -1500,25 +2071,61 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             }
 
             bool isCurrentPinMatch;
+            CtapPinAttemptVerdict? verifyVerdict = null;
             try
             {
                 using DecryptedContent decryptedCurrentPinHash = await protocol.DecryptAsync(
                     sharedSecret.Memory, action.PinHashEnc, context.Pool, cancellationToken).ConfigureAwait(false);
-                isCurrentPinMatch = CryptographicOperations.FixedTimeEquals(
-                    decryptedCurrentPinHash.AsReadOnlySpan(), action.CurrentStoredPin.AsReadOnlySpan());
+
+                //Contract R-2 (wavepin): with custody composed, the custody verdict REPLACES the local
+                //FixedTimeEquals compare — the candidate is the just-decrypted hash, never the stored one.
+                if(context.PinRetriesCustody is CtapPinRetriesCustody verifyingCustody)
+                {
+                    CtapPinAttemptVerdict verdict = await verifyingCustody.VerifyPinAttemptAsync(
+                        decryptedCurrentPinHash.AsReadOnlyMemory(), cancellationToken).ConfigureAwait(false);
+                    verifyVerdict = verdict;
+                    isCurrentPinMatch = verdict.IsMatch;
+                }
+                else
+                {
+                    //action.CurrentStoredPin is guaranteed non-null here: this branch runs only when no
+                    //custody is composed, and OnChangePinRequested's own IsPinEstablished pre-check already
+                    //required CurrentStoredPin itself (custody's separate provisioning signal does not
+                    //exist in a non-custody composition) to be non-null before declaring this action.
+                    isCurrentPinMatch = CryptographicOperations.FixedTimeEquals(
+                        decryptedCurrentPinHash.AsReadOnlySpan(), action.CurrentStoredPin!.AsReadOnlySpan());
+                }
+
+                if(isCurrentPinMatch)
+                {
+                    //Wavepin review fix F-4: captured here, while decryptedCurrentPinHash is still in
+                    //scope, regardless of whether custody is composed — in the custody-absent case this
+                    //copy's bytes equal action.CurrentStoredPin's own bytes exactly (that is what "match"
+                    //just proved), so using it below is byte-identical to before this fix; in the
+                    //custody-active case it is the ONLY correct current hash to compare against.
+                    confirmedCurrentPinHash = CopyConfirmedCurrentPinHash(decryptedCurrentPinHash.AsReadOnlySpan(), context.Pool);
+                }
             }
             catch(Exception exception) when(IsPinCryptoOperationFailure(exception))
             {
                 CtapPinUvAuthKeyAgreementKeyPair regeneratedOnDecryptFailure = MintSingleKeyAgreementKeyPair(context.Pool);
 
-                return new PinChangeCompleted(CtapChangePinOutcomeKind.CurrentPinDecryptFailed, action.ProtocolId, regeneratedOnDecryptFailure, 0, null, null, null);
+                //Contract R-2/R-3 (wavepin): a decrypt failure penalizes the persistent tier exactly like a
+                //recorded mismatch, instead of verifying a candidate that never existed.
+                CtapPinAttemptVerdict? penalizeVerdict = context.PinRetriesCustody is CtapPinRetriesCustody penalizingCustody
+                    ? await penalizingCustody.PenalizeAttemptAsync(cancellationToken).ConfigureAwait(false)
+                    : null;
+
+                return new PinChangeCompleted(
+                    CtapChangePinOutcomeKind.CurrentPinDecryptFailed, action.ProtocolId, regeneratedOnDecryptFailure, 0, null, null, null, penalizeVerdict);
             }
 
             if(!isCurrentPinMatch)
             {
                 CtapPinUvAuthKeyAgreementKeyPair regenerated = MintSingleKeyAgreementKeyPair(context.Pool);
 
-                return new PinChangeCompleted(CtapChangePinOutcomeKind.CurrentPinMismatch, action.ProtocolId, regenerated, 0, null, null, null);
+                return new PinChangeCompleted(
+                    CtapChangePinOutcomeKind.CurrentPinMismatch, action.ProtocolId, regenerated, 0, null, null, null, verifyVerdict);
             }
 
             DigestValue? newPinHash = null;
@@ -1529,31 +2136,39 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
                     sharedSecret.Memory, action.NewPinEnc, context.Pool, cancellationToken).ConfigureAwait(false);
                 if(paddedNewPin.Length != PaddedPinLength)
                 {
-                    return new PinChangeCompleted(CtapChangePinOutcomeKind.NewPinPaddedLengthInvalid, action.ProtocolId, null, 0, null, null, null);
+                    return new PinChangeCompleted(
+                        CtapChangePinOutcomeKind.NewPinPaddedLengthInvalid, action.ProtocolId, null, 0, null, null, null, verifyVerdict);
                 }
 
                 ReadOnlySpan<byte> newPin = StripTrailingZeroes(paddedNewPin.AsReadOnlySpan());
                 codePointLength = CountUtf8CodePoints(newPin);
                 if(codePointLength < action.MinPinCodePointLength)
                 {
-                    return new PinChangeCompleted(CtapChangePinOutcomeKind.NewPinPolicyViolation, action.ProtocolId, null, codePointLength, null, null, null);
+                    return new PinChangeCompleted(
+                        CtapChangePinOutcomeKind.NewPinPolicyViolation, action.ProtocolId, null, codePointLength, null, null, null, verifyVerdict);
                 }
 
                 newPinHash = ComputeStoredPinHash(newPin, context.Pool);
             }
             catch(Exception exception) when(IsPinCryptoOperationFailure(exception))
             {
-                return new PinChangeCompleted(CtapChangePinOutcomeKind.NewPinDecryptFailed, action.ProtocolId, null, 0, null, null, null);
+                return new PinChangeCompleted(
+                    CtapChangePinOutcomeKind.NewPinDecryptFailed, action.ProtocolId, null, 0, null, null, null, verifyVerdict);
             }
 
             //Line 5700: forcePINChange:true and the new PIN's hash equals the stored current PIN's hash
             //-> PinPolicyViolation, checked after the length check (line 5698) and before minting fresh
-            //tokens, constant-time since both operands are PIN-hash-derived.
-            if(action.IsForcePinChangeRequired && CryptographicOperations.FixedTimeEquals(newPinHash!.AsReadOnlySpan(), action.CurrentStoredPin.AsReadOnlySpan()))
+            //tokens, constant-time since both operands are PIN-hash-derived. Wavepin review fix F-4:
+            //compares against confirmedCurrentPinHash (the just-verified, custody-confirmed current hash),
+            //never action.CurrentStoredPin (captured BEFORE this command ran, and possibly stale once a
+            //custody bundle is composed — a rehydrated stale snapshot would otherwise wrongly reject a
+            //legitimate change here).
+            if(action.IsForcePinChangeRequired && CryptographicOperations.FixedTimeEquals(newPinHash!.AsReadOnlySpan(), confirmedCurrentPinHash!.AsReadOnlySpan()))
             {
                 newPinHash.Dispose();
 
-                return new PinChangeCompleted(CtapChangePinOutcomeKind.NewPinSameAsCurrentUnderForce, action.ProtocolId, null, codePointLength, null, null, null);
+                return new PinChangeCompleted(
+                    CtapChangePinOutcomeKind.NewPinSameAsCurrentUnderForce, action.ProtocolId, null, codePointLength, null, null, null, verifyVerdict);
             }
 
             CtapPinUvAuthTokenState freshProtocolOneToken = CtapPinUvAuthTokenState.Initial(context.Pool);
@@ -1569,15 +2184,57 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
                 throw;
             }
 
+            //Contract R-2 (wavepin): setPIN's own successor — a successful changePIN's new PIN hash
+            //replaces the persistent tier's provisioned value, rotating its authorization secret so a
+            //replayed stale snapshot's own CurrentStoredPin can never resurrect the superseded PIN. A
+            //thrown exception here fails the whole command uncaught, mirroring EstablishPinAsync's own
+            //provisioning discipline.
+            if(context.PinRetriesCustody is CtapPinRetriesCustody provisioningCustody)
+            {
+                try
+                {
+                    await provisioningCustody.ProvisionPinAsync(newPinHash!.AsReadOnlyMemory(), cancellationToken).ConfigureAwait(false);
+                }
+                catch
+                {
+                    freshProtocolOneToken.Dispose();
+                    freshProtocolTwoToken.Dispose();
+                    newPinHash?.Dispose();
+                    throw;
+                }
+            }
+
             return new PinChangeCompleted(
-                CtapChangePinOutcomeKind.Success, action.ProtocolId, null, codePointLength, newPinHash, freshProtocolOneToken, freshProtocolTwoToken);
+                CtapChangePinOutcomeKind.Success, action.ProtocolId, null, codePointLength, newPinHash, freshProtocolOneToken, freshProtocolTwoToken,
+                verifyVerdict);
         }
         finally
         {
+            confirmedCurrentPinHash?.Dispose();
+
             if(sharedSecret is not null)
             {
                 sharedSecret.Memory.Span.Clear();
                 sharedSecret.Dispose();
+            }
+        }
+
+        //Wavepin review fix F-4: copies decryptedCurrentPinHash's bytes into a carrier that outlives its
+        //own using-scope, so the forcePINChange same-PIN comparison further up this method can compare
+        //against the just-verified current hash rather than the possibly-stale action.CurrentStoredPin.
+        static DigestValue CopyConfirmedCurrentPinHash(ReadOnlySpan<byte> confirmedHash, MemoryPool<byte> pool)
+        {
+            IMemoryOwner<byte> copy = pool.Rent(confirmedHash.Length);
+            try
+            {
+                confirmedHash.CopyTo(copy.Memory.Span);
+
+                return new DigestValue(copy, CryptoTags.Sha256Digest);
+            }
+            catch
+            {
+                copy.Dispose();
+                throw;
             }
         }
     }
@@ -1615,25 +2272,51 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             }
 
             bool isCurrentPinMatch;
+            CtapPinAttemptVerdict? verifyVerdict = null;
             try
             {
                 using DecryptedContent decryptedCurrentPinHash = await protocol.DecryptAsync(
                     sharedSecret.Memory, action.PinHashEnc, context.Pool, cancellationToken).ConfigureAwait(false);
-                isCurrentPinMatch = CryptographicOperations.FixedTimeEquals(
-                    decryptedCurrentPinHash.AsReadOnlySpan(), action.CurrentStoredPin.AsReadOnlySpan());
+
+                //Contract R-2 (wavepin): with custody composed, the custody verdict REPLACES the local
+                //FixedTimeEquals compare — the candidate is the just-decrypted hash, never the stored one.
+                if(context.PinRetriesCustody is CtapPinRetriesCustody verifyingCustody)
+                {
+                    CtapPinAttemptVerdict verdict = await verifyingCustody.VerifyPinAttemptAsync(
+                        decryptedCurrentPinHash.AsReadOnlyMemory(), cancellationToken).ConfigureAwait(false);
+                    verifyVerdict = verdict;
+                    isCurrentPinMatch = verdict.IsMatch;
+                }
+                else
+                {
+                    //action.CurrentStoredPin is guaranteed non-null here: this branch runs only when no
+                    //custody is composed, and the declaring pure pre-check's own IsPinEstablished gate
+                    //already required CurrentStoredPin itself to be non-null before declaring this action.
+                    isCurrentPinMatch = CryptographicOperations.FixedTimeEquals(
+                        decryptedCurrentPinHash.AsReadOnlySpan(), action.CurrentStoredPin!.AsReadOnlySpan());
+                }
             }
             catch(Exception exception) when(IsPinCryptoOperationFailure(exception))
             {
                 CtapPinUvAuthKeyAgreementKeyPair regeneratedOnDecryptFailure = MintSingleKeyAgreementKeyPair(context.Pool);
 
-                return new PinTokenIssuanceCompleted(CtapPinTokenIssuanceOutcomeKind.CurrentPinDecryptFailed, action.ProtocolId, regeneratedOnDecryptFailure, null, null, null);
+                //Contract R-2/R-3 (wavepin): a decrypt failure penalizes the persistent tier exactly like a
+                //recorded mismatch, instead of verifying a candidate that never existed.
+                CtapPinAttemptVerdict? penalizeVerdict = context.PinRetriesCustody is CtapPinRetriesCustody penalizingCustody
+                    ? await penalizingCustody.PenalizeAttemptAsync(cancellationToken).ConfigureAwait(false)
+                    : null;
+
+                return new PinTokenIssuanceCompleted(
+                    CtapPinTokenIssuanceOutcomeKind.CurrentPinDecryptFailed, action.ProtocolId, regeneratedOnDecryptFailure, null, null, null,
+                    Verdict: penalizeVerdict);
             }
 
             if(!isCurrentPinMatch)
             {
                 CtapPinUvAuthKeyAgreementKeyPair regenerated = MintSingleKeyAgreementKeyPair(context.Pool);
 
-                return new PinTokenIssuanceCompleted(CtapPinTokenIssuanceOutcomeKind.CurrentPinMismatch, action.ProtocolId, regenerated, null, null, null);
+                return new PinTokenIssuanceCompleted(
+                    CtapPinTokenIssuanceOutcomeKind.CurrentPinMismatch, action.ProtocolId, regenerated, null, null, null, Verdict: verifyVerdict);
             }
 
             //Lines 5904/6006: checked strictly after the current-PIN match succeeds (pinRetries := maximum
@@ -1643,7 +2326,8 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             if(action.IsForcePinChangeRequired)
             {
                 return new PinTokenIssuanceCompleted(
-                    CtapPinTokenIssuanceOutcomeKind.ForcePinChangeRequired, action.ProtocolId, null, null, null, null, action.ForcePinChangeDeniedStatusCode);
+                    CtapPinTokenIssuanceOutcomeKind.ForcePinChangeRequired, action.ProtocolId, null, null, null, null,
+                    action.ForcePinChangeDeniedStatusCode, verifyVerdict);
             }
 
             CtapPinUvAuthTokenState freshProtocolOneToken = CtapPinUvAuthTokenState.Initial(context.Pool);
@@ -1697,7 +2381,8 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             }
 
             return new PinTokenIssuanceCompleted(
-                CtapPinTokenIssuanceOutcomeKind.Success, action.ProtocolId, null, freshProtocolOneToken, freshProtocolTwoToken, encryptedToken.Memory);
+                CtapPinTokenIssuanceOutcomeKind.Success, action.ProtocolId, null, freshProtocolOneToken, freshProtocolTwoToken, encryptedToken.Memory,
+                Verdict: verifyVerdict);
         }
         finally
         {
@@ -2161,24 +2846,39 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
                 hmacSecretMcOutputOwner?.Dispose();
             }
 
+            //Contract R-9 (wavenv): with signature-counter custody composed, the credential's INITIAL
+            //signCount is whatever EnsureCounterAsync mints it at (never 0 — see that delegate's own
+            //remarks) rather than the pure literal 0 below; the returned value feeds BOTH the signed
+            //authData (mint-time attestation covers this same authData) and the persisted record, so the
+            //wire-visible registration count and the stored count never disagree. Absent custody, mintSignCount
+            //stays the pre-wave literal 0 — byte-identical (contract R-9's opt-in discipline).
+            uint mintSignCount = 0;
+            if(context.SignatureCounterCustody is CtapSignatureCounterCustody signatureCounterCustody)
+            {
+                ulong custodyCount = await signatureCounterCustody.EnsureCounterAsync(action.CreationSequence, cancellationToken).ConfigureAwait(false);
+                mintSignCount = checked((uint)custodyCount);
+            }
+
             using DigestValue rpIdHash = ComputeRpIdHash(action.RpId, context.Pool);
             AuthenticatorDataFlags flags = BuildFlags(
                 userPresent: action.UserPresent, userVerified: action.UserVerified, attestedCredentialDataIncluded: true, extensionDataIncluded: !extensionsOutput.IsEmpty);
             AttestedCredentialDataToWrite attestedCredentialData = new(context.Aaguid, credentialId, credentialPublicKeyCbor.Memory);
             TaggedMemory<byte> authData = AuthenticatorDataWriter.Write(
-                rpIdHash, flags, signCount: 0, attestedCredentialData: attestedCredentialData, extensions: extensionsOutput.Memory);
+                rpIdHash, flags, mintSignCount, attestedCredentialData: attestedCredentialData, extensions: extensionsOutput.Memory);
 
             storedUserId = UserHandle.Create(action.UserId.AsReadOnlySpan(), context.Pool);
 
             //CreationSequence is a placeholder here: only the pure transition (OnCredentialMinted) knows
             //the state's current counter value, and stamps the real one via a `with` copy once this
             //record is folded back — mint order is decided by the store, not by the effect that builds
-            //the record's other fields.
+            //the record's other fields. action.CreationSequence (used above to key EnsureCounterAsync) is
+            //read from the SAME state field ahead of that stamp and is never itself persisted here.
             CtapCredentialRecord record = new(
                 credentialId, action.RpId, storedUserId, action.UserName, action.UserDisplayName,
-                action.Algorithm, action.ResidentKey, keyPair.PrivateKey, SignCount: 0, CreationSequence: 0,
+                action.Algorithm, action.ResidentKey, keyPair.PrivateKey, SignCount: mintSignCount, CreationSequence: 0,
                 PublicKey: keyPair.PublicKey, CredProtectLevel: action.CredProtectLevel,
-                CredRandomWithUV: credRandomWithUV!, CredRandomWithoutUV: credRandomWithoutUV!, LargeBlobKey: largeBlobKey);
+                CredRandomWithUV: credRandomWithUV!, CredRandomWithoutUV: credRandomWithoutUV!, LargeBlobKey: largeBlobKey,
+                CredentialKeyCustodyExport: keyPair.CredentialKeyCustodyExport);
 
             CtapMakeCredentialResponse response = await BuildAttestationResponseAsync(
                 action, keyPair.PrivateKey, authData.Memory, context, cancellationToken).ConfigureAwait(false);
@@ -2318,15 +3018,32 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         }
 
         TaggedMemory<byte> authData;
+        uint newSignCount;
         try
         {
+            //Contract R-9 (wavenv): with signature-counter custody composed, the count the SIGNED authData
+            //below carries — and the count OnAssertionSigned persists back into the credential record — is
+            //the CUSTODY-RETURNED value, never the pure transition's own action.NewSignCount (SignCount+1).
+            //The increment runs INSIDE this try so a thrown exception still releases hmacSecretOutputOwner
+            //via the finally below, then propagates out of this whole effect uncaught: no authData is ever
+            //framed, no signature ever computed, and no response ever escapes TransceiveAsync with a count
+            //that did not durably advance (increment-before-response, mirroring how a failing
+            //PersistSnapshotAsync already aborts the command today). Absent custody, newSignCount stays the
+            //pure action.NewSignCount — byte-identical (contract R-9's opt-in discipline).
+            newSignCount = action.NewSignCount;
+            if(context.SignatureCounterCustody is CtapSignatureCounterCustody signatureCounterCustody)
+            {
+                ulong custodyCount = await signatureCounterCustody.IncrementCounterAsync(action.CreationSequence, cancellationToken).ConfigureAwait(false);
+                newSignCount = checked((uint)custodyCount);
+            }
+
             TaggedMemory<byte> extensionsOutput = context.EncodeGetAssertionExtensionOutputs(hmacSecretOutput);
 
             using DigestValue rpIdHash = ComputeRpIdHash(action.RpId, context.Pool);
             AuthenticatorDataFlags flags = BuildFlags(
                 userPresent: action.UserPresent, userVerified: action.UserVerified, attestedCredentialDataIncluded: false,
                 extensionDataIncluded: !extensionsOutput.IsEmpty);
-            authData = AuthenticatorDataWriter.Write(rpIdHash, flags, action.NewSignCount, extensions: extensionsOutput.Memory);
+            authData = AuthenticatorDataWriter.Write(rpIdHash, flags, newSignCount, extensions: extensionsOutput.Memory);
         }
         finally
         {
@@ -2376,7 +3093,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
                 rememberOnCompletion.LargeBlobKeyRequested)
             : null;
 
-        return new AssertionSigned(response, action.CredentialId, action.NewSignCount, rememberedState);
+        return new AssertionSigned(response, action.CredentialId, newSignCount, rememberedState);
     }
 
 
@@ -3277,6 +3994,8 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <param name="simulateBuiltInUv">The R8 outcome-injection knob for a simulated built-in user verification gesture.</param>
     /// <param name="simulateUserPresence">The R1 outcome-injection knob for a simulated :2840 user-presence collection.</param>
     /// <param name="timeProvider">The time source the <see cref="CtapCollectUserPresenceAction"/> executor stamps a collected decision's <c>Now</c> with.</param>
+    /// <param name="signatureCounterCustody">The NV-counter-backed signature-counter custody seam bundle, or <see langword="null"/> when none is composed (contract R-9, wavenv).</param>
+    /// <param name="pinRetriesCustody">The NV-backed persistent-tier PIN-retries custody seam bundle, or <see langword="null"/> when none is composed (contract R-1..R-6, wavepin).</param>
     private readonly struct CtapActionContext(
         FillEntropyDelegate rng,
         MemoryPool<byte> pool,
@@ -3291,7 +4010,9 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         SimulateFingerprintCaptureDelegate simulateFingerprintCapture,
         SimulateBuiltInUvDelegate simulateBuiltInUv,
         SimulateUserPresenceDelegate simulateUserPresence,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        CtapSignatureCounterCustody? signatureCounterCustody,
+        CtapPinRetriesCustody? pinRetriesCustody)
     {
         /// <summary>The entropy provider credential identifiers are drawn from.</summary>
         public FillEntropyDelegate Rng { get; } = rng;
@@ -3334,6 +4055,12 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
         /// <summary>The time source the <see cref="CtapCollectUserPresenceAction"/> executor stamps a collected decision's <c>Now</c> with.</summary>
         public TimeProvider TimeProvider { get; } = timeProvider;
+
+        /// <summary>The NV-counter-backed signature-counter custody seam bundle, or <see langword="null"/> when none is composed (contract R-9, wavenv).</summary>
+        public CtapSignatureCounterCustody? SignatureCounterCustody { get; } = signatureCounterCustody;
+
+        /// <summary>The NV-backed persistent-tier PIN-retries custody seam bundle, or <see langword="null"/> when none is composed (contract R-1..R-6, wavepin).</summary>
+        public CtapPinRetriesCustody? PinRetriesCustody { get; } = pinRetriesCustody;
     }
 
 

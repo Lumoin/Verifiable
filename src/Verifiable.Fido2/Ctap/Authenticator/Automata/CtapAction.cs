@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using Verifiable.Cryptography;
+using Verifiable.Fido2.Ctap.Authenticator.Custody;
 using Verifiable.Foundation.Automata;
 using Verifiable.JCose;
 
@@ -111,6 +112,15 @@ public sealed record CtapCollectUserPresenceAction: CtapAction;
 /// <see cref="CtapCredentialRecord"/>, and echoes it as the mc response's TOP-LEVEL <c>largeBlobKey</c>
 /// (<c>0x05</c>) member.
 /// </param>
+/// <param name="CreationSequence">
+/// The mint-order sequence number <see cref="CtapAuthenticatorState.NextCredentialSequence"/> holds at the
+/// moment this action is declared — the SAME value <c>OnCredentialMinted</c> stamps onto the new
+/// <see cref="CtapCredentialRecord"/> once the effect completes (contract R-9, wavenv). Read here, ahead of
+/// that stamp, purely so the effect can key an optionally composed
+/// <see cref="CtapSignatureCounterCustody.EnsureCounterAsync"/> call by the credential's eventual
+/// identity before that identity is otherwise known to the effect — this simulator processes one command at
+/// a time (never concurrently), so nothing else can advance the counter between this read and the stamp.
+/// </param>
 /// <param name="HmacSecretMc">
 /// The resolved <c>hmac-secret-mc</c> crypto request (CTAP 2.3 §12.8), already assembled by the pure
 /// transition from the mc request's compound extension input, or <see langword="null"/> when the
@@ -139,6 +149,7 @@ public sealed record CtapGenerateCredentialKeyAction(
     int? MinPinLengthOutputValue,
     bool HmacSecretRequested,
     bool LargeBlobKeyRequested,
+    ulong CreationSequence,
     CtapMakeCredentialHmacSecretMcRequest? HmacSecretMc = null): CtapAction;
 
 /// <summary>
@@ -229,6 +240,12 @@ public sealed record CtapMakeCredentialHmacSecretMcRequest(
 /// exactly ONCE, computed after <see cref="UserVerified"/> is already resolved and threaded straight
 /// into the signed authData — never recomputed (trap 5).
 /// </param>
+/// <param name="CreationSequence">
+/// The resolved credential's own <see cref="CtapCredentialRecord.CreationSequence"/>, borrowed from the
+/// store (contract R-9, wavenv) — the identity an optionally composed
+/// <see cref="CtapSignatureCounterCustody.IncrementCounterAsync"/> call keys by. When no signature-
+/// counter custody is composed, this value is read but never used.
+/// </param>
 public sealed record CtapSignAssertionAction(
     string RpId,
     CredentialId CredentialId,
@@ -242,6 +259,7 @@ public sealed record CtapSignAssertionAction(
     int? NumberOfCredentials,
     CtapRememberGetAssertionRequest? RememberOnCompletion,
     ReadOnlyMemory<byte>? LargeBlobKey,
+    ulong CreationSequence,
     CtapGetAssertionHmacSecretRequest? HmacSecret = null): CtapAction;
 
 /// <summary>
@@ -398,7 +416,13 @@ public sealed record CtapEstablishPinAction(
 /// <param name="PinHashEnc">The request's <c>pinHashEnc</c>: the encrypted proof of knowledge of the current PIN.</param>
 /// <param name="CurrentStoredPin">
 /// The authenticator's current stored PIN hash, borrowed from <see cref="CtapAuthenticatorState"/> — the
-/// effect compares against it but neither copies nor disposes it.
+/// effect compares against it but neither copies nor disposes it. <see langword="null"/> when a
+/// <c>pinRetriesCustody</c> bundle is composed and the durable tier reports a genuinely provisioned PIN
+/// whose local hash this instance never (re)learned (<see cref="CtapAuthenticatorState.IsPinProvisionedWithUnknownLocalHash"/>,
+/// wavepin review fix F-1) — the effect's own custody-verified branch never dereferences it in that case;
+/// the local <c>FixedTimeEquals</c> compare branch is reached only when custody is absent, at which point
+/// the pure pre-check (<see cref="CtapAuthenticatorState.IsPinEstablished"/>) already guarantees it is
+/// non-null.
 /// </param>
 /// <param name="MinPinCodePointLength">
 /// The current minimum PIN length in Unicode code points, borrowed from
@@ -420,7 +444,7 @@ public sealed record CtapChangePinAction(
     ReadOnlyMemory<byte> PinUvAuthParam,
     ReadOnlyMemory<byte> NewPinEnc,
     ReadOnlyMemory<byte> PinHashEnc,
-    DigestValue CurrentStoredPin,
+    DigestValue? CurrentStoredPin,
     int MinPinCodePointLength,
     bool IsForcePinChangeRequired): CtapAction;
 
@@ -445,7 +469,10 @@ public sealed record CtapChangePinAction(
 /// <param name="PinHashEnc">The request's <c>pinHashEnc</c>: the encrypted proof of knowledge of the current PIN.</param>
 /// <param name="CurrentStoredPin">
 /// The authenticator's current stored PIN hash, borrowed from <see cref="CtapAuthenticatorState"/> — the
-/// effect compares against it but neither copies nor disposes it.
+/// effect compares against it but neither copies nor disposes it. <see langword="null"/> when a
+/// <c>pinRetriesCustody</c> bundle is composed and the durable tier reports a genuinely provisioned PIN
+/// whose local hash this instance never (re)learned (<see cref="CtapAuthenticatorState.IsPinProvisionedWithUnknownLocalHash"/>,
+/// wavepin review fix F-1) — see <see cref="CtapChangePinAction.CurrentStoredPin"/>'s identical note.
 /// </param>
 /// <param name="PermissionsToAssign">
 /// The permissions bitfield to assign to the issued token — already resolved by the pure pre-check:
@@ -482,7 +509,7 @@ public sealed record CtapIssuePinTokenAction(
     PrivateKeyMemory OwnPrivateKey,
     CoseKey PeerKeyAgreement,
     ReadOnlyMemory<byte> PinHashEnc,
-    DigestValue CurrentStoredPin,
+    DigestValue? CurrentStoredPin,
     int PermissionsToAssign,
     string? PermissionsRpId,
     DateTimeOffset Now,

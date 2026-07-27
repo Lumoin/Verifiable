@@ -64,7 +64,7 @@ internal sealed class DataIntegrityProofTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -85,7 +85,7 @@ internal sealed class DataIntegrityProofTests
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -117,7 +117,7 @@ internal sealed class DataIntegrityProofTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -138,7 +138,7 @@ internal sealed class DataIntegrityProofTests
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -468,7 +468,7 @@ internal sealed class DataIntegrityProofTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext);
 
@@ -482,7 +482,7 @@ internal sealed class DataIntegrityProofTests
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             BaseMemoryPool.Shared,
             EmptyContext);
 

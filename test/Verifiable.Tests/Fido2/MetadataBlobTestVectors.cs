@@ -4,8 +4,10 @@ using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Fido2;
+using Verifiable.Tests.X509;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -80,9 +82,9 @@ internal static class MetadataBlobTestVectors
         request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, critical: true));
         request.CertificateExtensions.Add(Fido2AttestationTestVectors.CreateLeafAuthorityKeyIdentifierExtension(issuer));
 
-        byte[] serialNumber = RandomNumberGenerator.GetBytes(16);
+        using Salt serialNumber = X509ChainTestRing.CreateSerialNumber(16);
 
-        return request.Create(issuer, notBefore ?? DefaultNotBefore, notAfter ?? DefaultNotAfter, serialNumber).CopyWithPrivateKey(signingKey);
+        return request.Create(issuer, notBefore ?? DefaultNotBefore, notAfter ?? DefaultNotAfter, serialNumber.AsReadOnlySpan()).CopyWithPrivateKey(signingKey);
     }
 
 
@@ -114,9 +116,9 @@ internal static class MetadataBlobTestVectors
         using ECDsa issuerKey = issuer.GetECDsaPrivateKey()
             ?? throw new ArgumentException("Issuer certificate must carry an ECDsa private key.", nameof(issuer));
         X509SignatureGenerator issuerSignatureGenerator = X509SignatureGenerator.CreateForECDsa(issuerKey);
-        byte[] serialNumber = RandomNumberGenerator.GetBytes(16);
+        using Salt serialNumber = X509ChainTestRing.CreateSerialNumber(16);
 
-        return request.Create(issuer.SubjectName, issuerSignatureGenerator, DefaultNotBefore, DefaultNotAfter, serialNumber).CopyWithPrivateKey(signingKey);
+        return request.Create(issuer.SubjectName, issuerSignatureGenerator, DefaultNotBefore, DefaultNotAfter, serialNumber.AsReadOnlySpan()).CopyWithPrivateKey(signingKey);
     }
 
 

@@ -35,8 +35,8 @@ internal sealed class KeriEventSaidTests
     /// </summary>
     private static readonly ComputeDigestDelegate AgileDigest = (input, outputByteLength, tag, pool, context, cancellationToken) =>
         tag.TryGet<CryptoAlgorithm>(out CryptoAlgorithm algorithm) && algorithm == CryptoAlgorithm.Blake3
-            ? BouncyCastleEntropyFunctions.ComputeBlake3DigestAsync(input, outputByteLength, tag, pool, context, cancellationToken)
-            : MicrosoftEntropyFunctions.ComputeDigestAsync(input, outputByteLength, tag, pool, context, cancellationToken);
+            ? BouncyCastleCryptographicFunctions.ComputeBlake3DigestAsync(input, outputByteLength, tag, pool, context, cancellationToken)
+            : MicrosoftCryptographicFunctions.ComputeDigestAsync(input, outputByteLength, tag, pool, context, cancellationToken);
 
 
     /// <summary>

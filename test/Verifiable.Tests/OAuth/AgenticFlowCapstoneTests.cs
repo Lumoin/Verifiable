@@ -921,8 +921,8 @@ internal sealed class AgenticFlowCapstoneTests
     /// equal to the client_id (ID-JAG §4.3.3 / ICHAIN-017), issuer and expiry — never an
     /// opaque-literal acceptance, and surfaces the step-3 granted scopes as
     /// <see cref="ValidatedSecurityToken.Scope"/>; <c>AuthorizeTokenExchangeAsync</c> enforces the
-    /// ICHAIN-024 ceiling (requested JAG scope ⊆ that grant). The honest ICHAIN-024 mapping for
-    /// this profile is "ceiling = the scopes granted alongside that id_token's issuance", which
+    /// ICHAIN-024 ceiling (requested JAG scope ⊆ that grant). The ICHAIN-024 mapping this profile
+    /// applies is "ceiling = the scopes granted alongside that id_token's issuance", which
     /// AS1 knows because it minted both — modelled here by the topology recording the step-3
     /// grant from the access token AS1 itself issued.
     /// </para>

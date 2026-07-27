@@ -648,7 +648,7 @@ internal sealed class Fido2RegistrationVerifierTests
             ExpectedOrigins = new HashSet<string> { ValidOrigin },
             ExpectedRpIdHash = Fido2TestVectors.WrapRpIdHash(rpIdHash, BaseMemoryPool.Shared),
             UserVerification = UserVerificationRequirement.Required,
-            AllowedAlgorithms = [WellKnownCoseAlgorithms.Rs256]
+            ExpectedPubKeyCredParams = [new PublicKeyCredentialParameters { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Alg = WellKnownCoseAlgorithms.Rs256 }]
         };
 
         SelectAttestationVerifierDelegate selectVerifier = Fido2AttestationSelectors.FromFormats(

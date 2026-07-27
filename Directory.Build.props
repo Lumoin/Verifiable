@@ -29,7 +29,7 @@
     AND $(MSBuildProjectName) != 'Verifiable'
     AND $(MSBuildProjectName) != 'Verifiable.BouncyCastle'
     AND $(MSBuildProjectName) != 'Verifiable.Microsoft'
-    AND $(MSBuildProjectName) != 'Verifiable.NSec'">
+    AND $(MSBuildProjectName) != 'Verifiable.Libsodium'">
     <SupportedPlatform Include="browser" />
   </ItemGroup>
 

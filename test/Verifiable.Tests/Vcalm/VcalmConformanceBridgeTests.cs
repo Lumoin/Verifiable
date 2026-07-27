@@ -275,7 +275,7 @@ internal sealed class VcalmConformanceBridgeTests
                     DeserializeCredential = DeserializeCredential,
                     SerializeProofOptions = SerializeProofOptions,
                     Encoder = TestSetup.Base58Encoder,
-                    ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync
+                    ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync
                 }
             ],
             ExistingProofHandling = VcalmExistingProofHandling.Error,
@@ -302,7 +302,7 @@ internal sealed class VcalmConformanceBridgeTests
             SerializePresentation = presentation => JsonSerializerExtensions.Serialize(presentation, JsonOptions),
             SerializeProofOptions = SerializeProofOptions,
             Decoder = TestSetup.Base58Decoder,
-            ComputeDigest = MicrosoftEntropyFunctions.ComputeDigestAsync,
+            ComputeDigest = MicrosoftCryptographicFunctions.ComputeDigestAsync,
             MemoryPool = Pool
         };
 

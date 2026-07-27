@@ -25,7 +25,8 @@ namespace Verifiable.OAuth.Client;
 /// library's typed identifiers
 /// (<see cref="ClientAuthenticationMethod"/>, <see cref="GrantType"/>,
 /// <see cref="ResponseType"/>) rather than raw strings. Wire serialization
-/// at the <c>Verifiable.OAuth.Json</c> boundary is responsible for the
+/// at the application-supplied JSON boundary (see
+/// <see cref="ParseClientMetadataDelegate"/>) is responsible for the
 /// string ↔ typed-value mapping; <see cref="ClientMetadata"/> itself stays
 /// strongly typed.
 /// </para>
@@ -127,7 +128,8 @@ public sealed record ClientMetadata
     /// <remarks>
     /// Kept as an opaque string because <c>System.Text.Json</c> is banned in
     /// this assembly. Parsing into a typed JWKS shape happens at the
-    /// <c>Verifiable.OAuth.Json</c> boundary.
+    /// application-supplied JSON boundary (see
+    /// <see cref="ParseClientMetadataDelegate"/>).
     /// </remarks>
     public string? Jwks { get; init; }
 

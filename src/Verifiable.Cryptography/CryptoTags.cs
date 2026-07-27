@@ -487,6 +487,31 @@ public static class CryptoTags
     public static Tag WireDecodedDisclosureSalt { get; } = Tag.Create(Purpose.Salt).With(EncodingScheme.Raw);
 
 
+    /// <summary>
+    /// Tag for an X.509 certificate serial number drawn from a CSPRNG at
+    /// certificate issuance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc5280#section-4.1.2.2">RFC 5280 §4.1.2.2</see>
+    /// requires the serial to be a positive integer of at most 20 octets,
+    /// unique per issuer. Serial unpredictability is security material, not
+    /// cosmetic uniqueness: an attacker who can predict the serial of a
+    /// certificate a CA is about to sign controls part of the to-be-signed
+    /// bytes, which is the lever chosen-prefix collision forgeries against the
+    /// signature hash need. Issuance profiles therefore require at least
+    /// 64 bits of CSPRNG output in the serial.
+    /// </para>
+    /// <para>
+    /// Carries <see cref="Purpose.Nonce"/> with raw encoding: unique per use,
+    /// never secret, recoverable from the issued certificate. Issuers allocate
+    /// serials via the configured entropy backend's <c>GenerateSalt</c>
+    /// delegate, which stamps provider provenance on top of this tag.
+    /// </para>
+    /// </remarks>
+    public static Tag X509CertificateSerialNumber { get; } = Tag.Create(Purpose.Nonce).With(EncodingScheme.Raw);
+
+
     //COSE wire-form tags. Pool-allocated buffers holding the byte form of
     //COSE_Sign1 (or its sub-structures) carry these tags so CBOM/OTel can
     //distinguish them from generic crypto material.
@@ -594,7 +619,7 @@ public static class CryptoTags
 
 
     //Digest tags. The hash family is carried via HashAlgorithmName per the existing
-    //digest dispatch contract (see CryptoFormatConversions / MicrosoftEntropyFunctions.ComputeDigestAsync).
+    //digest dispatch contract (see CryptoFormatConversions / MicrosoftCryptographicFunctions.ComputeDigestAsync).
 
     /// <summary>
     /// Tag for SHA-256 digest values. Carries
@@ -730,7 +755,7 @@ public static class CryptoTags
         BrainpoolP320r1ExchangePublicKey, BrainpoolP320r1ExchangePrivateKey,
         BrainpoolP384r1ExchangePublicKey, BrainpoolP384r1ExchangePrivateKey,
         BrainpoolP512r1ExchangePublicKey, BrainpoolP512r1ExchangePrivateKey,
-        MdocIssuerSignedItemRandom, WireDecodedDisclosureSalt,
+        MdocIssuerSignedItemRandom, WireDecodedDisclosureSalt, X509CertificateSerialNumber,
         CoseEncodedSign1, AlgorithmAgnosticSignature, CoseEncodedMac0, CoseEncodedProtectedHeader,
         CmsEncodedSignedData, CmsSignedAttributeValue,
         Sha256Digest, Sha384Digest, Sha512Digest, Blake3Digest,

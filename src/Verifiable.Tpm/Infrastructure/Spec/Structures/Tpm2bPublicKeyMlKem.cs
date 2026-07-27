@@ -78,7 +78,7 @@ public readonly struct Tpm2bPublicKeyMlKem: IDisposable, IEquatable<Tpm2bPublicK
             return Empty;
         }
 
-        pool ??= MemoryPool<byte>.Shared;
+        pool ??= BaseMemoryPool.Shared;
         var owner = pool.Rent(publicKey.Length);
         publicKey.CopyTo(owner.Memory.Span);
         return new Tpm2bPublicKeyMlKem(owner, owner.Memory[..publicKey.Length]);
@@ -124,7 +124,7 @@ public readonly struct Tpm2bPublicKeyMlKem: IDisposable, IEquatable<Tpm2bPublicK
             throw new InvalidOperationException($"ML-KEM public key size {size} exceeds maximum {MaxMlKemPubSize}.");
         }
 
-        pool ??= MemoryPool<byte>.Shared;
+        pool ??= BaseMemoryPool.Shared;
         var owner = pool.Rent(size);
         reader.ReadBytes(size).CopyTo(owner.Memory.Span);
         return new Tpm2bPublicKeyMlKem(owner, owner.Memory[..size]);

@@ -9,6 +9,7 @@ using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
+using Verifiable.Json;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -30,9 +31,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly JwtPartDecoder PartDecoder =
-        static bytes => JsonSerializer.Deserialize<Dictionary<string, object>>(bytes, TestSetup.DefaultSerializationOptions)
-            ?? throw new FormatException("JWT part parsed to null.");
+    private static readonly JwtPartDecoder PartDecoder = JwtPartJson.Default;
 
 
     /// <summary>

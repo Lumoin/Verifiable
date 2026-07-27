@@ -112,7 +112,7 @@ internal sealed class BitstringStatusListCredentialDataIntegrityTests
             DeserializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Encoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             Pool,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -131,7 +131,7 @@ internal sealed class BitstringStatusListCredentialDataIntegrityTests
             SerializeCredential,
             SerializeProofOptions,
             TestSetup.Base58Decoder,
-            MicrosoftEntropyFunctions.ComputeDigestAsync,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
             Pool,
             EmptyContext,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);

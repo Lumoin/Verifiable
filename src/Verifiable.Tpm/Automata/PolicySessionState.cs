@@ -27,8 +27,32 @@ namespace Verifiable.Tpm.Automata;
 /// <param name="PolicyHash">The session's policy hash algorithm (the <c>authHash</c> supplied at start), whose digest width the policyDigest carries.</param>
 /// <param name="IsTrial">Whether this is a trial session (started with <c>TPM_SE_TRIAL</c>): it computes the policyDigest but authorizes nothing.</param>
 /// <param name="PolicyDigest">The accumulated policyDigest, starting at all-zeros of the hash width and extended by each assertion.</param>
+/// <param name="NonceTpm">
+/// The session's retained nonceTPM (<see cref="PolicyHash"/>'s digest width), drawn from the TPM's RNG when the
+/// session started (TPM 2.0 Library Part 3, clause 11.1) and framed verbatim in the <c>TPM2_StartAuthSession()</c>
+/// response. <c>TPM2_PolicySigned()</c>'s <c>aHash</c> binds to this exact value (Part 3, Section 23.3), so it
+/// must be the real per-session nonce, not a placeholder.
+/// </param>
+/// <param name="CpHash">
+/// The command-parameter digest this session has been bound to, or empty when unlatched. Part 3, Section 23.2.4:
+/// once a policy assertion (for example <c>TPM2_PolicySigned()</c>) sets this to a non-empty value, it is
+/// immutable for the life of the session (first-writer-wins) — a later assertion proposing a different, non-empty
+/// value is rejected rather than silently replacing it.
+/// </param>
+/// <param name="StartTime">
+/// A snapshot of the simulator's <c>Time</c> (TPM 2.0 Library Part 1, clause 36.2) taken when the session
+/// started, used as the base for a session-relative <c>expiration</c> deadline (Part 3, Section 23.2.2). There is
+/// deliberately no separate "time epoch" field: a TPM Reset invalidates every policy session outright (this
+/// simulator clears <see cref="TpmSimulatorState.PolicySessions"/> on <c>OnStartup</c>'s Reset branch), so a
+/// session whose <see cref="StartTime"/> predates a Reset can never still be resolvable when a later command
+/// consults it — the epoch-mismatch branch a real TPM's free-running oscillator needs is structurally
+/// unreachable for an in-process simulator with no real timer discontinuity to detect.
+/// </param>
 public sealed record PolicySessionState(
     uint Handle,
     TpmAlgIdConstants PolicyHash,
     bool IsTrial,
-    ReadOnlyMemory<byte> PolicyDigest);
+    ReadOnlyMemory<byte> PolicyDigest,
+    ReadOnlyMemory<byte> NonceTpm,
+    ReadOnlyMemory<byte> CpHash,
+    ulong StartTime);

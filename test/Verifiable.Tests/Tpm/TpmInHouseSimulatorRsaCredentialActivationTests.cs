@@ -1,0 +1,357 @@
+using System;
+using System.Buffers;
+using System.Threading.Tasks;
+using Verifiable.Cryptography;
+using Verifiable.Tpm;
+using Verifiable.Tpm.Automata;
+using Verifiable.Tpm.Extensions.Policy;
+using Verifiable.Tpm.Infrastructure;
+using Verifiable.Tpm.Infrastructure.Commands;
+using Verifiable.Tpm.Infrastructure.Sessions;
+using Verifiable.Tpm.Infrastructure.Spec.Constants;
+using Verifiable.Tpm.Infrastructure.Spec.Handles;
+using Verifiable.Tpm.Infrastructure.Spec.Structures;
+using Verifiable.Tpm.Structures.Spec.Constants;
+
+namespace Verifiable.Tests.Tpm;
+
+/// <summary>
+/// Drives credential activation over the standard RSA endorsement key (<c>TPM2_MakeCredential()</c> +
+/// <c>TPM2_ActivateCredential()</c>, TCG EK Credential Profile, Annex B.3.3, Template L-1) against the in-house
+/// behavioural <see cref="TpmSimulator"/> — entirely in-process, with no external assets — through the same
+/// production command path the production code uses (<see cref="TpmCommandExecutor"/> with the real
+/// <see cref="MakeCredentialInput"/> / <see cref="ActivateCredentialInput"/> and response codecs), the RSA
+/// counterpart of <see cref="TpmInHouseSimulatorCredentialActivationTests"/>.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The standard RSA EK's USER-role authorization on <c>keyHandle</c> is gated on PolicyA (a policy session over
+/// the Endorsement Hierarchy), never a password, so both tests here drive the real
+/// <c>TPM2_PolicySecret()</c>-satisfied policy-session path — mirroring
+/// <see cref="TpmInHouseSimulatorCredentialActivationTests.StandardEkActivatesCredentialThroughThePolicyAPath"/>,
+/// the only shape available since no non-standard, password-authorized RSA storage-parent input factory exists
+/// in this codebase (only <see cref="CreatePrimaryInput.ForRsaEndorsementKey"/>).
+/// </para>
+/// <para>
+/// The simulator runs both sides, so its credential-protection crypto is self-consistent by construction: the
+/// seed is transported by RSA-OAEP to the EK's public modulus (TPM 2.0 Library Part 1, Annex B.4, B.10.3,
+/// B.10.4), and the credential blob is the real AK-Name-bound outer wrap (<c>KDFa</c>-derived AES-CFB
+/// encryption and an outer HMAC over the ciphertext and the AK's Name, Part 1, clause 24) — identical to the
+/// ECC arm. The negative test confirms the binding is to the AK's <i>Name</i>: a credential bound to one AK
+/// cannot be activated against a different object, even with the same EK.
+/// </para>
+/// </remarks>
+[TestClass]
+internal sealed class TpmInHouseSimulatorRsaCredentialActivationTests
+{
+    /// <summary>The secret credential wrapped and recovered by the tests.</summary>
+    private static byte[] CredentialSecret { get; } =
+        [0xB0, 0xB1, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7, 0xB8, 0xB9, 0xBA, 0xBB, 0xBC, 0xBD, 0xBE, 0xBF];
+
+    /// <summary>The RSA modulus size in bits used by these tests.</summary>
+    private const ushort Rsa2048KeyBits = 2048;
+
+    /// <summary>The policy session hash algorithm used by the standard-EK (PolicyA) tests.</summary>
+    private const TpmAlgIdConstants SessionAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
+
+    /// <summary>Gets or sets the per-test context (supplies the cancellation token).</summary>
+    public TestContext TestContext { get; set; } = null!;
+
+    /// <summary>
+    /// Verifies the canonical standard RSA EK activation (TCG EK Credential Profile, Annex B.3.2): a real policy
+    /// session satisfied by <c>TPM2_PolicySecret()</c> against the Endorsement Hierarchy authorizes the standard
+    /// RSA EK's USER role at <c>TPM2_ActivateCredential()</c>'s <c>keyHandle</c>, and the wrapped credential
+    /// round-trips end to end through the production <c>TPM2_MakeCredential()</c>/<c>TPM2_ActivateCredential()</c>
+    /// wire path (R-10).
+    /// </summary>
+    [TestMethod]
+    public async Task StandardRsaEkActivatesCredentialThroughThePolicyAPath()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse ek = await CreateStandardRsaEndorsementKeyAsync(tpm, registry, pool).ConfigureAwait(false);
+        try
+        {
+            using CreatePrimaryResponse ak = await CreateRsaSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
+            try
+            {
+                using MakeCredentialResponse made = await MakeCredentialAsync(tpm, registry, pool, ek.ObjectHandle, ak.Name.Span.ToArray()).ConfigureAwait(false);
+
+                uint policyHandle = 0;
+                try
+                {
+                    //Satisfy PolicyA the canonical way: TPM2_PolicySecret() against the Endorsement Hierarchy (TCG
+                    //EK Credential Profile, Annex B.3.2), authorized here with the hierarchy's empty auth value.
+                    TpmResult<StartAuthSessionResponse> policyStartResult = await tpm.StartPolicySessionAsync(
+                        SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
+                    Assert.IsTrue(policyStartResult.IsSuccess, $"StartAuthSession (policy) failed: '{policyStartResult.ResponseCode}'.");
+                    using StartAuthSessionResponse policyStart = policyStartResult.Value;
+                    policyHandle = policyStart.SessionHandle.Value;
+
+                    TpmResult<PolicySecretResponse> secretResult = await tpm.PolicySecretAsync(
+                        (uint)TpmRh.TPM_RH_ENDORSEMENT, policyHandle, TestContext.CancellationToken).ConfigureAwait(false);
+                    Assert.IsTrue(secretResult.IsSuccess, $"PolicySecret failed: '{secretResult.ResponseCode}'.");
+                    secretResult.Value.Dispose();
+
+                    //Device side: the AK is the activate object (ADMIN role, password), the EK recovers the seed
+                    //(USER role) — but the EK's userWithAuth is CLEAR, so its session must be the satisfied policy
+                    //session rather than a password. Both handles are transient objects, so the executor needs their
+                    //Names to compute cpHash for the policy session (Part 1, equation 15).
+                    using ActivateCredentialInput activateInput = ActivateCredentialInput.Create(
+                        ak.ObjectHandle, ek.ObjectHandle, made.CredentialBlob.Span, made.Secret.Span, pool);
+                    using TpmPasswordSession activateAuth = TpmPasswordSession.CreateEmpty(pool);
+                    using TpmPolicySession keySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, pool);
+                    ReadOnlyMemory<byte>[] handleNames = [ak.Name.Span.ToArray(), ek.Name.Span.ToArray()];
+
+                    TpmResult<ActivateCredentialResponse> activateResult = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
+                        tpm, activateInput, [activateAuth, keySession], handleNames, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                    Assert.IsTrue(activateResult.IsSuccess, $"TPM2_ActivateCredential (RSA PolicyA path) failed: '{activateResult.ResponseCode}'.");
+
+                    using ActivateCredentialResponse activated = activateResult.Value;
+                    Assert.IsTrue(
+                        activated.CertInfo.AsReadOnlySpan().SequenceEqual(CredentialSecret),
+                        "The recovered credential must equal the secret wrapped by TPM2_MakeCredential, proving the RSA PolicyA path round-trips end to end.");
+                }
+                finally
+                {
+                    await FlushIfPresentAsync(tpm, policyHandle).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                await FlushAsync(tpm, registry, ak.ObjectHandle.Value, pool).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await FlushAsync(tpm, registry, ek.ObjectHandle.Value, pool).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Verifies that a credential wrapped to one AK's Name cannot be activated against a different AK, even
+    /// through the same RSA EK: the outer HMAC is re-keyed on the activate object's Name (Part 1, clause 24), so
+    /// a mismatched object fails the integrity check regardless of the seed-transport algorithm.
+    /// </summary>
+    [TestMethod]
+    public async Task ActivateWithWrongObjectIsRejected()
+    {
+        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse ek = await CreateStandardRsaEndorsementKeyAsync(tpm, registry, pool).ConfigureAwait(false);
+        try
+        {
+            using CreatePrimaryResponse ak = await CreateRsaSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
+            using CreatePrimaryResponse otherAk = await CreateRsaSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
+            try
+            {
+                //The credential is bound to the AK's Name.
+                using MakeCredentialResponse made = await MakeCredentialAsync(tpm, registry, pool, ek.ObjectHandle, ak.Name.Span.ToArray()).ConfigureAwait(false);
+
+                uint policyHandle = 0;
+                try
+                {
+                    TpmResult<StartAuthSessionResponse> policyStartResult = await tpm.StartPolicySessionAsync(
+                        SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
+                    Assert.IsTrue(policyStartResult.IsSuccess, $"StartAuthSession (policy) failed: '{policyStartResult.ResponseCode}'.");
+                    using StartAuthSessionResponse policyStart = policyStartResult.Value;
+                    policyHandle = policyStart.SessionHandle.Value;
+
+                    TpmResult<PolicySecretResponse> secretResult = await tpm.PolicySecretAsync(
+                        (uint)TpmRh.TPM_RH_ENDORSEMENT, policyHandle, TestContext.CancellationToken).ConfigureAwait(false);
+                    Assert.IsTrue(secretResult.IsSuccess, $"PolicySecret failed: '{secretResult.ResponseCode}'.");
+                    secretResult.Value.Dispose();
+
+                    //Activating against a different object (otherAk) must fail: the credential's integrity is keyed
+                    //to the bound AK's Name, so a mismatched activate object cannot recover the secret.
+                    using ActivateCredentialInput activateInput = ActivateCredentialInput.Create(
+                        otherAk.ObjectHandle, ek.ObjectHandle, made.CredentialBlob.Span, made.Secret.Span, pool);
+                    using TpmPasswordSession activateAuth = TpmPasswordSession.CreateEmpty(pool);
+                    using TpmPolicySession keySession = TpmPolicySession.ForSession(policyHandle, SessionAlg, pool);
+                    ReadOnlyMemory<byte>[] handleNames = [otherAk.Name.Span.ToArray(), ek.Name.Span.ToArray()];
+
+                    TpmResult<ActivateCredentialResponse> activateResult = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
+                        tpm, activateInput, [activateAuth, keySession], handleNames, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+                    Assert.IsFalse(
+                        activateResult.IsSuccess,
+                        "A credential bound to one attestation key's Name must not be activatable against a different object.");
+                    Assert.AreEqual(TpmRcConstants.TPM_RC_INTEGRITY, activateResult.ResponseCode);
+                }
+                finally
+                {
+                    await FlushIfPresentAsync(tpm, policyHandle).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                await FlushAsync(tpm, registry, otherAk.ObjectHandle.Value, pool).ConfigureAwait(false);
+                await FlushAsync(tpm, registry, ak.ObjectHandle.Value, pool).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await FlushAsync(tpm, registry, ek.ObjectHandle.Value, pool).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Wraps <see cref="CredentialSecret"/> to the given key's public area, bound to <paramref name="objectName"/>.
+    /// </summary>
+    /// <param name="tpm">The TPM device.</param>
+    /// <param name="registry">The response codec registry.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="keyHandle">The credential key (EK) whose public area protects the seed.</param>
+    /// <param name="objectName">The Name of the object the credential is bound to (the AK).</param>
+    /// <returns>The MakeCredential response (the caller owns it).</returns>
+    private async Task<MakeCredentialResponse> MakeCredentialAsync(
+        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmiDhObject keyHandle, byte[] objectName)
+    {
+        using MakeCredentialInput input = MakeCredentialInput.Create(keyHandle, CredentialSecret, objectName, pool);
+
+        //TPM2_MakeCredential uses only the public area of the key, so it takes no authorization session.
+        TpmResult<MakeCredentialResponse> result = await TpmCommandExecutor.ExecuteAsync<MakeCredentialResponse>(
+            tpm, input, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(result.IsSuccess, $"TPM2_MakeCredential (RSA EK) failed: '{result.ResponseCode}'.");
+
+        return result.Value;
+    }
+
+    /// <summary>
+    /// Creates the standard RSA 2048 endorsement key (TCG EK Credential Profile, Annex B.3.3, Template L-1)
+    /// under the Endorsement Hierarchy, through <see cref="CreatePrimaryInput.ForRsaEndorsementKey"/>.
+    /// </summary>
+    /// <param name="tpm">The TPM device.</param>
+    /// <param name="registry">The response codec registry.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <returns>The CreatePrimary response (the caller owns it and flushes the handle).</returns>
+    private async Task<CreatePrimaryResponse> CreateStandardRsaEndorsementKeyAsync(
+        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool)
+    {
+        using CreatePrimaryInput input = CreatePrimaryInput.ForRsaEndorsementKey(TpmRh.TPM_RH_ENDORSEMENT, pool);
+        using TpmPasswordSession hierarchyAuth = TpmPasswordSession.CreateEmpty(pool);
+
+        TpmResult<CreatePrimaryResponse> result = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            tpm, input, [hierarchyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(result.IsSuccess, $"CreatePrimary (standard RSA EK) failed: '{result.ResponseCode}'.");
+
+        return result.Value;
+    }
+
+    /// <summary>
+    /// Creates a primary RSA-2048 signing key (the AK) under the given hierarchy.
+    /// </summary>
+    /// <param name="tpm">The TPM device.</param>
+    /// <param name="registry">The response codec registry.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="hierarchy">The hierarchy under which to create the key.</param>
+    /// <returns>The CreatePrimary response (the caller owns it and flushes the handle).</returns>
+    private async Task<CreatePrimaryResponse> CreateRsaSigningPrimaryAsync(
+        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+    {
+        using CreatePrimaryInput input = CreatePrimaryInput.ForRsaSigningKey(
+            hierarchy, password: null, keyBits: Rsa2048KeyBits, TpmtRsaScheme.Null, pool, noDa: true);
+        using TpmPasswordSession hierarchyAuth = TpmPasswordSession.CreateEmpty(pool);
+
+        TpmResult<CreatePrimaryResponse> result = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            tpm, input, [hierarchyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(result.IsSuccess, $"CreatePrimary signing key ({hierarchy}) failed: '{result.ResponseCode}'.");
+
+        return result.Value;
+    }
+
+    /// <summary>
+    /// Creates a simulator with the RSA (framework key generation and sign/verify, BouncyCastle OAEP) signing
+    /// backend wired, powers it on, and brings it through <c>TPM2_Startup(CLEAR)</c> into the operational phase.
+    /// The RSA backend is required so the simulator services <c>TPM2_CreatePrimary()</c> for the EK and AK
+    /// primaries and the RSA-OAEP secret exchange of credential activation. No ECC backend is wired.
+    /// </summary>
+    /// <param name="pool">The memory pool.</param>
+    /// <returns>The operational simulator.</returns>
+    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    {
+        var simulator = new TpmSimulator("tpm-in-house-rsa-credactivation", rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
+        await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
+
+        return simulator;
+    }
+
+    /// <summary>
+    /// Issues <c>TPM2_Startup(CLEAR)</c> directly against the simulator, mirroring how the executor frames an
+    /// unauthorized command on the wire, to move it into <see cref="TpmLifecyclePhase.Operational"/>.
+    /// </summary>
+    /// <param name="simulator">The simulator to bring operational.</param>
+    /// <param name="pool">The memory pool.</param>
+    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    {
+        var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
+        int length = TpmHeader.HeaderSize + input.GetSerializedSize();
+        using IMemoryOwner<byte> owner = pool.Rent(length);
+
+        var writer = new TpmWriter(owner.Memory.Span);
+        var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_NO_SESSIONS, (uint)length, (uint)input.CommandCode);
+        header.WriteTo(ref writer);
+        input.WriteHandles(ref writer);
+        input.WriteParameters(ref writer);
+
+        TpmResult<TpmResponse> result = await simulator.SubmitAsync(owner.Memory[..length], pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(result.IsSuccess, "TPM2_Startup(CLEAR) must succeed.");
+        using TpmResponse response = result.Value;
+        var reader = new TpmReader(response.AsReadOnlySpan());
+        TpmHeader responseHeader = TpmHeader.Parse(ref reader);
+        Assert.AreEqual(TpmRcConstants.TPM_RC_SUCCESS, (TpmRcConstants)responseHeader.Code);
+        Assert.AreEqual(TpmLifecyclePhase.Operational, simulator.CurrentPhase);
+    }
+
+    /// <summary>
+    /// Creates a response codec registry covering the commands these tests issue.
+    /// </summary>
+    /// <returns>The registry.</returns>
+    private static TpmResponseRegistry CreateRegistry()
+    {
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);
+        _ = registry.Register(TpmCcConstants.TPM_CC_MakeCredential, TpmResponseCodec.MakeCredential);
+        _ = registry.Register(TpmCcConstants.TPM_CC_ActivateCredential, TpmResponseCodec.ActivateCredential);
+        _ = registry.Register(TpmCcConstants.TPM_CC_FlushContext, TpmResponseCodec.FlushContext);
+
+        return registry;
+    }
+
+    /// <summary>
+    /// Flushes a transient object handle, ignoring the result.
+    /// </summary>
+    /// <param name="tpm">The TPM device.</param>
+    /// <param name="registry">The response codec registry.</param>
+    /// <param name="handle">The handle to flush.</param>
+    /// <param name="pool">The memory pool.</param>
+    private async Task FlushAsync(TpmDevice tpm, TpmResponseRegistry registry, uint handle, MemoryPool<byte> pool)
+    {
+        var flush = FlushContextInput.ForHandle(handle);
+        _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+            tpm, flush, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Flushes a policy session handle if one was actually started (<paramref name="handle"/> non-zero), ignoring
+    /// the result. A test that fails before starting its policy session leaves nothing to flush.
+    /// </summary>
+    /// <param name="tpm">The TPM device.</param>
+    /// <param name="handle">The session handle to flush, or <c>0</c> if none was started.</param>
+    private async Task FlushIfPresentAsync(TpmDevice tpm, uint handle)
+    {
+        if(handle == 0)
+        {
+            return;
+        }
+
+        _ = await tpm.FlushContextAsync(handle, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+}

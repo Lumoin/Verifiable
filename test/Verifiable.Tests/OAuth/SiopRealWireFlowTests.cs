@@ -112,10 +112,7 @@ internal sealed class SiopRealWireFlowTests
     /// Decodes a base64url-decoded JWT part back into a claims dictionary, for reading the header and
     /// payload off a compact §9 Request Object or ID Token.
     /// </summary>
-    private static JwtPartDecoder PartDecoder { get; } =
-        static bytes => JsonSerializer.Deserialize<Dictionary<string, object>>(
-            bytes, TestSetup.DefaultSerializationOptions)
-            ?? throw new FormatException("§9 Request Object JWT part parsed to null.");
+    private static JwtPartDecoder PartDecoder { get; } = JwtPartJson.Default;
 
 
     /// <summary>

@@ -126,7 +126,7 @@ internal sealed class MdocCoseKeyConversionTests
     public void RsaKtySurfacesNotSupportedExceptionInsteadOfGuessingSize()
     {
         //kty=3 (RSA) lacks a size discriminator at the COSE_Key map level;
-        //the delegate cannot honestly pick between Rsa2048 and Rsa4096
+        //the delegate cannot reliably pick between Rsa2048 and Rsa4096
         //without inspecting the modulus length. The contract: raise so the
         //caller resolves size from the n parameter downstream.
         Assert.ThrowsExactly<NotSupportedException>(() =>

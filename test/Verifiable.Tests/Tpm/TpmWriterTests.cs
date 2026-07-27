@@ -69,6 +69,36 @@ internal class TpmWriterTests
     }
 
     [TestMethod]
+    public void WriteInt32WritesBigEndianTwosComplement()
+    {
+        Span<byte> buffer = stackalloc byte[4];
+        var writer = new TpmWriter(buffer);
+
+        writer.WriteInt32(-1);
+
+        Assert.AreEqual((byte)0xFF, buffer[0]);
+        Assert.AreEqual((byte)0xFF, buffer[1]);
+        Assert.AreEqual((byte)0xFF, buffer[2]);
+        Assert.AreEqual((byte)0xFF, buffer[3]);
+        Assert.AreEqual(4, writer.Written);
+    }
+
+    [TestMethod]
+    public void WriteInt32WritesBigEndianPositiveValue()
+    {
+        Span<byte> buffer = stackalloc byte[4];
+        var writer = new TpmWriter(buffer);
+
+        writer.WriteInt32(0x12345678);
+
+        Assert.AreEqual((byte)0x12, buffer[0]);
+        Assert.AreEqual((byte)0x34, buffer[1]);
+        Assert.AreEqual((byte)0x56, buffer[2]);
+        Assert.AreEqual((byte)0x78, buffer[3]);
+        Assert.AreEqual(4, writer.Written);
+    }
+
+    [TestMethod]
     public void WriteBytesWritesAllBytes()
     {
         Span<byte> buffer = stackalloc byte[8];
