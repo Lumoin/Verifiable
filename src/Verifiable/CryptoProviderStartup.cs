@@ -102,7 +102,7 @@ internal static class CryptoProviderStartup
     /// <summary>
     /// Registers the <c>Verifiable.Microsoft</c> entropy, salt, and digest functions with
     /// <see cref="CryptographicKeyFactory"/>: CSPRNG-backed nonce/salt generation, the async SHA-2
-    /// digest, and the synchronous SHA-256/384/512 hash functions (SHA-256 default, SHA-384/512
+    /// digest, and the synchronous SHA-1/256/384/512 hash functions (SHA-256 default, SHA-1/384/512
     /// under qualifiers).
     /// </summary>
     private static void RegisterEntropyAndDigest()
@@ -137,6 +137,15 @@ internal static class CryptoProviderStartup
             typeof(HashFunctionDelegate),
             (HashFunctionDelegate)SHA512.HashData,
             qualifier: nameof(HashAlgorithmName.SHA512));
+
+        //SHA-1, registered under its own qualifier rather than as the default: RFC 6960 §4.3 requires an
+        //OCSP client to support SHA-1 for CertID hash-algorithm agility (an identification use, not a
+        //collision-sensitive one), and the convenience digest tags in CryptoTags omit SHA-1 by design so new
+        //protocol code cannot reach it without naming the qualifier explicitly.
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(HashFunctionDelegate),
+            (HashFunctionDelegate)SHA1.HashData,
+            qualifier: nameof(HashAlgorithmName.SHA1));
     }
 
 

@@ -45,15 +45,6 @@ public static class ManagedCmsVerification
     /// <summary>The message-digest signed attribute (RFC 5652 §11.2).</summary>
     private const string MessageDigestOid = "1.2.840.113549.1.9.4";
 
-    /// <summary>The SHA-256 digest algorithm object identifier.</summary>
-    private const string Sha256Oid = "2.16.840.1.101.3.4.2.1";
-
-    /// <summary>The SHA-384 digest algorithm object identifier.</summary>
-    private const string Sha384Oid = "2.16.840.1.101.3.4.2.2";
-
-    /// <summary>The SHA-512 digest algorithm object identifier.</summary>
-    private const string Sha512Oid = "2.16.840.1.101.3.4.2.3";
-
     /// <summary>The sha256WithRSAEncryption signature algorithm object identifier (RFC 8017).</summary>
     private const string Sha256WithRsaEncryptionOid = "1.2.840.113549.1.1.11";
 
@@ -187,7 +178,7 @@ public static class ManagedCmsVerification
         bool supportedSignatureAlgorithm =
             string.Equals(signer.SignatureAlgorithmOid, Sha256WithRsaEncryptionOid, StringComparison.Ordinal)
             || string.Equals(signer.SignatureAlgorithmOid, RsaEncryptionOid, StringComparison.Ordinal);
-        if(!supportedSignatureAlgorithm || !string.Equals(signer.DigestAlgorithmOid, Sha256Oid, StringComparison.Ordinal))
+        if(!supportedSignatureAlgorithm || !string.Equals(signer.DigestAlgorithmOid, WellKnownOids.Sha256, StringComparison.Ordinal))
         {
             throw new CryptographicException($"The managed CMS verifier supports only RSASSA-PKCS1-v1_5 with SHA-256 for RSA signers (signature '{signer.SignatureAlgorithmOid}', digest '{signer.DigestAlgorithmOid}').");
         }
@@ -555,9 +546,9 @@ public static class ManagedCmsVerification
     /// </summary>
     private static (Tag Tag, int Length) DigestForOid(string digestOid) => digestOid switch
     {
-        Sha256Oid => (CryptoTags.Sha256Digest, 32),
-        Sha384Oid => (CryptoTags.Sha384Digest, 48),
-        Sha512Oid => (CryptoTags.Sha512Digest, 64),
+        WellKnownOids.Sha256 => (CryptoTags.Sha256Digest, 32),
+        WellKnownOids.Sha384 => (CryptoTags.Sha384Digest, 48),
+        WellKnownOids.Sha512 => (CryptoTags.Sha512Digest, 64),
         _ => throw new CryptographicException($"The CMS digest algorithm '{digestOid}' is not supported by the managed verifier.")
     };
 

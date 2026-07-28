@@ -293,6 +293,16 @@ internal static class TestSetup
             (HashFunctionDelegate)System.Security.Cryptography.SHA512.HashData,
             qualifier: nameof(System.Security.Cryptography.HashAlgorithmName.SHA512));
 
+        //SHA-1, registered under its own qualifier rather than as the default: RFC 6960 §4.3 requires an OCSP
+        //client to support SHA-1 for CertID hash-algorithm agility (an identification use, not a
+        //collision-sensitive one), and RFC 6960 §4.2.1's KeyHash responderID form is unconditionally SHA-1.
+        //The convenience digest tags in CryptoTags omit SHA-1 by design so new protocol code cannot reach it
+        //without naming the qualifier explicitly, mirroring CryptoProviderStartup's identical registration.
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(HashFunctionDelegate),
+            (HashFunctionDelegate)System.Security.Cryptography.SHA1.HashData,
+            qualifier: nameof(System.Security.Cryptography.HashAlgorithmName.SHA1));
+
         //CMS SignedData verification (eMRTD Passive Authentication and CAdES). The Microsoft backend is the
         //default; the BouncyCastle backend is registered under a qualifier so a cross-backend test can prove
         //the seam is provider-neutral (an independent backend produces the same verified content).

@@ -162,6 +162,81 @@ namespace Verifiable.Cryptography
         /// </summary>
         public const string QcpPublicWithSscd = "0.4.0.1456.1.1";
 
+        /// <summary>
+        /// OID for the X.509 Authority Information Access certificate extension (id-pe-authorityInfoAccess)
+        /// per <see href="https://www.rfc-editor.org/rfc/rfc5280#section-4.2.2.1">RFC 5280 §4.2.2.1</see>,
+        /// carrying the <see cref="AccessMethodOcsp"/> and <see cref="AccessMethodCaIssuers"/> access
+        /// locations a revocation-source or chain-completion seam reads.
+        /// </summary>
+        public const string AuthorityInfoAccessExtension = "1.3.6.1.5.5.7.1.1";
+
+        /// <summary>
+        /// OID for the X.509 CRL Distribution Points certificate extension (id-ce-cRLDistributionPoints)
+        /// per <see href="https://www.rfc-editor.org/rfc/rfc5280#section-4.2.1.13">RFC 5280 §4.2.1.13</see>.
+        /// </summary>
+        public const string CrlDistributionPointsExtension = "2.5.29.31";
+
+        /// <summary>
+        /// OID for the <c>id-ad-ocsp</c> Authority Information Access method
+        /// (<see href="https://www.rfc-editor.org/rfc/rfc5280#section-4.2.2.1">RFC 5280 §4.2.2.1</see>; also
+        /// RFC 6960 Appendix B), naming an OCSP responder's access location within an
+        /// <c>AuthorityInfoAccessSyntax</c> entry.
+        /// </summary>
+        public const string AccessMethodOcsp = "1.3.6.1.5.5.7.48.1";
+
+        /// <summary>
+        /// OID for the <c>id-ad-caIssuers</c> Authority Information Access method
+        /// (<see href="https://www.rfc-editor.org/rfc/rfc5280#section-4.2.2.1">RFC 5280 §4.2.2.1</see>),
+        /// naming a certificate-chain-completion access location within an <c>AuthorityInfoAccessSyntax</c>
+        /// entry.
+        /// </summary>
+        public const string AccessMethodCaIssuers = "1.3.6.1.5.5.7.48.2";
+
+        /// <summary>
+        /// OID for the <c>id-pkix-ocsp-basic</c> response type
+        /// (<see href="https://www.rfc-editor.org/rfc/rfc6960#section-4.2.1">RFC 6960 §4.2.1</see>), the
+        /// only <c>ResponseBytes.responseType</c> this library's OCSP client reads.
+        /// </summary>
+        public const string OcspBasicResponseType = "1.3.6.1.5.5.7.48.1.1";
+
+        /// <summary>
+        /// OID for the <c>id-pkix-ocsp-nonce</c> request/response extension
+        /// (<see href="https://www.rfc-editor.org/rfc/rfc9654#section-2.1">RFC 9654 §2.1</see>, obsoleting
+        /// RFC 8954), carrying an anti-replay <c>Nonce ::= OCTET STRING (SIZE(1..128))</c>.
+        /// </summary>
+        public const string OcspNonce = "1.3.6.1.5.5.7.48.1.2";
+
+        /// <summary>
+        /// OID for the <c>id-pkix-ocsp-nocheck</c> extension
+        /// (<see href="https://www.rfc-editor.org/rfc/rfc6960#section-4.2.2.2.1">RFC 6960 §4.2.2.2.1</see>),
+        /// which a CA places on a delegated OCSP responder certificate to declare that the responder's own
+        /// revocation status need not be checked.
+        /// </summary>
+        public const string OcspNoCheck = "1.3.6.1.5.5.7.48.1.5";
+
+        /// <summary>
+        /// OID for the <c>id-kp-OCSPSigning</c> Extended Key Usage key purpose
+        /// (<see href="https://www.rfc-editor.org/rfc/rfc6960#section-4.2.2.2">RFC 6960 §4.2.2.2</see>), which
+        /// a delegated OCSP responder certificate must assert.
+        /// </summary>
+        public const string OcspSigningKeyPurpose = "1.3.6.1.5.5.7.3.9";
+
+        /// <summary>
+        /// OID for the SHA-1 digest algorithm (RFC 3279). Collision-broken for general integrity use; RFC 6960
+        /// §4.3 still requires an OCSP client to support it for <c>CertID</c> hash-algorithm agility, an
+        /// identification rather than a collision-sensitive use.
+        /// </summary>
+        public const string Sha1 = "1.3.14.3.2.26";
+
+        /// <summary>OID for the SHA-256 digest algorithm (RFC 5754 §2, NIST FIPS 180-4).</summary>
+        public const string Sha256 = "2.16.840.1.101.3.4.2.1";
+
+        /// <summary>OID for the SHA-384 digest algorithm (RFC 5754 §2, NIST FIPS 180-4).</summary>
+        public const string Sha384 = "2.16.840.1.101.3.4.2.2";
+
+        /// <summary>OID for the SHA-512 digest algorithm (RFC 5754 §2, NIST FIPS 180-4).</summary>
+        public const string Sha512 = "2.16.840.1.101.3.4.2.3";
+
 
         //The DER value bytes (the content after the 0x06 OBJECT IDENTIFIER tag and length) of the OIDs
         //above, for callers that compare against an OID parsed from a DER structure (e.g. a

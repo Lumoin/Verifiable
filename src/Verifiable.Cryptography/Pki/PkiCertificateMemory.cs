@@ -24,7 +24,7 @@ namespace Verifiable.Cryptography.Pki;
 ///     long-term validation.
 ///   </description></item>
 ///   <item><description>
-///     OCSP responses — for online revocation checking.
+///     OCSP requests and responses — for online revocation checking.
 ///   </description></item>
 ///   <item><description>
 ///     RFC 3161 timestamp tokens — for AdES time assertion.
@@ -33,8 +33,8 @@ namespace Verifiable.Cryptography.Pki;
 /// <para>
 /// The <see cref="Tag"/> on every instance carries a <see cref="PkiObjectKind"/>
 /// discriminator. Use <see cref="IsX509Certificate"/>, <see cref="IsCrl"/>,
-/// <see cref="IsOcspResponse"/>, and <see cref="IsTimestampToken"/> to branch
-/// without reading raw bytes.
+/// <see cref="IsOcspResponse"/>, <see cref="IsOcspRequest"/>, and
+/// <see cref="IsTimestampToken"/> to branch without reading raw bytes.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -68,6 +68,12 @@ public sealed class PkiCertificateMemory: SensitiveMemory, IEquatable<PkiCertifi
     /// </summary>
     public bool IsTimestampToken =>
         Tag.Get<PkiObjectKind>() == PkiObjectKind.TimestampToken;
+
+    /// <summary>
+    /// Returns <see langword="true"/> when this object is a DER-encoded OCSP request.
+    /// </summary>
+    public bool IsOcspRequest =>
+        Tag.Get<PkiObjectKind>() == PkiObjectKind.OcspRequest;
 
 
     /// <summary>

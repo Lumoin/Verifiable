@@ -23,4 +23,7 @@ public static class PkiCertificateTags
 
     /// <summary>Tag for a DER-encoded RFC 3161 timestamp token.</summary>
     public static Tag TimestampToken { get; } = Tag.Create(PkiObjectKind.TimestampToken);
+
+    /// <summary>Tag for a DER-encoded OCSP request per RFC 6960.</summary>
+    public static Tag OcspRequest { get; } = Tag.Create(PkiObjectKind.OcspRequest);
 }

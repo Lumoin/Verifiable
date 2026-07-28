@@ -25,5 +25,8 @@ public enum PkiObjectKind
     OcspResponse = 3,
 
     /// <summary>An RFC 3161 timestamp token.</summary>
-    TimestampToken = 4
+    TimestampToken = 4,
+
+    /// <summary>A DER-encoded OCSP request per RFC 6960.</summary>
+    OcspRequest = 5
 }
