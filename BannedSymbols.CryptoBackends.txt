@@ -1,0 +1,2 @@
+N:Org.BouncyCastle;Crypto-backend adapter dependency. Compose through Verifiable.BouncyCastle and the CryptoFunctionRegistry seams; library code stays crypto-backend-neutral.
+N:System.Security.Cryptography.X509Certificates;Platform certificate types are a lossy interop boundary. Compose through Verifiable.Microsoft or the backend-neutral Pki seams (PkiCertificateMemory carriers, the X509Chain delegates); parse certificate DER with System.Formats.Asn1.

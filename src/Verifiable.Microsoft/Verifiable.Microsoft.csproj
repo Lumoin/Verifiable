@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The CMS surface (SignedCms, CryptographicAttributeObject) lives in the out-of-band Pkcs
+         package. This direct reference declares the dependency where it is used; it previously
+         compiled only through an undeclared transitive flow from a build-task package's chain. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" />
   </ItemGroup>
 

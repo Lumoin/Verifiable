@@ -63,6 +63,22 @@
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.OAuth.txt" Visible="false" />
   </ItemGroup>
 
+  <!-- Crypto-backend boundary: BouncyCastle types and the platform X.509 certificate types live only
+       in the designated backend adapters (Verifiable.BouncyCastle, Verifiable.Microsoft,
+       Verifiable.Libsodium) and in test projects, which compose the adapters deliberately. Every
+       other project stays backend-neutral: crypto through the registry seams, certificates as
+       PkiCertificateMemory carriers parsed with System.Formats.Asn1. This makes the boundary a build
+       error instead of a review convention; previously it held only by dependency topology (the
+       BouncyCastle package is referenced by its adapter alone) and by discipline for the
+       always-visible platform types. -->
+  <ItemGroup Condition="
+             $(MSBuildProjectName) != 'Verifiable.BouncyCastle'
+             AND $(MSBuildProjectName) != 'Verifiable.Microsoft'
+             AND $(MSBuildProjectName) != 'Verifiable.Libsodium'
+             AND !$(MSBuildProjectName.StartsWith('Verifiable.Tests'))">
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.CryptoBackends.txt" Visible="false" />
+  </ItemGroup>
+
   <!-- Settings for all tests projects specifically. -->
   <PropertyGroup>
     <EnableMSTestRunner>true</EnableMSTestRunner>
@@ -112,22 +128,16 @@
     <AssemblyInformationalVersion>0.0.0</AssemblyInformationalVersion>
     <NeutralLanguage>en-US</NeutralLanguage>
 
-    <AppendToReleaseNotesProperty>
-      <![CDATA[
-See full changelog at https://github.com/lumoin/Verifiable/blob/main/CHANGELOG.md.]]>
-    </AppendToReleaseNotesProperty>
-    <ChangelogFile>../../CHANGELOG.md</ChangelogFile>
-
+    <!-- A static pointer instead of changelog-extraction tooling: the changelog's update cadence
+         never matched per-release extraction, and the extraction task chain pinned a stale
+         System.Security.Cryptography.Pkcs assembly into every project's closure (MSB3277). -->
+    <PackageReleaseNotes>See the full changelog at https://github.com/lumoin/Verifiable/blob/main/CHANGELOG.md.</PackageReleaseNotes>
 
     <AnalysisLevel>latest</AnalysisLevel>
     <AnalysisMode>All</AnalysisMode>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
 
   </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="SIL.ReleaseTasks" PrivateAssets="all" />
-  </ItemGroup>
 
   <!-- As this file is used in project file locations, the path is relative to them. -->
   <!-- Only include logo in packable (non-test) projects. -->
