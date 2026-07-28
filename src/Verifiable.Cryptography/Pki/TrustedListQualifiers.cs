@@ -187,4 +187,13 @@ public sealed record QualificationElement
 
     /// <summary>The root of the criteria tree gating <see cref="Qualifiers"/>.</summary>
     public required CriteriaListCondition Condition { get; init; }
+
+    /// <summary>
+    /// The <c>Critical</c> attribute of the <c>Qualifications</c> extension this element was carried in, per
+    /// <see href="https://www.etsi.org/deliver/etsi_ts/119600_119699/119612/02.04.01_60/ts_119612v020401p.pdf">
+    /// ETSI TS 119 612 V2.4.1 clause 5.5.9</see>'s <c>ExtensionType</c>. ETSI TS 119 615 V1.4.1
+    /// PRO-4.5.4-04 (b) branches on it: an unrecognised qualifier in a critical extension fails the QSCD
+    /// determination outright, while the same qualifier in a non-critical extension only warns.
+    /// </summary>
+    public required bool IsCritical { get; init; }
 }

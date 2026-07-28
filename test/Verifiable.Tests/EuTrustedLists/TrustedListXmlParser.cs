@@ -343,7 +343,10 @@ public static class TrustedListXmlParser
                 }
                 else if(content.Name == Sie + "Qualifications")
                 {
-                    qualifications.AddRange(content.Elements(Sie + "QualificationElement").Select(ReadQualificationElement));
+                    //The extension's Critical attribute (schema ExtensionType, clause 5.5.9) travels onto
+                    //each carried element: TS 119 615 PRO-4.5.4-04 (b) branches the QSCD determination on it.
+                    bool isCritical = string.Equals(((string?)extensionElement.Attribute("Critical"))?.Trim(), "true", StringComparison.OrdinalIgnoreCase);
+                    qualifications.AddRange(content.Elements(Sie + "QualificationElement").Select(element => ReadQualificationElement(element, isCritical)));
                 }
             }
         }
@@ -353,7 +356,9 @@ public static class TrustedListXmlParser
 
 
     /// <summary>Reads one <c>QualificationElement</c> (clause 5.5.9.2.1).</summary>
-    private static QualificationElement ReadQualificationElement(XElement qualificationElement)
+    /// <param name="qualificationElement">The element to read.</param>
+    /// <param name="isCritical">The <c>Critical</c> attribute of the containing <c>Qualifications</c> extension.</param>
+    private static QualificationElement ReadQualificationElement(XElement qualificationElement, bool isCritical)
     {
         XElement? qualifiersElement = qualificationElement.Element(Sie + "Qualifiers");
         List<ServiceQualifier> qualifiers = qualifiersElement is null
@@ -365,7 +370,8 @@ public static class TrustedListXmlParser
         return new QualificationElement
         {
             Qualifiers = qualifiers,
-            Condition = BuildCriteriaTree(criteriaListElement)
+            Condition = BuildCriteriaTree(criteriaListElement),
+            IsCritical = isCritical
         };
     }
 

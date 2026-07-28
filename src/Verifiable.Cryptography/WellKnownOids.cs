@@ -96,6 +96,54 @@ namespace Verifiable.Cryptography
         /// </summary>
         public const string CommonName = "2.5.4.3";
 
+        /// <summary>
+        /// OID for the ETSI EN 319 412-5 <c>id-etsi-qcs-QcCompliance</c> statement asserting the
+        /// certificate is an EU qualified certificate.
+        /// </summary>
+        public const string QcCompliance = "0.4.0.1862.1.1";
+
+        /// <summary>
+        /// OID for the ETSI EN 319 412-5 <c>id-etsi-qcs-QcSSCD</c> statement asserting the private key
+        /// resides in a qualified electronic signature/seal creation device.
+        /// </summary>
+        public const string QcSscd = "0.4.0.1862.1.4";
+
+        /// <summary>
+        /// OID for the ETSI EN 319 412-5 <c>id-etsi-qcs-QcType</c> statement carrying the qualified
+        /// certificate type identifiers below.
+        /// </summary>
+        public const string QcType = "0.4.0.1862.1.6";
+
+        /// <summary>
+        /// OID for the ETSI EN 319 412-5 <c>id-etsi-qct-esign</c> qualified certificate type (QcType 1,
+        /// electronic signatures).
+        /// </summary>
+        public const string QcTypeElectronicSignature = "0.4.0.1862.1.6.1";
+
+        /// <summary>
+        /// OID for the ETSI EN 319 412-5 <c>id-etsi-qct-eseal</c> qualified certificate type (QcType 2,
+        /// electronic seals).
+        /// </summary>
+        public const string QcTypeElectronicSeal = "0.4.0.1862.1.6.2";
+
+        /// <summary>
+        /// OID for the ETSI EN 319 412-5 <c>id-etsi-qct-web</c> qualified certificate type (QcType 3,
+        /// website authentication).
+        /// </summary>
+        public const string QcTypeWebsiteAuthentication = "0.4.0.1862.1.6.3";
+
+        /// <summary>
+        /// OID for the ETSI TS 101 456 <c>QCP</c> (qcp-public) qualified certificate policy of the
+        /// Directive 1999/93/EC era, which ETSI TS 119 615 PRO-4.4.4-33 reads.
+        /// </summary>
+        public const string QcpPublic = "0.4.0.1456.1.2";
+
+        /// <summary>
+        /// OID for the ETSI TS 101 456 <c>QCP+</c> (qcp-public-with-sscd) qualified certificate policy of
+        /// the Directive 1999/93/EC era, which ETSI TS 119 615 PRO-4.4.4-33 and PRO-4.5.4-03 read.
+        /// </summary>
+        public const string QcpPublicWithSscd = "0.4.0.1456.1.1";
+
 
         //The DER value bytes (the content after the 0x06 OBJECT IDENTIFIER tag and length) of the OIDs
         //above, for callers that compare against an OID parsed from a DER structure (e.g. a
