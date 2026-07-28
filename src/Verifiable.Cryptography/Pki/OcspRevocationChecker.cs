@@ -146,11 +146,13 @@ public sealed class OcspRevocationChecker
         }
         catch(InvalidOperationException)
         {
-            //A byKey responderID needs the SHA-1 digest seam (CryptographicKeyEvents.ComputeDigest under the
-            //SHA1 qualifier) to compare against the candidate's key hash; a composition that never registered
-            //it cannot resolve that comparison. CheckCertificateRevocationStatusAsyncDelegate's contract is to
-            //return a status rather than throw, so a missing registration fails closed to Unknown exactly like
-            //an unreachable responder, rather than escaping as a raw registry exception.
+            //A byKey responderID needs the registered async digest seam (CryptographicKeyEvents.ComputeDigestAsync's
+            //default ComputeDigestDelegate, dispatched by the SHA-1 Tag — see OcspResponseVerification's
+            //Sha1DigestTag remarks) to compare against the candidate's key hash; a composition that never
+            //registered a default ComputeDigestDelegate cannot resolve that comparison.
+            //CheckCertificateRevocationStatusAsyncDelegate's contract is to return a status rather than throw,
+            //so a missing registration fails closed to Unknown exactly like an unreachable responder, rather
+            //than escaping as a raw registry exception.
             return CertificateRevocationStatus.Unknown;
         }
     }
@@ -169,7 +171,7 @@ public sealed class OcspRevocationChecker
     private async ValueTask<CertificateRevocationStatus?> CheckAgainstResponderAsync(
         PkiCertificateMemory certificate, PkiCertificateMemory issuer, string responderUri, DateTimeOffset validationTime, MemoryPool<byte> pool, CancellationToken cancellationToken)
     {
-        using OcspRequestContent request = OcspRequests.Create(certificate, issuer, CertIdDigestAlgorithm, pool, NonceByteLength, IncludeNonce);
+        using OcspRequestContent request = await OcspRequests.CreateAsync(certificate, issuer, CertIdDigestAlgorithm, pool, NonceByteLength, IncludeNonce, cancellationToken).ConfigureAwait(false);
         var fetchContext = new OcspFetchContext { ResponderUri = responderUri, Request = request.Request };
 
         PkiCertificateMemory? response = await FetchResponse(fetchContext, pool, cancellationToken).ConfigureAwait(false);

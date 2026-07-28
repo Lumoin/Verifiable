@@ -3,6 +3,8 @@ using System.Buffers;
 using System.Diagnostics;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
+using System.Threading;
+using System.Threading.Tasks;
 using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Cryptography.Pki;
@@ -31,7 +33,7 @@ public enum OcspCertIdDigestAlgorithm
 
 
 /// <summary>
-/// An OCSP request built by <see cref="OcspRequests.Create"/>: the DER-encoded request bytes and, when the
+/// An OCSP request built by <see cref="OcspRequests.CreateAsync"/>: the DER-encoded request bytes and, when the
 /// request carries one, the nonce (RFC 9654 §2.1) it must be matched against on the response.
 /// </summary>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -42,7 +44,7 @@ public sealed class OcspRequestContent: IDisposable
 
     /// <summary>
     /// Gets the nonce this request carries in its <c>requestExtensions</c>, or <see langword="null"/> when
-    /// <see cref="OcspRequests.Create"/> was called with <c>includeNonce: false</c>. Owned by this instance;
+    /// <see cref="OcspRequests.CreateAsync"/> was called with <c>includeNonce: false</c>. Owned by this instance;
     /// its bytes were already consumed (<see cref="Nonce.UseNonce"/>) to embed them in <see cref="Request"/>,
     /// so a later comparison against a response reads <see cref="Nonce.AsReadOnlySpan"/> directly rather than
     /// calling <see cref="Nonce.UseNonce"/> a second time.
@@ -81,6 +83,14 @@ public sealed class OcspRequestContent: IDisposable
 /// certificate library and no HTTP client: the library ships the request format, the caller (via
 /// <see cref="FetchOcspResponseAsyncDelegate"/>) ships the transport.
 /// </summary>
+/// <remarks>
+/// The <c>issuerNameHash</c>/<c>issuerKeyHash</c> digests are computed through <see cref="CryptographicKeyEvents"/>'s
+/// async digest seam (<c>ComputeDigestAsync</c>) rather than the synchronous one: composability, not I/O,
+/// motivates the choice — a caller that composes an OCSP request into a larger async pipeline (chain building,
+/// revocation checking) never has to special-case a sync call in the middle of it. A backend that completes
+/// synchronously (as the registered Microsoft SHA backend does) makes the returned <see cref="ValueTask{TResult}"/>
+/// nearly free; a future hardware- or service-backed digest composes here with no signature change.
+/// </remarks>
 public static class OcspRequests
 {
     /// <summary>The RFC 9654 §2.1 <c>Nonce ::= OCTET STRING (SIZE(1..128))</c> lower bound.</summary>
@@ -95,10 +105,12 @@ public static class OcspRequests
     /// <summary>The SHA-256 digest output length in bytes (FIPS 180-4).</summary>
     private const int Sha256DigestByteLength = 32;
 
-    /// <summary>The qualifier the SHA-1 sync hash function is registered under (see <c>CryptoProviderStartup</c>); the convenience digest tags in <see cref="CryptoTags"/> omit SHA-1 by design, mirroring the eMRTD BAC idiom.</summary>
-    private const string Sha1Qualifier = nameof(HashAlgorithmName.SHA1);
-
-    /// <summary>The SHA-1 digest tag — composed inline because <see cref="CryptoTags"/> omits SHA-1 by design.</summary>
+    /// <summary>
+    /// The SHA-1 digest tag — composed inline because <see cref="CryptoTags"/> omits SHA-1 by design. Carries
+    /// no qualifier: the registered <see cref="ComputeDigestDelegate"/> default (<c>MicrosoftCryptographicFunctions.ComputeDigestAsync</c>)
+    /// dispatches the algorithm from the <see cref="HashAlgorithmName"/> this tag carries, mirroring the eMRTD
+    /// BAC idiom (<c>BasicAccessControl.ComputeSha1Async</c>).
+    /// </summary>
     private static Tag Sha1DigestTag { get; } = Tag.Create(HashAlgorithmName.SHA1).With(Purpose.Digest).With(EncodingScheme.Raw);
 
     /// <summary>The nonce tag for an OCSP request's <c>id-pkix-ocsp-nonce</c> extension value.</summary>
@@ -122,17 +134,19 @@ public static class OcspRequests
     /// a caller opt-out via <see langword="false"/>, not the default — a request without a nonce cannot
     /// itself detect a replayed response.
     /// </param>
+    /// <param name="cancellationToken">A cancellation token observed by the <c>issuerNameHash</c>/<c>issuerKeyHash</c> digest computations.</param>
     /// <returns>The built request and, when requested, the nonce it carries. The caller owns and disposes it.</returns>
     /// <exception cref="ArgumentException">When <paramref name="certificate"/> or <paramref name="issuerCertificate"/> does not carry an X.509 certificate.</exception>
     /// <exception cref="ArgumentOutOfRangeException">When <paramref name="nonceByteLength"/> is outside RFC 9654 §2.1's <c>SIZE(1..128)</c>.</exception>
     /// <exception cref="AsnContentException">When either certificate is not a well-formed DER-encoded RFC 5280 certificate.</exception>
-    public static OcspRequestContent Create(
+    public static async ValueTask<OcspRequestContent> CreateAsync(
         PkiCertificateMemory certificate,
         PkiCertificateMemory issuerCertificate,
         OcspCertIdDigestAlgorithm certIdDigestAlgorithm,
         MemoryPool<byte> pool,
         int nonceByteLength = 32,
-        bool includeNonce = true)
+        bool includeNonce = true,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(certificate);
         ArgumentNullException.ThrowIfNull(issuerCertificate);
@@ -152,10 +166,12 @@ public static class OcspRequests
 
         (ReadOnlyMemory<byte> issuerSubjectNameDer, ReadOnlyMemory<byte> issuerPublicKeyBits) = ReadIssuerCertIdInputs(issuerCertificate);
         ReadOnlyMemory<byte> serialNumber = ReadSerialNumber(certificate);
-        (Tag digestTag, string? digestQualifier, int digestLength, string hashAlgorithmOid, bool writeNullParameters) = ResolveDigest(certIdDigestAlgorithm);
+        (Tag digestTag, int digestLength, string hashAlgorithmOid, bool writeNullParameters) = ResolveDigest(certIdDigestAlgorithm);
 
-        using DigestValue issuerNameHash = CryptographicKeyEvents.ComputeDigest(issuerSubjectNameDer.Span, digestLength, digestTag, pool, digestQualifier);
-        using DigestValue issuerKeyHash = CryptographicKeyEvents.ComputeDigest(issuerPublicKeyBits.Span, digestLength, digestTag, pool, digestQualifier);
+        using DigestValue issuerNameHash = await CryptographicKeyEvents.ComputeDigestAsync(
+            issuerSubjectNameDer, digestLength, digestTag, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+        using DigestValue issuerKeyHash = await CryptographicKeyEvents.ComputeDigestAsync(
+            issuerPublicKeyBits, digestLength, digestTag, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         Nonce? nonce = includeNonce
             ? CryptographicKeyEvents.GenerateNonce(nonceByteLength, OcspRequestNonceTag, pool)
@@ -315,13 +331,14 @@ public static class OcspRequests
 
 
     /// <summary>
-    /// Resolves the <see cref="Tag"/>, sync digest qualifier, output length, <c>AlgorithmIdentifier</c> OID,
-    /// and NULL-parameters convention for a <see cref="OcspCertIdDigestAlgorithm"/>.
+    /// Resolves the <see cref="Tag"/>, output length, <c>AlgorithmIdentifier</c> OID, and NULL-parameters
+    /// convention for a <see cref="OcspCertIdDigestAlgorithm"/>. No qualifier: the async digest seam dispatches
+    /// the algorithm from the <see cref="Tag"/> itself (see <see cref="Sha1DigestTag"/>'s remarks).
     /// </summary>
-    private static (Tag Tag, string? Qualifier, int Length, string HashAlgorithmOid, bool WriteNullParameters) ResolveDigest(OcspCertIdDigestAlgorithm algorithm) => algorithm switch
+    private static (Tag Tag, int Length, string HashAlgorithmOid, bool WriteNullParameters) ResolveDigest(OcspCertIdDigestAlgorithm algorithm) => algorithm switch
     {
-        OcspCertIdDigestAlgorithm.Sha256 => (CryptoTags.Sha256Digest, null, Sha256DigestByteLength, WellKnownOids.Sha256, false),
-        OcspCertIdDigestAlgorithm.Sha1 => (Sha1DigestTag, Sha1Qualifier, Sha1DigestByteLength, WellKnownOids.Sha1, true),
+        OcspCertIdDigestAlgorithm.Sha256 => (CryptoTags.Sha256Digest, Sha256DigestByteLength, WellKnownOids.Sha256, false),
+        OcspCertIdDigestAlgorithm.Sha1 => (Sha1DigestTag, Sha1DigestByteLength, WellKnownOids.Sha1, true),
         _ => throw new ArgumentOutOfRangeException(nameof(algorithm), algorithm, "Unsupported OCSP CertID digest algorithm.")
     };
 }

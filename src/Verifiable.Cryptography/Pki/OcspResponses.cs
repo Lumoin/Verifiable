@@ -182,10 +182,13 @@ public static class OcspResponseVerification
     /// <summary>The only RSA public exponent the registered RSA verification seam supports (RFC 8017), matching the constraint <see cref="ManagedCmsVerification"/> enforces for the same reason.</summary>
     private static ReadOnlySpan<byte> Exponent65537 => [0x01, 0x00, 0x01];
 
-    /// <summary>The qualifier the SHA-1 sync hash function is registered under (see <c>CryptoProviderStartup</c>).</summary>
-    private const string Sha1Qualifier = nameof(HashAlgorithmName.SHA1);
-
-    /// <summary>The SHA-1 digest tag — composed inline because the convenience digest tags in <see cref="CryptoTags"/> omit SHA-1 by design, mirroring the eMRTD BAC idiom.</summary>
+    /// <summary>
+    /// The SHA-1 digest tag — composed inline because the convenience digest tags in <see cref="CryptoTags"/>
+    /// omit SHA-1 by design. Carries no qualifier: the registered <see cref="ComputeDigestDelegate"/> default
+    /// (<c>MicrosoftCryptographicFunctions.ComputeDigestAsync</c>) dispatches the algorithm from the
+    /// <see cref="HashAlgorithmName"/> this tag carries, mirroring the eMRTD BAC idiom
+    /// (<c>BasicAccessControl.ComputeSha1Async</c>).
+    /// </summary>
     private static Tag Sha1DigestTag { get; } = Tag.Create(HashAlgorithmName.SHA1).With(Purpose.Digest).With(EncodingScheme.Raw);
 
 
@@ -195,7 +198,7 @@ public static class OcspResponseVerification
     /// (<c>CertID</c> and nonce), and the validity time window.
     /// </summary>
     /// <param name="response">The DER-encoded <c>OCSPResponse</c>, tagged <see cref="PkiCertificateTags.OcspResponse"/>.</param>
-    /// <param name="request">The request this response is answering, from <see cref="OcspRequests.Create"/>.</param>
+    /// <param name="request">The request this response is answering, from <see cref="OcspRequests.CreateAsync"/>.</param>
     /// <param name="issuerCertificate">The target certificate's issuer — the direct signer, or the issuer of a delegated OCSP responder certificate.</param>
     /// <param name="validationTime">The instant at which the response's validity window is evaluated.</param>
     /// <param name="pool">The memory pool for every allocation this call performs.</param>
@@ -294,13 +297,13 @@ public static class OcspResponseVerification
 
         ParsedBasicResponse basic = ParseBasicResponse(basicResponseBytes.Value);
 
-        ManagedCertificate? signer = ResponderIdMatches(issuer, basic.ResponderName, basic.ResponderKeyHash, pool)
+        ManagedCertificate? signer = await ResponderIdMatches(issuer, basic.ResponderName, basic.ResponderKeyHash, pool, cancellationToken).ConfigureAwait(false)
             ? issuer
             : null;
 
         if(signer is null)
         {
-            List<ManagedCertificate> identityMatches = FindMatchingIdentities(basic.EmbeddedCertificates, basic.ResponderName, basic.ResponderKeyHash, pool);
+            List<ManagedCertificate> identityMatches = await FindMatchingIdentities(basic.EmbeddedCertificates, basic.ResponderName, basic.ResponderKeyHash, pool, cancellationToken).ConfigureAwait(false);
             if(identityMatches.Count == 0)
             {
                 return BuildResult(OcspResponseVerificationOutcome.ResponderNotAuthorized, responseStatus, null);
@@ -770,7 +773,7 @@ public static class OcspResponseVerification
     /// Reads the request carrier's own <c>reqCert CertID</c> fields
     /// (<see href="https://www.rfc-editor.org/rfc/rfc6960#section-4.1.1">RFC 6960 §4.1.1</see>), for the
     /// request/response matching step. The request carrier is bytes this library minted
-    /// (<see cref="OcspRequests.Create"/>), so this reads the exact shape that method writes: no
+    /// (<see cref="OcspRequests.CreateAsync"/>), so this reads the exact shape that method writes: no
     /// <c>version</c>, an optional <c>requestorName</c> (tolerated though never written), exactly one
     /// <c>Request</c>.
     /// </summary>
@@ -801,9 +804,18 @@ public static class OcspResponseVerification
     /// <summary>
     /// Reports whether <paramref name="candidate"/>'s identity (subject Name, or SHA-1 of its public key)
     /// matches a <c>ResponderID</c>'s <c>byName</c> or <c>byKey</c> choice
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc6960#section-4.2.1">RFC 6960 §4.2.1</see>).
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6960#section-4.2.1">RFC 6960 §4.2.1</see>). The
+    /// <c>byKey</c> arm awaits the async digest seam (see <see cref="Sha1DigestTag"/>'s remarks), so this is
+    /// itself async even though the <c>byName</c> arm never suspends.
     /// </summary>
-    private static bool ResponderIdMatches(ManagedCertificate candidate, ReadOnlyMemory<byte>? responderName, ReadOnlyMemory<byte>? responderKeyHash, MemoryPool<byte> pool)
+    /// <param name="candidate">The certificate whose identity is being matched.</param>
+    /// <param name="responderName">The <c>ResponderID</c>'s <c>byName</c> choice value, or <see langword="null"/>.</param>
+    /// <param name="responderKeyHash">The <c>ResponderID</c>'s <c>byKey</c> choice value, or <see langword="null"/>.</param>
+    /// <param name="pool">The memory pool the <c>byKey</c> arm's digest is rented from.</param>
+    /// <param name="cancellationToken">A cancellation token observed by the <c>byKey</c> arm's digest computation.</param>
+    /// <returns><see langword="true"/> when <paramref name="candidate"/>'s identity matches.</returns>
+    private static async ValueTask<bool> ResponderIdMatches(
+        ManagedCertificate candidate, ReadOnlyMemory<byte>? responderName, ReadOnlyMemory<byte>? responderKeyHash, MemoryPool<byte> pool, CancellationToken cancellationToken)
     {
         if(responderName is { } name)
         {
@@ -812,8 +824,8 @@ public static class OcspResponseVerification
 
         if(responderKeyHash is { } keyHash)
         {
-            using DigestValue candidateKeyHash = CryptographicKeyEvents.ComputeDigest(
-                candidate.SubjectPublicKeyBitStringContent.Span, Sha1DigestByteLength, Sha1DigestTag, pool, Sha1Qualifier);
+            using DigestValue candidateKeyHash = await CryptographicKeyEvents.ComputeDigestAsync(
+                candidate.SubjectPublicKeyBitStringContent, Sha1DigestByteLength, Sha1DigestTag, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             return candidateKeyHash.AsReadOnlySpan().SequenceEqual(keyHash.Span);
         }
@@ -827,13 +839,19 @@ public static class OcspResponseVerification
     /// empty when none does. More than one candidate can match — <c>certs</c> is unsigned (RFC 6960 §4.2.1), so
     /// the caller must try each match rather than trusting the first.
     /// </summary>
-    private static List<ManagedCertificate> FindMatchingIdentities(
-        IReadOnlyList<ManagedCertificate> embeddedCertificates, ReadOnlyMemory<byte>? responderName, ReadOnlyMemory<byte>? responderKeyHash, MemoryPool<byte> pool)
+    /// <param name="embeddedCertificates">The candidates to test, in certificate order.</param>
+    /// <param name="responderName">The <c>ResponderID</c>'s <c>byName</c> choice value, or <see langword="null"/>.</param>
+    /// <param name="responderKeyHash">The <c>ResponderID</c>'s <c>byKey</c> choice value, or <see langword="null"/>.</param>
+    /// <param name="pool">The memory pool a <c>byKey</c> match's digest is rented from.</param>
+    /// <param name="cancellationToken">A cancellation token observed by each candidate's digest computation.</param>
+    /// <returns>The matching candidates, in certificate order; empty when none match.</returns>
+    private static async ValueTask<List<ManagedCertificate>> FindMatchingIdentities(
+        IReadOnlyList<ManagedCertificate> embeddedCertificates, ReadOnlyMemory<byte>? responderName, ReadOnlyMemory<byte>? responderKeyHash, MemoryPool<byte> pool, CancellationToken cancellationToken)
     {
         List<ManagedCertificate> matches = [];
         foreach(ManagedCertificate candidate in embeddedCertificates)
         {
-            if(ResponderIdMatches(candidate, responderName, responderKeyHash, pool))
+            if(await ResponderIdMatches(candidate, responderName, responderKeyHash, pool, cancellationToken).ConfigureAwait(false))
             {
                 matches.Add(candidate);
             }

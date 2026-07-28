@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using Org.BouncyCastle.Asn1.Ocsp;
 using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Ocsp;
@@ -25,6 +26,9 @@ internal sealed class OcspRequestsTests
     /// <summary>The default minted validity end.</summary>
     private static DateTimeOffset NotAfter { get; } = new(2034, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
+    /// <summary>The MSTest context, carrying the cancellation token every asynchronous call observes.</summary>
+    public required TestContext TestContext { get; set; }
+
 
     /// <summary>
     /// A SHA-256 <c>CertID</c> request: the independent oracle confirms the issuer/serial match and that
@@ -32,14 +36,14 @@ internal sealed class OcspRequestsTests
     /// <see href="https://www.rfc-editor.org/rfc/rfc5754#section-2">RFC 5754 §2</see>.
     /// </summary>
     [TestMethod]
-    public void BuildsASha256CertIdRequestTheOracleMatchesAndDecodesExactly()
+    public async Task BuildsASha256CertIdRequestTheOracleMatchesAndDecodesExactly()
     {
         using MintedCertificate root = OcspTestFixtures.MintRootCa("OCSP Requests Sha256 Root", NotBefore, NotAfter);
         using MintedCertificate leaf = OcspTestFixtures.MintCertificate(root.Certificate, root.Key, "OCSP Requests Sha256 Leaf", NotBefore, NotAfter, []);
         using PkiCertificateMemory certificate = OcspTestFixtures.ToCertificateCarrier(leaf.Certificate);
         using PkiCertificateMemory issuer = OcspTestFixtures.ToCertificateCarrier(root.Certificate);
 
-        using OcspRequestContent request = OcspRequests.Create(certificate, issuer, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared);
+        using OcspRequestContent request = await OcspRequests.CreateAsync(certificate, issuer, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(request.Request.IsOcspRequest, "The built request must carry the OcspRequest tag.");
 
@@ -60,14 +64,14 @@ internal sealed class OcspRequestsTests
 
     /// <summary>A SHA-1 <c>CertID</c> request carries explicit NULL <c>hashAlgorithm</c> parameters, per RFC 3279.</summary>
     [TestMethod]
-    public void BuildsASha1CertIdRequestWithExplicitNullParameters()
+    public async Task BuildsASha1CertIdRequestWithExplicitNullParameters()
     {
         using MintedCertificate root = OcspTestFixtures.MintRootCa("OCSP Requests Sha1 Root", NotBefore, NotAfter);
         using MintedCertificate leaf = OcspTestFixtures.MintCertificate(root.Certificate, root.Key, "OCSP Requests Sha1 Leaf", NotBefore, NotAfter, []);
         using PkiCertificateMemory certificate = OcspTestFixtures.ToCertificateCarrier(leaf.Certificate);
         using PkiCertificateMemory issuer = OcspTestFixtures.ToCertificateCarrier(root.Certificate);
 
-        using OcspRequestContent request = OcspRequests.Create(certificate, issuer, OcspCertIdDigestAlgorithm.Sha1, BaseMemoryPool.Shared);
+        using OcspRequestContent request = await OcspRequests.CreateAsync(certificate, issuer, OcspCertIdDigestAlgorithm.Sha1, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var oracleRequest = new OcspReq(request.Request.AsReadOnlySpan().ToArray());
         CertificateID certId = oracleRequest.GetRequestList()[0].GetCertID();
@@ -79,14 +83,15 @@ internal sealed class OcspRequestsTests
 
     /// <summary>A requested nonce round-trips through the independent oracle's own extension reader.</summary>
     [TestMethod]
-    public void RequestsWithANonceRoundTripThroughTheOracle()
+    public async Task RequestsWithANonceRoundTripThroughTheOracle()
     {
         using MintedCertificate root = OcspTestFixtures.MintRootCa("OCSP Requests Nonce Root", NotBefore, NotAfter);
         using MintedCertificate leaf = OcspTestFixtures.MintCertificate(root.Certificate, root.Key, "OCSP Requests Nonce Leaf", NotBefore, NotAfter, []);
         using PkiCertificateMemory certificate = OcspTestFixtures.ToCertificateCarrier(leaf.Certificate);
         using PkiCertificateMemory issuer = OcspTestFixtures.ToCertificateCarrier(root.Certificate);
 
-        using OcspRequestContent request = OcspRequests.Create(certificate, issuer, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared, nonceByteLength: 24, includeNonce: true);
+        using OcspRequestContent request = await OcspRequests.CreateAsync(
+            certificate, issuer, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared, nonceByteLength: 24, includeNonce: true, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(request.RequestNonce, "A nonce must be present when requested.");
         Assert.AreEqual(24, request.RequestNonce.Length, "The nonce must be exactly the requested length.");
@@ -105,35 +110,35 @@ internal sealed class OcspRequestsTests
 
     /// <summary>The RFC 9654 §2.1 <c>SIZE(1..128)</c> nonce-length bound is enforced regardless of whether a nonce is actually requested.</summary>
     [TestMethod]
-    public void EnforcesTheNonceLengthBoundUnconditionally()
+    public async Task EnforcesTheNonceLengthBoundUnconditionally()
     {
         using MintedCertificate root = OcspTestFixtures.MintRootCa("OCSP Requests Bounds Root", NotBefore, NotAfter);
         using MintedCertificate leaf = OcspTestFixtures.MintCertificate(root.Certificate, root.Key, "OCSP Requests Bounds Leaf", NotBefore, NotAfter, []);
         using PkiCertificateMemory certificate = OcspTestFixtures.ToCertificateCarrier(leaf.Certificate);
         using PkiCertificateMemory issuer = OcspTestFixtures.ToCertificateCarrier(root.Certificate);
 
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(
-            () => OcspRequests.Create(certificate, issuer, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared, nonceByteLength: 0),
-            "A zero-length nonce is below the RFC 9654 §2.1 SIZE(1..128) lower bound.");
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(
-            () => OcspRequests.Create(certificate, issuer, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared, nonceByteLength: 129),
-            "A 129-byte nonce is above the RFC 9654 §2.1 SIZE(1..128) upper bound.");
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(
-            () => OcspRequests.Create(certificate, issuer, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared, nonceByteLength: 0, includeNonce: false),
-            "The nonce length is validated unconditionally, even when includeNonce is false.");
+        await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
+            async () => await OcspRequests.CreateAsync(certificate, issuer, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared, nonceByteLength: 0, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false),
+            "A zero-length nonce is below the RFC 9654 §2.1 SIZE(1..128) lower bound.").ConfigureAwait(false);
+        await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
+            async () => await OcspRequests.CreateAsync(certificate, issuer, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared, nonceByteLength: 129, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false),
+            "A 129-byte nonce is above the RFC 9654 §2.1 SIZE(1..128) upper bound.").ConfigureAwait(false);
+        await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
+            async () => await OcspRequests.CreateAsync(certificate, issuer, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared, nonceByteLength: 0, includeNonce: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false),
+            "The nonce length is validated unconditionally, even when includeNonce is false.").ConfigureAwait(false);
     }
 
 
     /// <summary>With <c>includeNonce: false</c> the request carries no <c>requestExtensions</c> block at all.</summary>
     [TestMethod]
-    public void OmittingTheNonceOmitsRequestExtensionsEntirely()
+    public async Task OmittingTheNonceOmitsRequestExtensionsEntirely()
     {
         using MintedCertificate root = OcspTestFixtures.MintRootCa("OCSP Requests No Nonce Root", NotBefore, NotAfter);
         using MintedCertificate leaf = OcspTestFixtures.MintCertificate(root.Certificate, root.Key, "OCSP Requests No Nonce Leaf", NotBefore, NotAfter, []);
         using PkiCertificateMemory certificate = OcspTestFixtures.ToCertificateCarrier(leaf.Certificate);
         using PkiCertificateMemory issuer = OcspTestFixtures.ToCertificateCarrier(root.Certificate);
 
-        using OcspRequestContent request = OcspRequests.Create(certificate, issuer, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared, includeNonce: false);
+        using OcspRequestContent request = await OcspRequests.CreateAsync(certificate, issuer, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared, includeNonce: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNull(request.RequestNonce, "No nonce carrier is produced when includeNonce is false.");
 

@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -44,7 +45,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task CaSignedGoodResponseVerifies()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory response = OcspTestFixtures.MintOcspResponse(
             scenario.Leaf.Certificate, scenario.Root.Certificate, OcspCertIdDigestAlgorithm.Sha256,
             scenario.Root.Certificate, scenario.Root.Key, responderIdByKey: false, embeddedCertificates: null,
@@ -66,7 +67,7 @@ internal sealed class OcspResponseVerificationTests
     public async Task CaSignedRevokedResponseSurfacesTimeAndReason()
     {
         DateTimeOffset revocationTime = new(2025, 5, 15, 12, 0, 0, TimeSpan.Zero);
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory response = OcspTestFixtures.MintOcspResponse(
             scenario.Leaf.Certificate, scenario.Root.Certificate, OcspCertIdDigestAlgorithm.Sha256,
             scenario.Root.Certificate, scenario.Root.Key, responderIdByKey: false, embeddedCertificates: null,
@@ -86,7 +87,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task CaSignedUnknownResponseVerifies()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory response = OcspTestFixtures.MintOcspResponse(
             scenario.Leaf.Certificate, scenario.Root.Certificate, OcspCertIdDigestAlgorithm.Sha256,
             scenario.Root.Certificate, scenario.Root.Key, responderIdByKey: false, embeddedCertificates: null,
@@ -104,7 +105,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task DelegatedResponderByNameWithEkuVerifies()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using MintedCertificate delegatedResponder = OcspTestFixtures.MintCertificate(
             scenario.Root.Certificate, scenario.Root.Key, "OCSP Verify Delegated ByName", NotBefore, NotAfter, [OcspSigningEkuExtension()]);
         using PkiCertificateMemory response = OcspTestFixtures.MintOcspResponse(
@@ -123,7 +124,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task DelegatedResponderByKeyWithEkuVerifies()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using MintedCertificate delegatedResponder = OcspTestFixtures.MintCertificate(
             scenario.Root.Certificate, scenario.Root.Key, "OCSP Verify Delegated ByKey", NotBefore, NotAfter, [OcspSigningEkuExtension()]);
         using PkiCertificateMemory response = OcspTestFixtures.MintOcspResponse(
@@ -144,7 +145,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task NonSuccessfulEnvelopeStatusesAreNotSuccessful(int oracleStatus, OcspResponseStatus expectedStatus)
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory response = OcspTestFixtures.MintNonSuccessfulOcspResponse(oracleStatus);
 
         OcspResponseVerificationResult result = await OcspResponseVerification.VerifyAsync(
@@ -160,7 +161,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task UnrecognisedResponseTypeIsMalformed()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory response = OcspTestFixtures.BuildResponseWithUnrecognisedResponseType();
 
         OcspResponseVerificationResult result = await OcspResponseVerification.VerifyAsync(
@@ -174,7 +175,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task BitFlippedSignatureIsInvalid()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory goodResponse = OcspTestFixtures.MintOcspResponse(
             scenario.Leaf.Certificate, scenario.Root.Certificate, OcspCertIdDigestAlgorithm.Sha256,
             scenario.Root.Certificate, scenario.Root.Key, responderIdByKey: false, embeddedCertificates: null,
@@ -192,7 +193,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task ResponseSignedByAnUnrelatedKeyIsResponderNotAuthorized()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using MintedCertificate unrelatedRoot = OcspTestFixtures.MintRootCa("OCSP Verify Unrelated Root", NotBefore, NotAfter);
         using PkiCertificateMemory response = OcspTestFixtures.MintOcspResponse(
             scenario.Leaf.Certificate, scenario.Root.Certificate, OcspCertIdDigestAlgorithm.Sha256,
@@ -210,7 +211,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task DelegatedResponderWithoutEkuIsResponderCertificateInvalid()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using MintedCertificate delegatedWithoutEku = OcspTestFixtures.MintCertificate(
             scenario.Root.Certificate, scenario.Root.Key, "OCSP Verify Delegated No EKU", NotBefore, NotAfter, []);
         using PkiCertificateMemory response = OcspTestFixtures.MintOcspResponse(
@@ -231,7 +232,7 @@ internal sealed class OcspResponseVerificationTests
     {
         DateTimeOffset expiredNotBefore = new(2024, 2, 1, 0, 0, 0, TimeSpan.Zero);
         DateTimeOffset expiredNotAfter = new(2024, 6, 1, 0, 0, 0, TimeSpan.Zero);
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using MintedCertificate expiredDelegate = OcspTestFixtures.MintCertificate(
             scenario.Root.Certificate, scenario.Root.Key, "OCSP Verify Expired Delegate", expiredNotBefore, expiredNotAfter, [OcspSigningEkuExtension()]);
         using PkiCertificateMemory response = OcspTestFixtures.MintOcspResponse(
@@ -250,7 +251,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task DifferentSerialNumberCertIdIsUnmatched()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         BcBigInteger differentSerial = OcspTestFixtures.ToBouncyCastleCertificate(scenario.Leaf.Certificate).SerialNumber.Add(BcBigInteger.One);
         using PkiCertificateMemory response = OcspTestFixtures.MintOcspResponse(
             scenario.Leaf.Certificate, scenario.Root.Certificate, OcspCertIdDigestAlgorithm.Sha256,
@@ -268,7 +269,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task MismatchedNonceIsRejected()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using Nonce differentNonce = CryptographicKeyEvents.GenerateNonce(32, Tag.Create(Purpose.Nonce).With(EntropySource.Csprng), BaseMemoryPool.Shared);
         using PkiCertificateMemory response = OcspTestFixtures.MintOcspResponse(
             scenario.Leaf.Certificate, scenario.Root.Certificate, OcspCertIdDigestAlgorithm.Sha256,
@@ -289,7 +290,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task AbsentNonceIsRejectedByDefaultAndAcceptedWithTheOptIn()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory response = OcspTestFixtures.MintOcspResponse(
             scenario.Leaf.Certificate, scenario.Root.Certificate, OcspCertIdDigestAlgorithm.Sha256,
             scenario.Root.Certificate, scenario.Root.Key, responderIdByKey: false, embeddedCertificates: null,
@@ -309,7 +310,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task ValidationBeforeThisUpdateIsStaleOrNotYetValid()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory response = OcspTestFixtures.MintOcspResponse(
             scenario.Leaf.Certificate, scenario.Root.Certificate, OcspCertIdDigestAlgorithm.Sha256,
             scenario.Root.Certificate, scenario.Root.Key, responderIdByKey: false, embeddedCertificates: null,
@@ -326,7 +327,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task ValidationAfterNextUpdateIsStaleOrNotYetValid()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory response = OcspTestFixtures.MintOcspResponse(
             scenario.Leaf.Certificate, scenario.Root.Certificate, OcspCertIdDigestAlgorithm.Sha256,
             scenario.Root.Certificate, scenario.Root.Key, responderIdByKey: false, embeddedCertificates: null,
@@ -346,7 +347,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task AbsentNextUpdateIsRejectedByDefaultAndAcceptedWithTheOptIn()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory response = OcspTestFixtures.MintOcspResponse(
             scenario.Leaf.Certificate, scenario.Root.Certificate, OcspCertIdDigestAlgorithm.Sha256,
             scenario.Root.Certificate, scenario.Root.Key, responderIdByKey: false, embeddedCertificates: null,
@@ -366,7 +367,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task TrailingDataAfterTheOuterSequenceIsMalformed()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory wellFormed = OcspTestFixtures.MintOcspResponse(
             scenario.Leaf.Certificate, scenario.Root.Certificate, OcspCertIdDigestAlgorithm.Sha256,
             scenario.Root.Certificate, scenario.Root.Key, responderIdByKey: false, embeddedCertificates: null,
@@ -385,7 +386,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task TrailingDataInsideTbsResponseDataIsMalformed()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory malformed = OcspTestFixtures.BuildStructurallyMalformedBasicResponse(trailingDataInTbsResponseData: true, misTaggedCertsBlock: false);
 
         OcspResponseVerificationResult result = await OcspResponseVerification.VerifyAsync(
@@ -399,7 +400,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task MisTaggedCertsBlockIsMalformed()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory malformed = OcspTestFixtures.BuildStructurallyMalformedBasicResponse(trailingDataInTbsResponseData: false, misTaggedCertsBlock: true);
 
         OcspResponseVerificationResult result = await OcspResponseVerification.VerifyAsync(
@@ -417,7 +418,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task DelegatedResponderDecoyDoesNotVetoALaterAuthorisedCandidate()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using MintedCertificate unrelatedRoot = OcspTestFixtures.MintRootCa("OCSP Verify Decoy Root", NotBefore, NotAfter);
         using MintedCertificate decoy = OcspTestFixtures.MintCertificate(
             unrelatedRoot.Certificate, unrelatedRoot.Key, "OCSP Verify Shared Responder Name", NotBefore, NotAfter, []);
@@ -444,7 +445,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task DelegatedResponderIssuedByAForeignCaWithEkuInWindowIsResponderCertificateInvalid()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using MintedCertificate foreignRoot = OcspTestFixtures.MintRootCa("OCSP Verify Foreign Root", NotBefore, NotAfter);
         using MintedCertificate foreignDelegate = OcspTestFixtures.MintCertificate(
             foreignRoot.Certificate, foreignRoot.Key, "OCSP Verify Foreign Delegate", NotBefore, NotAfter, [OcspSigningEkuExtension()]);
@@ -465,7 +466,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task EmbeddedCertificateWithTrailingDataInsideItsOuterSequenceIsMalformed()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory malformed = OcspTestFixtures.BuildResponseWithMalformedEmbeddedCertificate();
 
         OcspResponseVerificationResult result = await OcspResponseVerification.VerifyAsync(
@@ -491,7 +492,8 @@ internal sealed class OcspResponseVerificationTests
             using PkiCertificateMemory issuer = OcspTestFixtures.ToCertificateCarrier(forgedExponentRoot);
             using MintedCertificate leaf = OcspTestFixtures.MintRootCa("OCSP Verify RSA Leaf Stand-In", NotBefore, NotAfter);
             using PkiCertificateMemory leafCarrier = OcspTestFixtures.ToCertificateCarrier(leaf.Certificate);
-            using OcspRequestContent request = OcspRequests.Create(leafCarrier, issuer, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared, includeNonce: false);
+            using OcspRequestContent request = await OcspRequests.CreateAsync(
+                leafCarrier, issuer, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared, includeNonce: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
             using PkiCertificateMemory response = OcspTestFixtures.MintOcspResponseRsaSigned(
                 leaf.Certificate, forgedExponentRoot, forgedExponentRoot, rsaRootKey, OcspCertificateStatus.Good, ThisUpdate, NextUpdate);
 
@@ -513,7 +515,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task TrailingBytesInsideTheEcdsaSignatureAreRejected()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         PkiCertificateMemory wellFormed = OcspTestFixtures.MintOcspResponse(
             scenario.Leaf.Certificate, scenario.Root.Certificate, OcspCertIdDigestAlgorithm.Sha256,
             scenario.Root.Certificate, scenario.Root.Key, responderIdByKey: false, embeddedCertificates: null,
@@ -532,7 +534,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task TrailingDataInsideTheNonceExtensionValueIsMalformed()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory malformed = OcspTestFixtures.BuildResponseWithMalformedNonceExtension();
 
         OcspResponseVerificationResult result = await OcspResponseVerification.VerifyAsync(
@@ -550,7 +552,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task ReEncodedCertIdWithExplicitNullHashParametersStillMatches()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         var sha256WithExplicitNull = new Org.BouncyCastle.Asn1.X509.AlgorithmIdentifier(
             new Org.BouncyCastle.Asn1.DerObjectIdentifier(WellKnownOids.Sha256), Org.BouncyCastle.Asn1.DerNull.Instance);
         using PkiCertificateMemory response = OcspTestFixtures.MintOcspResponse(
@@ -571,7 +573,7 @@ internal sealed class OcspResponseVerificationTests
     [TestMethod]
     public async Task ExtraUnrelatedSingleResponseIsTolerated()
     {
-        using OcspVerificationScenario scenario = BuildScenario();
+        using OcspVerificationScenario scenario = await BuildScenarioAsync(TestContext.CancellationToken).ConfigureAwait(false);
         BcBigInteger unrelatedSerial = OcspTestFixtures.ToBouncyCastleCertificate(scenario.Leaf.Certificate).SerialNumber.Add(BcBigInteger.ValueOf(12345));
         using PkiCertificateMemory response = OcspTestFixtures.MintOcspResponse(
             scenario.Leaf.Certificate, scenario.Root.Certificate, OcspCertIdDigestAlgorithm.Sha256,
@@ -598,9 +600,10 @@ internal sealed class OcspResponseVerificationTests
 
 
     /// <summary>Builds the Root CA, target leaf (with an AIA extension so the shape mirrors production use), and a default nonce-carrying request against it.</summary>
+    /// <param name="cancellationToken">A cancellation token observed by the request-building digest computation.</param>
     /// <returns>The scenario; the caller disposes it.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of every minted certificate and carrier transfers to the returned OcspVerificationScenario, which the caller disposes; the nested try/catch disposes already-minted parts if a later step throws.")]
-    private static OcspVerificationScenario BuildScenario()
+    private static async ValueTask<OcspVerificationScenario> BuildScenarioAsync(CancellationToken cancellationToken)
     {
         MintedCertificate root = OcspTestFixtures.MintRootCa("OCSP Verify Root", NotBefore, NotAfter);
         try
@@ -614,7 +617,8 @@ internal sealed class OcspResponseVerificationTests
                     PkiCertificateMemory issuer = OcspTestFixtures.ToCertificateCarrier(root.Certificate);
                     try
                     {
-                        OcspRequestContent request = OcspRequests.Create(certificate, issuer, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared);
+                        OcspRequestContent request = await OcspRequests.CreateAsync(
+                            certificate, issuer, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared, cancellationToken: cancellationToken).ConfigureAwait(false);
 
                         return new OcspVerificationScenario(root, leaf, certificate, issuer, request);
                     }
