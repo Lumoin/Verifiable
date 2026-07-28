@@ -73,6 +73,24 @@ namespace Verifiable.Cryptography
         public const string KeyUsageExtension = "2.5.29.15";
 
         /// <summary>
+        /// OID for the X.509 Certificate Policies certificate extension (id-ce-certificatePolicies)
+        /// per RFC 5280 §4.2.1.4.
+        /// </summary>
+        public const string CertificatePoliciesExtension = "2.5.29.32";
+
+        /// <summary>
+        /// OID for the X.509 Extended Key Usage certificate extension (id-ce-extKeyUsage)
+        /// per RFC 5280 §4.2.1.12.
+        /// </summary>
+        public const string ExtendedKeyUsageExtension = "2.5.29.37";
+
+        /// <summary>
+        /// OID for the Qualified Certificate Statements certificate extension (id-pe-qcStatements)
+        /// per RFC 3739 §3.2.6, the extension carrying the ETSI EN 319 412-5 statements below.
+        /// </summary>
+        public const string QcStatementsExtension = "1.3.6.1.5.5.7.1.3";
+
+        /// <summary>
         /// OID for the X.520 Organizational Unit Name attribute type (organizationalUnitName) per
         /// RFC 5280 §4.1.2.4, used in a certificate's Subject or Issuer distinguished name.
         /// </summary>

@@ -17,7 +17,8 @@ namespace Verifiable.Cryptography.Pki;
 /// from the certificate with whatever X.509 machinery it composes (the certificate bytes themselves travel
 /// separately as <see cref="PkiCertificateMemory"/> for the service-matching seam), keeping the procedures
 /// free of any certificate-library dependency, in the same way <see cref="X509CertificateProfile"/> keeps
-/// profile enforcement backend-neutral.
+/// profile enforcement backend-neutral. <see cref="QualifiedCertificateFactsExtractor"/> is the in-library
+/// population, reading the facts straight off the certificate DER.
 /// </summary>
 [DebuggerDisplay("QualifiedCertificateFacts: issuer C={IssuerCountryCode}, QcCompliance={HasQcCompliance}, QcTypes={QcTypes.Count}")]
 public sealed record QualifiedCertificateFacts
