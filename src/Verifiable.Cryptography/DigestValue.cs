@@ -135,25 +135,23 @@ public sealed class DigestValue: SensitiveMemory, IEquatable<DigestValue>
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(outputByteLength, 0);
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);
-        AssertHousePool(pool);
 
         IMemoryOwner<byte> owner = pool.Rent(outputByteLength);
-        hashFunction(input, owner.Memory.Span);
-
-        return new DigestValue(owner, tag, lifetime);
 
         //Length derives from the rented owner's Memory.Length without slicing (see Length above), so a
         //pool whose rentals are not exact-length (e.g. System.Buffers.MemoryPool<byte>.Shared, which rounds
-        //up to a power-of-two bucket) silently produces an over-long digest. This assert turns a foreign
-        //pool arriving as a parameter into a debug-time failure instead of a wire-visible defect; compiled
-        //out in Release builds.
-        [Conditional("DEBUG")]
-        static void AssertHousePool(MemoryPool<byte> candidate)
-        {
-            Debug.Assert(candidate is BaseMemoryPool,
-                "DigestValue.Compute requires a Lumoin.Base.BaseMemoryPool (BaseMemoryPool.Shared or a " +
-                "custom house-configured instance) for exact-length rentals.");
-        }
+        //up to a power-of-two bucket) silently produces an over-long digest. Asserting the rental itself —
+        //rather than the pool's concrete type — checks the invariant directly, so an exact-length
+        //delegating pool (for example a test pool observing dispose-time zeroing over BaseMemoryPool.Shared)
+        //remains usable while a bucketing pool still fails at debug time instead of producing a
+        //wire-visible defect. Compiled out in Release builds.
+        Debug.Assert(owner.Memory.Length == outputByteLength,
+            "DigestValue.Compute requires exact-length rentals (BaseMemoryPool.Shared, a custom " +
+            "house-configured instance, or a pool delegating to one); the rented buffer length " +
+            "must equal the requested digest length.");
+        hashFunction(input, owner.Memory.Span);
+
+        return new DigestValue(owner, tag, lifetime);
     }
 
 

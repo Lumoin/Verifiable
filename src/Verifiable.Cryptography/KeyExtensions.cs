@@ -283,20 +283,26 @@ public static class KeyExtensions
 
 
     /// <summary>
-    /// Asserts, in DEBUG builds only, that <paramref name="candidate"/> is the house
-    /// <see cref="BaseMemoryPool"/> family. <see cref="Signature"/> and <see cref="HmacValue"/> derive their
-    /// <c>Length</c> from the rented owner's <c>Memory.Length</c> without slicing, so a pool whose rentals are
-    /// not exact-length (e.g. <see cref="MemoryPool{T}.Shared"/>, which rounds up to a power-of-two bucket)
-    /// silently produces an over-long carrier. This catches a foreign pool arriving as a caller-supplied
-    /// parameter — the one case the <c>BannedSymbols.txt</c> compile-time ban cannot see — as a debug-time
-    /// failure instead of a wire-visible defect. Compiled out in Release builds.
+    /// Asserts, in DEBUG builds only, that <paramref name="candidate"/> returns exact-length rentals.
+    /// <see cref="Signature"/> and <see cref="HmacValue"/> derive their <c>Length</c> from the rented
+    /// owner's <c>Memory.Length</c> without slicing, so a pool whose rentals are not exact-length
+    /// (e.g. <see cref="MemoryPool{T}.Shared"/>, which rounds up to a power-of-two bucket) silently produces
+    /// an over-long carrier. Probing a rental checks that invariant directly rather than the pool's concrete
+    /// type, so an exact-length delegating pool (for example a test pool observing dispose-time zeroing over
+    /// <see cref="BaseMemoryPool.Shared"/>) remains usable while a bucketing pool arriving as a
+    /// caller-supplied parameter — the one case the <c>BannedSymbols.txt</c> compile-time ban cannot see —
+    /// still fails at debug time instead of producing a wire-visible defect. Compiled out in Release builds.
     /// </summary>
     /// <param name="candidate">The pool passed by the caller at one of this class's public entry points.</param>
     [Conditional("DEBUG")]
     private static void AssertHousePool(MemoryPool<byte> candidate)
     {
-        Debug.Assert(candidate is BaseMemoryPool,
-            "The memory pool must be Lumoin.Base.BaseMemoryPool (BaseMemoryPool.Shared, or a custom " +
-            "house-configured instance) for the exact-length rentals Signature and HmacValue depend on.");
+        //An odd, non-bucket probe length: any power-of-two-bucketing pool must round it up and fail.
+        const int ProbeLength = 3;
+        using IMemoryOwner<byte> probe = candidate.Rent(ProbeLength);
+        Debug.Assert(probe.Memory.Length == ProbeLength,
+            "The memory pool must return exact-length rentals (BaseMemoryPool.Shared, a custom " +
+            "house-configured instance, or a pool delegating to one), which Signature and HmacValue " +
+            "depend on for their lengths.");
     }
 }
