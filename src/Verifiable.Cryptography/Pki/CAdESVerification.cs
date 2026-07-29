@@ -46,15 +46,6 @@ public static class CAdESVerification
     /// <summary>The signature-time-stamp-token unsigned attribute (CAdES-T, RFC 3161 / ETSI EN 319 122-1 §5.3).</summary>
     private const string SignatureTimeStampTokenOid = "1.2.840.113549.1.9.16.2.14";
 
-    /// <summary>The SHA-256 hash algorithm object identifier — the default for an ESSCertIDv2 that omits its hash algorithm.</summary>
-    private const string Sha256Oid = "2.16.840.1.101.3.4.2.1";
-
-    /// <summary>The SHA-384 hash algorithm object identifier.</summary>
-    private const string Sha384Oid = "2.16.840.1.101.3.4.2.2";
-
-    /// <summary>The SHA-512 hash algorithm object identifier.</summary>
-    private const string Sha512Oid = "2.16.840.1.101.3.4.2.3";
-
 
     /// <summary>
     /// Verifies a CAdES-B-B signature.
@@ -181,44 +172,27 @@ public static class CAdESVerification
 
         using(timestamp)
         {
-            (string hashOid, byte[] imprint, DateTimeOffset genTime) = ParseTimeStampTokenInfo(timestamp.Content);
-
-            (Tag tag, int length) = DigestForOid(hashOid);
-            if(tag is null)
+            using TimestampTokenInfo tokenInfo = TimestampTokenInfo.Read(timestamp.Content, pool);
+            if(tokenInfo.Status == TimestampTokenInfoStatus.UnsupportedMessageImprintAlgorithm)
             {
                 return (CAdESLevel.Baseline, null, CAdESVerificationStatus.UnsupportedHashAlgorithm);
             }
 
-            using DigestValue computed = await CryptographicKeyEvents.ComputeDigestAsync(
-                signatureValue, length, tag, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
-            if(!computed.AsReadOnlySpan().SequenceEqual(imprint))
+            if(!tokenInfo.IsRead)
+            {
+                //The TSTInfo is not well-formed DER, which is the same Malformed outcome a signed attribute that
+                //does not parse produces.
+                return (CAdESLevel.Baseline, null, CAdESVerificationStatus.Malformed);
+            }
+
+            if(!await tokenInfo.VerifyMessageImprintAsync(signatureValue, pool, cancellationToken).ConfigureAwait(false))
             {
                 //The timestamp does not bind this signature.
                 return (CAdESLevel.Baseline, null, CAdESVerificationStatus.TimestampImprintMismatch);
             }
 
-            return (CAdESLevel.Timestamp, genTime, CAdESVerificationStatus.Valid);
+            return (CAdESLevel.Timestamp, tokenInfo.GenerationTime, CAdESVerificationStatus.Valid);
         }
-    }
-
-
-    /// <summary>
-    /// Parses an RFC 3161 TSTInfo: the message-imprint hash algorithm and value (which binds the timestamped
-    /// data) and the generalised time the token asserts.
-    /// </summary>
-    private static (string HashOid, byte[] Imprint, DateTimeOffset GenTime) ParseTimeStampTokenInfo(ReadOnlyMemory<byte> tstInfo)
-    {
-        AsnReader info = new AsnReader(tstInfo, AsnEncodingRules.DER).ReadSequence();
-        _ = info.ReadInteger();                                        //version
-        _ = info.ReadObjectIdentifier();                              //policy
-        AsnReader messageImprint = info.ReadSequence();
-        AsnReader hashAlgorithm = messageImprint.ReadSequence();
-        string hashOid = hashAlgorithm.ReadObjectIdentifier();
-        byte[] imprint = messageImprint.ReadOctetString();
-        _ = info.ReadInteger();                                        //serialNumber
-        DateTimeOffset genTime = info.ReadGeneralizedTime();
-
-        return (hashOid, imprint, genTime);
     }
 
 
@@ -231,14 +205,14 @@ public static class CAdESVerification
     {
         (string hashOid, byte[] certificateHash) = ParseFirstEssCertId(signingCertificate.AsReadOnlyMemory());
 
-        (Tag tag, int length) = DigestForOid(hashOid);
-        if(tag is null)
+        PkiDigestAlgorithm? algorithm = PkiDigestAlgorithm.FromOid(hashOid);
+        if(algorithm is null)
         {
             return CAdESVerificationStatus.UnsupportedHashAlgorithm;
         }
 
         using DigestValue computed = await CryptographicKeyEvents.ComputeDigestAsync(
-            signerCertificate, length, tag, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+            signerCertificate, algorithm.Value.OutputByteLength, algorithm.Value.DigestTag, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return computed.AsReadOnlySpan().SequenceEqual(certificateHash)
             ? CAdESVerificationStatus.Valid
@@ -259,7 +233,7 @@ public static class CAdESVerification
 
         //hashAlgorithm AlgorithmIdentifier DEFAULT {algorithm id-sha256}: present when the next element is the
         //AlgorithmIdentifier SEQUENCE, omitted (default SHA-256) when the certHash OCTET STRING comes first.
-        string hashOid = Sha256Oid;
+        string hashOid = WellKnownOids.Sha256;
         if(essCertId.PeekTag() == new Asn1Tag(UniversalTagNumber.Sequence, isConstructed: true))
         {
             AsnReader hashAlgorithm = essCertId.ReadSequence();
@@ -305,19 +279,6 @@ public static class CAdESVerification
             return null;
         }
     }
-
-
-    /// <summary>
-    /// Maps a hash-algorithm object identifier to its digest <see cref="Tag"/> and output length, or a
-    /// <see langword="null"/> tag for an unsupported algorithm.
-    /// </summary>
-    private static (Tag Tag, int Length) DigestForOid(string hashOid) => hashOid switch
-    {
-        Sha256Oid => (CryptoTags.Sha256Digest, 32),
-        Sha384Oid => (CryptoTags.Sha384Digest, 48),
-        Sha512Oid => (CryptoTags.Sha512Digest, 64),
-        _ => (null!, 0)
-    };
 }
 
 

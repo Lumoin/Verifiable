@@ -123,6 +123,28 @@ internal sealed class ManagedCertificate
     /// <summary>Gets the certificate's own <c>signatureValue</c> BIT STRING content bytes (RFC 5280 §4.1.1.3).</summary>
     public ReadOnlyMemory<byte> SignatureValue { get; }
 
+    /// <summary>
+    /// Gets the size in bits of the subject public key — the RSA modulus length, or the named curve's field
+    /// size — or <see langword="null"/> when the key algorithm is not one this parse recognises. This is the
+    /// "size of the key, if applicable, used with that algorithm" a cryptographic constraint is stated about
+    /// (ETSI EN 319 102-1 V1.4.1 clause 5.1.4.3).
+    /// </summary>
+    public int? SubjectPublicKeySizeBits => RsaModulus.IsEmpty
+        ? EllipticCurve switch
+        {
+            EllipticCurveTypes.P256 => 256,
+            EllipticCurveTypes.P384 => 384,
+            EllipticCurveTypes.P521 => 521,
+            EllipticCurveTypes.Secp256k1 => 256,
+            EllipticCurveTypes.BrainpoolP224r1 => 224,
+            EllipticCurveTypes.BrainpoolP256r1 => 256,
+            EllipticCurveTypes.BrainpoolP320r1 => 320,
+            EllipticCurveTypes.BrainpoolP384r1 => 384,
+            EllipticCurveTypes.BrainpoolP512r1 => 512,
+            _ => null
+        }
+        : RsaModulus.Length * 8;
+
 
     /// <summary>
     /// Parses the fields the managed CMS and OCSP verifiers need from an encoded certificate.
