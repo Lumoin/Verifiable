@@ -75,6 +75,18 @@ public sealed class PkiCertificateMemory: SensitiveMemory, IEquatable<PkiCertifi
     public bool IsOcspRequest =>
         Tag.Get<PkiObjectKind>() == PkiObjectKind.OcspRequest;
 
+    /// <summary>
+    /// Returns <see langword="true"/> when this object is a DER-encoded RFC 3161 <c>TimeStampReq</c>.
+    /// </summary>
+    public bool IsTimestampRequest =>
+        Tag.Get<PkiObjectKind>() == PkiObjectKind.TimestampRequest;
+
+    /// <summary>
+    /// Returns <see langword="true"/> when this object is a DER-encoded RFC 3161 <c>TimeStampResp</c>.
+    /// </summary>
+    public bool IsTimestampResponse =>
+        Tag.Get<PkiObjectKind>() == PkiObjectKind.TimestampResponse;
+
 
     /// <summary>
     /// Creates a new <see cref="PkiCertificateMemory"/> from owned DER-encoded bytes.

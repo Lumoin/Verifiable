@@ -195,9 +195,24 @@ namespace Verifiable.Cryptography
         /// <summary>
         /// OID for the <c>id-pkix-ocsp-basic</c> response type
         /// (<see href="https://www.rfc-editor.org/rfc/rfc6960#section-4.2.1">RFC 6960 §4.2.1</see>), the
-        /// only <c>ResponseBytes.responseType</c> this library's OCSP client reads.
+        /// only <c>ResponseBytes.responseType</c> this library's OCSP client reads. It types a bare
+        /// <c>BasicOCSPResponse</c>, and is distinct from <see cref="OcspResponseRevocationInfo"/> — the
+        /// two name different structures.
         /// </summary>
         public const string OcspBasicResponseType = "1.3.6.1.5.5.7.48.1.1";
+
+        /// <summary>
+        /// OID for the <c>id-ri-ocsp-response</c> revocation-information format
+        /// (<see href="https://www.rfc-editor.org/rfc/rfc5940#section-2">RFC 5940 §2</see>), which types a
+        /// whole <c>OCSPResponse</c> carried as the <c>other</c> alternative of a CMS <c>RevocationInfoChoice</c>
+        /// (<see href="https://www.rfc-editor.org/rfc/rfc5652#section-10.2.1">RFC 5652 §10.2.1</see>) — the
+        /// placement ETSI EN 319 122-1 clause 5.4.2.2 gives an embedded OCSP response — and, within an
+        /// EN 319 122-1 <c>revocation-values</c> attribute, its <c>otherRevVals</c> field (clause A.1.2.2).
+        /// Only this format is defined by RFC 5940; the pre-RFC-5940 <see cref="OcspBasicResponseType"/>
+        /// (<c>id-pkix-ocsp-basic</c>) instead types a bare <c>BasicOCSPResponse</c>, so a reader accepting an
+        /// embedded OCSP response must recognise both while writing only this one.
+        /// </summary>
+        public const string OcspResponseRevocationInfo = "1.3.6.1.5.5.7.16.2";
 
         /// <summary>
         /// OID for the <c>id-pkix-ocsp-nonce</c> request/response extension

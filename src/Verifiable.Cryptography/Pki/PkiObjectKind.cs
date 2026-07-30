@@ -28,5 +28,11 @@ public enum PkiObjectKind
     TimestampToken = 4,
 
     /// <summary>A DER-encoded OCSP request per RFC 6960.</summary>
-    OcspRequest = 5
+    OcspRequest = 5,
+
+    /// <summary>A DER-encoded RFC 3161 <c>TimeStampReq</c>.</summary>
+    TimestampRequest = 6,
+
+    /// <summary>A DER-encoded RFC 3161 <c>TimeStampResp</c> (the status envelope a Time-Stamping Authority returns, before the embedded token is extracted).</summary>
+    TimestampResponse = 7
 }

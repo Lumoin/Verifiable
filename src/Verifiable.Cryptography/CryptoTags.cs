@@ -600,6 +600,35 @@ public static class CryptoTags
 
 
     /// <summary>
+    /// Tag for the DER wire bytes of a complete CMS <c>Attribute</c> (RFC 5652 §5.3) — the
+    /// <c>attrType</c> object identifier together with its <c>attrValues</c> set, as the single
+    /// <c>SEQUENCE</c> that goes into a <c>SignerInfo</c>'s <c>signedAttrs</c> or <c>unsignedAttrs</c>.
+    /// Distinct from <see cref="CmsSignedAttributeValue"/>, which tags one attribute's value alone.
+    /// </summary>
+    public static Tag CmsEncodedAttribute { get; } = Tag.Create(Purpose.Signature).With(EncodingScheme.Der);
+
+
+    /// <summary>
+    /// Tag for the DER wire bytes of a CMS <c>SignedAttributes</c> set (RFC 5652 §5.3), in either of the
+    /// two forms the standard uses: the <c>[0] IMPLICIT</c> form carried inside a <c>SignerInfo</c>, and
+    /// the universal <c>SET OF</c> form that is the signature input of RFC 5652 §5.4.
+    /// </summary>
+    public static Tag CmsEncodedSignedAttributes { get; } = Tag.Create(Purpose.Signature).With(EncodingScheme.Der);
+
+
+    /// <summary>
+    /// Tag for the DER wire bytes of a bare CMS <c>SignerInfo</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc5652#section-5.3">RFC 5652 §5.3</see>) standing on its own
+    /// rather than inside a <c>SignedData</c> — which is what a <c>countersignature</c> attribute value is
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc5652#section-11.4">RFC 5652 §11.4</see>:
+    /// <c>Countersignature ::= SignerInfo</c>). Distinct from <see cref="CmsEncodedSignedData"/>, which tags a
+    /// whole signature envelope, and from <see cref="CmsEncodedAttribute"/>, which tags the <c>Attribute</c> such
+    /// a <c>SignerInfo</c> is carried in.
+    /// </summary>
+    public static Tag CmsEncodedSignerInfo { get; } = Tag.Create(Purpose.Signature).With(EncodingScheme.Der);
+
+
+    /// <summary>
     /// Tag for P-384 public keys used in ECDH key agreement.
     /// Uncompressed encoding: <c>0x04 || X || Y</c>.
     /// </summary>
@@ -757,7 +786,8 @@ public static class CryptoTags
         BrainpoolP512r1ExchangePublicKey, BrainpoolP512r1ExchangePrivateKey,
         MdocIssuerSignedItemRandom, WireDecodedDisclosureSalt, X509CertificateSerialNumber,
         CoseEncodedSign1, AlgorithmAgnosticSignature, CoseEncodedMac0, CoseEncodedProtectedHeader,
-        CmsEncodedSignedData, CmsSignedAttributeValue,
+        CmsEncodedSignedData, CmsSignedAttributeValue, CmsEncodedAttribute, CmsEncodedSignedAttributes,
+        CmsEncodedSignerInfo,
         Sha256Digest, Sha384Digest, Sha512Digest, Blake3Digest,
         HmacSha256Key, HmacSha384Key, HmacSha512Key,
         HmacSha256Value, HmacSha384Value, HmacSha512Value,

@@ -258,6 +258,55 @@ internal sealed class OcspRevocationCheckerTests
     }
 
 
+    /// <summary>
+    /// The retaining check keeps the very octets the status was decided from, which is what a caller placing
+    /// long-term validation material into a signature needs (ETSI EN 319 122-1 Table 1 requirement o), and
+    /// reports the same status the status-only check does.
+    /// </summary>
+    [TestMethod]
+    public async Task TheRetainingCheckKeepsTheVerifiedResponseTheStatusWasDecidedFrom()
+    {
+        const string responderUri = "http://ocsp.checker.example.test/retained";
+        using OcspCheckerScenario scenario = BuildScenario(responderUri);
+        PkiCertificateMemory response = OcspTestFixtures.MintOcspResponse(
+            scenario.Leaf.Certificate, scenario.Root.Certificate, OcspCertIdDigestAlgorithm.Sha256,
+            scenario.Root.Certificate, scenario.Root.Key, responderIdByKey: false, embeddedCertificates: null,
+            OcspCertificateStatus.Good, ThisUpdate, NextUpdate, echoNonce: null);
+        byte[] answered = response.AsReadOnlySpan().ToArray();
+        using var responder = new MapBackedOcspResponder(new Dictionary<string, PkiCertificateMemory?> { [responderUri] = response });
+        var checker = new OcspRevocationChecker(responder.FetchAsync, includeNonce: false);
+
+        using RetainedOcspResponse retained = await checker.CheckRetainingResponseAsync(
+            scenario.Certificate, [scenario.Issuer], ValidationTime, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(CertificateRevocationStatus.Good, retained.Status, "The retaining check reaches the same conclusion as the status-only one.");
+        Assert.IsNotNull(retained.Response, "A verified response is kept, so its octets can be placed into a signature.");
+        Assert.AreSequenceEqual(answered, retained.Response!.AsReadOnlySpan().ToArray(),
+            "The octets kept are the responder's own answer, unchanged.");
+        Assert.IsTrue(retained.Response!.IsOcspResponse, "The kept carrier is tagged as the OCSP response it is.");
+    }
+
+
+    /// <summary>
+    /// A check that determined nothing keeps nothing: an unreachable responder yields the fail-closed status
+    /// and no octets for a caller to place.
+    /// </summary>
+    [TestMethod]
+    public async Task TheRetainingCheckKeepsNothingWhenNoResponderAnswers()
+    {
+        const string responderUri = "http://ocsp.checker.example.test/retained-unreachable";
+        using OcspCheckerScenario scenario = BuildScenario(responderUri);
+        using var responder = new MapBackedOcspResponder(new Dictionary<string, PkiCertificateMemory?> { [responderUri] = null });
+        var checker = new OcspRevocationChecker(responder.FetchAsync, includeNonce: false);
+
+        using RetainedOcspResponse retained = await checker.CheckRetainingResponseAsync(
+            scenario.Certificate, [scenario.Issuer], ValidationTime, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(CertificateRevocationStatus.Unknown, retained.Status, "An unreachable responder determines nothing.");
+        Assert.IsNull(retained.Response, "Nothing verified, so there is nothing to place.");
+    }
+
+
     /// <summary>Builds a 3-byte payload that is not a well-formed DER structure, tagged as an OCSP response — the "responder returned garbage" fixture.</summary>
     /// <returns>The pooled response carrier; ownership transfers to whichever <see cref="MapBackedOcspResponder"/> map it is placed in.</returns>
     private static PkiCertificateMemory BuildGarbageResponse()

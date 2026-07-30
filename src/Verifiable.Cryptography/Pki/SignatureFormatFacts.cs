@@ -663,6 +663,60 @@ public delegate ValueTask<SignedContentMemory?> StateTimestampCoverageAsyncDeleg
 
 
 /// <summary>
+/// The per-call context a <see cref="StateTimestampProtectsObjectAsyncDelegate"/> implementation receives — one
+/// candidate object of the signature, asked about one time-stamp — so the delegate carries no caller data through
+/// a lambda closure.
+/// </summary>
+/// <remarks>
+/// <strong>Ownership.</strong> Every carrier here is a non-owning reference to memory the validation run owns;
+/// the delegate must not dispose any of it.
+/// </remarks>
+[DebuggerDisplay("TimestampProtectedObjectContext: {Kind} against {Timestamp.Class} from {Timestamp.Identifier}")]
+public sealed record TimestampProtectedObjectContext
+{
+    /// <summary>The signature both the time-stamp and the candidate object are carried in.</summary>
+    public required SignatureFacts Signature { get; init; }
+
+    /// <summary>The embedded time-stamp whose protection of the candidate object is asked about.</summary>
+    public required EmbeddedTimestamp Timestamp { get; init; }
+
+    /// <summary>The candidate object's own encoded octets, as the extracted facts carry them.</summary>
+    public required PkiCertificateMemory Object { get; init; }
+
+    /// <summary>What the candidate object is, which decides where in the format's own coverage statement the answer is looked up.</summary>
+    public required ValidationObjectKind Kind { get; init; }
+}
+
+
+/// <summary>
+/// Decides whether one embedded time-stamp is shown to protect one individual object of the signature — the
+/// object-level reading of "objects ... that are protected by the time-stamp" of step 1) of clause 5.6.2.3 of
+/// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31910201/01.04.01_60/en_31910201v010401p.pdf">
+/// ETSI EN 319 102-1 V1.4.1</see>, which a format specification may state more finely than the per-class
+/// classification of clause 5.6.3.1 does.
+/// </summary>
+/// <param name="context">The signature, the time-stamp, and the one candidate object.</param>
+/// <param name="pool">The memory pool any scratch buffer and any computed digest is rented from.</param>
+/// <param name="cancellationToken">A cancellation token.</param>
+/// <returns>
+/// <see langword="true"/> when the object may be admitted into the set the POE extraction building block derives
+/// proofs for, <see langword="false"/> when the binding shows it is not protected. The delegate reports rather
+/// than throws: the signature is attacker-reachable input, and a binding that cannot decide answers the
+/// fail-closed way for the object in question.
+/// </returns>
+/// <remarks>
+/// This is a narrowing filter, never a widening one: the class-based admission of clause 5.6.3.1 decides which
+/// objects are candidates at all, and a binding that supplies this delegate can only remove candidates the format
+/// specification shows the time-stamp does not in fact protect. A binding that supplies nothing keeps the
+/// per-class admission exactly as it stands.
+/// </remarks>
+public delegate ValueTask<bool> StateTimestampProtectsObjectAsyncDelegate(
+    TimestampProtectedObjectContext context,
+    MemoryPool<byte> pool,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
 /// One base format's binding to the format-neutral validation algorithm: the delegates the building blocks call
 /// instead of knowing the format. A seam bundle of delegates and context records, not an interface.
 /// </summary>
@@ -689,6 +743,21 @@ public sealed record SignatureFormatSeam
     /// time-stamp that protects nothing it can name.
     /// </summary>
     public StateTimestampCoverageAsyncDelegate? StateTimestampCoverage { get; init; }
+
+    /// <summary>
+    /// States, per object, whether a time-stamp embedded in the signature protects it, so that the POE extraction
+    /// building block of clause 5.6.2.3 admits into its set only the objects the format specification shows the
+    /// time-stamp actually covers rather than everything the per-class rule of clause 5.6.3.1 names.
+    /// <see langword="null"/> when the binding states nothing at object granularity, which leaves the per-class
+    /// admission in force exactly as it stands.
+    /// </summary>
+    /// <remarks>
+    /// A format whose archive time-stamps name their protected objects one by one — the <c>ats-hash-index-v3</c>
+    /// of ETSI EN 319 122-1 clause 5.5.2 is one — supplies this so that material appended to a signature
+    /// <em>after</em> an archive time-stamp was applied gains no proof of existence from it. Without it, the
+    /// coarser class rule would grant one, which is a proof of existence nothing in the signature establishes.
+    /// </remarks>
+    public StateTimestampProtectsObjectAsyncDelegate? StateTimestampProtectsObject { get; init; }
 }
 
 

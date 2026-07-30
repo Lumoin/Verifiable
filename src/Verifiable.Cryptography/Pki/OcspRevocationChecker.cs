@@ -2,11 +2,58 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
+
+/// <summary>
+/// The outcome of a revocation check that kept the response it decided from: the status, and — when a
+/// responder's answer verified — the DER-encoded <c>OCSPResponse</c> those octets are.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Placing validation material into a signature needs the response itself, not only what it said: ETSI EN 319
+/// 122-1 Table 1 requirement o) has a generator include "the full set of revocation data ... used in the
+/// validation of the signature", and clause 5.4.2.2 places an OCSP response into <c>SignedData.crls.other</c>
+/// as octets. A checker that answers only Good, Revoked, or Unknown cannot supply them, which is why this
+/// carrier exists beside <see cref="OcspRevocationChecker.CheckAsync"/>'s status-only contract.
+/// </para>
+/// <para>
+/// <see cref="Response"/> is <see langword="null"/> whenever no responder's answer verified — an unreachable
+/// responder, a response that failed the RFC 6960 §3.2 checks, or a certificate carrying no responder URI —
+/// which is every case in which <see cref="Status"/> is <see cref="CertificateRevocationStatus.Unknown"/>.
+/// </para>
+/// </remarks>
+[DebuggerDisplay("RetainedOcspResponse({Status}, {Response is null ? \"no response\" : \"response retained\",nq})")]
+public sealed class RetainedOcspResponse: IDisposable
+{
+    /// <summary>Gets the certificate's revocation status.</summary>
+    public CertificateRevocationStatus Status { get; }
+
+    /// <summary>Gets the verified response the status was decided from, or <see langword="null"/> when none verified.</summary>
+    public PkiCertificateMemory? Response { get; }
+
+
+    /// <summary>
+    /// Initializes a new <see cref="RetainedOcspResponse"/>. Ownership of a non-<see langword="null"/> response
+    /// transfers to this instance.
+    /// </summary>
+    /// <param name="status">The certificate's revocation status.</param>
+    /// <param name="response">The verified response, or <see langword="null"/>.</param>
+    public RetainedOcspResponse(CertificateRevocationStatus status, PkiCertificateMemory? response)
+    {
+        Status = status;
+        Response = response;
+    }
+
+
+    /// <inheritdoc/>
+    public void Dispose() => Response?.Dispose();
+}
+
 
 /// <summary>
 /// An online <see cref="CheckCertificateRevocationStatusAsyncDelegate"/> backed by RFC 6960 OCSP: it selects
@@ -101,6 +148,37 @@ public sealed class OcspRevocationChecker
         MemoryPool<byte> pool,
         CancellationToken cancellationToken)
     {
+        using RetainedOcspResponse retained = await CheckRetainingResponseAsync(
+            certificate, issuerCandidates, validationTime, pool, cancellationToken).ConfigureAwait(false);
+
+        return retained.Status;
+    }
+
+
+    /// <summary>
+    /// Performs exactly the check <see cref="CheckAsync"/> performs and keeps the verified response the status
+    /// was decided from, for a caller that has to place those octets into a signature as long-term validation
+    /// material (ETSI EN 319 122-1 Table 1 requirement o, clause 5.4.2.2).
+    /// </summary>
+    /// <param name="certificate">The certificate whose revocation status is being determined.</param>
+    /// <param name="issuerCandidates">The certificates that may be <paramref name="certificate"/>'s issuer.</param>
+    /// <param name="validationTime">The instant at which a response's validity window is evaluated.</param>
+    /// <param name="pool">The memory pool for every allocation this call performs.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The status and, when one verified, the response. The caller owns and disposes the result.</returns>
+    /// <remarks>
+    /// This is the same walk over the same responders with the same fail-closed rules — <see cref="CheckAsync"/>
+    /// is this method with the response dropped — so a caller collecting material and a caller deciding a chain
+    /// never see two different answers.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the retained response transfers to the returned result, which the caller disposes.")]
+    public async ValueTask<RetainedOcspResponse> CheckRetainingResponseAsync(
+        PkiCertificateMemory certificate,
+        IReadOnlyList<PkiCertificateMemory> issuerCandidates,
+        DateTimeOffset validationTime,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(certificate);
         ArgumentNullException.ThrowIfNull(issuerCandidates);
         cancellationToken.ThrowIfCancellationRequested();
@@ -110,39 +188,35 @@ public sealed class OcspRevocationChecker
             PkiCertificateMemory? issuer = SelectIssuer(certificate, issuerCandidates);
             if(issuer is null)
             {
-                return CertificateRevocationStatus.Unknown;
+                return Undetermined();
             }
 
             RevocationSourceFacts facts = RevocationSourceFactsExtractor.Extract(certificate);
             if(facts.OcspResponderUris.Count == 0)
             {
-                return CertificateRevocationStatus.Unknown;
+                return Undetermined();
             }
 
             foreach(string responderUri in facts.OcspResponderUris)
             {
-                CertificateRevocationStatus? status = await CheckAgainstResponderAsync(
+                RetainedOcspResponse answer = await CheckAgainstResponderAsync(
                     certificate, issuer, responderUri, validationTime, pool, cancellationToken).ConfigureAwait(false);
-                if(status == CertificateRevocationStatus.Revoked)
+                if(answer.Status is CertificateRevocationStatus.Revoked or CertificateRevocationStatus.Good)
                 {
-                    return CertificateRevocationStatus.Revoked;
-                }
-
-                if(status == CertificateRevocationStatus.Good)
-                {
-                    return CertificateRevocationStatus.Good;
+                    return answer;
                 }
 
                 //Unreachable responder, an unverified response, or an affirmed-Unknown status: try the next URI.
+                answer.Dispose();
             }
 
-            return CertificateRevocationStatus.Unknown;
+            return Undetermined();
         }
         catch(AsnContentException)
         {
             //A malformed target or issuer candidate cannot be checked; fail closed rather than throw a parsing
             //exception out of a revocation-status seam.
-            return CertificateRevocationStatus.Unknown;
+            return Undetermined();
         }
         catch(InvalidOperationException)
         {
@@ -153,22 +227,33 @@ public sealed class OcspRevocationChecker
             //CheckCertificateRevocationStatusAsyncDelegate's contract is to return a status rather than throw,
             //so a missing registration fails closed to Unknown exactly like an unreachable responder, rather
             //than escaping as a raw registry exception.
-            return CertificateRevocationStatus.Unknown;
+            return Undetermined();
         }
+
+        //Builds the outcome of every path that decided nothing, so no branch has to repeat the absent response.
+        static RetainedOcspResponse Undetermined() => new(CertificateRevocationStatus.Unknown, response: null);
     }
 
 
     /// <summary>
-    /// Builds a request for one responder URI, sends it, and verifies the response, disposing every carrier
-    /// this call creates.
+    /// Builds a request for one responder URI, sends it, and verifies the response, keeping the response when
+    /// it verified with a status and disposing every carrier this call created otherwise.
     /// </summary>
+    /// <param name="certificate">The certificate whose revocation status is being determined.</param>
+    /// <param name="issuer">The certificate's issuer.</param>
+    /// <param name="responderUri">The responder to contact.</param>
+    /// <param name="validationTime">The instant at which the response's validity window is evaluated.</param>
+    /// <param name="pool">The memory pool for every allocation this call performs.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>
-    /// <see cref="CertificateRevocationStatus.Good"/> or <see cref="CertificateRevocationStatus.Revoked"/> when
-    /// the response verifies with that status; otherwise <see langword="null"/> (unreachable responder, an
-    /// unverified response, or an affirmed <see cref="OcspCertificateStatus.Unknown"/> status), signalling the
-    /// caller to try the next configured responder URI.
+    /// <see cref="CertificateRevocationStatus.Good"/> or <see cref="CertificateRevocationStatus.Revoked"/> with
+    /// the verified response when the response verifies with that status; otherwise
+    /// <see cref="CertificateRevocationStatus.Unknown"/> with no response (unreachable responder, an unverified
+    /// response, or an affirmed <see cref="OcspCertificateStatus.Unknown"/> status), signalling the caller to
+    /// try the next configured responder URI.
     /// </returns>
-    private async ValueTask<CertificateRevocationStatus?> CheckAgainstResponderAsync(
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the fetched response transfers to the returned result on the verified path; every other path disposes it here.")]
+    private async ValueTask<RetainedOcspResponse> CheckAgainstResponderAsync(
         PkiCertificateMemory certificate, PkiCertificateMemory issuer, string responderUri, DateTimeOffset validationTime, MemoryPool<byte> pool, CancellationToken cancellationToken)
     {
         using OcspRequestContent request = await OcspRequests.CreateAsync(certificate, issuer, CertIdDigestAlgorithm, pool, NonceByteLength, IncludeNonce, cancellationToken).ConfigureAwait(false);
@@ -177,26 +262,42 @@ public sealed class OcspRevocationChecker
         PkiCertificateMemory? response = await FetchResponse(fetchContext, pool, cancellationToken).ConfigureAwait(false);
         if(response is null)
         {
-            return null;
+            return new RetainedOcspResponse(CertificateRevocationStatus.Unknown, response: null);
         }
 
-        using(response)
+        bool retained = false;
+        try
         {
             OcspResponseVerificationResult result = await OcspResponseVerification.VerifyAsync(
                 response, request, issuer, validationTime, pool, AllowResponsesWithoutNextUpdate, AllowResponsesWithoutNonce, cancellationToken).ConfigureAwait(false);
 
             if(result.Outcome != OcspResponseVerificationOutcome.Verified)
             {
-                return null;
+                return new RetainedOcspResponse(CertificateRevocationStatus.Unknown, response: null);
             }
 
-            //An affirmed Unknown status (the discard arm) yields null so the caller tries the next responder.
-            return result.Single!.Status switch
+            //An affirmed Unknown status (the discard arm) keeps nothing, so the caller tries the next responder.
+            CertificateRevocationStatus status = result.Single!.Status switch
             {
                 OcspCertificateStatus.Good => CertificateRevocationStatus.Good,
                 OcspCertificateStatus.Revoked => CertificateRevocationStatus.Revoked,
-                _ => (CertificateRevocationStatus?)null
+                _ => CertificateRevocationStatus.Unknown
             };
+            if(status == CertificateRevocationStatus.Unknown)
+            {
+                return new RetainedOcspResponse(CertificateRevocationStatus.Unknown, response: null);
+            }
+
+            retained = true;
+
+            return new RetainedOcspResponse(status, response);
+        }
+        finally
+        {
+            if(!retained)
+            {
+                response.Dispose();
+            }
         }
     }
 

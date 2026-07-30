@@ -214,6 +214,17 @@ public static class ProofOfExistenceExtraction
     /// certificates and revocation data it contains, which is what makes the certificates of a Time-Stamping
     /// Authority reachable as proven objects.
     /// </para>
+    /// <para>
+    /// <strong>The class rule is the coarsest reading, and a binding may narrow it.</strong> A format whose
+    /// time-stamps name their protected objects one by one — the <c>ats-hash-index-v3</c> of ETSI EN 319 122-1
+    /// clause 5.5.2 does exactly that — supplies
+    /// <see cref="SignatureFormatSeam.StateTimestampProtectsObject"/>, and every object the class rule proposes is
+    /// then put to it before joining the set. Without it the class rule stands unnarrowed, which is what every
+    /// binding that states nothing at object granularity gets. The narrowing matters because the class rule alone
+    /// would grant a proof of existence to material appended to the signature <em>after</em> the time-stamp was
+    /// applied: such material has no entry in that time-stamp's index, so nothing in the signature establishes it
+    /// existed at the time-stamp's instant.
+    /// </para>
     /// </remarks>
     public static async ValueTask<ProtectedObjectSet> DetermineProtectedObjectsAsync(
         SignatureFacts signature,
@@ -240,6 +251,12 @@ public static class ProofOfExistenceExtraction
         List<ProtectedObjectReference> references = [];
         var containers = new Stack<PkiCertificateMemory>();
 
+        //The binding's object-granular narrowing of step 1), when it states one. Bundled with the two inputs every
+        //call needs so the filter travels as one explicit parameter rather than a captured closure.
+        ProtectedObjectAdmission? admission = seams.Format.StateTimestampProtectsObject is StateTimestampProtectsObjectAsyncDelegate statesProtection
+            ? new ProtectedObjectAdmission { States = statesProtection, Signature = signature, Timestamp = timestamp }
+            : null;
+
         //Step 1): what a time-stamp protects follows from its class. A token whose class the binding could not
         //state protects nothing this algorithm can name.
         switch(timestamp.Class)
@@ -255,12 +272,12 @@ public static class ProofOfExistenceExtraction
                 break;
 
             case SignatureTimestampClass.ValidationDataTimestamp:
-                await AddValidationMaterialAsync(signature, objects, resources, pool, cancellationToken).ConfigureAwait(false);
+                await AddValidationMaterialAsync(signature, objects, admission, resources, pool, cancellationToken).ConfigureAwait(false);
 
                 break;
 
             case SignatureTimestampClass.ArchiveTimestamp:
-                await AddArchiveMaterialAsync(signature, timestamp, objects, containers, resources, pool, cancellationToken).ConfigureAwait(false);
+                await AddArchiveMaterialAsync(signature, timestamp, objects, containers, admission, resources, pool, cancellationToken).ConfigureAwait(false);
 
                 break;
 
@@ -271,7 +288,9 @@ public static class ProofOfExistenceExtraction
         //An archive time-stamp protects the signature's signed attributes too, and the signing certificate
         //identifier attributes among them are references naming an object by a hash value under a stated
         //function — exactly the shape step 4) reasons over. A reference is admitted when the object it names is
-        //in hand, because step 4)b) has to ask the set of POEs about that object.
+        //in hand, because step 4)b) has to ask the set of POEs about that object. The narrowing filter does not
+        //apply to the references: what the imprint binds is the signed attribute carrying the reference, which is
+        //part of the time-stamped material by construction rather than by the format's index of protected objects.
         if(timestamp.Class == SignatureTimestampClass.ArchiveTimestamp)
         {
             await AddSigningCertificateReferencesAsync(signature, references, resources, pool, cancellationToken).ConfigureAwait(false);
@@ -302,9 +321,12 @@ public static class ProofOfExistenceExtraction
                 continue;
             }
 
-            await AddCarriersAsync(contained.EmbeddedCertificates, ValidationObjectKind.Certificate, objects, resources, pool, cancellationToken).ConfigureAwait(false);
-            await AddCarriersAsync(contained.EmbeddedCertificateRevocationLists, ValidationObjectKind.RevocationData, objects, resources, pool, cancellationToken).ConfigureAwait(false);
-            await AddCarriersAsync(contained.EmbeddedOcspResponses, ValidationObjectKind.RevocationData, objects, resources, pool, cancellationToken).ConfigureAwait(false);
+            //The contents of a container that is itself protected are protected with it, so the narrowing filter
+            //does not apply here: it answers about objects of the outer signature, not about objects inside one of
+            //them, and a container the filter denied never reached this stack.
+            await AddCarriersAsync(contained.EmbeddedCertificates, ValidationObjectKind.Certificate, objects, admission: null, resources, pool, cancellationToken).ConfigureAwait(false);
+            await AddCarriersAsync(contained.EmbeddedCertificateRevocationLists, ValidationObjectKind.RevocationData, objects, admission: null, resources, pool, cancellationToken).ConfigureAwait(false);
+            await AddCarriersAsync(contained.EmbeddedOcspResponses, ValidationObjectKind.RevocationData, objects, admission: null, resources, pool, cancellationToken).ConfigureAwait(false);
         }
 
         return new ProtectedObjectSet { Objects = objects, References = references };
@@ -509,23 +531,26 @@ public static class ProofOfExistenceExtraction
 
 
     /// <summary>
-    /// Admits every certificate and revocation data object the signature carries.
+    /// Admits every certificate and revocation data object the signature carries that the time-stamp is shown to
+    /// protect.
     /// </summary>
     /// <param name="signature">The signature's facts.</param>
     /// <param name="objects">The set being built.</param>
+    /// <param name="admission">The binding's object-granular narrowing of step 1), or <see langword="null"/> when the class rule stands unnarrowed.</param>
     /// <param name="resources">The ledger the computed digests are tracked in.</param>
     /// <param name="pool">The memory pool the digests are rented from.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     private static async ValueTask AddValidationMaterialAsync(
         SignatureFacts signature,
         List<ValidationObjectIdentity> objects,
+        ProtectedObjectAdmission? admission,
         SignatureValidationResources resources,
         MemoryPool<byte> pool,
         CancellationToken cancellationToken)
     {
-        await AddCarriersAsync(signature.EmbeddedCertificates, ValidationObjectKind.Certificate, objects, resources, pool, cancellationToken).ConfigureAwait(false);
-        await AddCarriersAsync(signature.EmbeddedCertificateRevocationLists, ValidationObjectKind.RevocationData, objects, resources, pool, cancellationToken).ConfigureAwait(false);
-        await AddCarriersAsync(signature.EmbeddedOcspResponses, ValidationObjectKind.RevocationData, objects, resources, pool, cancellationToken).ConfigureAwait(false);
+        await AddCarriersAsync(signature.EmbeddedCertificates, ValidationObjectKind.Certificate, objects, admission, resources, pool, cancellationToken).ConfigureAwait(false);
+        await AddCarriersAsync(signature.EmbeddedCertificateRevocationLists, ValidationObjectKind.RevocationData, objects, admission, resources, pool, cancellationToken).ConfigureAwait(false);
+        await AddCarriersAsync(signature.EmbeddedOcspResponses, ValidationObjectKind.RevocationData, objects, admission, resources, pool, cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -538,14 +563,24 @@ public static class ProofOfExistenceExtraction
     /// <param name="timestamp">The archive time-stamp being extracted from.</param>
     /// <param name="objects">The set being built.</param>
     /// <param name="containers">The stack of objects whose contents step 2) still has to admit.</param>
+    /// <param name="admission">The binding's object-granular narrowing of step 1), or <see langword="null"/> when the class rule stands unnarrowed.</param>
     /// <param name="resources">The ledger the computed digests are tracked in.</param>
     /// <param name="pool">The memory pool the digests are rented from.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
+    /// <remarks>
+    /// The signature, its value and its content are not put to the narrowing filter: what makes a time-stamp an
+    /// archive time-stamp at all is that its message imprint is computed over those very octets — for CAdES, parts
+    /// 1) to 3) of the concatenation of ETSI EN 319 122-1 clause 5.5.3 — so a token whose imprint verified against
+    /// the binding's stated coverage has already been shown to protect them. What the filter narrows is the
+    /// material a signature can gain after the fact: the certificates, the revocation data and the earlier
+    /// time-stamp tokens, each of which is bound only through that format's own index of protected objects.
+    /// </remarks>
     private static async ValueTask AddArchiveMaterialAsync(
         SignatureFacts signature,
         EmbeddedTimestamp timestamp,
         List<ValidationObjectIdentity> objects,
         Stack<PkiCertificateMemory> containers,
+        ProtectedObjectAdmission? admission,
         SignatureValidationResources resources,
         MemoryPool<byte> pool,
         CancellationToken cancellationToken)
@@ -553,8 +588,8 @@ public static class ProofOfExistenceExtraction
         await AddSignatureAsync(signature, objects, resources, pool, cancellationToken).ConfigureAwait(false);
         await AddSignatureValueAsync(signature, objects, resources, pool, cancellationToken).ConfigureAwait(false);
         await AddContentAsync(signature, objects, resources, pool, cancellationToken).ConfigureAwait(false);
-        await AddValidationMaterialAsync(signature, objects, resources, pool, cancellationToken).ConfigureAwait(false);
-        await AddEarlierTimestampsAsync(signature, timestamp, objects, containers, resources, pool, cancellationToken).ConfigureAwait(false);
+        await AddValidationMaterialAsync(signature, objects, admission, resources, pool, cancellationToken).ConfigureAwait(false);
+        await AddEarlierTimestampsAsync(signature, timestamp, objects, containers, admission, resources, pool, cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -614,14 +649,21 @@ public static class ProofOfExistenceExtraction
     /// <param name="timestamp">The time-stamp being extracted from.</param>
     /// <param name="objects">The set being built.</param>
     /// <param name="containers">The stack of objects whose contents step 2) still has to admit.</param>
+    /// <param name="admission">The binding's object-granular narrowing of step 1), or <see langword="null"/> when the class rule stands unnarrowed.</param>
     /// <param name="resources">The ledger the computed digests are tracked in.</param>
     /// <param name="pool">The memory pool the digests are rented from.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
+    /// <remarks>
+    /// A token the filter denies is neither admitted nor queued for the closure of step 2): its own contents are
+    /// no better protected than it is, and a later archive time-stamp of the same signature is exactly such a
+    /// token — carried in an unsigned attribute this one's index cannot name, because it did not yet exist.
+    /// </remarks>
     private static async ValueTask AddEarlierTimestampsAsync(
         SignatureFacts signature,
         EmbeddedTimestamp timestamp,
         List<ValidationObjectIdentity> objects,
         Stack<PkiCertificateMemory> containers,
+        ProtectedObjectAdmission? admission,
         SignatureValidationResources resources,
         MemoryPool<byte> pool,
         CancellationToken cancellationToken)
@@ -634,6 +676,11 @@ public static class ProofOfExistenceExtraction
                 continue;
             }
 
+            if(!await AdmitsAsync(admission, candidate.Token, ValidationObjectKind.TimestampToken, pool, cancellationToken).ConfigureAwait(false))
+            {
+                continue;
+            }
+
             objects.Add(await CreateIdentityAsync(
                 candidate.Token.AsReadOnlyMemory(), ValidationObjectKind.TimestampToken, candidate.Identifier, resources, pool, cancellationToken).ConfigureAwait(false));
             containers.Push(candidate.Token);
@@ -642,11 +689,13 @@ public static class ProofOfExistenceExtraction
 
 
     /// <summary>
-    /// Admits every carrier of a list as an object of a stated kind.
+    /// Admits every carrier of a list as an object of a stated kind, less the ones the binding's object-granular
+    /// filter shows the time-stamp does not protect.
     /// </summary>
     /// <param name="carriers">The carriers to admit.</param>
     /// <param name="kind">What the carriers are.</param>
     /// <param name="objects">The set being built.</param>
+    /// <param name="admission">The binding's object-granular narrowing of step 1), or <see langword="null"/> when the class rule stands unnarrowed.</param>
     /// <param name="resources">The ledger the computed digests are tracked in.</param>
     /// <param name="pool">The memory pool the digests are rented from.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
@@ -654,12 +703,18 @@ public static class ProofOfExistenceExtraction
         IReadOnlyList<PkiCertificateMemory> carriers,
         ValidationObjectKind kind,
         List<ValidationObjectIdentity> objects,
+        ProtectedObjectAdmission? admission,
         SignatureValidationResources resources,
         MemoryPool<byte> pool,
         CancellationToken cancellationToken)
     {
         for(int i = 0; i < carriers.Count && objects.Count < MaximumProtectedObjects; ++i)
         {
+            if(!await AdmitsAsync(admission, carriers[i], kind, pool, cancellationToken).ConfigureAwait(false))
+            {
+                continue;
+            }
+
             ValidationObjectIdentity identity = await CreateIdentityAsync(
                 carriers[i].AsReadOnlyMemory(), kind, reference: null, resources, pool, cancellationToken).ConfigureAwait(false);
             if(!objects.Contains(identity))
@@ -667,5 +722,70 @@ public static class ProofOfExistenceExtraction
                 objects.Add(identity);
             }
         }
+    }
+
+
+    /// <summary>
+    /// Asks the binding's object-granular filter whether one candidate object may join the set.
+    /// </summary>
+    /// <param name="admission">The filter and the two inputs it needs, or <see langword="null"/> when no binding stated one.</param>
+    /// <param name="candidate">The candidate object.</param>
+    /// <param name="kind">What the candidate is.</param>
+    /// <param name="pool">The memory pool the filter rents any scratch buffer from.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns><see langword="true"/> when the object may join the set.</returns>
+    /// <remarks>
+    /// No filter means the per-class admission of clause 5.6.3.1 stands: this returns <see langword="true"/> and
+    /// nothing about the surrounding algorithm changes. A filter that throws has not shown the object to be
+    /// protected, which is the fail-closed answer the same way an unstatable coverage is.
+    /// </remarks>
+    private static async ValueTask<bool> AdmitsAsync(
+        ProtectedObjectAdmission? admission,
+        PkiCertificateMemory candidate,
+        ValidationObjectKind kind,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken)
+    {
+        if(admission is null)
+        {
+            return true;
+        }
+
+        try
+        {
+            return await admission.States(
+                new TimestampProtectedObjectContext
+                {
+                    Signature = admission.Signature,
+                    Timestamp = admission.Timestamp,
+                    Object = candidate,
+                    Kind = kind
+                },
+                pool,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch(Exception exception) when(exception is not OperationCanceledException)
+        {
+            //A binding that cannot decide about an object has not shown the time-stamp protects it.
+            return false;
+        }
+    }
+
+
+    /// <summary>
+    /// The binding's object-granular narrowing of step 1) together with the two inputs every call of it needs, so
+    /// the filter travels through the walk as one explicit parameter rather than as data captured in a closure.
+    /// </summary>
+    [DebuggerDisplay("ProtectedObjectAdmission: {Timestamp.Class} from {Timestamp.Identifier}")]
+    private sealed record ProtectedObjectAdmission
+    {
+        /// <summary>The binding's filter.</summary>
+        public required StateTimestampProtectsObjectAsyncDelegate States { get; init; }
+
+        /// <summary>The signature every candidate object is asked about.</summary>
+        public required SignatureFacts Signature { get; init; }
+
+        /// <summary>The time-stamp every candidate object is asked about.</summary>
+        public required EmbeddedTimestamp Timestamp { get; init; }
     }
 }

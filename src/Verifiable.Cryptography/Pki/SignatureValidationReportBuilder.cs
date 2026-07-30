@@ -352,30 +352,76 @@ public static class SignatureValidationReportBuilder
 
     /// <summary>
     /// Builds the Signature Validation Objects (clause 4.4): the certificate chain, the validation data the
-    /// conclusion consulted, and the signed content, each with a proof of existence when the validation process
-    /// for Signatures providing Long Term Availability and Integrity of Validation Material ran and accumulated
-    /// one for it.
+    /// conclusion consulted, every time-stamp token the signature embeds, and the signed content, each with a
+    /// proof of existence (clause 4.4.6) when the validation process for Signatures providing Long Term
+    /// Availability and Integrity of Validation Material ran and accumulated one for it, and each time-stamp
+    /// token with the POE Provisioning of clause 4.4.7 naming what it proved.
     /// </summary>
+    /// <param name="outcome">The completed run.</param>
+    /// <param name="pool">The memory pool the recomputed identities are rented from.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The objects.</returns>
+    /// <remarks>
+    /// The time-stamp tokens come from the signature's own facts rather than from
+    /// <see cref="SignatureValidationConclusion.ValidationDataUsed"/>, which clause 5.1.3 fills with the
+    /// certificate and revocation material alone: a token the long-term process validated and derived proofs
+    /// from is an object "used during the validation" in the sense of clause 4.4, and clause 4.4.7 is defined
+    /// about a time-stamp token in the first place, so a report that never carried one could never populate it.
+    /// </remarks>
     private static async ValueTask<IReadOnlyList<ValidationObject>> BuildValidationObjectsAsync(
         SignatureValidationOutcome outcome,
         MemoryPool<byte> pool,
         CancellationToken cancellationToken)
     {
         SignatureValidationConclusion conclusion = outcome.Conclusion;
+        SignatureFacts signature = outcome.BasicValidation.Signature;
+        LongTermValidationResult? longTerm = outcome.LongTermValidation;
 
         var carriers = new List<PkiCertificateMemory>(conclusion.ValidatedCertificateChain.Count + conclusion.ValidationDataUsed.Count);
         AddDistinct(carriers, conclusion.ValidatedCertificateChain);
         AddDistinct(carriers, conclusion.ValidationDataUsed);
 
-        var objects = new List<ValidationObject>(carriers.Count + 1);
+        var described = new List<DescribedValidationObject>(carriers.Count + signature.Timestamps.Count + 1);
         for(int i = 0; i < carriers.Count; ++i)
         {
-            objects.Add(await BuildValidationObjectAsync(carriers[i], outcome.LongTermValidation, outcome.Resources, pool, cancellationToken).ConfigureAwait(false));
+            described.Add(await DescribeAsync(
+                carriers[i], Classify(carriers[i]), reference: null, longTerm, outcome.Resources, pool, cancellationToken).ConfigureAwait(false));
         }
 
-        if(outcome.BasicValidation.Signature.SignedContent is SignedContentMemory content)
+        for(int i = 0; i < signature.Timestamps.Count; ++i)
         {
-            objects.Add(new ValidationObject { ObjectType = ValidationObjectKind.SignedDataObject, Representation = content });
+            EmbeddedTimestamp timestamp = signature.Timestamps[i];
+            if(HoldsCarrier(described, timestamp.Token))
+            {
+                continue;
+            }
+
+            //The reference is the attribute the token was carried in, which is exactly what
+            //ProofOfExistenceExtraction names a token by; an identity built with any other reference would not
+            //compare equal to the EstablishedBy of the proofs that token established.
+            described.Add(await DescribeAsync(
+                timestamp.Token, ValidationObjectKind.TimestampToken, timestamp.Identifier, longTerm, outcome.Resources, pool, cancellationToken).ConfigureAwait(false));
+        }
+
+        if(signature.SignedContent is SignedContentMemory content)
+        {
+            described.Add(await DescribeAsync(
+                content, ValidationObjectKind.SignedDataObject, signature.SignedContentIdentifier, longTerm, outcome.Resources, pool, cancellationToken).ConfigureAwait(false));
+        }
+
+        var objects = new List<ValidationObject>(described.Count);
+        for(int i = 0; i < described.Count; ++i)
+        {
+            DescribedValidationObject entry = described[i];
+            objects.Add(new ValidationObject
+            {
+                ObjectType = entry.Kind,
+                Representation = entry.Representation,
+                ProofOfExistence = entry.Identity is null || longTerm is null ? null : EarliestObjectProof(longTerm.ProofsOfExistence, entry.Identity),
+                ProvidesProofOfExistenceFor = entry.Identity is null || longTerm is null
+                    ? []
+                    : BuildProofOfExistenceProvisioning(longTerm.ProofsOfExistence, entry.Identity, described)
+            });
         }
 
         return objects;
@@ -403,39 +449,154 @@ public static class SignatureValidationReportBuilder
                 }
             }
         }
+
+        //Reports whether an object with the same octets is already described, so a token that also reached the
+        //validation-data list is projected once.
+        static bool HoldsCarrier(List<DescribedValidationObject> described, SensitiveMemory carrier)
+        {
+            for(int i = 0; i < described.Count; ++i)
+            {
+                if(described[i].Representation.AsReadOnlySpan().SequenceEqual(carrier.AsReadOnlySpan()))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 
 
-    /// <summary>Builds one Validation Object (clause 4.4) for a certificate, CRL, OCSP response, or time-stamp token carrier.</summary>
-    private static async ValueTask<ValidationObject> BuildValidationObjectAsync(
-        PkiCertificateMemory carrier,
+    /// <summary>
+    /// Classifies one carrier into the object-type vocabulary clause 4.4.4 fixes.
+    /// </summary>
+    /// <param name="carrier">The carrier to classify.</param>
+    /// <returns>The kind.</returns>
+    /// <remarks>
+    /// No <c>PkiObjectKind</c> is exposed as a public property on <see cref="PkiCertificateMemory"/>;
+    /// classification goes through its public <c>Is*</c> predicates, mirroring the same ternary chain
+    /// <c>LongTermValidation.AddCarrierProofsAsync</c> already uses for the same carriers.
+    /// </remarks>
+    private static ValidationObjectKind Classify(PkiCertificateMemory carrier) => carrier.IsX509Certificate
+        ? ValidationObjectKind.Certificate
+        : carrier.IsCrl || carrier.IsOcspResponse
+            ? ValidationObjectKind.RevocationData
+            : carrier.IsTimestampToken ? ValidationObjectKind.TimestampToken : ValidationObjectKind.Unknown;
+
+
+    /// <summary>
+    /// Pairs one object with the canonical identity the proofs of existence name it by, recomputing that
+    /// identity only when a long-term run accumulated proofs to match it against.
+    /// </summary>
+    /// <param name="representation">The object itself (clause 4.4.5).</param>
+    /// <param name="kind">The object's type (clause 4.4.4), which takes part in the identity.</param>
+    /// <param name="reference">The object's own identifier where its format supplies one, which also takes part in the identity.</param>
+    /// <param name="longTerm">The long-term validation result, or <see langword="null"/> when that process did not run.</param>
+    /// <param name="resources">The ledger the recomputed digest is tracked in.</param>
+    /// <param name="pool">The memory pool the digest is rented from.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The described object.</returns>
+    private static async ValueTask<DescribedValidationObject> DescribeAsync(
+        SensitiveMemory representation,
+        ValidationObjectKind kind,
+        string? reference,
         LongTermValidationResult? longTerm,
         SignatureValidationResources resources,
         MemoryPool<byte> pool,
         CancellationToken cancellationToken)
     {
-        //No PkiObjectKind is exposed as a public property on PkiCertificateMemory; classification goes through
-        //its public Is* predicates, mirroring the same ternary chain LongTermValidation.AddCarrierProofsAsync
-        //already uses for the same carriers.
-        ValidationObjectKind kind = carrier.IsX509Certificate
-            ? ValidationObjectKind.Certificate
-            : carrier.IsCrl || carrier.IsOcspResponse
-                ? ValidationObjectKind.RevocationData
-                : carrier.IsTimestampToken ? ValidationObjectKind.TimestampToken : ValidationObjectKind.Unknown;
+        ValidationObjectIdentity? identity = longTerm is null
+            ? null
+            : await ProofOfExistenceExtraction.CreateIdentityAsync(
+                representation.AsReadOnlyMemory(), kind, reference, resources, pool, cancellationToken).ConfigureAwait(false);
 
-        ProofOfExistence? proof = null;
-        if(longTerm is not null)
+        return new DescribedValidationObject(kind, representation, identity);
+    }
+
+
+    /// <summary>
+    /// Builds the POE Provisioning elements of clause 4.4.7 for one validation object: the objects it itself
+    /// established a proof of existence for, grouped by the time value of that proof.
+    /// </summary>
+    /// <param name="proofs">Every proof the long-term run accumulated.</param>
+    /// <param name="identity">The identity of the object whose provisioning is being built.</param>
+    /// <param name="described">Every object the report projects, which is what a covered object can be named as.</param>
+    /// <returns>The elements, or an empty list when the object established no proof.</returns>
+    /// <remarks>
+    /// A proof carries the identity of what established it (<see cref="ProofOfExistence.EstablishedBy"/>), which
+    /// in this engine is only ever a time-stamp token — clause 4.4.7's own subject. An object a proof is about
+    /// that the report does not project as a validation object of its own (the signature value, the Signed Data
+    /// Object itself) is not named here, because clause 4.4.7 names validation objects.
+    /// </remarks>
+    private static List<ProofOfExistenceProvisioning> BuildProofOfExistenceProvisioning(
+        ProofOfExistenceSet proofs,
+        ValidationObjectIdentity identity,
+        List<DescribedValidationObject> described)
+    {
+        List<ProofOfExistenceProvisioning> provisioning = [];
+        List<DateTimeOffset> instants = [];
+        List<List<SensitiveMemory>> covered = [];
+
+        for(int i = 0; i < proofs.Proofs.Count; ++i)
         {
-            ValidationObjectIdentity identity = await ProofOfExistenceExtraction.CreateIdentityAsync(
-                carrier.AsReadOnlyMemory(), kind, reference: null, resources, pool, cancellationToken).ConfigureAwait(false);
-            proof = EarliestObjectProof(longTerm.ProofsOfExistence, identity);
+            ProofOfExistence proof = proofs.Proofs[i];
+            if(proof.EstablishedBy is not ValidationObjectIdentity establishedBy || !establishedBy.Equals(identity))
+            {
+                continue;
+            }
+
+            if(FindRepresentation(described, proof.ObjectIdentity) is not SensitiveMemory representation)
+            {
+                continue;
+            }
+
+            int group = instants.IndexOf(proof.Instant);
+            if(group < 0)
+            {
+                instants.Add(proof.Instant);
+                covered.Add([]);
+                group = instants.Count - 1;
+            }
+
+            if(!covered[group].Contains(representation))
+            {
+                covered[group].Add(representation);
+            }
         }
 
-        return new ValidationObject
+        for(int i = 0; i < instants.Count; ++i)
         {
-            ObjectType = kind,
-            Representation = carrier,
-            ProofOfExistence = proof
-        };
+            provisioning.Add(new ProofOfExistenceProvisioning { ProofTime = instants[i], CoveredObjects = covered[i] });
+        }
+
+        return provisioning;
+
+        //Finds the object a proof is about among the ones the report projects, by the identity each was
+        //described with; an object the report does not project has no representation to name.
+        static SensitiveMemory? FindRepresentation(List<DescribedValidationObject> described, ValidationObjectIdentity objectIdentity)
+        {
+            for(int i = 0; i < described.Count; ++i)
+            {
+                if(described[i].Identity is ValidationObjectIdentity candidate && candidate.Equals(objectIdentity))
+                {
+                    return described[i].Representation;
+                }
+            }
+
+            return null;
+        }
     }
+
+
+    /// <summary>
+    /// One object the report projects, with the canonical identity the accumulated proofs of existence name it
+    /// by — the pairing clauses 4.4.6 and 4.4.7 both need and which is computed once per object.
+    /// </summary>
+    /// <param name="Kind">The object's type (clause 4.4.4).</param>
+    /// <param name="Representation">The object itself (clause 4.4.5), a non-owning reference to memory the run owns.</param>
+    /// <param name="Identity">The identity the proofs name it by, or <see langword="null"/> when no long-term run accumulated proofs.</param>
+    private sealed record DescribedValidationObject(
+        ValidationObjectKind Kind,
+        SensitiveMemory Representation,
+        ValidationObjectIdentity? Identity);
 }

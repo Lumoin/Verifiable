@@ -86,6 +86,42 @@ internal static class X509ChainTestRingTimestamping
             timestampedOctets, Sha256Length, CryptoTags.Sha256Digest, pool,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
+        return MintTimestampTokenOverImprint(
+            authority, embeddedCertificates, messageImprint.AsReadOnlySpan(), generationTime, requestNonce: default, accuracy, isOrdered);
+    }
+
+
+    /// <summary>
+    /// Mints a time-stamp token over an already-computed SHA-256 message imprint, which is what a Time-Stamping
+    /// Authority answering an RFC 3161 <c>TimeStampReq</c> does: the request carries the imprint, never the data
+    /// it was taken over.
+    /// </summary>
+    /// <param name="authority">The Time-Stamping Authority node, minted by <see cref="X509ChainTestRing.CreateTimeStampingAuthority"/> so that it carries the Extended Key Usage RFC 3161 §2.3 requires.</param>
+    /// <param name="embeddedCertificates">The certificates the token carries in its own <c>certificates</c> field.</param>
+    /// <param name="messageImprintDigest">The SHA-256 digest the token's <c>messageImprint</c> states.</param>
+    /// <param name="generationTime">The <c>genTime</c> the authority states.</param>
+    /// <param name="requestNonce">The nonce the request carried, which the token echoes; empty when the request carried none.</param>
+    /// <param name="accuracy">The <c>accuracy</c> the authority states, in whole seconds; omitted from the token when <see langword="null"/>.</param>
+    /// <param name="isOrdered">Whether the token sets the <c>ordering</c> field.</param>
+    /// <returns>The pooled DER-encoded token, tagged <see cref="PkiCertificateTags.TimestampToken"/>; the caller disposes it.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when a required argument is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="messageImprintDigest"/> is not a SHA-256 digest length.</exception>
+    internal static PkiCertificateMemory MintTimestampTokenOverImprint(
+        X509ChainTestRingNode authority,
+        IReadOnlyList<X509ChainTestRingNode> embeddedCertificates,
+        ReadOnlySpan<byte> messageImprintDigest,
+        DateTimeOffset generationTime,
+        ReadOnlySpan<byte> requestNonce = default,
+        TimeSpan? accuracy = null,
+        bool isOrdered = false)
+    {
+        ArgumentNullException.ThrowIfNull(authority);
+        ArgumentNullException.ThrowIfNull(embeddedCertificates);
+        if(messageImprintDigest.Length != Sha256Length)
+        {
+            throw new ArgumentException($"The message imprint of a token minted here is a {Sha256Length}-byte SHA-256 digest.", nameof(messageImprintDigest));
+        }
+
         BcX509Certificate bcAuthority = OcspTestFixtures.ToBouncyCastleCertificate(authority.Certificate);
         AsymmetricKeyParameter authorityPrivateKey = OcspTestFixtures.ToBouncyCastlePrivateKey(authority.SigningKey);
 
@@ -120,7 +156,12 @@ internal static class X509ChainTestRingTimestamping
 
         var requestGenerator = new TimeStampRequestGenerator();
         requestGenerator.SetCertReq(true);
-        TimeStampRequest request = requestGenerator.Generate(NistObjectIdentifiers.IdSha256, messageImprint.AsReadOnlySpan().ToArray());
+
+        //The generator copies the request's nonce into the TSTInfo it signs, which is how an authority answers
+        //a request that carried one (RFC 3161 §2.4.2).
+        TimeStampRequest request = requestNonce.IsEmpty
+            ? requestGenerator.Generate(NistObjectIdentifiers.IdSha256, messageImprintDigest.ToArray())
+            : requestGenerator.Generate(NistObjectIdentifiers.IdSha256, messageImprintDigest.ToArray(), new BcBigInteger(1, requestNonce.ToArray()));
 
         using Salt serialNumber = X509ChainTestRing.CreateSerialNumber();
         TimeStampToken token = tokenGenerator.Generate(

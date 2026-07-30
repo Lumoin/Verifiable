@@ -270,9 +270,10 @@ internal sealed class SignatureValidationProcessTests
 
 
     /// <summary>
-    /// Steps 1) and 5) of clause 5.6.2.3.4: an archive time-stamp whose coverage the Driving Application accepts
-    /// proves every object it protects at its generation time, and the same token proves nothing under the
-    /// default constraints, where the format binding states no coverage for that class to verify against.
+    /// Steps 1) and 5) of clause 5.6.2.3.4: an <c>archive-time-stamp-v3</c> whose message imprint the shipped
+    /// CAdES binding recomputes from the Signed Data Object and the token's own <c>ats-hash-index-v3</c> proves
+    /// every object it protects at its generation time under the <em>default</em> constraints — no declaration
+    /// by the Driving Application is involved, because the coverage was verified rather than asserted.
     /// </summary>
     [TestMethod]
     public async Task ProofOfExistenceExtractionProvesEveryObjectAnArchiveTimestampProtects()
@@ -286,13 +287,6 @@ internal sealed class SignatureValidationProcessTests
         IReadOnlyList<EmbeddedTimestamp> archiveTimestamps = facts.TimestampsOfClass(SignatureTimestampClass.ArchiveTimestamp);
 
         ProofOfExistenceSet extracted = await ProofOfExistenceExtraction.ExtractAsync(
-            facts, archiveTimestamps[0], scenario.ArchiveTimestampTime, ProofOfExistenceSet.Empty,
-            scenario.CryptographicConstraints, scenario.Constraints.SignatureElements, scenario.Seams, resources,
-            BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
-
-        //The same extraction under the default constraints, where the binding's inability to state what a CAdES
-        //archive time-stamp covers means the token is not shown to protect anything.
-        ProofOfExistenceSet withoutDeclaredCoverage = await ProofOfExistenceExtraction.ExtractAsync(
             facts, archiveTimestamps[0], scenario.ArchiveTimestampTime, ProofOfExistenceSet.Empty,
             scenario.CryptographicConstraints, SignatureElementsConstraints.None, scenario.Seams, resources,
             BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
@@ -309,8 +303,47 @@ internal sealed class SignatureValidationProcessTests
             "The signing certificate the signature carries is protected by the archive time-stamp too.");
         Assert.AreEqual(scenario.ArchiveTimestampTime, extracted.EarliestInstantFor(signatureValueIdentity),
             "Every proof the extraction derives is at the generation time of the time-stamp, which clause 5.6.2.3 calls T1.");
-        Assert.IsFalse(withoutDeclaredCoverage.ExistsAtOrBefore(signatureValueIdentity, scenario.ArchiveTimestampTime),
-            "Step 1) of clause 5.6.2.3.4 puts into the set S only the objects protected by the time-stamp, and a token whose coverage the format binding cannot state and verify has not been shown to protect any of them.");
+    }
+
+
+    /// <summary>
+    /// The constraint itself: <see cref="SignatureElementsConstraints.AcceptsUnverifiableTimestampCoverage"/>
+    /// defaults to <see langword="false"/> and decides only the case step 1) of clause 5.6.2.3.4 leaves open —
+    /// a time-stamp whose covered octets the format binding states nothing about. An archive time-stamp of the
+    /// deprecated v2 form (ETSI EN 319 122-1 clause A.2.4) carries no <c>ats-hash-index-v3</c>, so it is exactly
+    /// that case, while the conformant v3 attribute on the same signature is decided by verification and not by
+    /// the constraint at all.
+    /// </summary>
+    [TestMethod]
+    public async Task AcceptingUnverifiableCoverageDecidesOnlyTheTimestampsTheBindingStatesNothingAbout()
+    {
+        using var scenario = await SignatureScenario.CreateAsync(
+            "unverifiable-coverage.example.test", revokeSigningCertificate: false, trustTheSignatureTimestampAuthority: false, TestContext.CancellationToken).ConfigureAwait(false);
+        using var resources = new SignatureValidationResources();
+
+        CmsSignedData withBothForms = await scenario.WithDeprecatedArchiveTimestampAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        using SignatureFacts facts = await CAdESSignatureFacts.ExtractAsync(
+            new SignatureFactsExtractionContext { SignedDataObject = withBothForms }, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+
+        EmbeddedTimestamp conformant = FindTimestamp(facts, CAdESSignatureFacts.ArchiveTimestampV3AttributeOid);
+        EmbeddedTimestamp deprecated = FindTimestamp(facts, CAdESSignatureFacts.ArchiveTimestampV2AttributeOid);
+        var accepting = new SignatureElementsConstraints { AcceptsUnverifiableTimestampCoverage = true };
+
+        ProtectedObjectSet conformantByDefault = await ProofOfExistenceExtraction.DetermineProtectedObjectsAsync(
+            facts, conformant, SignatureElementsConstraints.None, scenario.Seams, resources, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+        ProtectedObjectSet deprecatedByDefault = await ProofOfExistenceExtraction.DetermineProtectedObjectsAsync(
+            facts, deprecated, SignatureElementsConstraints.None, scenario.Seams, resources, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+        ProtectedObjectSet deprecatedWhenAccepted = await ProofOfExistenceExtraction.DetermineProtectedObjectsAsync(
+            facts, deprecated, accepting, scenario.Seams, resources, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(SignatureElementsConstraints.None.AcceptsUnverifiableTimestampCoverage,
+            "The documented default is false: a token whose message imprint nothing verified against those objects has not been shown to protect them.");
+        Assert.IsNotEmpty(conformantByDefault.Objects,
+            "The archive-time-stamp-v3 states its coverage through the binding, so the default admits what its imprint is verified to protect.");
+        Assert.IsEmpty(deprecatedByDefault.Objects,
+            "The deprecated v2 form carries no ats-hash-index-v3, so the binding states nothing and the default admits nothing from it.");
+        Assert.IsNotEmpty(deprecatedWhenAccepted.Objects,
+            "A Driving Application that declares it establishes the binding by other means gets the class-based admission of clause 5.6.3.1 for that same token.");
     }
 
 
@@ -417,6 +450,26 @@ internal sealed class SignatureValidationProcessTests
             "Step 1) of clause 5.3.4 makes a non-conformant signature FAILED, which clause 5.1.2 step 6) reports as TOTAL-FAILED.");
         Assert.Contains(SignatureValidationSubIndication.FormatFailure, outcome.Conclusion.SubIndications,
             "The sub-indication is FORMAT_FAILURE.");
+    }
+
+
+    /// <summary>
+    /// Finds the one time-stamp a signature carries in a named attribute.
+    /// </summary>
+    /// <param name="facts">The extracted facts.</param>
+    /// <param name="attributeOid">The attribute the token was carried in.</param>
+    /// <returns>The time-stamp.</returns>
+    private static EmbeddedTimestamp FindTimestamp(SignatureFacts facts, string attributeOid)
+    {
+        for(int i = 0; i < facts.Timestamps.Count; ++i)
+        {
+            if(string.Equals(facts.Timestamps[i].Identifier, attributeOid, StringComparison.Ordinal))
+            {
+                return facts.Timestamps[i];
+            }
+        }
+
+        throw new InvalidOperationException($"The signature carries no time-stamp in the attribute '{attributeOid}'.");
     }
 
 
@@ -666,11 +719,11 @@ internal sealed class SignatureValidationProcessTests
                 X509 = X509Constraints,
                 Cryptographic = CryptographicConstraints,
 
-                //This world's archive time-stamp is minted over the Signed Data Object as it stood before the
-                //attribute carrying it was attached, a coverage the shipped CAdES binding does not restate, so
-                //the Driving Application declares that it establishes the binding itself. The default admits
-                //nothing from a time-stamp whose coverage the binding cannot verify.
-                SignatureElements = new SignatureElementsConstraints { AcceptsUnverifiableTimestampCoverage = true }
+                //Nothing is declared about time-stamp coverage. This world's archive time-stamp carries the
+                //ats-hash-index-v3 of ETSI EN 319 122-1 clause 5.5.2 and its message imprint is the clause 5.5.3
+                //concatenation, both of which the shipped CAdES binding recomputes from the Signed Data Object's
+                //own octets, so the coverage is verified rather than declared.
+                SignatureElements = SignatureElementsConstraints.None
             };
 
             var completer = new CertificateChainCompleter([Chain[1], Chain[2]]);
@@ -761,14 +814,62 @@ internal sealed class SignatureValidationProcessTests
         /// <param name="generationTime">The generation time of the archive time-stamp.</param>
         /// <param name="cancellationToken">A cancellation token.</param>
         /// <returns>The signature with the attribute attached, which the caller disposes.</returns>
+        /// <remarks>
+        /// The attribute is a conformant <c>archive-time-stamp-v3</c>: the index of ETSI EN 319 122-1 clause
+        /// 5.5.2 is computed over the signature as it stands, the token's message imprint is the digest of the
+        /// four-part concatenation of clause 5.5.3, and the index is grafted into the token's own
+        /// <c>unsignedAttrs</c> as that clause requires — so the shipped CAdES binding can restate the coverage
+        /// and the proof-of-existence extraction building block can verify it rather than take it on trust.
+        /// </remarks>
         private static async ValueTask<CmsSignedData> AttachArchiveTimestampAsync(
             CmsSignedData signature,
             X509Certificate2 authority,
             DateTimeOffset generationTime,
             CancellationToken cancellationToken)
         {
+            using AtsHashIndexV3 hashIndex = await ArchiveTimestampV3.ComputeHashIndexAsync(
+                signature, signerIndex: 0, PkiDigestAlgorithm.Sha256, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
+            using SignedContentMemory imprintInput = await ArchiveTimestampV3.BuildMessageImprintInputAsync(
+                new ArchiveTimestampImprintContext
+                {
+                    SignedData = signature,
+                    HashIndex = hashIndex,
+                    MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                    SignerIndex = 0
+                },
+                BaseMemoryPool.Shared,
+                cancellationToken).ConfigureAwait(false);
+
+            using CmsSignedData token = await MintTimestampTokenAsync(
+                imprintInput.AsReadOnlyMemory(), authority, generationTime, cancellationToken).ConfigureAwait(false);
+            using CmsAttribute indexAttribute = CmsAttribute.Create(
+                CAdESSignatureFacts.AtsHashIndexV3AttributeOid, hashIndex.AsReadOnlySpan(), BaseMemoryPool.Shared);
+            using CmsSignedData grafted = CmsSignedDataAugmentation.AppendUnsignedAttributes(
+                token, signerIndex: 0, [indexAttribute], BaseMemoryPool.Shared);
+            using CmsAttribute archiveAttribute = CmsAttribute.Create(
+                ArchiveTimestampV3Oid, grafted.AsReadOnlySpan(), BaseMemoryPool.Shared);
+
+            return CmsSignedDataAugmentation.AppendUnsignedAttributes(signature, signerIndex: 0, [archiveAttribute], BaseMemoryPool.Shared);
+        }
+
+
+        /// <summary>
+        /// Mints a time-stamp token over caller-supplied octets: a <c>TSTInfo</c> naming their SHA-256 digest as
+        /// its message imprint, encapsulated in a CMS SignedData the authority signs.
+        /// </summary>
+        /// <param name="timestampedOctets">The octets the authority time-stamps.</param>
+        /// <param name="authority">The Time-Stamping Authority's certificate, which holds its own key.</param>
+        /// <param name="generationTime">The generation time the authority states.</param>
+        /// <param name="cancellationToken">A cancellation token.</param>
+        /// <returns>The token, which the caller disposes.</returns>
+        private static async ValueTask<CmsSignedData> MintTimestampTokenAsync(
+            ReadOnlyMemory<byte> timestampedOctets,
+            X509Certificate2 authority,
+            DateTimeOffset generationTime,
+            CancellationToken cancellationToken)
+        {
             using DigestValue imprint = await CryptographicKeyEvents.ComputeDigestAsync(
-                signature.AsReadOnlyMemory(), Sha256Length, CryptoTags.Sha256Digest, BaseMemoryPool.Shared,
+                timestampedOctets, Sha256Length, CryptoTags.Sha256Digest, BaseMemoryPool.Shared,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
             var writer = new AsnWriter(AsnEncodingRules.DER);
             using(writer.PushSequence())
@@ -790,13 +891,37 @@ internal sealed class SignatureValidationProcessTests
                 writer.WriteGeneralizedTime(generationTime);
             }
 
-            using CmsSignedData token = CmsSignedDataTestFactory.SignAsCms(writer.Encode(), TimestampTokenContentTypeOid, authority);
+            return CmsSignedDataTestFactory.SignAsCms(writer.Encode(), TimestampTokenContentTypeOid, authority);
+        }
 
-            var signedCms = new SignedCms();
-            signedCms.Decode(signature.AsReadOnlySpan().ToArray());
-            signedCms.SignerInfos[0].AddUnsignedAttribute(new AsnEncodedData(new Oid(ArchiveTimestampV3Oid), token.AsReadOnlySpan().ToArray()));
 
-            return CmsSignedData.FromBytes(signedCms.Encode(), BaseMemoryPool.Shared);
+        /// <summary>
+        /// Adds an archive time-stamp of the deprecated v2 form (ETSI EN 319 122-1 clause A.2.4) beside the
+        /// scenario's conformant one: a genuine token, carried in the <c>archive-time-stamp</c> attribute, with
+        /// no <c>ats-hash-index-v3</c> naming what it covers. It is the shape for which the shipped binding
+        /// states nothing, which is what
+        /// <see cref="SignatureElementsConstraints.AcceptsUnverifiableTimestampCoverage"/> exists for.
+        /// </summary>
+        /// <param name="cancellationToken">A cancellation token.</param>
+        /// <returns>The signature carrying both archive time-stamps, owned by this scenario.</returns>
+        /// <remarks>
+        /// Adding an unsigned attribute after the conformant archive time-stamp was applied leaves that
+        /// time-stamp intact: clause 5.5.2 NOTE 5 has later additions not invalidate an index, and the imprint
+        /// input of clause 5.5.3 excludes <c>unsignedAttrs</c> altogether.
+        /// </remarks>
+        public async ValueTask<CmsSignedData> WithDeprecatedArchiveTimestampAsync(CancellationToken cancellationToken)
+        {
+            using ECDsa deprecatedAuthorityKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+            X509Certificate2 deprecatedAuthority = Own(CmsSignedDataTestFactory.MintSelfSignedCertificate(
+                deprecatedAuthorityKey, CurrentTime.AddDays(-1), CurrentTime.AddYears(1)));
+
+            using CmsSignedData token = await MintTimestampTokenAsync(
+                SignedDataObject.AsReadOnlyMemory(), deprecatedAuthority, ArchiveTimestampTime, cancellationToken).ConfigureAwait(false);
+            using CmsAttribute archiveAttribute = CmsAttribute.Create(
+                CAdESSignatureFacts.ArchiveTimestampV2AttributeOid, token.AsReadOnlySpan(), BaseMemoryPool.Shared);
+
+            return Own(CmsSignedDataAugmentation.AppendUnsignedAttributes(
+                SignedDataObject, signerIndex: 0, [archiveAttribute], BaseMemoryPool.Shared));
         }
 
 

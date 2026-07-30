@@ -70,13 +70,15 @@ internal static class X509ChainTestRingRevocation
     /// <param name="thisUpdate">The <c>thisUpdate</c> instant — when the issuer states the list was produced.</param>
     /// <param name="nextUpdate">The <c>nextUpdate</c> instant; a list without one is never authoritative for the shipped checker, so it is required here.</param>
     /// <param name="revokedCertificates">The entries, in list order; an empty list mints a clean CRL.</param>
+    /// <param name="deltaCrlIndicatorBaseNumber">The <c>BaseCRLNumber</c> a Delta CRL states (RFC 5280 §5.2.4); <see langword="null"/> mints a complete list.</param>
     /// <returns>The pooled DER-encoded list, tagged <see cref="PkiCertificateTags.X509Crl"/>; the caller disposes it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when a required argument is <see langword="null"/>.</exception>
     internal static PkiCertificateMemory MintCertificateRevocationList(
         X509ChainTestRingNode issuer,
         DateTimeOffset thisUpdate,
         DateTimeOffset nextUpdate,
-        IReadOnlyList<RevokedCertificateEntry> revokedCertificates)
+        IReadOnlyList<RevokedCertificateEntry> revokedCertificates,
+        int? deltaCrlIndicatorBaseNumber = null)
     {
         ArgumentNullException.ThrowIfNull(issuer);
         ArgumentNullException.ThrowIfNull(revokedCertificates);
@@ -101,6 +103,13 @@ internal static class X509ChainTestRingRevocation
         //monotonicity across a fixture's lists is not asserted by any reader this suite exercises.
         using Salt crlNumber = X509ChainTestRing.CreateSerialNumber();
         generator.AddExtension(X509Extensions.CrlNumber, critical: false, new CrlNumber(ToPositiveInteger(crlNumber)));
+
+        if(deltaCrlIndicatorBaseNumber is int baseNumber)
+        {
+            //RFC 5280 §5.2.4: the deltaCRLIndicator is a critical extension whose value is the BaseCRLNumber the
+            //delta is computed against. Its presence is what makes a list a Delta CRL to any reader.
+            generator.AddExtension(X509Extensions.DeltaCrlIndicator, critical: true, new CrlNumber(BcBigInteger.ValueOf(baseNumber)));
+        }
 
         X509Crl crl = generator.Generate(new Asn1SignatureFactory(X509ChainTestRing.EcdsaWithSha256SignatureName, issuerPrivateKey));
 

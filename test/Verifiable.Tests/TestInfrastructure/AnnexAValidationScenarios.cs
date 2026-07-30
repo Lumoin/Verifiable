@@ -604,12 +604,12 @@ internal sealed class AnnexAValidationScenario: IDisposable
             X509 = X509Constraints,
             Cryptographic = CryptographicConstraints,
 
-            //The archive time-stamp of this world is minted over the Signed Data Object as it stood before the
-            //attribute carrying it was attached. The shipped CAdES binding does not restate that computation —
-            //it states coverage only for the content and signature time-stamps — so the Driving Application here
-            //declares that it establishes the binding itself, which is what this constraint means. Without it the
-            //POE extraction building block admits nothing from an archive time-stamp, which is the default.
-            SignatureElements = new SignatureElementsConstraints { AcceptsUnverifiableTimestampCoverage = true }
+            //Nothing is declared about time-stamp coverage: the archive time-stamp of this world carries the
+            //ats-hash-index-v3 of ETSI EN 319 122-1 clause 5.5.2 and its imprint is the clause 5.5.3
+            //concatenation, both of which the shipped CAdES binding recomputes, so the proof-of-existence
+            //extraction building block verifies the token's messageImprint against octets it derived itself.
+            //SignatureElementsConstraints.None leaves AcceptsUnverifiableTimestampCoverage at its false default.
+            SignatureElements = SignatureElementsConstraints.None
         };
 
         TimestampConstraints = Constraints;

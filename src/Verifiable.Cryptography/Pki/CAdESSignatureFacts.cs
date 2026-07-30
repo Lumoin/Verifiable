@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
@@ -91,6 +92,25 @@ public static class CAdESSignatureFacts
     /// <summary>The signature-time-stamp-token unsigned attribute (CAdES-T), whose token time-stamps the signature value.</summary>
     public static string SignatureTimestampAttributeOid => "1.2.840.113549.1.9.16.2.14";
 
+    /// <summary>
+    /// The complete-certificate-references unsigned attribute of
+    /// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31912201/01.03.01_60/en_31912201v010301p.pdf">
+    /// ETSI EN 319 122-1 V1.3.1 clause A.1.1.1</see> (<c>id-aa-ets-certificateRefs</c>), which references the
+    /// certificates of the signer's chain by hash value rather than carrying them. It is
+    /// <c>shall not be present</c> at every baseline level of clause 6.3 and is never created here; it is
+    /// recognised because the time-stamps of clause A.1.5 are computed over it.
+    /// </summary>
+    public static string CompleteCertificateReferencesAttributeOid => "1.2.840.113549.1.9.16.2.21";
+
+    /// <summary>
+    /// The complete-revocation-references unsigned attribute of
+    /// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31912201/01.03.01_60/en_31912201v010301p.pdf">
+    /// ETSI EN 319 122-1 V1.3.1 clause A.1.2.1</see> (<c>id-aa-ets-revocationRefs</c>), the revocation-data
+    /// counterpart of <see cref="CompleteCertificateReferencesAttributeOid"/>, recognised for the same reason
+    /// and equally never created.
+    /// </summary>
+    public static string CompleteRevocationReferencesAttributeOid => "1.2.840.113549.1.9.16.2.22";
+
     /// <summary>The certificate-values unsigned attribute, carrying certificates for long-term validation.</summary>
     public static string CertificateValuesAttributeOid => "1.2.840.113549.1.9.16.2.23";
 
@@ -109,6 +129,124 @@ public static class CAdESSignatureFacts
     /// <summary>The archive-timestamp-v3 unsigned attribute of ETSI EN 319 122-1.</summary>
     public static string ArchiveTimestampV3AttributeOid => "0.4.0.1733.2.4";
 
+    /// <summary>
+    /// The ats-hash-index-v3 unsigned attribute of
+    /// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31912201/01.03.01_60/en_31912201v010301p.pdf">
+    /// ETSI EN 319 122-1 V1.3.1 clause 5.5.2</see> (<c>id-aa-ATSHashIndex-v3</c>, Annex D). It names which
+    /// certificates, revocation information objects and unsigned attribute values an archive time-stamp
+    /// protects, and clause 5.5.3 requires an archive-time-stamp-v3 token to carry exactly one of them among the
+    /// unsigned attributes of its own SignerInfo — which is where <see cref="ArchiveTimestampV3"/> reads it, not
+    /// among the attributes of the signature this binding surfaces.
+    /// </summary>
+    public static string AtsHashIndexV3AttributeOid => "0.4.0.19122.1.5";
+
+    /// <summary>
+    /// The long-term-validation unsigned attribute, deprecated by
+    /// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31912201/01.03.01_60/en_31912201v010301p.pdf">
+    /// ETSI EN 319 122-1 V1.3.1 clause A.2.5</see> ("New long-term-validation attributes shall not be created").
+    /// It is recognised, never emitted, and its presence selects the second validation-data placement strategy
+    /// of clause 5.5.3. The object identifier's value is not printed in EN 319 122-1 itself, which names the
+    /// attribute by reference to the legacy specification it is inherited from.
+    /// </summary>
+    public static string LongTermValidationAttributeOid => "0.4.0.1733.2.2";
+
+    /// <summary>
+    /// The ats-hash-index unsigned attribute preceding <see cref="AtsHashIndexV3AttributeOid"/>, deprecated by
+    /// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31912201/01.03.01_60/en_31912201v010301p.pdf">
+    /// ETSI EN 319 122-1 V1.3.1 clause A.2.6</see> ("Instead the ats-hash-index-v3 attribute ... shall be
+    /// used"). Recognised, never emitted. The object identifier's value is not printed in EN 319 122-1 itself,
+    /// which names the attribute by reference to the legacy specification it is inherited from.
+    /// </summary>
+    public static string AtsHashIndexAttributeOid => "0.4.0.1733.2.5";
+
+    /// <summary>
+    /// The ats-hash-index-v2 unsigned attribute, the second of the three forms and deprecated by the same
+    /// clause A.2.6 as the first. Recognised, never emitted. The object identifier's value is not printed in
+    /// EN 319 122-1 V1.3.1, which inherits it from the earlier version of the present document.
+    /// </summary>
+    public static string AtsHashIndexV2AttributeOid => "0.4.0.19122.1.4";
+
+    /// <summary>
+    /// The commitment-type-indication signed attribute of
+    /// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31912201/01.03.01_60/en_31912201v010301p.pdf">
+    /// ETSI EN 319 122-1 V1.3.1 clause 5.2.3</see> (<c>id-aa-ets-commitmentType</c>), which qualifies the
+    /// commitment the signer made when signing the data object.
+    /// </summary>
+    public static string CommitmentTypeIndicationAttributeOid => "1.2.840.113549.1.9.16.2.16";
+
+    /// <summary>
+    /// The content-hints signed attribute of
+    /// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31912201/01.03.01_60/en_31912201v010301p.pdf">
+    /// ETSI EN 319 122-1 V1.3.1 clause 5.2.4.1</see> (<c>id-aa-contentHint</c>, ESS
+    /// <see href="https://www.rfc-editor.org/rfc/rfc2634#section-2.9">RFC 2634 §2.9</see>), one of the two
+    /// Service Provision Options for the "identifying the signed data type" service of Table 1 requirement t).
+    /// </summary>
+    public static string ContentHintsAttributeOid => "1.2.840.113549.1.9.16.2.4";
+
+    /// <summary>
+    /// The mime-type signed attribute of
+    /// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31912201/01.03.01_60/en_31912201v010301p.pdf">
+    /// ETSI EN 319 122-1 V1.3.1 clause 5.2.4.2</see> (<c>id-aa-ets-mimeType</c>), the other Service Provision
+    /// Option for Table 1 requirement t).
+    /// </summary>
+    public static string MimeTypeAttributeOid => "0.4.0.1733.2.1";
+
+    /// <summary>
+    /// The signer-location signed attribute of
+    /// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31912201/01.03.01_60/en_31912201v010301p.pdf">
+    /// ETSI EN 319 122-1 V1.3.1 clause 5.2.5</see> (<c>id-aa-ets-signerLocation</c>).
+    /// </summary>
+    public static string SignerLocationAttributeOid => "1.2.840.113549.1.9.16.2.17";
+
+    /// <summary>
+    /// The content-reference signed attribute of
+    /// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31912201/01.03.01_60/en_31912201v010301p.pdf">
+    /// ETSI EN 319 122-1 V1.3.1 clause 5.2.11</see> (<c>id-aa-contentReference</c>, ESS
+    /// <see href="https://www.rfc-editor.org/rfc/rfc2634#section-2.11">RFC 2634 §2.11</see>).
+    /// </summary>
+    public static string ContentReferenceAttributeOid => "1.2.840.113549.1.9.16.2.10";
+
+    /// <summary>
+    /// The content-identifier signed attribute of
+    /// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31912201/01.03.01_60/en_31912201v010301p.pdf">
+    /// ETSI EN 319 122-1 V1.3.1 clause 5.2.12</see> (<c>id-aa-contentIdentifier</c>, ESS
+    /// <see href="https://www.rfc-editor.org/rfc/rfc2634#section-2.7">RFC 2634 §2.7</see>).
+    /// </summary>
+    public static string ContentIdentifierAttributeOid => "1.2.840.113549.1.9.16.2.7";
+
+    /// <summary>
+    /// The signature-policy-store unsigned attribute of
+    /// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31912201/01.03.01_60/en_31912201v010301p.pdf">
+    /// ETSI EN 319 122-1 V1.3.1 clause 5.2.10</see> (<c>id-aa-ets-sigPolicyStore</c>). Table 1 requirement k)
+    /// gates its incorporation on <see cref="SignaturePolicyIdentifierAttributeOid"/> being present with a
+    /// non-zero <c>sigPolicyHash</c> — enforced by <see cref="CAdESSignatureAugmentation.AddSignaturePolicyStore"/>.
+    /// </summary>
+    public static string SignaturePolicyStoreAttributeOid => "0.4.0.19122.1.3";
+
+    /// <summary>
+    /// The signer-attributes-v2 signed attribute of
+    /// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31912201/01.03.01_60/en_31912201v010301p.pdf">
+    /// ETSI EN 319 122-1 V1.3.1 clause 5.2.6.1</see> (<c>id-aa-ets-signerAttrV2</c>, Annex D), which encapsulates
+    /// attributes of the signer: claimed attributes, attribute certificates issued by an Attribute Authority, or
+    /// assertions signed by a third party. Table 1 requirement n) admits
+    /// <see cref="CompleteCertificateReferencesAttributeOid"/>'s attribute-certificate siblings only when a
+    /// <c>certifiedAttributesV2</c> or <c>signedAssertions</c> arm of this attribute is present — the
+    /// <c>claimedAttributes</c> arm on its own does not legitimize them.
+    /// </summary>
+    public static string SignerAttributesV2AttributeOid => "0.4.0.19122.1.1";
+
+    /// <summary>
+    /// The countersignature unsigned attribute of
+    /// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31912201/01.03.01_60/en_31912201v010301p.pdf">
+    /// ETSI EN 319 122-1 V1.3.1 clause 5.2.7</see>, which states it "shall be as defined in CMS" —
+    /// <c>id-countersignature</c> of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc5652#section-11.4">RFC 5652 §11.4</see>, whose value is a
+    /// whole <c>SignerInfo</c> signed over the outer <c>SignerInfo.signature</c> value octets. Table 1 gives it
+    /// cardinality <c>&gt;= 0</c>, so a signature may carry none, one, or several — as several values of one
+    /// attribute or as several attributes, both of which clause 5.5.3 NOTE 6 names explicitly.
+    /// </summary>
+    public static string CountersignatureAttributeOid => "1.2.840.113549.1.9.6";
+
 
     /// <summary>
     /// The seam bundle a caller hands the building blocks to validate a CAdES signature.
@@ -118,7 +256,8 @@ public static class CAdESSignatureFacts
         Format = SignatureFormatIdentifier.CAdES,
         ExtractFacts = ExtractAsync,
         VerifyCryptography = VerifyCryptographyAsync,
-        StateTimestampCoverage = StateTimestampCoverageAsync
+        StateTimestampCoverage = StateTimestampCoverageAsync,
+        StateTimestampProtectsObject = StateTimestampProtectsObjectAsync
     };
 
 
@@ -137,18 +276,25 @@ public static class CAdESSignatureFacts
     /// over the <c>SignerInfo.signature</c> octets, which are both carriers the extracted facts already hold.
     /// </para>
     /// <para>
-    /// <strong>Archive and validation-data time-stamps are not stated.</strong> Their message imprints are
-    /// computed over the concatenation ETSI EN 319 122-1 defines for <c>archive-time-stamp-v3</c> (and its
-    /// predecessors), which reaches encoded fields of the CMS structure this binding does not reassemble and, for
-    /// the v3 attribute, the <c>ats-hash-index-v3</c> attribute that names which of them are covered. Until that
-    /// computation is implemented, this binding states nothing for those classes, and the POE extraction building
-    /// block therefore derives no proof of existence from such a token unless the caller's validation constraints
-    /// explicitly accept a coverage this binding cannot verify.
+    /// An archive time-stamp's imprint is the four-part concatenation of
+    /// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31912201/01.03.01_60/en_31912201v010301p.pdf">
+    /// ETSI EN 319 122-1 V1.3.1 clause 5.5.3</see>, driven by the <c>ats-hash-index-v3</c> of clause 5.5.2 that
+    /// the token itself carries; it is recomputed from the Signed Data Object's own octets by
+    /// <see cref="ArchiveTimestampV3.StateCoverageAsync"/> — the same component the generator side computes the
+    /// index and the imprint input with, so the two directions cannot drift. A time-stamp on references to
+    /// validation data uses the third convention of clause A.1.5, which
+    /// <see cref="ValidationDataTimestampCoverage"/> states.
+    /// </para>
+    /// <para>
+    /// <strong>Nothing stated is the fail-closed outcome, and it is reached without an exception.</strong> An
+    /// archive time-stamp of the deprecated v2 form carries no hash index, a token whose index no longer matches
+    /// the material the signature carries is invalid per clause 5.5.2, and a detached signature has no
+    /// encapsulated content for step 2) of clause 5.5.3 — each of those, and every unreadable structure, yields
+    /// <see langword="null"/>. The POE extraction building block then derives no proof of existence from the
+    /// token unless the caller's validation constraints explicitly accept a coverage this binding did not state.
     /// </para>
     /// </remarks>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of the returned carrier transfers to the caller, which disposes it once it has verified the message imprint against it.")]
-    public static ValueTask<SignedContentMemory?> StateTimestampCoverageAsync(
+    public static async ValueTask<SignedContentMemory?> StateTimestampCoverageAsync(
         TimestampCoverageContext context,
         MemoryPool<byte> pool,
         CancellationToken cancellationToken)
@@ -157,15 +303,448 @@ public static class CAdESSignatureFacts
         ArgumentNullException.ThrowIfNull(pool);
         cancellationToken.ThrowIfCancellationRequested();
 
-        SignedContentMemory? covered = context.Timestamp.Class switch
+        //The archive time-stamp is the only class whose coverage reaches the digest seam, so it is resolved on
+        //its own and every other class maps straight to the octets it is computed over.
+        if(context.Timestamp.Class == SignatureTimestampClass.ArchiveTimestamp)
         {
-            SignatureTimestampClass.ContentTimestamp => context.Signature.SignedContent,
-            SignatureTimestampClass.SignatureTimestamp => context.Signature.SignatureValue,
+            return await StateArchiveTimestampCoverageAsync(context, pool, cancellationToken).ConfigureAwait(false);
+        }
+
+        return context.Timestamp.Class switch
+        {
+            SignatureTimestampClass.ContentTimestamp => CopyStatedOctets(context.Signature.SignedContent, pool),
+            SignatureTimestampClass.SignatureTimestamp => CopyStatedOctets(context.Signature.SignatureValue, pool),
+            SignatureTimestampClass.ValidationDataTimestamp => StateValidationDataTimestampCoverage(context, pool),
             _ => null
         };
-
-        return ValueTask.FromResult(covered is null ? null : SignedContentMemory.FromBytes(covered.AsReadOnlyMemory().Span, pool));
     }
+
+
+    /// <summary>
+    /// States coverage the extracted facts already hold as a carrier, copied into a carrier the caller owns.
+    /// </summary>
+    /// <param name="stated">The octets the class is computed over, or <see langword="null"/> when the signature carries none.</param>
+    /// <param name="pool">The memory pool the returned carrier is rented from.</param>
+    /// <returns>The copy, which the caller disposes, or <see langword="null"/>.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the returned carrier transfers to the caller, which disposes it once it has verified the message imprint against it.")]
+    private static SignedContentMemory? CopyStatedOctets(SignedContentMemory? stated, MemoryPool<byte> pool) =>
+        stated is null ? null : SignedContentMemory.FromBytes(stated.AsReadOnlyMemory().Span, pool);
+
+
+    /// <summary>
+    /// States the octets an <c>archive-time-stamp-v3</c>'s message imprint is computed over, by recomputing the
+    /// clause 5.5.3 concatenation from the Signed Data Object and the token's own <c>ats-hash-index-v3</c>.
+    /// </summary>
+    /// <param name="context">The signature and the time-stamp.</param>
+    /// <param name="pool">The memory pool the returned carrier is rented from.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The octets, which the caller disposes, or <see langword="null"/> when nothing could be stated.</returns>
+    /// <remarks>
+    /// The signer index is zero because this binding surfaces the facts of the first <c>SignerInfo</c> alone —
+    /// the same signer every other member of <see cref="SignatureFacts"/> describes — so an archive time-stamp
+    /// it surfaced is the one of clause 5.5.1 belonging to that signer.
+    /// <para>
+    /// A detached signature states nothing here: step 2) of clause 5.5.3 needs the signed data, its NOTE 1 has
+    /// that hash come from outside the signature for the detached case, and the coverage seam carries no channel
+    /// for the Driving Application's Signer's Document. The same binding already reports
+    /// <see cref="SignatureCryptographicOutcome.SignedDataNotFound"/> for a detached signature, so no run
+    /// reaches proof-of-existence extraction with one.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the returned carrier transfers to the caller, which disposes it once it has verified the message imprint against it.")]
+    private static async ValueTask<SignedContentMemory?> StateArchiveTimestampCoverageAsync(
+        TimestampCoverageContext context,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken)
+    {
+        if(context.Signature.SignedDataObject is not CmsSignedData signedData)
+        {
+            return null;
+        }
+
+        using ArchiveTimestampCoverage coverage = await ArchiveTimestampV3.StateCoverageAsync(
+            new ArchiveTimestampCoverageContext
+            {
+                SignedData = signedData,
+                ArchiveTimestampToken = context.Timestamp.Token,
+                SignerIndex = 0
+            },
+            pool,
+            cancellationToken).ConfigureAwait(false);
+
+        return coverage.MessageImprintInput is SignedContentMemory imprintInput
+            ? SignedContentMemory.FromBytes(imprintInput.AsReadOnlyMemory().Span, pool)
+            : null;
+    }
+
+
+    /// <summary>
+    /// States the octets a time-stamp on references to validation data — clause A.1.5's
+    /// <c>CAdES-C-timestamp</c> or <c>time-stamped-certs-crls-references</c> — has its message imprint computed
+    /// over.
+    /// </summary>
+    /// <param name="context">The signature and the time-stamp.</param>
+    /// <param name="pool">The memory pool the returned carrier is rented from.</param>
+    /// <returns>The octets, which the caller disposes, or <see langword="null"/> when nothing could be stated.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the returned carrier transfers to the caller, which disposes it once it has verified the message imprint against it.")]
+    private static SignedContentMemory? StateValidationDataTimestampCoverage(
+        TimestampCoverageContext context,
+        MemoryPool<byte> pool) =>
+        context.Signature.SignedDataObject is CmsSignedData signedData
+            ? ValidationDataTimestampCoverage.StateCoverage(signedData, signerIndex: 0, context.Timestamp.Identifier, pool)
+            : null;
+
+
+    /// <summary>
+    /// Decides whether one embedded time-stamp is shown to protect one individual object of the signature — the
+    /// <see cref="StateTimestampProtectsObjectAsyncDelegate"/> implementation of the bundle in <see cref="Seam"/>.
+    /// </summary>
+    /// <param name="context">The signature, the time-stamp, and the one candidate object.</param>
+    /// <param name="pool">The memory pool the scratch buffer and the computed digest are rented from.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns><see langword="true"/> when this format shows the time-stamp protects the object.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when a required argument is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// <para>
+    /// An <c>archive-time-stamp-v3</c> names the objects it protects one by one, in the <c>ats-hash-index-v3</c> of
+    /// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31912201/01.03.01_60/en_31912201v010301p.pdf">
+    /// ETSI EN 319 122-1 V1.3.1 clause 5.5.2</see>: one hash value per instance of <c>CertificateChoices</c>, one
+    /// per instance of <c>RevocationInfoChoice</c>, and one per <c>AttributeValue</c> of every unsigned attribute,
+    /// "as present at the time when the corresponding archive time-stamp is requested". That is strictly finer than
+    /// the per-class rule of clause 5.6.3.1 of ETSI EN 319 102-1, which classifies an archive time-stamp as
+    /// protecting "the whole signature except the last archive time-stamp"; the difference is exactly the material
+    /// somebody appended to the signature <em>after</em> the archive time-stamp was applied, which the index cannot
+    /// name and which no part of the token's message imprint binds. Answering from the index closes that gap: a
+    /// revocation object or a certificate added after the fact gains no proof of existence at the archive
+    /// time-stamp's instant.
+    /// </para>
+    /// <para>
+    /// A time-stamp on references to validation data protects no such object at all. The imprints of clauses
+    /// A.1.5.1 and A.1.5.2 are computed over the <c>complete-certificate-references</c> and
+    /// <c>complete-revocation-references</c> attributes — and, for the <c>escTimeStamp</c> form, the signature
+    /// value and the <c>signature-time-stamp</c> attribute as well — never over the certificates and revocation
+    /// data the signature carries. Those attributes name the material by hash value, which is a <em>reference</em>
+    /// of step 4) of clause 5.6.2.3 rather than an object of step 5), and this binding does not surface those
+    /// references. The answer is therefore <see langword="false"/>: a proof of existence is lost rather than one
+    /// granted that the token does not establish.
+    /// </para>
+    /// </remarks>
+    public static async ValueTask<bool> StateTimestampProtectsObjectAsync(
+        TimestampProtectedObjectContext context,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(pool);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        //The archive class is the only one whose answer reaches the digest seam, so it is resolved on its own and
+        //every other class answers from its own imprint definition alone.
+        if(context.Timestamp.Class == SignatureTimestampClass.ArchiveTimestamp)
+        {
+            return await StateArchiveTimestampProtectsObjectAsync(context, pool, cancellationToken).ConfigureAwait(false);
+        }
+
+        return context.Timestamp.Class switch
+        {
+            //Clause A.1.5: the imprint covers the reference attributes, not the material they reference.
+            SignatureTimestampClass.ValidationDataTimestamp => false,
+
+            //A content time-stamp covers the signed content and a signature time-stamp the signature value, and
+            //the extraction block admits those two objects without consulting this filter at all, so neither class
+            //ever reaches here. An unforeseen class has shown nothing about a certificate, a revocation object or
+            //an earlier token either.
+            _ => false
+        };
+    }
+
+
+    /// <summary>
+    /// Decides whether the <c>ats-hash-index-v3</c> of an <c>archive-time-stamp-v3</c> names one candidate object
+    /// of the signature, by recomputing that object's hash value the way clause 5.5.2 counts it and testing
+    /// membership in the matching index list.
+    /// </summary>
+    /// <param name="context">The signature, the archive time-stamp, and the one candidate object.</param>
+    /// <param name="pool">The memory pool the scratch buffer and the computed digest are rented from.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns><see langword="true"/> when an index entry matches the object.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>The object is looked up in the Signed Data Object's own structure, because that is what the index
+    /// counts.</strong> Clause 5.5.2 hashes whole members of <c>SignedData.certificates</c> and
+    /// <c>SignedData.crls</c>, and for an unsigned attribute the concatenation of the <c>attrType</c> field and the
+    /// one <c>AttributeValue</c>. For a certificate and for a certificate revocation list that member is the
+    /// object's own encoding, but for an OCSP response it is not: clause 5.4.2.2 places it as the <c>other</c>
+    /// alternative of <c>RevocationInfoChoice</c>, an <c>OtherRevocationInfoFormat</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc5940">RFC 5940</see>) whose <c>otherRevInfo</c> field is what
+    /// the extracted facts surface. Hashing the surfaced octets alone would report every embedded OCSP response
+    /// uncovered, so the member that carries it is located and hashed instead — no re-encoding is involved, the
+    /// member's own octets are taken as they stand.
+    /// </para>
+    /// <para>
+    /// <strong>A signed attribute value is protected through the imprint, not the index.</strong> A
+    /// <c>content-time-stamp</c> is a SIGNED attribute (clause 5.2.8), and step 3) of clause 5.5.3 concatenates
+    /// the whole <c>signedAttrs</c> TLV verbatim into the archive time-stamp's message imprint, so its token is
+    /// bound by the archive time-stamp exactly as the signature value and the signed content are — none of which
+    /// the <c>ats-hash-index-v3</c> of clause 5.5.2 names, because that index holds hashes of certificates,
+    /// revocation objects and <em>unsigned</em> attribute values alone. This object-granular filter therefore
+    /// admits a <see cref="ValidationObjectKind.TimestampToken"/> candidate whose octets are one of the signer's
+    /// signed attribute values unconditionally, before any index list is consulted and with no hash-index lookup;
+    /// a lookup would find nothing and wrongly cost the token its proof of existence. Only the timestamp-token
+    /// kind is tested this way — a certificate or a revocation object never appears among <c>signedAttrs</c>.
+    /// </para>
+    /// <para>
+    /// <strong>Accepted over-strictness (fail-closed), and its exact reach.</strong> One placement is still read
+    /// as unprotected when it is in fact protected: a certificate this binding surfaced out of a
+    /// <c>certificate-values</c> attribute, or a revocation object out of a <c>revocation-values</c> attribute —
+    /// the legacy placement of clauses A.1.1.2 and A.1.2.2 that clause 5.5.3's second strategy writes to. That
+    /// object is not a member of the root <c>certificates</c> or <c>crls</c> field, so it is not found and reads
+    /// as unprotected, though it is in fact protected through the index entry of the whole attribute value that
+    /// contains it; a finer reading would descend into that attribute's own syntax. This is deliberately not done:
+    /// the outcome costs a proof of existence rather than granting one, and it is only reachable on a signature
+    /// carrying the deprecated legacy attributes that select that second strategy at all — nothing this library
+    /// creates does. A <c>content-time-stamp</c>, by contrast, is a signed attribute this library <em>does</em>
+    /// create (clause 6.3, an opt-in attribute) and is reached through the signed-attribute-value admission above,
+    /// so it is not among the over-strict placements.
+    /// </para>
+    /// </remarks>
+    private static async ValueTask<bool> StateArchiveTimestampProtectsObjectAsync(
+        TimestampProtectedObjectContext context,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken)
+    {
+        if(context.Signature.SignedDataObject is not CmsSignedData signedData)
+        {
+            return false;
+        }
+
+        AtsHashIndexV3? hashIndex = null;
+        try
+        {
+            hashIndex = ArchiveTimestampV3.ReadHashIndexFromToken(context.Timestamp.Token, pool);
+            if(hashIndex is null)
+            {
+                //A token carrying no ats-hash-index-v3 names no protected objects one by one; the deprecated
+                //archive-time-stamp form of clause A.2.4 is exactly that. Nothing here can narrow the class rule,
+                //and nothing needs to: StateTimestampCoverageAsync already states no coverage for such a token, so
+                //a validation run reaches this filter with one only when the caller's constraints explicitly
+                //accept a coverage this binding did not state — which is itself the declaration that the per-class
+                //admission of clause 5.6.3.1 may stand for that token.
+                return true;
+            }
+
+            //A content-time-stamp is a SIGNED attribute (clause 5.2.8), and step 3) of clause 5.5.3 concatenates
+            //the whole signedAttrs TLV verbatim into the archive time-stamp's message imprint — so a candidate
+            //whose octets are one of the signer's signed attribute values is bound by the archive time-stamp
+            //exactly as its signature value and signed content are (the objects the extraction block admits
+            //without ever consulting this filter). The ats-hash-index-v3 of clause 5.5.2 never names it — the
+            //index holds hashes of certificates, revocation objects and UNSIGNED attribute values alone — so the
+            //answer is stated here, before any index list is consulted, and admitted unconditionally on a hit
+            //with no hash-index lookup. Only the TimestampToken kind can be a signed attribute value; a
+            //certificate or a revocation object never appears in signedAttrs, so no other kind is tested this way.
+            if(context.Kind == ValidationObjectKind.TimestampToken && CandidateIsSignedAttributeValue(signedData, context.Object))
+            {
+                return true;
+            }
+
+            if(PkiDigestAlgorithm.FromOid(hashIndex.HashIndexAlgorithm.Oid) is not PkiDigestAlgorithm algorithm)
+            {
+                return false;
+            }
+
+            IReadOnlyList<ReadOnlyMemory<byte>> entries = context.Kind switch
+            {
+                ValidationObjectKind.Certificate => hashIndex.CertificatesHashIndex,
+                ValidationObjectKind.RevocationData => hashIndex.CrlsHashIndex,
+                ValidationObjectKind.TimestampToken => hashIndex.UnsignedAttributeValuesHashIndex,
+                _ => []
+            };
+            if(entries.Count == 0)
+            {
+                return false;
+            }
+
+            IndexedObjectEncoding? indexed = LocateIndexedEncoding(signedData, context.Object, context.Kind);
+            if(indexed is null)
+            {
+                return false;
+            }
+
+            using DigestValue digest = await ComputeIndexedDigestAsync(
+                indexed.Value, algorithm, pool, cancellationToken).ConfigureAwait(false);
+            for(int i = 0; i < entries.Count; ++i)
+            {
+                if(digest.AsReadOnlySpan().SequenceEqual(entries[i].Span))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        catch(Exception exception) when(exception is AsnContentException or CryptographicException)
+        {
+            //Attacker-reachable input: a structure this walk cannot read shows nothing about the object.
+            return false;
+        }
+        finally
+        {
+            hashIndex?.Dispose();
+        }
+
+        //Finds the encoding clause 5.5.2 counts a hash value of for one candidate object, as it stands in the
+        //Signed Data Object, and names the attribute type it has to be concatenated after when the object is
+        //carried as an unsigned attribute value.
+        static IndexedObjectEncoding? LocateIndexedEncoding(CmsSignedData signedData, PkiCertificateMemory candidate, ValidationObjectKind kind)
+        {
+            if(kind == ValidationObjectKind.Certificate)
+            {
+                IReadOnlyList<ReadOnlyMemory<byte>> members = CmsSignedDataAugmentation.ReadCertificates(signedData);
+                for(int i = 0; i < members.Count; ++i)
+                {
+                    if(members[i].Span.SequenceEqual(candidate.AsReadOnlySpan()))
+                    {
+                        return new IndexedObjectEncoding(AttributeType: null, members[i]);
+                    }
+                }
+
+                return null;
+            }
+
+            if(kind == ValidationObjectKind.RevocationData)
+            {
+                IReadOnlyList<ReadOnlyMemory<byte>> members = CmsSignedDataAugmentation.ReadRevocationInformation(signedData);
+                for(int i = 0; i < members.Count; ++i)
+                {
+                    if(members[i].Span.SequenceEqual(candidate.AsReadOnlySpan()) || CarriesOtherRevocationInfo(members[i], candidate.AsReadOnlySpan()))
+                    {
+                        return new IndexedObjectEncoding(AttributeType: null, members[i]);
+                    }
+                }
+
+                return null;
+            }
+
+            if(kind != ValidationObjectKind.TimestampToken)
+            {
+                return null;
+            }
+
+            //An earlier time-stamp token is one AttributeValue of one unsigned attribute, and clause 5.5.2 indexes
+            //those per value: the hash is over the attribute's attrType field followed by the one value.
+            IReadOnlyList<CmsUnsignedAttributeValueLocation> locations = CmsSignedDataAugmentation.LocateUnsignedAttributeValues(signedData, signerIndex: 0);
+            for(int i = 0; i < locations.Count; ++i)
+            {
+                ReadOnlyMemory<byte> value = CmsSignedDataAugmentation.ReadUnsignedAttributeValue(
+                    signedData, signerIndex: 0, locations[i].AttributeIndex, locations[i].ValueIndex);
+                if(value.Span.SequenceEqual(candidate.AsReadOnlySpan()))
+                {
+                    return new IndexedObjectEncoding(locations[i].AttributeType, value);
+                }
+            }
+
+            return null;
+        }
+
+        //Tells whether one member of SignedData.crls is the other alternative of RevocationInfoChoice (RFC 5652
+        //§10.2.1) carrying the candidate object as its otherRevInfo field, which is the shape clause 5.4.2.2 gives
+        //an embedded OCSP response and the reason the octets the extracted facts surface are shorter than the
+        //member whose hash value the index holds.
+        static bool CarriesOtherRevocationInfo(ReadOnlyMemory<byte> member, ReadOnlySpan<byte> candidate)
+        {
+            try
+            {
+                var reader = new AsnReader(member, AsnEncodingRules.DER);
+                if(reader.PeekTag() != new Asn1Tag(TagClass.ContextSpecific, 1, isConstructed: true))
+                {
+                    return false;
+                }
+
+                AsnReader otherRevocationInfo = reader.ReadSequence(new Asn1Tag(TagClass.ContextSpecific, 1));
+                string format = otherRevocationInfo.ReadObjectIdentifier();
+                ReadOnlyMemory<byte> otherRevInfo = otherRevocationInfo.ReadEncodedValue();
+
+                //The candidate is the surfaced OCSP response, always a whole OCSPResponse; the member is
+                //normalised the same way the surfacing walk normalises it (the id-pkix-ocsp-basic form's bare
+                //BasicOCSPResponse wrapped, the RFC 5940 §2 id-ri-ocsp-response form's whole response left as it
+                //stands) so the two forms compare on the one canonical shape the index member is then hashed by.
+                return string.Equals(format, WellKnownOids.OcspBasicResponseType, StringComparison.Ordinal)
+                    ? WrapBasicResponseAsOcspResponse(otherRevInfo.Span).AsSpan().SequenceEqual(candidate)
+                    : otherRevInfo.Span.SequenceEqual(candidate);
+            }
+            catch(AsnContentException)
+            {
+                //One member this walk cannot read is one member that does not match; the remaining members are
+                //still worth asking about, so the failure is local rather than the whole answer's.
+                return false;
+            }
+        }
+
+        //Computes the hash value clause 5.5.2 holds for one object: of the located encoding alone, or of the
+        //attribute's attrType field laid before it when the object is an unsigned attribute value. The attrType
+        //field is re-encoded from the object identifier the walk read, which reproduces the octets the index was
+        //computed over because an object identifier's DER encoding is canonical — and a structure whose attribute
+        //types are not DER states no archive coverage in the first place, so nothing reaches here from one.
+        static async ValueTask<DigestValue> ComputeIndexedDigestAsync(
+            IndexedObjectEncoding indexed,
+            PkiDigestAlgorithm algorithm,
+            MemoryPool<byte> pool,
+            CancellationToken cancellationToken)
+        {
+            if(indexed.AttributeType is not string attributeType)
+            {
+                return await CryptographicKeyEvents.ComputeDigestAsync(
+                    indexed.Encoding, algorithm.OutputByteLength, algorithm.DigestTag, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+
+            var writer = new AsnWriter(AsnEncodingRules.DER);
+            writer.WriteObjectIdentifier(attributeType);
+            int attributeTypeLength = writer.GetEncodedLength();
+            int total = attributeTypeLength + indexed.Encoding.Length;
+            using IMemoryOwner<byte> concatenation = pool.Rent(total);
+            if(!writer.TryEncode(concatenation.Memory.Span[..attributeTypeLength], out _))
+            {
+                throw new CryptographicException("An unsigned attribute's attrType object identifier did not encode into the length its own encoder stated.");
+            }
+
+            indexed.Encoding.CopyTo(concatenation.Memory[attributeTypeLength..]);
+
+            return await CryptographicKeyEvents.ComputeDigestAsync(
+                concatenation.Memory[..total], algorithm.OutputByteLength, algorithm.DigestTag, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+
+        //Tells whether one candidate object's octets are one of the signer's signed attribute values, which
+        //step 3) of clause 5.5.3 binds as a whole — the placement of a content-time-stamp (clause 5.2.8) —
+        //rather than through the ats-hash-index-v3. The single signedAttrs walker of CmsSignedDataAugmentation is
+        //reused, so no fourth CMS descent is opened here, and any parse failure it raises is caught by the outer
+        //fail-closed handler exactly as every other read on this path is.
+        static bool CandidateIsSignedAttributeValue(CmsSignedData signedData, PkiCertificateMemory candidate)
+        {
+            IReadOnlyList<ReadOnlyMemory<byte>> values = CmsSignedDataAugmentation.ReadSignedAttributeValues(signedData, signerIndex: 0);
+            for(int i = 0; i < values.Count; ++i)
+            {
+                if(values[i].Span.SequenceEqual(candidate.AsReadOnlySpan()))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+
+    /// <summary>
+    /// The encoding whose hash value the <c>ats-hash-index-v3</c> of clause 5.5.2 holds for one object of a
+    /// signature, as it stands in the Signed Data Object.
+    /// </summary>
+    /// <param name="AttributeType">The <c>attrType</c> object identifier the encoding has to be concatenated after, when the object is one <c>AttributeValue</c> of an unsigned attribute; <see langword="null"/> for a member of <c>certificates</c> or <c>crls</c>, whose whole encoding is hashed on its own.</param>
+    /// <param name="Encoding">The whole encoding of the member or the attribute value, tag and length octets included.</param>
+    [DebuggerDisplay("IndexedObjectEncoding: {Encoding.Length} octets after {AttributeType}")]
+    private readonly record struct IndexedObjectEncoding(string? AttributeType, ReadOnlyMemory<byte> Encoding);
 
 
     /// <summary>
@@ -802,8 +1381,9 @@ public static class CAdESSignatureFacts
 
 
     /// <summary>
-    /// Reads a revocation-values attribute value, appending the CRLs of its <c>crlVals</c> and the OCSP
-    /// responses of its <c>ocspVals</c>.
+    /// Reads a revocation-values attribute value, appending the CRLs of its <c>crlVals</c>, the OCSP responses
+    /// of its <c>ocspVals</c>, and any whole <c>OCSPResponse</c> its <c>otherRevVals</c> carries under
+    /// <c>id-ri-ocsp-response</c>.
     /// </summary>
     /// <param name="value">The DER-encoded attribute value.</param>
     /// <param name="revocationLists">The list the CRLs are appended to.</param>
@@ -811,9 +1391,22 @@ public static class CAdESSignatureFacts
     /// <param name="pool">The memory pool each carrier is rented from.</param>
     /// <exception cref="AsnContentException">Thrown when the value is not a well-formed <c>RevocationValues</c>.</exception>
     /// <remarks>
-    /// The <c>ocspVals</c> field carries <c>BasicOCSPResponse</c> structures rather than the <c>OCSPResponse</c>
-    /// wrapper an OCSP client receives; the carriers are tagged <see cref="PkiObjectKind.OcspResponse"/> and a
-    /// consumer reads them accordingly.
+    /// <para>
+    /// The Annex D module (<c>ETSI-CAdES-ExplicitSyntax97</c>) opens <c>DEFINITIONS EXPLICIT TAGS</c>, so a
+    /// conformant <c>RevocationValues</c> tags each field explicitly: <c>crlVals [0] { SEQUENCE OF
+    /// CertificateList }</c>, <c>ocspVals [1] { SEQUENCE OF BasicOCSPResponse }</c>, and <c>otherRevVals [2]
+    /// { OtherRevVals SEQUENCE { OID, SEQUENCE OF } }</c>. This reader reads that shape and ALSO tolerates the
+    /// tag-replacing legacy shape a foreign encoder may have written (the context tag standing in for the inner
+    /// SEQUENCE's own tag) — a lenient read is defensible, a lenient write is not (the writer always emits the
+    /// explicit shape). See <see cref="RevocationSequenceOfMembers"/> for how the two are told apart.
+    /// </para>
+    /// <para>
+    /// The <c>ocspVals</c> field carries bare <c>BasicOCSPResponse</c> structures (clause A.1.2.2) while the
+    /// <c>otherRevVals</c> field carries whole <c>OCSPResponse</c> values under <c>id-ri-ocsp-response</c>
+    /// (RFC 5940 §2). Both surface as whole <c>OCSPResponse</c> carriers tagged
+    /// <see cref="PkiObjectKind.OcspResponse"/> — the form <see cref="OcspResponseVerification.VerifyAsync"/>
+    /// reads — so a consumer never receives a bare <c>BasicOCSPResponse</c> under that tag.
+    /// </para>
     /// </remarks>
     private static void ReadRevocationValues(
         ReadOnlyMemory<byte> value,
@@ -827,7 +1420,7 @@ public static class CAdESSignatureFacts
 
         if(revocationValues.HasData && revocationValues.PeekTag() == new Asn1Tag(TagClass.ContextSpecific, 0, isConstructed: true))
         {
-            AsnReader crlValues = revocationValues.ReadSequence(new Asn1Tag(TagClass.ContextSpecific, 0));
+            AsnReader crlValues = RevocationSequenceOfMembers(revocationValues.ReadEncodedValue(), new Asn1Tag(TagClass.ContextSpecific, 0));
             while(crlValues.HasData && revocationLists.Count < MaximumEmbeddedRevocationObjects)
             {
                 revocationLists.Add(Copy(crlValues.ReadEncodedValue(), PkiCertificateTags.X509Crl, pool));
@@ -836,20 +1429,115 @@ public static class CAdESSignatureFacts
 
         if(revocationValues.HasData && revocationValues.PeekTag() == new Asn1Tag(TagClass.ContextSpecific, 1, isConstructed: true))
         {
-            AsnReader ocspValues = revocationValues.ReadSequence(new Asn1Tag(TagClass.ContextSpecific, 1));
+            AsnReader ocspValues = RevocationSequenceOfMembers(revocationValues.ReadEncodedValue(), new Asn1Tag(TagClass.ContextSpecific, 1));
             while(ocspValues.HasData && ocspResponses.Count < MaximumEmbeddedRevocationObjects)
             {
-                ocspResponses.Add(Copy(ocspValues.ReadEncodedValue(), PkiCertificateTags.OcspResponse, pool));
+                //ocspVals carries bare BasicOCSPResponse values (clause A.1.2.2); each surfaces as the whole
+                //OCSPResponse OcspResponseVerification.VerifyAsync reads, so it is wrapped into that shape here.
+                ocspResponses.Add(Copy(WrapBasicResponseAsOcspResponse(ocspValues.ReadEncodedValue().Span), PkiCertificateTags.OcspResponse, pool));
             }
         }
 
         if(revocationValues.HasData && revocationValues.PeekTag() == new Asn1Tag(TagClass.ContextSpecific, 2, isConstructed: true))
         {
-            //otherRevVals [2] carries formats outside RFC 5280 and RFC 6960; consumed so the structure closes.
-            _ = revocationValues.ReadEncodedValue();
+            //otherRevVals [2] is OtherRevVals ::= SEQUENCE { otherRevValType OID, otherRevVals SEQUENCE OF ANY }
+            //(clause A.1.2.2). The module's EXPLICIT TagDefault gives the conformant shape [2] { OtherRevVals
+            //SEQUENCE { ... } }; a tag-replacing legacy encoder wrote [2] AS the OtherRevVals content, its first
+            //child the OID rather than a SEQUENCE. Both are read (lenient read, strict write), told apart by the
+            //first child's tag. RFC 5940 §2's id-ri-ocsp-response types a whole OCSPResponse; any other
+            //otherRevValType names a format outside RFC 5280/RFC 6960 and is consumed so the structure closes.
+            AsnReader otherField = revocationValues.ReadSequence(new Asn1Tag(TagClass.ContextSpecific, 2));
+            AsnReader otherRevocationValues = otherField.HasData && otherField.PeekTag() == Asn1Tag.Sequence
+                ? otherField.ReadSequence()
+                : otherField;
+            string otherRevValType = otherRevocationValues.ReadObjectIdentifier();
+            if(string.Equals(otherRevValType, WellKnownOids.OcspResponseRevocationInfo, StringComparison.Ordinal))
+            {
+                AsnReader responses = otherRevocationValues.ReadSequence();
+                while(responses.HasData && ocspResponses.Count < MaximumEmbeddedRevocationObjects)
+                {
+                    ocspResponses.Add(Copy(responses.ReadEncodedValue(), PkiCertificateTags.OcspResponse, pool));
+                }
+            }
         }
 
         revocationValues.ThrowIfNotEmpty();
+    }
+
+
+    /// <summary>
+    /// Returns a reader positioned at the members of a <c>crlVals</c>/<c>ocspVals</c> field, accepting both the
+    /// conformant EXPLICIT-TAGS shape (<c>[n] { SEQUENCE OF Value }</c>, per the Annex D module's
+    /// <c>DEFINITIONS EXPLICIT TAGS</c>) and the tag-replacing legacy shape a foreign encoder may have written
+    /// (<c>[n] { Value, ... }</c>). Lenient read, strict write.
+    /// </summary>
+    /// <param name="fieldTlv">The whole encoding of the <c>[n]</c> field.</param>
+    /// <param name="fieldTag">The field's context tag (<c>[0]</c> for <c>crlVals</c>, <c>[1]</c> for <c>ocspVals</c>).</param>
+    /// <returns>A reader over the field's values.</returns>
+    /// <remarks>
+    /// The two shapes coincide only when the field holds a single element that is a SEQUENCE. They are told
+    /// apart structurally: each <c>Value</c> (a <c>CertificateList</c>, RFC 5280 §5.1, or a
+    /// <c>BasicOCSPResponse</c>, RFC 6960 §4.2.1) carries a mandatory BIT STRING signature among its members, so
+    /// a field whose first element is a SEQUENCE all of whose members are themselves SEQUENCEs is the explicit
+    /// <c>SEQUENCE OF</c> (each member a <c>Value</c>), whereas a first element with any non-SEQUENCE member is a
+    /// lone legacy <c>Value</c>.
+    /// </remarks>
+    private static AsnReader RevocationSequenceOfMembers(ReadOnlyMemory<byte> fieldTlv, Asn1Tag fieldTag)
+    {
+        AsnReader field = new AsnReader(fieldTlv, AsnEncodingRules.DER).ReadSequence(fieldTag);
+        if(!field.HasData || field.PeekTag() != Asn1Tag.Sequence)
+        {
+            return field;
+        }
+
+        AsnReader firstMembers = new AsnReader(field.PeekEncodedValue(), AsnEncodingRules.DER).ReadSequence();
+        bool explicitSequenceOf = firstMembers.HasData;
+        int probed = 0;
+        while(firstMembers.HasData && probed++ < MaximumEmbeddedRevocationObjects)
+        {
+            if(firstMembers.PeekTag() != Asn1Tag.Sequence)
+            {
+                explicitSequenceOf = false;
+                break;
+            }
+
+            firstMembers.ReadEncodedValue();
+        }
+
+        return explicitSequenceOf ? field.ReadSequence() : field;
+    }
+
+
+    /// <summary>
+    /// Wraps a bare <c>BasicOCSPResponse</c> as the whole <c>OCSPResponse</c> that
+    /// <see cref="OcspResponseVerification.VerifyAsync"/> reads and <see cref="PkiCertificateTags.OcspResponse"/>
+    /// names: a successful <c>responseStatus</c> followed by a <c>ResponseBytes</c> that types the basic response
+    /// with <c>id-pkix-ocsp-basic</c> (<see href="https://www.rfc-editor.org/rfc/rfc6960#section-4.2.1">RFC 6960
+    /// §4.2.1</see>). The pre-RFC-5940 <c>id-pkix-ocsp-basic</c> <c>otherRevInfo</c> form and the
+    /// <c>revocation-values.ocspVals</c> form both carry the bare basic response, so surfacing them through this
+    /// one canonical shape is what keeps a consumer from ever receiving a bare <c>BasicOCSPResponse</c> under the
+    /// whole-response tag. A whole <c>OCSPResponse</c> (the RFC 5940 §2 <c>id-ri-ocsp-response</c> form) needs no
+    /// wrapping and is surfaced as it stands.
+    /// </summary>
+    /// <param name="basicResponse">The DER-encoded <c>BasicOCSPResponse</c>.</param>
+    /// <returns>The DER-encoded whole <c>OCSPResponse</c>.</returns>
+    private static byte[] WrapBasicResponseAsOcspResponse(ReadOnlySpan<byte> basicResponse)
+    {
+        var writer = new AsnWriter(AsnEncodingRules.DER);
+        using(writer.PushSequence())
+        {
+            writer.WriteEnumeratedValue(OcspResponseStatus.Successful);
+            using(writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 0, isConstructed: true)))
+            {
+                using(writer.PushSequence())
+                {
+                    writer.WriteObjectIdentifier(WellKnownOids.OcspBasicResponseType);
+                    writer.WriteOctetString(basicResponse);
+                }
+            }
+        }
+
+        return writer.Encode();
     }
 
 
@@ -1041,12 +1729,21 @@ public static class CAdESSignatureFacts
                 }
 
                 //OtherRevocationInfoFormat ::= SEQUENCE { otherRevInfoFormat OID, otherRevInfo ANY } (RFC 5652
-                //§10.2.1); the id-pkix-ocsp-basic format carries a BasicOCSPResponse.
+                //§10.2.1). Clause 5.4.2.2 of ETSI EN 319 122-1 places an embedded OCSP response here under RFC
+                //5940 §2's id-ri-ocsp-response, whose otherRevInfo is a whole OCSPResponse; the pre-RFC-5940
+                //id-pkix-ocsp-basic (RFC 6960 §4.2.1) instead carries a bare BasicOCSPResponse. Both are
+                //recognised, and both surface as the whole OCSPResponse OcspResponseVerification.VerifyAsync
+                //reads and PkiCertificateTags.OcspResponse names — the basic form wrapped into that shape so a
+                //consumer never receives a bare BasicOCSPResponse under the whole-response tag.
                 AsnReader otherRevocationInfo = candidateReader.ReadSequence(new Asn1Tag(TagClass.ContextSpecific, 1));
                 string format = otherRevocationInfo.ReadObjectIdentifier();
-                if(string.Equals(format, WellKnownOids.OcspBasicResponseType, StringComparison.Ordinal))
+                if(string.Equals(format, WellKnownOids.OcspResponseRevocationInfo, StringComparison.Ordinal))
                 {
                     ocspResponses.Add(otherRevocationInfo.ReadEncodedValue());
+                }
+                else if(string.Equals(format, WellKnownOids.OcspBasicResponseType, StringComparison.Ordinal))
+                {
+                    ocspResponses.Add(WrapBasicResponseAsOcspResponse(otherRevocationInfo.ReadEncodedValue().Span));
                 }
             }
         }

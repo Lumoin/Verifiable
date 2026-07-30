@@ -200,6 +200,51 @@ internal sealed class AnnexAValidationReportFlowTests
 
 
     /// <summary>
+    /// The POE Provisioning of clause 4.4.7: after the validation process for Signatures providing Long Term
+    /// Availability and Integrity of Validation Material has run, the archive time-stamp token is itself a
+    /// validation object, it carries the proof time it established, and it names the objects it provided that
+    /// proof of existence for — which for the world of clause A.3.4 is what the earlier time-stamp and the
+    /// certificates the signature carries owe their proofs at <c>t5</c> to.
+    /// </summary>
+    [TestMethod]
+    public async Task Example2LongTermReportNamesWhatTheArchiveTimestampProvesTheExistenceOf()
+    {
+        using AnnexAValidationScenario scenario = await AnnexAValidationScenario
+            .CreateRevokedCertificationAuthorityWorldAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        using SignatureValidationOutcome outcome = await SignatureValidation.ValidateAsync(
+            scenario.Inputs, scenario.Seams, SignatureValidationProcessSelection.LongTermAvailability,
+            SignatureValidationCapabilities.All, scenario.ValidationTime, BaseMemoryPool.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        ValidationReport report = await SignatureValidationReportBuilder.BuildAsync(
+            outcome, scenario.Inputs, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        IReadOnlyList<ValidationObject> objects = report.SignatureValidationObjects;
+        List<ValidationObject> tokens = [.. objects.Where(o => o.ObjectType == ValidationObjectKind.TimestampToken)];
+        ValidationObject archiveToken = tokens.Single(t => t.ProvidesProofOfExistenceFor.Count > 0);
+        ProofOfExistenceProvisioning provisioning = archiveToken.ProvidesProofOfExistenceFor.Single();
+
+        List<SensitiveMemory> covered = [.. provisioning.CoveredObjects];
+        ValidationObject signingCertificate = objects.Single(
+            o => o.ObjectType == ValidationObjectKind.Certificate && o.Representation.Equals(scenario.Chain[0]));
+
+        Assert.HasCount(2, tokens,
+            "Clause 4.4: the signature time-stamp of t3 and the archive time-stamp of t5 are both objects the validation used, so both are projected.");
+        Assert.AreEqual(scenario.ArchiveTimestampCreated, provisioning.ProofTime,
+            "Clause 4.4.7.1: the time value of the proof, which for an archive time-stamp is its own generation time.");
+        Assert.Contains(signingCertificate.Representation, covered,
+            "Clause 4.4.7 names the objects the validation object provides a proof of existence for; the signing certificate travels inside the signature the archive time-stamp protects.");
+        Assert.Contains(tokens.Single(t => !ReferenceEquals(t, archiveToken)).Representation, covered,
+            "An archive time-stamp protects the whole signature except itself, so the earlier signature time-stamp token is among the objects it proves existed.");
+        Assert.AreEqual(scenario.ArchiveTimestampCreated, signingCertificate.ProofOfExistence!.Instant,
+            "Clause 4.4.6: the same run attaches the earliest proof of the object's existence to the object itself, which is the proof the archive time-stamp established.");
+        Assert.IsEmpty(signingCertificate.ProvidesProofOfExistenceFor,
+            "Clause 4.4.7 is about what a time-stamp token or evidence record proves; a certificate establishes no proof of existence for anything.");
+    }
+
+
+    /// <summary>
     /// States one check the validation policy disables, so that the report of a passing run carries the
     /// individual validation constraint report elements clause 4.3.5.1 requires for disabled checks.
     /// </summary>

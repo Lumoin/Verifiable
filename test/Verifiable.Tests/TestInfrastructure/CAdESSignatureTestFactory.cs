@@ -37,6 +37,14 @@ namespace Verifiable.Tests.TestInfrastructure;
 internal static class CAdESSignatureTestFactory
 {
     /// <summary>
+    /// The address the archive time-stamp's transport delegate is handed. Nothing dials it: the delegate
+    /// answers from the in-process authority oracle, and the value exists because the shipped surface requires
+    /// the caller to name the authority it is talking to.
+    /// </summary>
+    private static string ArchiveTimestampAuthorityAddress => "https://archive-authority.example.test/tsa";
+
+
+    /// <summary>
     /// Signs <paramref name="content"/> as a CAdES-B-B signature — the CMS signed attributes plus a signing-time
     /// attribute and the ESS signing-certificate-v2 reference binding the signer's certificate.
     /// </summary>
@@ -162,14 +170,21 @@ internal static class CAdESSignatureTestFactory
     /// Validation Material.
     /// </summary>
     /// <remarks>
-    /// The message imprint is taken over the whole encoded Signed Data Object rather than over the
-    /// <c>ATSHashIndex</c>-driven octet sequence ETSI EN 319 122-1 specifies for an archive-time-stamp-v3. The
-    /// validation algorithm of ETSI EN 319 102-1 never reconstructs that input — clause 5.6.3.4 validates an
-    /// archive time-stamp as a token and extracts proofs of existence from it (clause 5.6.2.3), and only a
-    /// <em>signature</em> time-stamp has its imprint checked against octets the engine re-derives (clause 5.5.4
-    /// step 3)a)) — so the simplification is invisible to everything under test while keeping the attribute a
-    /// genuine, independently produced token. A format-conformance test of the imprint input itself belongs to
-    /// the EN 319 122-1 arc.
+    /// <para>
+    /// The attribute is produced by the shipped augmentation surface
+    /// (<see cref="CAdESSignatureAugmentation.AddArchiveTimestampAsync"/>), so the message imprint is the
+    /// four-part concatenation of ETSI EN 319 122-1 clause 5.5.3 and the token carries the
+    /// <c>ats-hash-index-v3</c> of clause 5.5.2 that names what it covers — the coverage the shipped CAdES
+    /// binding restates and the proof-of-existence extraction building block of ETSI EN 319 102-1 clause 5.6.2.3
+    /// verifies the token's <c>messageImprint</c> against. A world minted here therefore needs no declaration
+    /// that the Driving Application establishes the binding by other means.
+    /// </para>
+    /// <para>
+    /// The token itself still comes from the independent time-stamp protocol oracle, which answers the
+    /// <c>TimeStampReq</c> the library writes by decoding it with its own reader
+    /// (<see cref="MintingTimestampResponder"/>): the octets of the request and the response cross the shipped
+    /// transport seam exactly as they would against a real authority.
+    /// </para>
     /// </remarks>
     /// <param name="signature">The signature to attach the attribute to; not disposed by this call.</param>
     /// <param name="timestampAuthority">The Time-Stamping Authority node that produces the token.</param>
@@ -192,11 +207,24 @@ internal static class CAdESSignatureTestFactory
         ArgumentNullException.ThrowIfNull(timestampAuthorityChain);
         ArgumentNullException.ThrowIfNull(pool);
 
-        using PkiCertificateMemory token = await X509ChainTestRingTimestamping.MintTimestampTokenAsync(
-            timestampAuthority, timestampAuthorityChain, signature.AsReadOnlyMemory(), generationTime, pool,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        var authority = new MintingTimestampResponder(timestampAuthority, timestampAuthorityChain, generationTime);
 
-        return AttachUnsignedAttribute(signature, CAdESSignatureFacts.ArchiveTimestampV3AttributeOid, token, pool);
+        return await CAdESSignatureAugmentation.AddArchiveTimestampAsync(
+            new CAdESArchiveTimestampContext
+            {
+                SignedData = signature,
+                SignerIndex = 0,
+                MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                TsaUri = ArchiveTimestampAuthorityAddress,
+                FetchResponse = authority.FetchAsync,
+                ValidationMaterial = CAdESValidationMaterial.None,
+                //This shared fixture has no signing-certificate parameter and is reused across scenarios that
+                //are not about requirement m) (e.g. post-expiry long-term-preservation worlds); requirement m)
+                //itself is exercised by its own dedicated tests against the production context directly.
+                EnforceSigningCertificateValidity = false
+            },
+            pool,
+            cancellationToken).ConfigureAwait(false);
     }
 
 

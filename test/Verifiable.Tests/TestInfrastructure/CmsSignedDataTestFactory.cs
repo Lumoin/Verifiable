@@ -40,11 +40,25 @@ internal static class CmsSignedDataTestFactory
     /// <summary>
     /// Mints a self-signed certificate for an elliptic-curve signing key.
     /// </summary>
-    public static X509Certificate2 MintSelfSignedCertificate(ECDsa key, DateTimeOffset notBefore, DateTimeOffset notAfter)
+    /// <param name="key">The signing key the certificate certifies and is signed by.</param>
+    /// <param name="notBefore">The validity start.</param>
+    /// <param name="notAfter">The validity end.</param>
+    /// <param name="subjectName">
+    /// The subject distinguished name, defaulting to the shared one every earlier caller relies on. A test that
+    /// mints two self-signed certificates that must be told apart by name — a counter signer beside a signer,
+    /// for instance — passes a distinct one, because two self-signed certificates sharing a subject are also two
+    /// certificates sharing an issuer name, which is the ambiguous-issuer shape chain building trips over.
+    /// </param>
+    /// <returns>The minted certificate; the caller disposes it.</returns>
+    public static X509Certificate2 MintSelfSignedCertificate(
+        ECDsa key,
+        DateTimeOffset notBefore,
+        DateTimeOffset notAfter,
+        string subjectName = "CN=Verifiable CAdES Test")
     {
         ArgumentNullException.ThrowIfNull(key);
 
-        var request = new CertificateRequest("CN=Verifiable CAdES Test", key, HashAlgorithmName.SHA256);
+        var request = new CertificateRequest(subjectName, key, HashAlgorithmName.SHA256);
 
         return request.CreateSelfSigned(notBefore, notAfter);
     }
@@ -100,6 +114,45 @@ internal static class CmsSignedDataTestFactory
         var signedCms = new SignedCms(content, detached: false);
         var signer = new CmsSigner(signerCertificate) { IncludeOption = X509IncludeOption.EndCertOnly };
         signedCms.ComputeSignature(signer);
+
+        return CmsSignedData.FromBytes(signedCms.Encode(), BaseMemoryPool.Shared);
+    }
+
+
+    /// <summary>
+    /// Signs the payload as a plain CMS SignedData carrying two SignerInfo structures, one per certificate, and
+    /// returns the pooled wire carrier. Used where an operation has to address one signer among several.
+    /// </summary>
+    /// <param name="payload">The content both signers sign.</param>
+    /// <param name="firstSignerCertificate">The certificate of the SignerInfo added first.</param>
+    /// <param name="secondSignerCertificate">The certificate of the SignerInfo added second.</param>
+    /// <returns>The wire carrier. The caller disposes it.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the carrier transfers to the caller, which disposes it.")]
+    public static CmsSignedData SignAsCmsWithTwoSigners(ReadOnlySpan<byte> payload, X509Certificate2 firstSignerCertificate, X509Certificate2 secondSignerCertificate)
+    {
+        var content = new ContentInfo(payload.ToArray());
+        var signedCms = new SignedCms(content, detached: false);
+        signedCms.ComputeSignature(new CmsSigner(firstSignerCertificate) { IncludeOption = X509IncludeOption.EndCertOnly });
+        signedCms.ComputeSignature(new CmsSigner(secondSignerCertificate) { IncludeOption = X509IncludeOption.EndCertOnly });
+
+        return CmsSignedData.FromBytes(signedCms.Encode(), BaseMemoryPool.Shared);
+    }
+
+
+    /// <summary>
+    /// Signs the payload as a plain CMS SignedData carrying no <c>certificates</c> field at all, and returns the
+    /// pooled wire carrier. This is the structure ETSI EN 319 122-1 clause 5.5.2 NOTE 3 describes, where an
+    /// absent field leaves the corresponding hash-index list empty.
+    /// </summary>
+    /// <param name="payload">The content the signature encapsulates and covers.</param>
+    /// <param name="signerCertificate">The signer certificate (the test holds its key); its own copy is not embedded.</param>
+    /// <returns>The wire carrier. The caller disposes it.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the carrier transfers to the caller, which disposes it.")]
+    public static CmsSignedData SignAsCmsWithoutCertificates(ReadOnlySpan<byte> payload, X509Certificate2 signerCertificate)
+    {
+        var content = new ContentInfo(payload.ToArray());
+        var signedCms = new SignedCms(content, detached: false);
+        signedCms.ComputeSignature(new CmsSigner(signerCertificate) { IncludeOption = X509IncludeOption.None });
 
         return CmsSignedData.FromBytes(signedCms.Encode(), BaseMemoryPool.Shared);
     }
