@@ -115,21 +115,21 @@
       "verifiable.cryptography": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.7, )",
+          "Lumoin.Base": "[0.0.8, )",
           "Verifiable.Foundation": "[0.0.0, )"
         }
       },
       "verifiable.foundation": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.7, )"
+          "Lumoin.Base": "[0.0.8, )"
         }
       },
       "Lumoin.Base": {
         "type": "CentralTransitive",
-        "requested": "[0.0.7, )",
-        "resolved": "0.0.7",
-        "contentHash": "d6F1X14lCQZJejiZH8UQ8vf4TL3MDGO+llscPCVy3k9KMvn9Xc52zQEEOHZ+ZTc7gDtc2ekG7JduQCsCrTjygA=="
+        "requested": "[0.0.8, )",
+        "resolved": "0.0.8",
+        "contentHash": "rHyzMyF+vQDtgApld0QuTLHrpDSrSLPB10uCv+ijV2zr3wb3PQSkNFQGel9j8+PEK0pBEdDmeydd8vUGZ4Ukmw=="
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "CentralTransitive",

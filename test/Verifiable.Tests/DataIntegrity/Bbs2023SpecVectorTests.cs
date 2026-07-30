@@ -828,8 +828,12 @@ internal sealed class Bbs2023W3cVectorTests
                 g1Backend.Add,
                 g1Backend.MultiScalarMultiply,
                 hashToCurve,
+                g1Backend.IsOnCurve!,
+                g1Backend.IsInPrimeOrderSubgroup!,
                 g2Backend.Add,
                 g2Backend.ScalarMultiply,
+                g2Backend.IsOnCurve,
+                g2Backend.IsInPrimeOrderSubgroup,
                 pairingBackend.Pairing,
                 keyPool);
         }
@@ -896,8 +900,12 @@ internal sealed class Bbs2023W3cVectorTests
                 g1Backend.Add,
                 g1Backend.MultiScalarMultiply,
                 hashToCurve,
+                g1Backend.IsOnCurve!,
+                g1Backend.IsInPrimeOrderSubgroup!,
                 g2Backend.Add,
                 g2Backend.ScalarMultiply,
+                g2Backend.IsOnCurve,
+                g2Backend.IsInPrimeOrderSubgroup,
                 pairingBackend.Pairing,
                 keyPool);
         }
@@ -936,6 +944,8 @@ internal sealed class Bbs2023W3cVectorTests
                 g1Backend.ScalarMultiply,
                 g1Backend.MultiScalarMultiply,
                 hashToCurve,
+                g1Backend.IsOnCurve!,
+                g1Backend.IsInPrimeOrderSubgroup!,
                 keyPool);
 
             return ConcatenateProof(proof);

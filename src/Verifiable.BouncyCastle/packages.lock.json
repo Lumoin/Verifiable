@@ -121,8 +121,8 @@
       "verifiable.core": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Veridical.Backends.Managed": "[0.0.4, )",
-          "Lumoin.Veridical.Bbs": "[0.0.4, )",
+          "Lumoin.Veridical.Backends.Managed": "[0.0.5, )",
+          "Lumoin.Veridical.Bbs": "[0.0.5, )",
           "Verifiable.Foundation": "[0.0.0, )",
           "Verifiable.JCose": "[0.0.0, )",
           "Verifiable.JsonPointer": "[0.0.0, )"
@@ -131,14 +131,14 @@
       "verifiable.cryptography": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.7, )",
+          "Lumoin.Base": "[0.0.8, )",
           "Verifiable.Foundation": "[0.0.0, )"
         }
       },
       "verifiable.foundation": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.7, )"
+          "Lumoin.Base": "[0.0.8, )"
         }
       },
       "verifiable.jcose": {
@@ -153,48 +153,48 @@
       },
       "Lumoin.Base": {
         "type": "CentralTransitive",
-        "requested": "[0.0.7, )",
-        "resolved": "0.0.7",
-        "contentHash": "d6F1X14lCQZJejiZH8UQ8vf4TL3MDGO+llscPCVy3k9KMvn9Xc52zQEEOHZ+ZTc7gDtc2ekG7JduQCsCrTjygA=="
+        "requested": "[0.0.8, )",
+        "resolved": "0.0.8",
+        "contentHash": "rHyzMyF+vQDtgApld0QuTLHrpDSrSLPB10uCv+ijV2zr3wb3PQSkNFQGel9j8+PEK0pBEdDmeydd8vUGZ4Ukmw=="
       },
       "Lumoin.Veridical.Backends.Managed": {
         "type": "CentralTransitive",
-        "requested": "[0.0.4, )",
-        "resolved": "0.0.4",
-        "contentHash": "l6s23qmXpCQSzpS8TmKJN2DlcgbjiS6UsHzZzP4YiI5+0s7GYwxDeFJ/OT2mSU6AfeIq6WnI+llCqzLJaRsyaA==",
+        "requested": "[0.0.5, )",
+        "resolved": "0.0.5",
+        "contentHash": "rPmCItTqYMaeig37he9RCQ28ixZqsQvXtCxm6hWxNu6zOTmscRjDSDkfV6Y6ygwPQ45S06YclyVffaDztEcSnw==",
         "dependencies": {
-          "Lumoin.Base": "0.0.4",
-          "Lumoin.Veridical.Core": "0.0.4",
-          "Lumoin.Veridical.Hashing": "0.0.4"
+          "Lumoin.Base": "0.0.8",
+          "Lumoin.Veridical.Core": "0.0.5",
+          "Lumoin.Veridical.Hashing": "0.0.5"
         }
       },
       "Lumoin.Veridical.Bbs": {
         "type": "CentralTransitive",
-        "requested": "[0.0.4, )",
-        "resolved": "0.0.4",
-        "contentHash": "4SHX8YMj8P9w/Da7kUT30p1qoSgQBbLnJVyDmDG9awADHvkjy4VAXL5AtIXvP/V23HmDm47mA4JrVHtJkQ1hhw==",
+        "requested": "[0.0.5, )",
+        "resolved": "0.0.5",
+        "contentHash": "fGbwr9zMeHV7vnF8Nqf8WSS8KDC3kIf1MNlig7Z4ugRhRDroYgjTV3PYPxl1mHBXUCAjPEYXTW5yGlQwY9v3OA==",
         "dependencies": {
-          "Lumoin.Base": "0.0.4",
-          "Lumoin.Veridical.Core": "0.0.4"
+          "Lumoin.Base": "0.0.8",
+          "Lumoin.Veridical.Core": "0.0.5"
         }
       },
       "Lumoin.Veridical.Core": {
         "type": "CentralTransitive",
-        "requested": "[0.0.4, )",
-        "resolved": "0.0.4",
-        "contentHash": "8X6jB5D+Ab7O7slCBCfAbee0jdELA/V69RKyyJ/JuiP8uqL5+BeAka+7dBMYTfmwmcv/Wt2pRiuNHp7BdznH0Q==",
+        "requested": "[0.0.5, )",
+        "resolved": "0.0.5",
+        "contentHash": "zL0efj8D23WtTN0zk2L1teCsX4KjwpyREC96q4f+1dTIkTfvpg0tTXM4sDEhtS8KxDV4ArAIsOeOsDk6Gh2lqQ==",
         "dependencies": {
-          "Lumoin.Base": "0.0.4"
+          "Lumoin.Base": "0.0.8"
         }
       },
       "Lumoin.Veridical.Hashing": {
         "type": "CentralTransitive",
-        "requested": "[0.0.4, )",
-        "resolved": "0.0.4",
-        "contentHash": "XGXPOWZf9tagQBggoqlY+MTHvO6aKF8EIEMncQEEigd3XHGYHMD05niaRVzlqkoXr5mzaf7PH2OEdjxfQOuf6w==",
+        "requested": "[0.0.5, )",
+        "resolved": "0.0.5",
+        "contentHash": "2UP6CyYGjCDzueqP4zDCIlvf98DEgqzWWk6ep3tWv61hZlZNFGIJAgQAlQRutJdCHKZYeyXX+4n8jCPecjOjPQ==",
         "dependencies": {
-          "Lumoin.Base": "0.0.4",
-          "Lumoin.Veridical.Core": "0.0.4"
+          "Lumoin.Base": "0.0.8",
+          "Lumoin.Veridical.Core": "0.0.5"
         }
       },
       "System.Security.Cryptography.ProtectedData": {
