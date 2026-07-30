@@ -1,5 +1,5 @@
 using System.Buffers;
-using System.Text.Json;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 
@@ -28,6 +28,7 @@ internal static class EntityStatementJwsReader
     /// <param name="base64UrlDecoder">Decodes the base64url segments to bytes.</param>
     /// <param name="pool">Memory pool the transient segment buffers rent from.</param>
     /// <returns>The parsed statement, or <see langword="null"/> on any structural failure.</returns>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The base64url decoder and deserializer seams are opaque app-provided delegates that throw arbitrary types on malformed input — including the JSON library's own parse exception, which the serialization firewall forbids this assembly from naming. TryRead processes untrusted chain entries and MUST fail closed (return null), never throw, on any decode/deserialize failure.")]
     internal static FetchedEntityStatement? TryRead(
         string compactJws,
         JwtHeaderDeserializer headerDeserializer,
@@ -58,15 +59,12 @@ internal static class EntityStatementJwsReader
             header = new UnverifiedJwtHeader(headerDeserializer(headerBytes.Memory.Span));
             payload = new UnverifiedJwtPayload(payloadDeserializer(payloadBytes.Memory.Span));
         }
-        //The header/payload bytes are attacker-controlled: a tampered chain
-        //element can decode from base64url to syntactically invalid JSON
-        //(a wire-type violation such as an unterminated literal), which the
-        //caller-supplied deserializer surfaces as JsonException rather than
-        //the FormatException the deserializer delegate contract otherwise
-        //uses. Both are structural decode failures and must fail closed the
-        //same way — never let hostile input escape as an unhandled exception.
-        catch(Exception ex) when(ex is FormatException or InvalidOperationException or JsonException)
+        catch(Exception)
         {
+            //A malformed segment fails closed. The decoder/deserializer seams can throw arbitrary types
+            //(base64 FormatException, the JSON library's own parse exception the firewall forbids naming here),
+            //and a tampered chain entry is hostile input — so any decode/deserialize failure yields null, not a
+            //thrown exception, matching this method's Try contract.
             return null;
         }
 

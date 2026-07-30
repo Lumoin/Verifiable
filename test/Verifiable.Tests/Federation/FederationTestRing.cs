@@ -309,6 +309,7 @@ internal static class FederationTestRing
         DateTimeOffset issuedAt,
         DateTimeOffset? expiresAt = null,
         IReadOnlyDictionary<string, object>? extraClaims = null,
+        bool includeKid = true,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(issuer);
@@ -319,8 +320,14 @@ internal static class FederationTestRing
         {
             [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.TrustMarkJwt,
             [WellKnownJwkMemberNames.Alg] = AlgorithmName,
-            [WellKnownJwkMemberNames.Kid] = issuer.Kid,
         };
+
+        //A kid-less mark is valid for a single-key issuer; an in-chain key resolver then selects that one
+        //published key. The caller omits the kid when the published key carries an id the ring node does not know.
+        if(includeKid)
+        {
+            headerDict[WellKnownJwkMemberNames.Kid] = issuer.Kid;
+        }
 
         Dictionary<string, object> payloadDict = new(StringComparer.Ordinal)
         {

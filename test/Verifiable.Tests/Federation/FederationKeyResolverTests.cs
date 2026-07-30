@@ -82,4 +82,80 @@ internal sealed class FederationKeyResolverTests
 
         Assert.IsNull(resolved, "Resolver should return null when issuer has no jwks.");
     }
+
+
+    /// <summary>The chain-keyed resolver finds the Trust Anchor's key by its Entity Identifier + kid.</summary>
+    [TestMethod]
+    public async Task InChainResolvesAnchorKeyByIssuerAndKid()
+    {
+        DateTimeOffset now = TestClock.CanonicalEpoch;
+        using FederationTestRingNode subject = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/subject"));
+        using FederationTestRingNode anchor = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/anchor"));
+
+        MintedChain minted = await FederationTestRing.BuildDirectChainAsync(
+            subject, anchor, now, now.AddHours(1), TestContext.CancellationToken).ConfigureAwait(false);
+
+        using PublicKeyMemory? key = await FederationKeyResolver.ResolveInChainKeyAsync(
+            minted.Chain, anchor.Identifier.Value, anchor.Kid,
+            TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNotNull(key, "The anchor's key should resolve by its Entity Identifier and kid.");
+    }
+
+
+    /// <summary>The chain-keyed resolver finds the subject's key from its own Entity Configuration.</summary>
+    [TestMethod]
+    public async Task InChainResolvesSubjectKeyByIssuerAndKid()
+    {
+        DateTimeOffset now = TestClock.CanonicalEpoch;
+        using FederationTestRingNode subject = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/subject"));
+        using FederationTestRingNode anchor = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/anchor"));
+
+        MintedChain minted = await FederationTestRing.BuildDirectChainAsync(
+            subject, anchor, now, now.AddHours(1), TestContext.CancellationToken).ConfigureAwait(false);
+
+        using PublicKeyMemory? key = await FederationKeyResolver.ResolveInChainKeyAsync(
+            minted.Chain, subject.Identifier.Value, subject.Kid,
+            TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNotNull(key, "The subject's key should resolve by its Entity Identifier and kid.");
+    }
+
+
+    /// <summary>An issuer described by no chain statement resolves to null.</summary>
+    [TestMethod]
+    public async Task InChainUnknownIssuerResolvesToNull()
+    {
+        DateTimeOffset now = TestClock.CanonicalEpoch;
+        using FederationTestRingNode subject = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/subject"));
+        using FederationTestRingNode anchor = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/anchor"));
+
+        MintedChain minted = await FederationTestRing.BuildDirectChainAsync(
+            subject, anchor, now, now.AddHours(1), TestContext.CancellationToken).ConfigureAwait(false);
+
+        using PublicKeyMemory? key = await FederationKeyResolver.ResolveInChainKeyAsync(
+            minted.Chain, "https://example.test/stranger", kid: null,
+            TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNull(key, "An issuer absent from the chain should resolve to null.");
+    }
+
+
+    /// <summary>A kid no key in the issuer's jwks carries resolves to null.</summary>
+    [TestMethod]
+    public async Task InChainWrongKidResolvesToNull()
+    {
+        DateTimeOffset now = TestClock.CanonicalEpoch;
+        using FederationTestRingNode subject = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/subject"));
+        using FederationTestRingNode anchor = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/anchor"));
+
+        MintedChain minted = await FederationTestRing.BuildDirectChainAsync(
+            subject, anchor, now, now.AddHours(1), TestContext.CancellationToken).ConfigureAwait(false);
+
+        using PublicKeyMemory? key = await FederationKeyResolver.ResolveInChainKeyAsync(
+            minted.Chain, anchor.Identifier.Value, "kid-does-not-exist",
+            TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNull(key, "A kid absent from the issuer's jwks should resolve to null.");
+    }
 }
