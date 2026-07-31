@@ -248,6 +248,19 @@ namespace Verifiable.Core.Assessment
         /// <param name="code">The code representing the claim identifier.</param>
         /// <param name="description">The description of the claim. Defaults to an empty string.</param>
         /// <returns>A new instance of <see cref="ClaimId"/>.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">When <paramref name="code"/> is not greater than zero.</exception>
+        /// <exception cref="ArgumentException">
+        /// When <paramref name="description"/> is <see langword="null"/> or empty, or when the registry already
+        /// holds <paramref name="code"/>.
+        /// </exception>
+        /// <remarks>
+        /// <strong>The duplicate refusal is decided inside the registry's own lock.</strong> Reading the registry
+        /// here to answer it first would be a check-then-act window: two threads allocating one code could both
+        /// find it absent, and the loser would be refused by the underlying collection rather than by this
+        /// method — with a different message, and after an unsynchronised read of a collection that is not
+        /// thread-safe. Every allocation site of this type is a static property initialiser, so an exception
+        /// escaping here escapes a type initialiser and poisons the registry class for the process.
+        /// </remarks>
         public static ClaimId Create(int code, string description)
         {
             //At the moment only FailedClaimId is allowed to have code 0.
@@ -258,11 +271,6 @@ namespace Verifiable.Core.Assessment
             }
 
             ArgumentException.ThrowIfNullOrEmpty(description, nameof(description));
-
-            if(CodeDescriptions.Descriptions.ContainsKey(code))
-            {
-                throw new ArgumentException($"A {nameof(ClaimId)} with code {code} already exists.");
-            }
 
             return new ClaimId(code, description);
         }
@@ -315,14 +323,25 @@ namespace Verifiable.Core.Assessment
 
 
             /// <summary>
-            /// Adds a description for a claim identifier.
+            /// Adds a description for a claim identifier, refusing a code the registry already holds.
             /// </summary>
             /// <param name="code">The identifier code.</param>
             /// <param name="description">The description of the claim identifier, or a default message for unknown identifiers.</param>
+            /// <exception cref="ArgumentException">When the registry already holds <paramref name="code"/>.</exception>
+            /// <remarks>
+            /// The check and the insertion are one lock scope, so a code is refused for exactly one reason
+            /// whatever else is allocating at the same moment, and no thread reads the dictionary while another
+            /// is writing it. Answering the question before taking the lock would leave both halves open.
+            /// </remarks>
             public static void AddDescription(int code, string description)
             {
                 lock(descriptionsLock)
                 {
+                    if(Descriptions.ContainsKey(code))
+                    {
+                        throw new ArgumentException($"A {nameof(ClaimId)} with code {code} already exists.");
+                    }
+
                     Descriptions.Add(code, description);
                 }
             }

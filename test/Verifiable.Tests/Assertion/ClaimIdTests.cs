@@ -126,6 +126,137 @@ namespace Verifiable.Tests.Assertion
         }
 
 
+        /// <summary>
+        /// The first code of the band this class races over. It sits far from every band the shipped registries
+        /// allocate from and far from the band <see cref="CreateReturnsClaimIdForValidInput"/> draws in, so a
+        /// code raced here can only collide with itself.
+        /// </summary>
+        private static int RaceBandStart { get; } = 1_500_000;
+
+        /// <summary>How many fresh codes the concurrent-allocation test races over.</summary>
+        private static int RaceRounds { get; } = 200;
+
+        /// <summary>How many threads race for each of those codes.</summary>
+        private static int RaceThreads { get; } = 4;
+
+
+        /// <summary>
+        /// Allocating one code from several threads at once lets exactly one through and refuses every other one
+        /// the way the registry documents — which holds only while the duplicate check and the insertion are one
+        /// atomic step.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <strong>What a check outside the lock costs.</strong> When the duplicate check reads the shared
+        /// dictionary before the lock the insertion takes, two threads can both find the code absent and both go
+        /// on to insert it. One inserts; the other is refused by the dictionary rather than by the registry, so
+        /// the caller sees a different exception than the one the registry promises — the observable half of a
+        /// check-then-act window whose other half is an unsynchronised read of a collection that is not
+        /// thread-safe.
+        /// </para>
+        /// <para>
+        /// The assertions are therefore about the refusal itself: exactly one winner per code, every loser
+        /// refused with the registry's own message, and no thread reaching any exception type other than the one
+        /// documented — which is what an unsynchronised read of a dictionary being resized or initialised would
+        /// produce.
+        /// </para>
+        /// </remarks>
+        [TestMethod]
+        public void ConcurrentAllocationOfOneCodeLetsExactlyOneThroughAndRefusesTheRestTheDocumentedWay()
+        {
+            for(int round = 0; round < RaceRounds; ++round)
+            {
+                int code = RaceBandStart + round;
+                var outcomes = new Exception?[RaceThreads];
+                var attempted = new bool[RaceThreads];
+                using var start = new Barrier(RaceThreads);
+                var racers = new Thread[RaceThreads];
+                for(int i = 0; i < RaceThreads; ++i)
+                {
+                    racers[i] = new Thread(Race) { IsBackground = true };
+                    racers[i].Start(new RaceAttempt(code, i, start, outcomes, attempted));
+                }
+
+                for(int i = 0; i < RaceThreads; ++i)
+                {
+                    racers[i].Join();
+                }
+
+                int winners = 0;
+                for(int i = 0; i < RaceThreads; ++i)
+                {
+                    Assert.IsTrue(attempted[i], $"Racer {i} of code {code} never reached the allocation.");
+
+                    if(outcomes[i] is null)
+                    {
+                        ++winners;
+                        continue;
+                    }
+
+                    var refusal = Assert.IsInstanceOfType<ArgumentException>(
+                        outcomes[i],
+                        $"Racer {i} of code {code} was refused with {outcomes[i]!.GetType().Name}: {outcomes[i]!.Message}");
+
+                    Assert.Contains(
+                        $"code {code} already exists",
+                        refusal.Message,
+                        StringComparison.Ordinal,
+                        $"Racer {i} of code {code} was refused by the dictionary rather than by the registry: {refusal.Message}");
+                }
+
+                Assert.AreEqual(1, winners, $"Exactly one racer allocates code {code}.");
+
+                //And the registry is consistent afterwards, whichever racer won.
+                ArgumentException afterwards = Assert.ThrowsExactly<ArgumentException>(
+                    () => ClaimId.Create(code, $"AFTERWARDS-{code}"));
+
+                Assert.Contains($"code {code} already exists", afterwards.Message, StringComparison.Ordinal);
+            }
+        }
+
+
+        /// <summary>
+        /// What one racing thread needs: the code to allocate, which racer it is, the barrier releasing them
+        /// together, and where to record what happened. Passed as the thread's own parameter rather than captured,
+        /// so nothing is shared implicitly.
+        /// </summary>
+        /// <param name="Code">The code every racer of this round allocates.</param>
+        /// <param name="Index">Which racer this is, and the slot it records into.</param>
+        /// <param name="Start">The barrier releasing the racers of one round together.</param>
+        /// <param name="Outcomes">One slot per racer: the exception it was refused with, or <see langword="null"/> when it allocated.</param>
+        /// <param name="Attempted">One slot per racer, set once it has reached the allocation at all.</param>
+        private sealed record RaceAttempt(
+            int Code,
+            int Index,
+            Barrier Start,
+            Exception?[] Outcomes,
+            bool[] Attempted);
+
+
+        /// <summary>
+        /// One racing thread: waits for its siblings, allocates, and records what happened.
+        /// </summary>
+        /// <param name="state">The <see cref="RaceAttempt"/> the thread was started with.</param>
+        private static void Race(object? state)
+        {
+            var attempt = (RaceAttempt)state!;
+            attempt.Start.SignalAndWait();
+            try
+            {
+                _ = ClaimId.Create(attempt.Code, $"RACE-{attempt.Code}-{attempt.Index}");
+                attempt.Outcomes[attempt.Index] = null;
+            }
+            catch(Exception thrown)
+            {
+                attempt.Outcomes[attempt.Index] = thrown;
+            }
+            finally
+            {
+                attempt.Attempted[attempt.Index] = true;
+            }
+        }
+
+
         [TestMethod]
         public void NotPossibleToUseDefaultConstructor()
         {
