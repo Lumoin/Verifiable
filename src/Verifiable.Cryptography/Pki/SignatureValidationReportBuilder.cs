@@ -409,6 +409,26 @@ public static class SignatureValidationReportBuilder
                 content, ValidationObjectKind.SignedDataObject, signature.SignedContentIdentifier, longTerm, outcome.Resources, pool, cancellationToken).ConfigureAwait(false));
         }
 
+        //Every Evidence Record step 1) of clause 5.6.3.4 processed is an object the validation used, and clause
+        //4.4.7 names an evidence record beside a time-stamp token as something that provides proofs of existence
+        //for others. The identity is the one that step computed rather than a recomputation: a record's octets
+        //are the ones its own carrier states, and an identity taken over anything else would not compare equal to
+        //the EstablishedBy of the proofs the record established, which is what the provisioning below matches on.
+        if(longTerm is not null)
+        {
+            for(int i = 0; i < longTerm.EvidenceRecordValidations.Count; ++i)
+            {
+                EvidenceRecordValidationResult evidenceRecord = longTerm.EvidenceRecordValidations[i];
+                if(HoldsCarrier(described, evidenceRecord.EvidenceRecord))
+                {
+                    continue;
+                }
+
+                described.Add(new DescribedValidationObject(
+                    ValidationObjectKind.EvidenceRecord, evidenceRecord.EvidenceRecord, evidenceRecord.Identity));
+            }
+        }
+
         var objects = new List<ValidationObject>(described.Count);
         for(int i = 0; i < described.Count; ++i)
         {
@@ -524,9 +544,9 @@ public static class SignatureValidationReportBuilder
     /// <returns>The elements, or an empty list when the object established no proof.</returns>
     /// <remarks>
     /// A proof carries the identity of what established it (<see cref="ProofOfExistence.EstablishedBy"/>), which
-    /// in this engine is only ever a time-stamp token — clause 4.4.7's own subject. An object a proof is about
-    /// that the report does not project as a validation object of its own (the signature value, the Signed Data
-    /// Object itself) is not named here, because clause 4.4.7 names validation objects.
+    /// in this engine is a time-stamp token or an Evidence Record — the two objects clause 4.4.7 names. An object
+    /// a proof is about that the report does not project as a validation object of its own (the signature value,
+    /// the Signed Data Object itself) is not named here, because clause 4.4.7 names validation objects.
     /// </remarks>
     private static List<ProofOfExistenceProvisioning> BuildProofOfExistenceProvisioning(
         ProofOfExistenceSet proofs,

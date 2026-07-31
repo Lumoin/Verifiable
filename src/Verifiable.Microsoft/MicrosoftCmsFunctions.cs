@@ -12,8 +12,8 @@ using Verifiable.Cryptography.Pki;
 namespace Verifiable.Microsoft;
 
 /// <summary>
-/// A BCL-backed implementation of <see cref="VerifyCmsSignedDataDelegate"/> using
-/// <see cref="SignedCms"/>.
+/// A BCL-backed implementation of <see cref="VerifyCmsSignedDataDelegate"/> and of its detached counterpart
+/// <see cref="VerifyDetachedCmsSignedDataDelegate"/>, using <see cref="SignedCms"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -44,8 +44,6 @@ public static class MicrosoftCmsFunctions
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The verified content and embedded certificates. The caller disposes it.</returns>
     /// <exception cref="CryptographicException">Thrown when the signature is invalid or the signer certificate is absent.</exception>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of the content buffer and certificate memories transfers to the returned CmsVerifiedContent, which the caller disposes; the catch disposes them on a partial failure.")]
     public static ValueTask<CmsVerifiedContent> VerifyCmsSignedDataAsync(
         CmsSignedData signedData,
         MemoryPool<byte> pool,
@@ -58,6 +56,64 @@ public static class MicrosoftCmsFunctions
         SignedCms cms = new();
         cms.Decode(signedData.AsReadOnlySpan());
 
+        return Verify(cms, pool);
+    }
+
+
+    /// <summary>
+    /// Implements <see cref="VerifyDetachedCmsSignedDataDelegate"/>. Decodes a CMS SignedData that encapsulates
+    /// no content of its own, verifies the signer's signature against content the caller carries beside it, and
+    /// returns that content with the embedded certificates.
+    /// </summary>
+    /// <param name="signedData">The CMS SignedData carrier, encapsulating no content of its own.</param>
+    /// <param name="detachedContent">The octets the signature is detached over — the Signer's Document.</param>
+    /// <param name="pool">Memory pool; must be <see cref="BaseMemoryPool.Shared"/> for exact-size allocations.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The verified content and embedded certificates. The caller disposes it.</returns>
+    /// <exception cref="CryptographicException">Thrown when the structure encapsulates content of its own, the signature is invalid, or the signer certificate is absent.</exception>
+    /// <remarks>
+    /// <see cref="SignedCms"/> takes the detached content as the <see cref="ContentInfo"/> it is constructed
+    /// with, so everything after the decode is the encapsulated case verbatim. A structure that does carry its
+    /// own content is refused before that, because verifying one of two contents is the shape a substitution
+    /// attack takes — the same rule the library's managed backend applies.
+    /// </remarks>
+    public static ValueTask<CmsVerifiedContent> VerifyDetachedCmsSignedDataAsync(
+        CmsSignedData signedData,
+        SignedContentMemory detachedContent,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(signedData);
+        ArgumentNullException.ThrowIfNull(detachedContent);
+        ArgumentNullException.ThrowIfNull(pool);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        SignedCms probe = new();
+        probe.Decode(signedData.AsReadOnlySpan());
+        if(probe.ContentInfo.Content.Length > 0)
+        {
+            throw new CryptographicException("The CMS SignedData encapsulates content of its own, so it is not a detached signature.");
+        }
+
+        SignedCms cms = new(new ContentInfo(detachedContent.AsReadOnlySpan().ToArray()), detached: true);
+        cms.Decode(signedData.AsReadOnlySpan());
+
+        return Verify(cms, pool);
+    }
+
+
+    /// <summary>
+    /// Verifies a decoded CMS SignedData and projects it into the seam's verified content — the body both the
+    /// encapsulated and the detached member share, which differ only in where the content came from.
+    /// </summary>
+    /// <param name="cms">The decoded structure, carrying the content to verify against.</param>
+    /// <param name="pool">Memory pool; must be <see cref="BaseMemoryPool.Shared"/> for exact-size allocations.</param>
+    /// <returns>The verified content and embedded certificates. The caller disposes it.</returns>
+    /// <exception cref="CryptographicException">Thrown when the signature is invalid or the signer certificate is absent.</exception>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the content buffer and certificate memories transfers to the returned CmsVerifiedContent, which the caller disposes; the catch disposes them on a partial failure.")]
+    private static ValueTask<CmsVerifiedContent> Verify(SignedCms cms, MemoryPool<byte> pool)
+    {
         //Verify the signature over the encapsulated content, but not the certificate chain — trust is
         //established separately through the certificate-chain seam against the appropriate anchors.
         cms.CheckSignature(verifySignatureOnly: true);

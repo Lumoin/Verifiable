@@ -100,6 +100,66 @@ internal sealed class CmsBackendEquivalenceTests
 
 
     /// <summary>
+    /// The same provider-neutrality over the DETACHED seam: all three backends verify one detached signature
+    /// against the octets carried beside it and surface the same verified content, so a host may choose which
+    /// of them an Associated Signature Container's CAdES objects are verified on.
+    /// </summary>
+    /// <returns>The running test.</returns>
+    [TestMethod]
+    public async Task AllThreeDetachedBackendsVerifyTheSameDetachedSignatureEquivalently()
+    {
+        //The key feeds CertificateRequest directly to mint the self-signed signer certificate (cert-factory carve-out).
+        using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var signerCertificate = CmsSignedDataTestFactory.MintSelfSignedCertificate(signingKey, NotBefore, NotAfter);
+        using SignedContentMemory content = SignedContentMemory.FromBytes("the cross-backend detached content"u8, BaseMemoryPool.Shared);
+        using CmsSignedData carrier = CmsSignedDataTestFactory.SignAsCAdESDetached(content.AsReadOnlySpan(), signerCertificate, SigningTime);
+
+        using CmsVerifiedContent fromMicrosoft = await ResolveDetached(qualifier: null)(carrier, content, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+        using CmsVerifiedContent fromBouncyCastle = await ResolveDetached(BouncyCastleQualifier)(carrier, content, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+        using CmsVerifiedContent fromManaged = await ResolveDetached(ManagedQualifier)(carrier, content, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertEquivalent(fromMicrosoft, fromBouncyCastle, "BouncyCastle");
+        AssertEquivalent(fromMicrosoft, fromManaged, "managed");
+        Assert.AreEqual(
+            Convert.ToHexString(content.AsReadOnlySpan()),
+            Convert.ToHexString(fromMicrosoft.Content.Span),
+            "The verified content of a detached signature is the octets the caller supplied.");
+    }
+
+
+    /// <summary>
+    /// Every detached backend refuses a structure that encapsulates content of its own rather than checking it
+    /// against the octets supplied beside it: two contents with only one of them checked is the shape a
+    /// substitution attack takes, and the refusal has to hold whichever backend a host registered.
+    /// </summary>
+    /// <returns>The running test.</returns>
+    [TestMethod]
+    public async Task EveryDetachedBackendRefusesAStructureCarryingItsOwnContent()
+    {
+        //The key feeds CertificateRequest directly to mint the self-signed signer certificate (cert-factory carve-out).
+        using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var signerCertificate = CmsSignedDataTestFactory.MintSelfSignedCertificate(signingKey, NotBefore, NotAfter);
+        using CmsSignedData encapsulating = CmsSignedDataTestFactory.SignAsCAdES("the cross-backend content"u8, signerCertificate, SigningTime);
+
+        //The octets supplied beside the structure are the ones it encapsulates, which is the case a backend
+        //that simply verified would accept: the message-digest attribute matches and the signature holds. The
+        //refusal is a rule about the shape, not a consequence of a mismatch.
+        using SignedContentMemory same = SignedContentMemory.FromBytes("the cross-backend content"u8, BaseMemoryPool.Shared);
+
+        foreach(string? qualifier in new[] { null, BouncyCastleQualifier, ManagedQualifier })
+        {
+            VerifyDetachedCmsSignedDataDelegate verify = ResolveDetached(qualifier);
+            await Assert.ThrowsExactlyAsync<CryptographicException>(
+                async () =>
+                {
+                    using CmsVerifiedContent _ = await verify(encapsulating, same, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+                },
+                $"The backend registered for qualifier '{qualifier ?? "(default)"}' must refuse a structure that carries its own content.").ConfigureAwait(false);
+        }
+    }
+
+
+    /// <summary>
     /// Asserts two verified-content results are equivalent: the same content type, content, signer
     /// certificate, and signed attributes (by object identifier and value).
     /// </summary>
@@ -123,4 +183,15 @@ internal sealed class CmsBackendEquivalenceTests
     private static VerifyCmsSignedDataDelegate Resolve(string? qualifier) =>
         CryptographicKeyFactory.GetFunction<VerifyCmsSignedDataDelegate>(typeof(VerifyCmsSignedDataDelegate), qualifier)
             ?? throw new InvalidOperationException($"No VerifyCmsSignedDataDelegate has been registered for qualifier '{qualifier ?? "(default)"}'.");
+
+
+    /// <summary>
+    /// Resolves the detached CMS verification backend registered under one qualifier.
+    /// </summary>
+    /// <param name="qualifier">The registration qualifier, or <see langword="null"/> for the default.</param>
+    /// <returns>The registered backend.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when nothing is registered under that qualifier.</exception>
+    private static VerifyDetachedCmsSignedDataDelegate ResolveDetached(string? qualifier) =>
+        CryptographicKeyFactory.GetFunction<VerifyDetachedCmsSignedDataDelegate>(typeof(VerifyDetachedCmsSignedDataDelegate), qualifier)
+            ?? throw new InvalidOperationException($"No VerifyDetachedCmsSignedDataDelegate has been registered for qualifier '{qualifier ?? "(default)"}'.");
 }

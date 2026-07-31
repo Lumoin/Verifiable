@@ -293,6 +293,43 @@ public enum SignatureFactsStatus
 
 
 /// <summary>
+/// Where the signed content a <see cref="SignatureFacts"/> carries came from — inside the Signed Data Object, or
+/// beside it from the Driving Application. This is the distinction the containment rule of clause 5.6.2.3 step 5)
+/// of
+/// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31910201/01.04.01_60/en_31910201v010401p.pdf">
+/// ETSI EN 319 102-1 V1.4.1</see> turns on: a proof of existence for an object is a proof for "each object
+/// contained in" it, and a detached Signer's Document is not contained in the Signed Data Object at all — the
+/// signature binds it by the digest of RFC 5652 clause 5.4's <c>message-digest</c> attribute alone, which is the
+/// digest-reference territory of step 4) rather than the containment territory of step 5).
+/// </summary>
+/// <remarks>
+/// <see cref="NotPresent"/> occupies zero, so a binding that states no placement never has its content read as
+/// contained in the Signed Data Object. That is the fail-closed direction: a containment rule that cannot tell
+/// the two apart states the stronger claim for both.
+/// </remarks>
+public enum SignedContentPlacement
+{
+    /// <summary>The facts carry no signed content. The value of an unset field, by design.</summary>
+    NotPresent = 0,
+
+    /// <summary>
+    /// The content is encapsulated in the Signed Data Object — the <c>eContent</c> of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc5652#section-5.2">IETF RFC 5652 clause 5.2</see> — so every
+    /// octet of it is contained in the object a proof of existence is about.
+    /// </summary>
+    Encapsulated = 1,
+
+    /// <summary>
+    /// The content travelled beside the Signed Data Object as the Signer's Document of Table 8 of clause 5.2.2.2,
+    /// which is what an Associated Signature Container carries for the CAdES objects of ETSI EN 319 162-1 clause
+    /// 4.4.4.2 item 3 a) and clause 4.3.3.2 item 4 b). RFC 5652 clause 5.2 states the case outright: "the content
+    /// is not present ... supplied by other means".
+    /// </summary>
+    Detached = 2
+}
+
+
+/// <summary>
 /// Everything the format-neutral validation algorithm of clause 5 of
 /// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31910201/01.04.01_60/en_31910201v010401p.pdf">
 /// ETSI EN 319 102-1 V1.4.1</see> needs to know about one signature, extracted by the binding for its base
@@ -340,8 +377,20 @@ public sealed class SignatureFacts: IDisposable
     /// <summary>Gets the identity of the signed content — for CMS the encapsulated content type object identifier; empty when the format names none.</summary>
     public string SignedContentIdentifier { get; init; } = string.Empty;
 
-    /// <summary>Gets the signed content the signature encapsulates, owned by this instance; <see langword="null"/> for a detached signature, whose content the caller supplies as a <see cref="SignerDocumentReference"/>.</summary>
+    /// <summary>
+    /// Gets the signed content, owned by this instance: the octets the signature encapsulates, or — for a
+    /// detached signature — the Signer's Document the caller supplied beside it as a
+    /// <see cref="SignerDocumentReference"/>. <see cref="SignedContentPlacement"/> states which of the two this
+    /// is. <see langword="null"/> when the signature encapsulates nothing and the caller supplied nothing.
+    /// </summary>
     public SignedContentMemory? SignedContent { get; init; }
+
+    /// <summary>
+    /// Gets where <see cref="SignedContent"/> came from — the fact the containment rule of clause 5.6.2.3 step 5)
+    /// turns on, since a detached Signer's Document is not contained in the Signed Data Object;
+    /// <see cref="SignedContentPlacement.NotPresent"/> when there is no signed content.
+    /// </summary>
+    public SignedContentPlacement SignedContentPlacement { get; init; }
 
     /// <summary>
     /// Gets the signature value octets — clause 4.2.9's "signature", the object a signature time-stamp binds and

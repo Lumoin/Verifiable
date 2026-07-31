@@ -190,6 +190,20 @@ public sealed record SignatureValidationInputs
     public ProofOfExistenceSet ProofsOfExistence { get; init; } = ProofOfExistenceSet.Empty;
 
     /// <summary>
+    /// The Evidence Records accompanying the signature, which step 1) of clause 5.6.3.4 validates "according to
+    /// IETF RFC 4998 or IETF RFC 6283" before anything else the process does. Empty — the default — is the state
+    /// the step's own NOTE describes as having nothing to validate, and every process below behaves exactly as it
+    /// did before this input existed.
+    /// </summary>
+    /// <remarks>
+    /// The input is the Driving Application's, like every other member here: an Evidence Record travels beside a
+    /// signature (in an Associated Signature Container, in an archival package, in a CMS unsigned attribute the
+    /// caller has already located), and which objects it is claimed to protect is knowledge the container or the
+    /// package carries rather than the record.
+    /// </remarks>
+    public IReadOnlyList<EvidenceRecordValidationInput> EvidenceRecords { get; init; } = [];
+
+    /// <summary>
     /// The constraints applicable for validating time-stamps, which step 1) of clause 5.4.4 has the time-stamp
     /// validation building block use in place of the signature's own — "a trust anchor list applicable for
     /// validating time-stamps according to the validation policy" and "a validation policy applicable for

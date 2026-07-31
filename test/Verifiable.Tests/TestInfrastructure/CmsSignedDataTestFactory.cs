@@ -185,6 +185,56 @@ internal static class CmsSignedDataTestFactory
 
 
     /// <summary>
+    /// Signs the payload as a CAdES-B-B signature whose <c>encapContentInfo</c> carries no content — a detached
+    /// signature — and returns the pooled wire carrier together with nothing else: the content stays with the
+    /// caller, which is the whole point of the shape.
+    /// </summary>
+    /// <param name="payload">The content the signature covers without carrying it.</param>
+    /// <param name="signerCertificate">The signer certificate (the test holds its key).</param>
+    /// <param name="signingTime">The signing-time attribute value.</param>
+    /// <param name="rsaSignaturePadding">
+    /// The padding an RSA signer signs with, or <see langword="null"/> for the signer's default. Passing
+    /// <see cref="RSASignaturePadding.Pss"/> makes the <c>SignerInfo</c> state <c>id-RSASSA-PSS</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8017#appendix-A.2.3">RFC 8017 Appendix A.2.3</see>), the
+    /// shape a third-party container signed under a modern EU signature policy carries.
+    /// </param>
+    /// <returns>The wire carrier. The caller disposes it.</returns>
+    /// <remarks>
+    /// The second selection method of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc4998#appendix-A">IETF RFC 4998 Appendix A</see> groups "the
+    /// hash value of the CMS Object as well as the hash value of the content" as separate data objects, which
+    /// only means anything when the content is separate from the object. Without a detached signature that
+    /// selection cannot be exercised at all.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the carrier transfers to the caller, which disposes it.")]
+    public static CmsSignedData SignAsCAdESDetached(
+        ReadOnlySpan<byte> payload,
+        X509Certificate2 signerCertificate,
+        DateTimeOffset signingTime,
+        RSASignaturePadding? rsaSignaturePadding = null)
+    {
+        var content = new ContentInfo(payload.ToArray());
+        var signedCms = new SignedCms(content, detached: true);
+        CmsSigner signer = rsaSignaturePadding is null
+            ? new CmsSigner(signerCertificate)
+            : new CmsSigner(SubjectIdentifierType.IssuerAndSerialNumber, signerCertificate, privateKey: null, rsaSignaturePadding);
+        signer.IncludeOption = X509IncludeOption.EndCertOnly;
+        signer.SignedAttributes.Add(new Pkcs9SigningTime(signingTime.UtcDateTime));
+
+        //The certificate hash goes into a stack span; the ESS DER is encoded straight into the attribute.
+        Span<byte> certificateHash = stackalloc byte[Sha256Length];
+        SHA256.HashData(signerCertificate.RawData, certificateHash);
+        var writer = new AsnWriter(AsnEncodingRules.DER);
+        WriteSigningCertificateV2(writer, certificateHash, explicitHashAlgorithm: false);
+        signer.SignedAttributes.Add(new AsnEncodedData(new Oid(SigningCertificateV2Oid), writer.Encode()));
+
+        signedCms.ComputeSignature(signer);
+
+        return CmsSignedData.FromBytes(signedCms.Encode(), BaseMemoryPool.Shared);
+    }
+
+
+    /// <summary>
     /// Signs the payload as a CAdES-B-T signature — a CAdES-B-B signature plus a signature timestamp (an RFC
     /// 3161 timestamp token, signed by <paramref name="tsaCertificate"/>) over the signature value, attached as
     /// the signature-time-stamp-token unsigned attribute — and returns the pooled wire carrier.

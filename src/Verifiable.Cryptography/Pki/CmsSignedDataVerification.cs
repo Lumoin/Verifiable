@@ -37,6 +37,46 @@ public delegate ValueTask<CmsVerifiedContent> VerifyCmsSignedDataDelegate(
 
 
 /// <summary>
+/// Verifies the signature on a CMS SignedData structure that encapsulates no content of its own
+/// (<see href="https://www.rfc-editor.org/rfc/rfc5652#section-5.2">RFC 5652 §5.2</see>: "the content
+/// is not present ... it is supplied by other means") against content the caller carries beside it —
+/// the detached form. The optional counterpart of <see cref="VerifyCmsSignedDataDelegate"/>: a host
+/// that registers one of these chooses the backend detached verification runs on, and a host that
+/// registers none keeps the library's own managed backend.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Detached is the only form an Associated Signature Container carries — clause 4.4.4.2 item 3 a) and
+/// clause 4.3.3.2 item 4 b) of
+/// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31916201/01.01.01_60/en_31916201v010101p.pdf">
+/// ETSI EN 319 162-1 V1.1.1</see> both place a detached CAdES object in the container's signature file — so
+/// without this seam the container path would be the one cryptographic operation of this library a host cannot
+/// choose the backend for. The signed data items travel beside the structure there (Table 8 of clause 5.2.2.2
+/// of ETSI EN 319 102-1: the Driving Application supplies the Signer's Document), which is why this takes them
+/// as a parameter while <see cref="VerifyCmsSignedDataDelegate"/> does not.
+/// </para>
+/// <para>
+/// The contract is otherwise that of <see cref="VerifyCmsSignedDataDelegate"/>: the signature only (never the
+/// certificate chain), fail-closed by throwing rather than returning, and the returned
+/// <see cref="CmsVerifiedContent"/> carries the content that was verified — here the octets the caller
+/// supplied. An implementation is expected to refuse a structure that <em>does</em> encapsulate content of its
+/// own rather than check it against the supplied octets: two contents with only one of them checked is the
+/// shape a substitution attack takes.
+/// </para>
+/// </remarks>
+/// <param name="signedData">The CMS SignedData carrier, encapsulating no content of its own.</param>
+/// <param name="detachedContent">The octets the signature is detached over — the Signer's Document.</param>
+/// <param name="pool">Memory pool for the content and certificate allocations.</param>
+/// <param name="cancellationToken">A cancellation token.</param>
+/// <returns>The verified content and the embedded certificates. The caller disposes it.</returns>
+public delegate ValueTask<CmsVerifiedContent> VerifyDetachedCmsSignedDataDelegate(
+    CmsSignedData signedData,
+    SignedContentMemory detachedContent,
+    MemoryPool<byte> pool,
+    CancellationToken cancellationToken = default);
+
+
+/// <summary>
 /// The result of verifying a CMS SignedData signature: the encapsulated content, its content-type
 /// identifier, and the certificates the structure carried — including the signer's, ready to feed
 /// <see cref="ValidateCertificateChainAsyncDelegate"/> for the separate trust step.

@@ -904,7 +904,8 @@ public static class CmsSignedDataAugmentation
     /// <returns>The sites, in encoding order.</returns>
     /// <exception cref="CryptographicException">When an attribute is not of the syntax's shape.</exception>
     /// <exception cref="AsnContentException">When the set is malformed or holds more attributes or values than this walk stays within.</exception>
-    private static List<UnsignedAttributeValueSite> WalkUnsignedAttributeValues(ReadOnlySpan<byte> source, CmsElement unsignedAttributes)
+    /// <remarks>Visible to <see cref="CmsSignedDataReduction"/>, which removes the very sites this walk reports.</remarks>
+    internal static List<UnsignedAttributeValueSite> WalkUnsignedAttributeValues(ReadOnlySpan<byte> source, CmsElement unsignedAttributes)
     {
         List<UnsignedAttributeValueSite> sites = [];
         int position = unsignedAttributes.ContentStart;
@@ -1070,7 +1071,12 @@ public static class CmsSignedDataAugmentation
     /// <returns>The enclosing chain and the insertion offset.</returns>
     /// <exception cref="CryptographicException">When the structure is not a CMS SignedData with a SignerInfo at that index.</exception>
     /// <exception cref="AsnContentException">When the structure is malformed, truncated, or carries trailing octets.</exception>
-    private static SpliceTarget LocateTarget(ReadOnlySpan<byte> source, int signerIndex)
+    /// <remarks>
+    /// Visible to <see cref="CmsSignedDataReduction"/> so the removal primitive walks the structure with this
+    /// walk and not a second one of its own: an insertion and its inverse must agree on where the containers
+    /// are, or the inverse is not one.
+    /// </remarks>
+    internal static SpliceTarget LocateTarget(ReadOnlySpan<byte> source, int signerIndex)
     {
         SignedDataLayout layout = LocateSignedDataLayout(source);
         CmsElement signerInfo = LocateSignerInfo(source, layout.SignerInfos, signerIndex);
@@ -1325,7 +1331,8 @@ public static class CmsSignedDataAugmentation
     /// <param name="limit">The offset one past the last octet the value may occupy.</param>
     /// <returns>The located element.</returns>
     /// <exception cref="AsnContentException">When the value is absent, malformed, or runs past <paramref name="limit"/>.</exception>
-    private static CmsElement ReadElement(ReadOnlySpan<byte> source, int start, int limit)
+    /// <remarks>Visible to <see cref="CmsSignedDataReduction"/>, which reads the same elements to remove them.</remarks>
+    internal static CmsElement ReadElement(ReadOnlySpan<byte> source, int start, int limit)
     {
         if(start >= limit)
         {
@@ -1433,7 +1440,8 @@ public static class CmsSignedDataAugmentation
     /// <param name="lengthOctetCount">The number of length octets to write.</param>
     /// <param name="isIndefinite">Whether the container carried an indefinite length.</param>
     /// <returns>The number of octets written.</returns>
-    private static int WriteLength(Span<byte> destination, int contentLength, int lengthOctetCount, bool isIndefinite)
+    /// <remarks>Visible to <see cref="CmsSignedDataReduction"/>, whose containers shrink where these grow.</remarks>
+    internal static int WriteLength(Span<byte> destination, int contentLength, int lengthOctetCount, bool isIndefinite)
     {
         if(isIndefinite)
         {
@@ -1482,7 +1490,11 @@ public static class CmsSignedDataAugmentation
     /// </summary>
     /// <param name="contentLength">The content length.</param>
     /// <returns>The octet count, including the leading long-form octet when one is needed.</returns>
-    private static int MinimalLengthOctetCount(int contentLength) => contentLength switch
+    /// <remarks>
+    /// Visible to <see cref="CmsSignedDataReduction"/>, which re-derives a shrinking container's length in
+    /// exactly this count — the inverse of what an insertion grew it to.
+    /// </remarks>
+    internal static int MinimalLengthOctetCount(int contentLength) => contentLength switch
     {
         < 0x80 => 1,
         <= 0xFF => 2,
@@ -1505,7 +1517,8 @@ public static class CmsSignedDataAugmentation
     /// <param name="End">The offset one past the whole element, end-of-contents octets included.</param>
     /// <param name="IsIndefinite">Whether the element carried a BER indefinite length.</param>
     /// <param name="Tag">The element's tag.</param>
-    private readonly record struct CmsElement(
+    /// <remarks>Visible to <see cref="CmsSignedDataReduction"/>, which addresses the same located elements.</remarks>
+    internal readonly record struct CmsElement(
         int Start,
         int TagLength,
         int HeaderLength,
@@ -1527,7 +1540,8 @@ public static class CmsSignedDataAugmentation
     /// <param name="HasUnsignedAttributes">Whether the chosen <c>SignerInfo</c> already carries an <c>unsignedAttrs</c> set.</param>
     /// <param name="UnsignedAttributes">The <c>unsignedAttrs</c> set, meaningful only when <paramref name="HasUnsignedAttributes"/> holds.</param>
     /// <param name="SignatureValue">The chosen <c>SignerInfo</c>'s <c>signature</c> OCTET STRING.</param>
-    private readonly record struct SpliceTarget(
+    /// <remarks>Visible to <see cref="CmsSignedDataReduction"/>, which splices the same chain the other way.</remarks>
+    internal readonly record struct SpliceTarget(
         CmsElement[] Chain,
         int ChainLength,
         int InsertionOffset,
@@ -1573,7 +1587,8 @@ public static class CmsSignedDataAugmentation
     /// <param name="Value">The <c>AttributeValue</c> itself.</param>
     /// <param name="Attribute">The <c>Attribute</c> SEQUENCE enclosing it.</param>
     /// <param name="Values">The <c>attrValues</c> SET enclosing it.</param>
-    private readonly record struct UnsignedAttributeValueSite(
+    /// <remarks>Visible to <see cref="CmsSignedDataReduction"/>, which removes the sites this describes.</remarks>
+    internal readonly record struct UnsignedAttributeValueSite(
         int AttributeIndex,
         int ValueIndex,
         string AttributeType,

@@ -95,6 +95,12 @@ internal static class X509ChainTestRing
     /// </summary>
     internal const int SigningKeySizeBits = 256;
 
+    /// <summary>
+    /// The modulus size in bits of the RSA end-entity keys <see cref="CreateRsaLeafCertificate"/> mints by
+    /// default, for a fixture stating a minimum key size in its cryptographic constraints over RSA material.
+    /// </summary>
+    internal const int RsaSigningKeySizeBits = 2048;
+
 
     /// <summary>
     /// Creates a self-signed Root CA. The returned node's certificate
@@ -353,6 +359,109 @@ internal static class X509ChainTestRing
             key.Dispose();
             throw;
         }
+    }
+
+
+    /// <summary>
+    /// Creates an end-entity certificate whose subject public key is RSA, signed by <paramref name="issuer"/>
+    /// with the issuer's own key, and returns it with its private key attached. For a fixture whose signer has
+    /// to use an RSA signature algorithm — RSASSA-PSS
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8017#section-8.1">RFC 8017 §8.1</see>), which ETSI
+    /// TS 119 312 lists among the algorithms an EU advanced signature may be produced with — while still
+    /// chaining to this ring's root.
+    /// </summary>
+    /// <param name="issuer">The issuing node — a Root or an Intermediate.</param>
+    /// <param name="dnsName">The DNS name carried as the subject common name and Subject Alternative Name.</param>
+    /// <param name="timeProvider">The clock the default validity window is derived from; never read when both instants are supplied.</param>
+    /// <param name="keySizeBits">The RSA modulus size in bits.</param>
+    /// <param name="notBefore">An explicit validity start; defaults to one day before the clock's now.</param>
+    /// <param name="notAfter">An explicit validity end; defaults to one year after the clock's now.</param>
+    /// <returns>The certificate, carrying its private key. The caller disposes it.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the issuer is itself an end-entity node.</exception>
+    /// <remarks>
+    /// The return type differs from the other members' <see cref="X509ChainTestRingNode"/> deliberately: a node
+    /// holds an <see cref="ECDsa"/> signing key by construction, and the private key of an RSA end-entity
+    /// travels with the certificate because that is the form the CMS signing APIs take. Everything else — the
+    /// Subject Alternative Name, the end-entity Basic Constraints, the digital-signature Key Usage and the
+    /// Authority Key Identifier chained to the issuer's Subject Key Identifier — is what
+    /// <see cref="CreateLeaf"/> mints, so chain building faces no ambiguous same-subject issuer here either.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "The certificate carrying the copied private key transfers to the caller, which disposes it; the ephemeral key and the public-only certificate are disposed here.")]
+    public static X509Certificate2 CreateRsaLeafCertificate(
+        X509ChainTestRingNode issuer,
+        string dnsName,
+        TimeProvider timeProvider,
+        int keySizeBits = RsaSigningKeySizeBits,
+        DateTimeOffset? notBefore = null,
+        DateTimeOffset? notAfter = null)
+    {
+        ArgumentNullException.ThrowIfNull(issuer);
+        ArgumentException.ThrowIfNullOrWhiteSpace(dnsName);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
+        if(issuer.Role == X509ChainNodeRole.Leaf)
+        {
+            throw new InvalidOperationException(
+                "Cannot issue a Leaf from another Leaf; issuer must be a Root or Intermediate.");
+        }
+
+        DateTimeOffset now = timeProvider.GetUtcNow();
+        DateTimeOffset validFrom = notBefore ?? now.AddDays(-1);
+        DateTimeOffset validTo = notAfter ?? now.AddYears(1);
+
+        //X.509 cert-factory carve-out: CertificateRequest.Create needs a live framework signing key.
+        using RSA key = RSA.Create(keySizeBits);
+
+        CertificateRequest request = new(
+            $"CN={dnsName}, O=Verifiable Test Infrastructure",
+            key,
+            SignatureHashAlg,
+            RSASignaturePadding.Pkcs1);
+
+        SubjectAlternativeNameBuilder sanBuilder = new();
+        sanBuilder.AddDnsName(dnsName);
+        request.CertificateExtensions.Add(sanBuilder.Build(critical: false));
+
+        request.CertificateExtensions.Add(
+            new X509BasicConstraintsExtension(
+                certificateAuthority: false,
+                hasPathLengthConstraint: false,
+                pathLengthConstraint: 0,
+                critical: false));
+
+        request.CertificateExtensions.Add(
+            new X509KeyUsageExtension(
+                X509KeyUsageFlags.DigitalSignature,
+                critical: true));
+
+        X509SubjectKeyIdentifierExtension subjectKeyId =
+            new(request.PublicKey, X509SubjectKeyIdentifierHashAlgorithm.Sha256, critical: false);
+        request.CertificateExtensions.Add(subjectKeyId);
+
+        X509SubjectKeyIdentifierExtension? issuerSubjectKeyId =
+            FindSubjectKeyIdentifier(issuer.Certificate);
+        if(issuerSubjectKeyId is not null)
+        {
+            request.CertificateExtensions.Add(
+                X509AuthorityKeyIdentifierExtension.CreateFromSubjectKeyIdentifier(issuerSubjectKeyId));
+        }
+
+        using Salt serial = CreateSerialNumber();
+
+        //The issuer signs with its own elliptic-curve key over a request whose subject key is RSA, so the
+        //issuance goes through the signature generator rather than the issuer-certificate overload, which
+        //requires the two key algorithms to match.
+        X509SignatureGenerator generator = X509SignatureGenerator.CreateForECDsa(issuer.SigningKey);
+
+        using X509Certificate2 publicOnly = request.Create(
+            issuer.Certificate.SubjectName,
+            generator,
+            notBefore: validFrom,
+            notAfter: validTo,
+            serialNumber: serial.AsReadOnlySpan().ToArray());
+
+        return publicOnly.CopyWithPrivateKey(key);
     }
 
 

@@ -78,9 +78,15 @@ internal sealed class MintingTimestampResponder
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(pool);
 
-        (byte[] messageImprint, byte[] nonce) = ReadRequest(context.Request.AsReadOnlyMemory());
+        (byte[] messageImprint, string algorithmOid, byte[] nonce) = ReadRequest(context.Request.AsReadOnlyMemory());
+        PkiDigestAlgorithm? algorithm = PkiDigestAlgorithm.FromOid(algorithmOid);
+        if(algorithm is null)
+        {
+            throw new ArgumentException($"The request states a message imprint algorithm this responder does not mint under: {algorithmOid}.", nameof(context));
+        }
+
         using PkiCertificateMemory token = X509ChainTestRingTimestamping.MintTimestampTokenOverImprint(
-            Authority, EmbeddedCertificates, messageImprint, GenerationTime, nonce);
+            Authority, EmbeddedCertificates, messageImprint, GenerationTime, nonce, messageImprintAlgorithm: algorithm.Value);
 
         return ValueTask.FromResult<PkiCertificateMemory?>(BuildResponse(token.AsReadOnlySpan(), pool));
     }
@@ -90,8 +96,13 @@ internal sealed class MintingTimestampResponder
     /// Decodes the fields of a <c>TimeStampReq</c> this responder answers from (RFC 3161 §2.4.1).
     /// </summary>
     /// <param name="request">The DER-encoded request.</param>
-    /// <returns>The message imprint's hashed message, and the nonce when the request carried one.</returns>
-    private static (byte[] MessageImprint, byte[] Nonce) ReadRequest(ReadOnlyMemory<byte> request)
+    /// <returns>The message imprint's hashed message, the algorithm it names, and the nonce when the request carried one.</returns>
+    /// <remarks>
+    /// The algorithm is read rather than assumed, because an authority answers under the algorithm the request
+    /// states: a caller renewing an archive under a new hash algorithm asks this responder for a token under
+    /// that algorithm, and a responder that always answered under one would make the renewal untestable.
+    /// </remarks>
+    private static (byte[] MessageImprint, string AlgorithmOid, byte[] Nonce) ReadRequest(ReadOnlyMemory<byte> request)
     {
         var outer = new AsnReader(request, AsnEncodingRules.DER);
         AsnReader timeStampReq = outer.ReadSequence();
@@ -99,7 +110,8 @@ internal sealed class MintingTimestampResponder
 
         _ = timeStampReq.ReadInteger();                                     //version.
         AsnReader messageImprint = timeStampReq.ReadSequence();
-        _ = messageImprint.ReadSequence();                                  //hashAlgorithm.
+        AsnReader hashAlgorithm = messageImprint.ReadSequence();
+        string algorithmOid = hashAlgorithm.ReadObjectIdentifier();
         byte[] hashedMessage = messageImprint.ReadOctetString();
         messageImprint.ThrowIfNotEmpty();
 
@@ -114,7 +126,7 @@ internal sealed class MintingTimestampResponder
             nonce = timeStampReq.ReadIntegerBytes().ToArray();
         }
 
-        return (hashedMessage, nonce);
+        return (hashedMessage, algorithmOid, nonce);
     }
 
 

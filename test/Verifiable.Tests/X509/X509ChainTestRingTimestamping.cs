@@ -49,7 +49,7 @@ internal static class X509ChainTestRingTimestamping
     /// </summary>
     internal static string TestPolicyOid { get; } = "1.2.3.4.1";
 
-    /// <summary>The SHA-256 digest length in bytes — the message imprint length of every token minted here.</summary>
+    /// <summary>The SHA-256 digest length in bytes — the message imprint length a token minted here states unless a caller names another algorithm.</summary>
     private const int Sha256Length = 32;
 
 
@@ -92,20 +92,28 @@ internal static class X509ChainTestRingTimestamping
 
 
     /// <summary>
-    /// Mints a time-stamp token over an already-computed SHA-256 message imprint, which is what a Time-Stamping
+    /// Mints a time-stamp token over an already-computed message imprint, which is what a Time-Stamping
     /// Authority answering an RFC 3161 <c>TimeStampReq</c> does: the request carries the imprint, never the data
     /// it was taken over.
     /// </summary>
     /// <param name="authority">The Time-Stamping Authority node, minted by <see cref="X509ChainTestRing.CreateTimeStampingAuthority"/> so that it carries the Extended Key Usage RFC 3161 §2.3 requires.</param>
     /// <param name="embeddedCertificates">The certificates the token carries in its own <c>certificates</c> field.</param>
-    /// <param name="messageImprintDigest">The SHA-256 digest the token's <c>messageImprint</c> states.</param>
+    /// <param name="messageImprintDigest">The digest the token's <c>messageImprint</c> states, under <paramref name="messageImprintAlgorithm"/>.</param>
     /// <param name="generationTime">The <c>genTime</c> the authority states.</param>
     /// <param name="requestNonce">The nonce the request carried, which the token echoes; empty when the request carried none.</param>
     /// <param name="accuracy">The <c>accuracy</c> the authority states, in whole seconds; omitted from the token when <see langword="null"/>.</param>
     /// <param name="isOrdered">Whether the token sets the <c>ordering</c> field.</param>
+    /// <param name="messageImprintAlgorithm">The algorithm the imprint was computed under, or <see langword="null"/> for SHA-256.</param>
     /// <returns>The pooled DER-encoded token, tagged <see cref="PkiCertificateTags.TimestampToken"/>; the caller disposes it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when a required argument is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="messageImprintDigest"/> is not a SHA-256 digest length.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="messageImprintDigest"/> is not the stated algorithm's digest length, or that algorithm is one this fixture does not mint under.</exception>
+    /// <remarks>
+    /// The imprint algorithm is a parameter because a real authority answers under the algorithm the request
+    /// states, and a caller renewing an archive under a new hash algorithm — RFC 4998 clause 5.2's Hash-Tree
+    /// Renewal — asks for exactly that. The token's own signature and its <c>ESSCertIDv2</c> certificate
+    /// reference stay SHA-256 whatever the imprint algorithm is; those are the authority's own choices and
+    /// independent of what it is asked to bind.
+    /// </remarks>
     internal static PkiCertificateMemory MintTimestampTokenOverImprint(
         X509ChainTestRingNode authority,
         IReadOnlyList<X509ChainTestRingNode> embeddedCertificates,
@@ -113,13 +121,18 @@ internal static class X509ChainTestRingTimestamping
         DateTimeOffset generationTime,
         ReadOnlySpan<byte> requestNonce = default,
         TimeSpan? accuracy = null,
-        bool isOrdered = false)
+        bool isOrdered = false,
+        PkiDigestAlgorithm? messageImprintAlgorithm = null)
     {
         ArgumentNullException.ThrowIfNull(authority);
         ArgumentNullException.ThrowIfNull(embeddedCertificates);
-        if(messageImprintDigest.Length != Sha256Length)
+
+        PkiDigestAlgorithm imprintAlgorithm = messageImprintAlgorithm ?? PkiDigestAlgorithm.Sha256;
+        DerObjectIdentifier imprintAlgorithmOid = ToBouncyCastleDigestOid(imprintAlgorithm);
+        if(messageImprintDigest.Length != imprintAlgorithm.OutputByteLength)
         {
-            throw new ArgumentException($"The message imprint of a token minted here is a {Sha256Length}-byte SHA-256 digest.", nameof(messageImprintDigest));
+            throw new ArgumentException(
+                $"The message imprint of a token minted under {imprintAlgorithm.Identifier.Oid} is a {imprintAlgorithm.OutputByteLength}-byte digest.", nameof(messageImprintDigest));
         }
 
         BcX509Certificate bcAuthority = OcspTestFixtures.ToBouncyCastleCertificate(authority.Certificate);
@@ -160,8 +173,8 @@ internal static class X509ChainTestRingTimestamping
         //The generator copies the request's nonce into the TSTInfo it signs, which is how an authority answers
         //a request that carried one (RFC 3161 §2.4.2).
         TimeStampRequest request = requestNonce.IsEmpty
-            ? requestGenerator.Generate(NistObjectIdentifiers.IdSha256, messageImprintDigest.ToArray())
-            : requestGenerator.Generate(NistObjectIdentifiers.IdSha256, messageImprintDigest.ToArray(), new BcBigInteger(1, requestNonce.ToArray()));
+            ? requestGenerator.Generate(imprintAlgorithmOid, messageImprintDigest.ToArray())
+            : requestGenerator.Generate(imprintAlgorithmOid, messageImprintDigest.ToArray(), new BcBigInteger(1, requestNonce.ToArray()));
 
         using Salt serialNumber = X509ChainTestRing.CreateSerialNumber();
         TimeStampToken token = tokenGenerator.Generate(
@@ -170,6 +183,16 @@ internal static class X509ChainTestRingTimestamping
             generationTime.UtcDateTime);
 
         return ToTimestampTokenCarrier(token.GetEncoded());
+
+        //Maps a digest algorithm to the object identifier the independent generator names it by. Only the
+        //SHA-2 family is minted here, which is what the shipped surfaces request.
+        static DerObjectIdentifier ToBouncyCastleDigestOid(PkiDigestAlgorithm algorithm) => algorithm.Identifier.Oid switch
+        {
+            "2.16.840.1.101.3.4.2.1" => NistObjectIdentifiers.IdSha256,
+            "2.16.840.1.101.3.4.2.2" => NistObjectIdentifiers.IdSha384,
+            "2.16.840.1.101.3.4.2.3" => NistObjectIdentifiers.IdSha512,
+            _ => throw new ArgumentException($"A token minted here states a SHA-2 message imprint, not one under {algorithm.Identifier.Oid}.", nameof(algorithm))
+        };
     }
 
 

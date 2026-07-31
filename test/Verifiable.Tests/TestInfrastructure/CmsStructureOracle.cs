@@ -197,6 +197,166 @@ internal static class CmsStructureOracle
 
 
     /// <summary>
+    /// Rebuilds a Signed Data Object with the addressed unsigned attribute values gone — the independent
+    /// counterpart of the library's removal splice, written from X.690 and RFC 5652 §5.3 alone.
+    /// </summary>
+    /// <param name="signedData">The Signed Data Object octets.</param>
+    /// <param name="signerIndex">The zero-based index of the signer whose attributes are addressed.</param>
+    /// <param name="valueOrdinals">The zero-based positions of the values to remove, counted across every unsigned attribute of that signer in encoding order.</param>
+    /// <returns>The rebuilt Signed Data Object.</returns>
+    /// <remarks>
+    /// <para>
+    /// This shares no code and no strategy with the operation it checks. The library splices: it copies the
+    /// input through and rewrites the length octets of the containers that shrank. This rebuilds: it takes the
+    /// surviving values' octets, wraps them in a fresh <c>attrValues</c> SET, wraps that with the attribute's own
+    /// verbatim <c>attrType</c> octets in a fresh <c>Attribute</c> SEQUENCE, and re-wraps every ancestor from the
+    /// inside out. Two constructions that agree octet for octet agree about what "the length of fields containing
+    /// tags has to be adapted, apart from that the existing coding must not be modified" means.
+    /// </para>
+    /// <para>
+    /// An emptied container disappears rather than being written empty, because <c>attrValues</c> and
+    /// <c>UnsignedAttributes</c> are both <c>SET SIZE (1..MAX)</c>. An indefinite-length container keeps its
+    /// <c>0x80</c> length octet and its end-of-contents pair; a definite one is written in the minimal number of
+    /// length octets.
+    /// </para>
+    /// </remarks>
+    public static byte[] RemoveUnsignedAttributeValues(byte[] signedData, int signerIndex, IReadOnlyList<int> valueOrdinals)
+    {
+        ArgumentNullException.ThrowIfNull(signedData);
+        ArgumentNullException.ThrowIfNull(valueOrdinals);
+
+        List<CmsTlvBounds> chain = LocateLengthChain(signedData, signerIndex);
+        if(chain.Count != 6)
+        {
+            throw new InvalidOperationException("The signer carries no unsignedAttrs field, so there is nothing to remove from it.");
+        }
+
+        var survivingAttributes = new List<byte[]>();
+        int ordinal = 0;
+        foreach(CmsTlvBounds attribute in Children(signedData, chain[5]))
+        {
+            List<CmsTlvBounds> fields = Children(signedData, attribute);
+            CmsTlvBounds values = fields[^1];
+            var survivingValues = new List<byte[]>();
+            foreach(CmsTlvBounds value in Children(signedData, values))
+            {
+                if(!valueOrdinals.Contains(ordinal))
+                {
+                    survivingValues.Add(signedData[value.Start..value.End]);
+                }
+
+                ++ordinal;
+            }
+
+            if(survivingValues.Count == 0)
+            {
+                continue;
+            }
+
+            byte[] rebuiltValues = Wrap(signedData, values, Concatenate(survivingValues));
+            survivingAttributes.Add(Wrap(signedData, attribute, Concatenate([signedData[fields[0].Start..fields[0].End], rebuiltValues])));
+        }
+
+        byte[] rebuiltUnsignedAttributes = survivingAttributes.Count == 0 ? [] : Wrap(signedData, chain[5], Concatenate(survivingAttributes));
+
+        List<CmsTlvBounds> signerFields = Children(signedData, chain[4]);
+        var signerParts = new List<byte[]>();
+        for(int i = 0; i < signerFields.Count - 1; ++i)
+        {
+            signerParts.Add(signedData[signerFields[i].Start..signerFields[i].End]);
+        }
+
+        signerParts.Add(rebuiltUnsignedAttributes);
+        byte[] rebuiltSigner = Wrap(signedData, chain[4], Concatenate(signerParts));
+
+        byte[] rebuiltSignerInfos = Wrap(signedData, chain[3], Concatenate(ReplaceChild(signedData, chain[3], signerIndex, rebuiltSigner)));
+        byte[] rebuiltSignedData = Wrap(signedData, chain[2], Concatenate(ReplaceChild(signedData, chain[2], Children(signedData, chain[2]).Count - 1, rebuiltSignerInfos)));
+        byte[] rebuiltContent = Wrap(signedData, chain[1], rebuiltSignedData);
+
+        return Wrap(signedData, chain[0], Concatenate(ReplaceChild(signedData, chain[0], Children(signedData, chain[0]).Count - 1, rebuiltContent)));
+    }
+
+
+    /// <summary>
+    /// The children of a constructed element with one of them replaced by new octets.
+    /// </summary>
+    /// <param name="buffer">The octets the element lives in.</param>
+    /// <param name="parent">The constructed element.</param>
+    /// <param name="childIndex">The zero-based index of the child to replace.</param>
+    /// <param name="replacement">The octets the child becomes.</param>
+    /// <returns>The children's octets, in order, with the replacement in place.</returns>
+    private static List<byte[]> ReplaceChild(byte[] buffer, CmsTlvBounds parent, int childIndex, byte[] replacement)
+    {
+        List<CmsTlvBounds> children = Children(buffer, parent);
+        var parts = new List<byte[]>(children.Count);
+        for(int i = 0; i < children.Count; ++i)
+        {
+            parts.Add(i == childIndex ? replacement : buffer[children[i].Start..children[i].End]);
+        }
+
+        return parts;
+    }
+
+
+    /// <summary>
+    /// Wraps content in one element's own tag octets and a length that fits it: the indefinite-length octet and
+    /// an end-of-contents pair when that is what the element carried, otherwise the minimal definite length.
+    /// </summary>
+    /// <param name="buffer">The octets the element lives in.</param>
+    /// <param name="element">The element whose tag and length form is reproduced.</param>
+    /// <param name="content">The content octets the wrapper holds.</param>
+    /// <returns>The wrapped element.</returns>
+    private static byte[] Wrap(byte[] buffer, CmsTlvBounds element, byte[] content)
+    {
+        var wrapped = new List<byte>(content.Length + 8);
+        wrapped.AddRange(buffer[element.Start..(element.Start + element.TagLength)]);
+        if(element.IsIndefinite)
+        {
+            wrapped.Add(IndefiniteLengthOctet);
+            wrapped.AddRange(content);
+            wrapped.AddRange([0x00, 0x00]);
+
+            return [.. wrapped];
+        }
+
+        if(content.Length < 0x80)
+        {
+            wrapped.Add((byte)content.Length);
+        }
+        else
+        {
+            int octetCount = content.Length <= 0xFF ? 1 : content.Length <= 0xFFFF ? 2 : content.Length <= 0xFFFFFF ? 3 : 4;
+            wrapped.Add((byte)(IndefiniteLengthOctet | octetCount));
+            for(int i = octetCount - 1; i >= 0; --i)
+            {
+                wrapped.Add((byte)(content.Length >>> (8 * i)));
+            }
+        }
+
+        wrapped.AddRange(content);
+
+        return [.. wrapped];
+    }
+
+
+    /// <summary>
+    /// Joins octet sequences end to end.
+    /// </summary>
+    /// <param name="parts">The sequences to join.</param>
+    /// <returns>The joined octets.</returns>
+    private static byte[] Concatenate(List<byte[]> parts)
+    {
+        var joined = new List<byte>();
+        for(int i = 0; i < parts.Count; ++i)
+        {
+            joined.AddRange(parts[i]);
+        }
+
+        return [.. joined];
+    }
+
+
+    /// <summary>
     /// Re-encodes the two outer wrappers of a Signed Data Object — the ContentInfo and its content field — as
     /// BER indefinite-length constructed values, leaving every inner octet exactly as it was. Structures like
     /// this occur in the wild; the framework's own signer emits definite-length DER only.

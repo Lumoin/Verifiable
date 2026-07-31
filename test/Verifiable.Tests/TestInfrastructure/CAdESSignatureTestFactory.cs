@@ -67,6 +67,35 @@ internal static class CAdESSignatureTestFactory
 
 
     /// <summary>
+    /// Signs <paramref name="content"/> as a detached CAdES-B-B signature — the same signed attributes, with an
+    /// <c>encapContentInfo</c> that carries no content, so the content stays a data object beside the CMS object
+    /// rather than inside it.
+    /// </summary>
+    /// <param name="content">The content the signature covers without carrying it.</param>
+    /// <param name="signer">The ring leaf whose key signs.</param>
+    /// <param name="signingTime">The claimed signing time the signed attribute states.</param>
+    /// <returns>The pooled Signed Data Object; the caller disposes it.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when a required argument is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// The second selection method of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc4998#appendix-A">IETF RFC 4998 Appendix A</see> archives "the
+    /// CMS Object and the signed or encrypted content ... as separated objects", which only means anything when
+    /// the content is separate from the object.
+    /// </remarks>
+    internal static CmsSignedData SignBaselineDetached(
+        ReadOnlyMemory<byte> content,
+        X509ChainTestRingNode signer,
+        DateTimeOffset signingTime)
+    {
+        ArgumentNullException.ThrowIfNull(signer);
+
+        using X509Certificate2 signerWithKey = signer.Certificate.CopyWithPrivateKey(signer.SigningKey);
+
+        return CmsSignedDataTestFactory.SignAsCAdESDetached(content.Span, signerWithKey, signingTime);
+    }
+
+
+    /// <summary>
     /// Adds certificates to a signature's own certificate set, so that a time-stamp attached afterwards protects
     /// them and a validator can build a chain offline from the signature alone. The certificate set is outside
     /// what the signature covers, so adding to it leaves the signature verifiable.

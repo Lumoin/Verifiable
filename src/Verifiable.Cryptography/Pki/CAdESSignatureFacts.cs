@@ -37,8 +37,12 @@ namespace Verifiable.Cryptography.Pki;
 /// absent.
 /// </para>
 /// <para>
-/// <strong>Encapsulated content only.</strong> The shipped <see cref="VerifyCmsSignedDataDelegate"/> verifies a
-/// SignedData that encapsulates its content, so a detached CAdES signature reports
+/// <strong>Encapsulated or detached, each through its own seam.</strong> A SignedData that encapsulates its
+/// content is verified by the registered <see cref="VerifyCmsSignedDataDelegate"/>; a detached one — the form
+/// every CAdES object inside an Associated Signature Container takes — is verified by the registered
+/// <see cref="VerifyDetachedCmsSignedDataDelegate"/> against the Signer's Document the Driving Application
+/// supplied (Table 8 of clause 5.2.2.2), or by this library's managed backend when a host registers none.
+/// A detached signature with no Signer's Document beside it reports
 /// <see cref="SignatureCryptographicOutcome.SignedDataNotFound"/> — the clause 5.2.7.4 step 1) outcome for
 /// signed data that cannot be obtained — rather than silently passing.
 /// </para>
@@ -330,6 +334,32 @@ public static class CAdESSignatureFacts
         Justification = "Ownership of the returned carrier transfers to the caller, which disposes it once it has verified the message imprint against it.")]
     private static SignedContentMemory? CopyStatedOctets(SignedContentMemory? stated, MemoryPool<byte> pool) =>
         stated is null ? null : SignedContentMemory.FromBytes(stated.AsReadOnlyMemory().Span, pool);
+
+
+    /// <summary>
+    /// Finds the Signer's Document a detached signature's signed content comes from — the first one the Driving
+    /// Application supplied octets for.
+    /// </summary>
+    /// <param name="signerDocuments">The documents the Driving Application supplied.</param>
+    /// <returns>The document, or <see langword="null"/> when none carries content.</returns>
+    /// <remarks>
+    /// The first is the one, because a CMS SignedData signs exactly one content object (RFC 5652 §5.2's
+    /// <c>encapContentInfo</c> is a single <c>eContent</c>): a caller naming several documents is naming
+    /// candidates, and a candidate whose octets do not match the <c>message-digest</c> attribute is reported as
+    /// a hash failure rather than silently passed over for the next one.
+    /// </remarks>
+    private static SignerDocumentReference? FindSignerDocument(IReadOnlyList<SignerDocumentReference> signerDocuments)
+    {
+        for(int i = 0; i < signerDocuments.Count; ++i)
+        {
+            if(signerDocuments[i].Content is not null)
+            {
+                return signerDocuments[i];
+            }
+        }
+
+        return null;
+    }
 
 
     /// <summary>
@@ -806,10 +836,10 @@ public static class CAdESSignatureFacts
             };
         }
 
-        if(context.Signature.SignedContent is null)
+        if(context.Signature.SignedContent is not SignedContentMemory signedContent)
         {
             //Clause 5.2.7.4 step 1): the signed data items could not be obtained. A detached CAdES signature
-            //reaches this branch because the shipped CMS verification seam verifies encapsulated content only.
+            //reaches this branch when the Driving Application supplied no Signer's Document to go with it.
             return new SignatureCryptographicVerification
             {
                 Outcome = SignatureCryptographicOutcome.SignedDataNotFound,
@@ -845,10 +875,22 @@ public static class CAdESSignatureFacts
         VerifyCmsSignedDataDelegate verifyCms = CryptographicKeyFactory.GetFunction<VerifyCmsSignedDataDelegate>(typeof(VerifyCmsSignedDataDelegate))
             ?? throw new InvalidOperationException("No VerifyCmsSignedDataDelegate has been registered.");
 
+        //The detached counterpart is optional: a host that registers one chooses the backend a detached
+        //signature is verified on — the form every CAdES object inside an Associated Signature Container takes —
+        //and a host that registers none keeps this library's own managed backend, which is what this path did
+        //before the seam existed. Neither branch reaches past the registry for a fixed implementation.
+        VerifyDetachedCmsSignedDataDelegate verifyDetachedCms =
+            CryptographicKeyFactory.GetFunction<VerifyDetachedCmsSignedDataDelegate>(typeof(VerifyDetachedCmsSignedDataDelegate))
+            ?? ManagedCmsVerification.VerifyDetachedCmsSignedDataAsync;
+
         try
         {
-            //Clause 5.2.7.4 step 3): the signature value under the signing certificate's public key.
-            using CmsVerifiedContent verified = await verifyCms(signedData, pool, cancellationToken).ConfigureAwait(false);
+            //Clause 5.2.7.4 step 3): the signature value under the signing certificate's public key. A detached
+            //signature goes through the detached seam with the Signer's Document as an explicit argument,
+            //because a Signed Data Object alone leaves no channel for content that travels beside it.
+            using CmsVerifiedContent verified = structure.HasContent
+                ? await verifyCms(signedData, pool, cancellationToken).ConfigureAwait(false)
+                : await verifyDetachedCms(signedData, signedContent, pool, cancellationToken).ConfigureAwait(false);
             if(!verified.SignerCertificate.Equals(context.SigningCertificate))
             {
                 //The certificate the CMS core verified under is not the one the identification building block
@@ -991,9 +1033,26 @@ public static class CAdESSignatureFacts
                 ocspResponses.Add(Copy(structure.OcspResponses[i], PkiCertificateTags.OcspResponse, pool));
             }
 
+            //A detached signature encapsulates nothing, and clause 5.2.2.2's Table 8 has the Driving Application
+            //supply the Signer's Document beside it — which is exactly what an Associated Signature Container
+            //carries for the CAdES objects of EN 319 162-1 clause 4.4.4.2 item 3 a) and clause 4.3.3.2 item 4 b).
+            //A run that supplies none reaches the same facts it always did: no signed content, and the
+            //SIGNED_DATA_NOT_FOUND of clause 5.2.7.4 step 1) where the cryptographic verification needs it.
+            string? detachedContentIdentifier = null;
+            SignedContentPlacement signedContentPlacement = SignedContentPlacement.NotPresent;
             if(structure.HasContent)
             {
                 signedContent = SignedContentMemory.FromBytes(structure.Content.Span, pool);
+                signedContentPlacement = SignedContentPlacement.Encapsulated;
+            }
+            else if(FindSignerDocument(context.SignerDocuments) is SignerDocumentReference document && document.Content is SignedContentMemory supplied)
+            {
+                signedContent = SignedContentMemory.FromBytes(supplied.AsReadOnlyMemory().Span, pool);
+                detachedContentIdentifier = document.Identifier;
+
+                //The octets are the caller's, not the structure's: nothing of this document travels inside the
+                //Signed Data Object, which is what clause 5.6.2.3 step 5)'s containment rule asks about.
+                signedContentPlacement = SignedContentPlacement.Detached;
             }
 
             List<SignatureAttributeFacts> attributes = [];
@@ -1021,8 +1080,9 @@ public static class CAdESSignatureFacts
                 Status = SignatureFactsStatus.Extracted,
                 Format = SignatureFormatIdentifier.CAdES,
                 SignedDataObject = signedData,
-                SignedContentIdentifier = structure.ContentType,
+                SignedContentIdentifier = detachedContentIdentifier ?? structure.ContentType,
                 SignedContent = signedContent,
+                SignedContentPlacement = signedContentPlacement,
                 SignatureValue = signatureValue,
                 Attributes = attributes,
                 SigningCertificateReferences = signingCertificateReferences,

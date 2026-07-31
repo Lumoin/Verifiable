@@ -309,6 +309,22 @@ internal static class TestSetup
             (Verifiable.Cryptography.Pki.VerifyCmsSignedDataDelegate)Verifiable.Cryptography.Pki.ManagedCmsVerification.VerifyCmsSignedDataAsync,
             qualifier: "Managed");
 
+        //The detached counterpart, registered the same way: the form every CAdES object inside an Associated
+        //Signature Container takes (ETSI EN 319 162-1 clause 4.4.4.2 item 3 a), clause 4.3.3.2 item 4 b), so the
+        //container path resolves a backend through the registry exactly as the encapsulated path does. Leaving
+        //this unregistered is a supported composition too — the seam then falls back to the managed backend.
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(Verifiable.Cryptography.Pki.VerifyDetachedCmsSignedDataDelegate),
+            (Verifiable.Cryptography.Pki.VerifyDetachedCmsSignedDataDelegate)MicrosoftCmsFunctions.VerifyDetachedCmsSignedDataAsync);
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(Verifiable.Cryptography.Pki.VerifyDetachedCmsSignedDataDelegate),
+            (Verifiable.Cryptography.Pki.VerifyDetachedCmsSignedDataDelegate)BouncyCastleCmsFunctions.VerifyDetachedCmsSignedDataAsync,
+            qualifier: "BouncyCastle");
+        CryptographicKeyFactory.RegisterFunction(
+            typeof(Verifiable.Cryptography.Pki.VerifyDetachedCmsSignedDataDelegate),
+            (Verifiable.Cryptography.Pki.VerifyDetachedCmsSignedDataDelegate)Verifiable.Cryptography.Pki.ManagedCmsVerification.VerifyDetachedCmsSignedDataAsync,
+            qualifier: "Managed");
+
         //The X.509 certificate-profile reader (eMRTD Passive Authentication enforces the ICAO Doc 9303 Part 12
         //Document Signer profile through it). The Microsoft backend is the default; the BouncyCastle backend is
         //registered under a qualifier so a cross-backend test can prove the seam is provider-neutral.

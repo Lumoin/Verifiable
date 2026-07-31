@@ -11,7 +11,9 @@ using Verifiable.Cryptography.Context;
 namespace Verifiable.Cryptography.Pki;
 
 /// <summary>
-/// A fully managed implementation of <see cref="VerifyCmsSignedDataDelegate"/>: it parses the CMS SignedData
+/// A fully managed implementation of <see cref="VerifyCmsSignedDataDelegate"/> and of its detached counterpart
+/// <see cref="VerifyDetachedCmsSignedDataDelegate"/> (which is also what that seam resolves to when a host
+/// registers nothing for it): it parses the CMS SignedData
 /// structure (RFC 5652) with <see cref="System.Formats.Asn1"/> and verifies the signature through the
 /// library's own registered cryptographic seams — the <see cref="VerificationDelegate"/> for the raw
 /// elliptic-curve primitive and <see cref="CryptographicKeyEvents.ComputeDigestAsync"/> for the digest — with
@@ -96,6 +98,79 @@ public static class ManagedCmsVerification
         await VerifySignatureAsync(parsed.Signer, signerCertificate, pool, cancellationToken).ConfigureAwait(false);
 
         return BuildVerifiedContent(parsed, signerCertificate, pool);
+    }
+
+
+    /// <summary>
+    /// Verifies a CMS SignedData that encapsulates no content, against content the caller supplies from beside
+    /// it — a detached signature, which is what
+    /// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31916201/01.01.01_60/en_31916201v010101p.pdf">
+    /// ETSI EN 319 162-1 V1.1.1</see> clause 4.4.4.2 item 3 a) and clause 4.3.3.2 item 4 b) put inside an
+    /// Associated Signature Container.
+    /// </summary>
+    /// <param name="signedData">The CMS SignedData carrier, which encapsulates no content.</param>
+    /// <param name="detachedContent">The octets the signature is detached over — the Signer's Document of Table 18 of ETSI EN 319 102-1 clause 5.3.2.</param>
+    /// <param name="pool">The memory pool for the content, certificate, and signed-attribute allocations.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The verified content and embedded certificates. The caller disposes it.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when a required argument is <see langword="null"/>.</exception>
+    /// <exception cref="CryptographicException">Thrown when the structure is malformed, encapsulates content of its own, the supplied content does not match the <c>message-digest</c> attribute, or the signature does not verify.</exception>
+    /// <remarks>
+    /// <para>
+    /// Nothing about the cryptography differs from the encapsulated case: the signature covers the DER
+    /// re-encoding of the signed attributes (RFC 5652 §5.4), which is the same octets whether the content
+    /// travels inside the structure or beside it, and the <c>message-digest</c> attribute is what binds the
+    /// content either way. The one difference is where the content comes from, and that is exactly what this
+    /// overload takes as a parameter.
+    /// </para>
+    /// <para>
+    /// A structure that <em>does</em> encapsulate content is refused rather than verified against the supplied
+    /// octets: two different contents would then be in play and only one of them checked, which is the shape a
+    /// substitution attack takes.
+    /// </para>
+    /// <para>
+    /// This implements <see cref="VerifyDetachedCmsSignedDataDelegate"/> and is what that seam resolves to when
+    /// a host registers nothing for it — the same RSA profile this file's encapsulated member accepts (see
+    /// <c>VerifyRsaAsync</c>: RSASSA-PKCS1-v1_5 with SHA-256, exponent 65537, 2048- or 4096-bit moduli), so a
+    /// host whose material is outside that profile registers a backend rather than being refused by one.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the content buffer, certificate memories, and signed-attribute carriers transfers to the returned CmsVerifiedContent, which the caller disposes; the catch disposes them on a partial failure.")]
+    public static async ValueTask<CmsVerifiedContent> VerifyDetachedCmsSignedDataAsync(
+        CmsSignedData signedData,
+        SignedContentMemory detachedContent,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(signedData);
+        ArgumentNullException.ThrowIfNull(detachedContent);
+        ArgumentNullException.ThrowIfNull(pool);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        ParsedSignedData parsed;
+        try
+        {
+            parsed = ParseSignedData(signedData.AsReadOnlySpan());
+        }
+        catch(AsnContentException exception)
+        {
+            throw new CryptographicException("The CMS SignedData is not well-formed DER.", exception);
+        }
+
+        if(!parsed.Content.IsEmpty)
+        {
+            throw new CryptographicException("The CMS SignedData encapsulates content of its own, so it is not a detached signature.");
+        }
+
+        ManagedCertificate signerCertificate = MatchSigner(parsed.Certificates, parsed.Signer)
+            ?? throw new CryptographicException("The CMS SignedData does not embed the signer certificate.");
+
+        ParsedSignedData withDetachedContent = parsed with { Content = detachedContent.AsReadOnlyMemory() };
+        await VerifyMessageDigestAsync(withDetachedContent, pool, cancellationToken).ConfigureAwait(false);
+        await VerifySignatureAsync(withDetachedContent.Signer, signerCertificate, pool, cancellationToken).ConfigureAwait(false);
+
+        return BuildVerifiedContent(withDetachedContent, signerCertificate, pool);
     }
 
 
@@ -523,6 +598,19 @@ public static class ManagedCmsVerification
     }
 
 
+    /// <summary>
+    /// Copies a DER-encoded certificate into a pooled <see cref="PkiCertificateMemory"/> carrier tagged as an
+    /// X.509 certificate.
+    /// </summary>
+    /// <param name="der">The DER octets of the certificate as they appear in the <c>certificates</c> field.</param>
+    /// <param name="pool">The pool the returned carrier rents its memory from.</param>
+    /// <returns>A carrier owning a copy of <paramref name="der"/>.</returns>
+    /// <remarks>
+    /// The octets are copied rather than referenced because the decoded structure the span points into is
+    /// released when the enclosing verification returns, while the carrier outlives it.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc5652#section-5.1">RFC 5652 clause 5.1</see> states the
+    /// <c>certificates</c> field the octets are read from.
+    /// </remarks>
     private static PkiCertificateMemory ToPkiCertificate(ReadOnlySpan<byte> der, MemoryPool<byte> pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(der.Length);
@@ -532,6 +620,19 @@ public static class ManagedCmsVerification
     }
 
 
+    /// <summary>
+    /// Copies a signed attribute's DER-encoded value into a pooled <see cref="CmsSignedAttribute"/> carrier.
+    /// </summary>
+    /// <param name="oid">The object identifier of the attribute type.</param>
+    /// <param name="der">The DER octets of the attribute value as they appear in <c>signedAttrs</c>.</param>
+    /// <param name="pool">The pool the returned carrier rents its memory from.</param>
+    /// <returns>A carrier owning a copy of <paramref name="der"/> under <paramref name="oid"/>.</returns>
+    /// <remarks>
+    /// The octets are copied for the same reason <see cref="ToPkiCertificate"/> copies its own: the decoded
+    /// structure is released when the verification returns.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc5652#section-5.3">RFC 5652 clause 5.3</see> states the
+    /// <c>signedAttrs</c> field the octets are read from.
+    /// </remarks>
     private static CmsSignedAttribute ToSignedAttribute(string oid, ReadOnlySpan<byte> der, MemoryPool<byte> pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(der.Length);
