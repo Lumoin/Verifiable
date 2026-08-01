@@ -86,6 +86,75 @@ public static class MicrosoftKeyMaterialCreator
         return CreateRsaKeys(4096, memoryPool);
     }
 
+#pragma warning disable SYSLIB5006 //The platform post-quantum surface is experimental; these creators gate on IsSupported and the BouncyCastle creator remains the portable fallback.
+
+    /// <summary>Creates ML-DSA-44 key material (NIST FIPS 204, security level 2) using the platform implementation.</summary>
+    /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
+    /// <returns>A new key pair. The caller must dispose each key individually.</returns>
+    /// <exception cref="PlatformNotSupportedException">Thrown when the platform ships no ML-DSA implementation (<see cref="MLDsa.IsSupported"/>).</exception>
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlDsa44Keys(BaseMemoryPool memoryPool)
+    {
+        ArgumentNullException.ThrowIfNull(memoryPool);
+        return CreateMlDsaKeys(MLDsaAlgorithm.MLDsa44, memoryPool, CryptoTags.MlDsa44PublicKey, CryptoTags.MlDsa44PrivateKey);
+    }
+
+
+    /// <summary>Creates ML-DSA-65 key material (NIST FIPS 204, security level 3) using the platform implementation.</summary>
+    /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
+    /// <returns>A new key pair. The caller must dispose each key individually.</returns>
+    /// <exception cref="PlatformNotSupportedException">Thrown when the platform ships no ML-DSA implementation (<see cref="MLDsa.IsSupported"/>).</exception>
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlDsa65Keys(BaseMemoryPool memoryPool)
+    {
+        ArgumentNullException.ThrowIfNull(memoryPool);
+        return CreateMlDsaKeys(MLDsaAlgorithm.MLDsa65, memoryPool, CryptoTags.MlDsa65PublicKey, CryptoTags.MlDsa65PrivateKey);
+    }
+
+
+    /// <summary>Creates ML-DSA-87 key material (NIST FIPS 204, security level 5) using the platform implementation.</summary>
+    /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
+    /// <returns>A new key pair. The caller must dispose each key individually.</returns>
+    /// <exception cref="PlatformNotSupportedException">Thrown when the platform ships no ML-DSA implementation (<see cref="MLDsa.IsSupported"/>).</exception>
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlDsa87Keys(BaseMemoryPool memoryPool)
+    {
+        ArgumentNullException.ThrowIfNull(memoryPool);
+        return CreateMlDsaKeys(MLDsaAlgorithm.MLDsa87, memoryPool, CryptoTags.MlDsa87PublicKey, CryptoTags.MlDsa87PrivateKey);
+    }
+
+
+    /// <summary>Creates ML-KEM-512 key material (NIST FIPS 203, security level 1) using the platform implementation.</summary>
+    /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
+    /// <returns>A new key pair. The caller must dispose each key individually.</returns>
+    /// <exception cref="PlatformNotSupportedException">Thrown when the platform ships no ML-KEM implementation (<see cref="MLKem.IsSupported"/>).</exception>
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlKem512Keys(BaseMemoryPool memoryPool)
+    {
+        ArgumentNullException.ThrowIfNull(memoryPool);
+        return CreateMlKemKeys(MLKemAlgorithm.MLKem512, memoryPool, CryptoTags.MlKem512PublicKey, CryptoTags.MlKem512PrivateKey);
+    }
+
+
+    /// <summary>Creates ML-KEM-768 key material (NIST FIPS 203, security level 3) using the platform implementation.</summary>
+    /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
+    /// <returns>A new key pair. The caller must dispose each key individually.</returns>
+    /// <exception cref="PlatformNotSupportedException">Thrown when the platform ships no ML-KEM implementation (<see cref="MLKem.IsSupported"/>).</exception>
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlKem768Keys(BaseMemoryPool memoryPool)
+    {
+        ArgumentNullException.ThrowIfNull(memoryPool);
+        return CreateMlKemKeys(MLKemAlgorithm.MLKem768, memoryPool, CryptoTags.MlKem768PublicKey, CryptoTags.MlKem768PrivateKey);
+    }
+
+
+    /// <summary>Creates ML-KEM-1024 key material (NIST FIPS 203, security level 5) using the platform implementation.</summary>
+    /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
+    /// <returns>A new key pair. The caller must dispose each key individually.</returns>
+    /// <exception cref="PlatformNotSupportedException">Thrown when the platform ships no ML-KEM implementation (<see cref="MLKem.IsSupported"/>).</exception>
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlKem1024Keys(BaseMemoryPool memoryPool)
+    {
+        ArgumentNullException.ThrowIfNull(memoryPool);
+        return CreateMlKemKeys(MLKemAlgorithm.MLKem1024, memoryPool, CryptoTags.MlKem1024PublicKey, CryptoTags.MlKem1024PrivateKey);
+    }
+
+#pragma warning restore SYSLIB5006
+
 
     /// <summary>
     /// Creates a P-256 ephemeral key pair for ECDH-ES key agreement using the .NET
@@ -344,6 +413,138 @@ public static class MicrosoftKeyMaterialCreator
             publicKeyMemory, privateKeyMemory);
     }
 
+
+#pragma warning disable SYSLIB5006 //The platform post-quantum surface is experimental; these cores gate on IsSupported and the BouncyCastle creator remains the portable fallback.
+
+    /// <summary>
+    /// Creates an ML-DSA key pair through the platform <see cref="MLDsa"/> implementation
+    /// (<see href="https://csrc.nist.gov/pubs/fips/204/final">NIST FIPS 204</see>).
+    /// </summary>
+    /// <remarks>
+    /// The FIPS 204 private key exports through <see cref="MLDsa.ExportMLDsaPrivateKey(Span{byte})"/>
+    /// directly into an exact-length <see cref="AllocationKind.Pinned"/> rental, so no transient
+    /// movable copy of the private key ever exists on the managed heap — the property the
+    /// BouncyCastle creator cannot offer because its key parameter types export only through
+    /// <c>byte[]</c>. The public key exports into a Managed rental the same way.
+    /// </remarks>
+    /// <param name="algorithm">The FIPS 204 parameter set.</param>
+    /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
+    /// <param name="publicKeyTag">The tag the public key carries.</param>
+    /// <param name="privateKeyTag">The tag the private key carries.</param>
+    /// <returns>A new key pair. The caller must dispose each key individually.</returns>
+    private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlDsaKeys(
+        MLDsaAlgorithm algorithm,
+        BaseMemoryPool memoryPool,
+        Tag publicKeyTag,
+        Tag privateKeyTag)
+    {
+        if(!MLDsa.IsSupported)
+        {
+            throw new PlatformNotSupportedException(
+                "The platform ships no ML-DSA implementation; use the BouncyCastle creator where platform support is absent.");
+        }
+
+        ProviderOperation operation = new(nameof(CreateMlDsaKeys));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
+            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+        }
+
+        using MLDsa key = MLDsa.GenerateKey(algorithm);
+
+        //One guard covers both exports AND the second rent: a throwing pinned rental must release
+        //the already-populated public-key rental rather than leak it.
+        IMemoryOwner<byte> publicKeyBuffer = memoryPool.Rent(algorithm.PublicKeySizeInBytes);
+        IMemoryOwner<byte>? privateKeyBuffer = null;
+        try
+        {
+            key.ExportMLDsaPublicKey(publicKeyBuffer.Memory.Span[..algorithm.PublicKeySizeInBytes]);
+            privateKeyBuffer = memoryPool.Rent(algorithm.PrivateKeySizeInBytes, AllocationKind.Pinned);
+            key.ExportMLDsaPrivateKey(privateKeyBuffer.Memory.Span[..algorithm.PrivateKeySizeInBytes]);
+        }
+        catch
+        {
+            privateKeyBuffer?.Dispose();
+            publicKeyBuffer.Dispose();
+            throw;
+        }
+
+        var publicKeyMemory = new PublicKeyMemory(publicKeyBuffer, publicKeyTag);
+        var privateKeyMemory = new PrivateKeyMemory(privateKeyBuffer, privateKeyTag);
+
+        return new PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>(publicKeyMemory, privateKeyMemory);
+    }
+
+
+    /// <summary>
+    /// Creates an ML-KEM key pair through the platform <see cref="MLKem"/> implementation
+    /// (<see href="https://csrc.nist.gov/pubs/fips/203/final">NIST FIPS 203</see>).
+    /// </summary>
+    /// <remarks>
+    /// The FIPS 203 decapsulation key exports through <see cref="MLKem.ExportDecapsulationKey(Span{byte})"/>
+    /// directly into an exact-length <see cref="AllocationKind.Pinned"/> rental, so no transient
+    /// movable copy of the private key ever exists on the managed heap. The encapsulation key
+    /// exports into a Managed rental the same way.
+    /// </remarks>
+    /// <param name="algorithm">The FIPS 203 parameter set.</param>
+    /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
+    /// <param name="publicKeyTag">The tag the encapsulation key carries.</param>
+    /// <param name="privateKeyTag">The tag the decapsulation key carries.</param>
+    /// <returns>A new key pair. The caller must dispose each key individually.</returns>
+    private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlKemKeys(
+        MLKemAlgorithm algorithm,
+        BaseMemoryPool memoryPool,
+        Tag publicKeyTag,
+        Tag privateKeyTag)
+    {
+        if(!MLKem.IsSupported)
+        {
+            throw new PlatformNotSupportedException(
+                "The platform ships no ML-KEM implementation; use the BouncyCastle creator where platform support is absent.");
+        }
+
+        ProviderOperation operation = new(nameof(CreateMlKemKeys));
+        using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
+        if(activity is not null)
+        {
+            CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
+            CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
+            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+        }
+
+        using MLKem key = MLKem.GenerateKey(algorithm);
+
+        //One guard covers both exports AND the second rent: a throwing pinned rental must release
+        //the already-populated encapsulation-key rental rather than leak it.
+        IMemoryOwner<byte> publicKeyBuffer = memoryPool.Rent(algorithm.EncapsulationKeySizeInBytes);
+        IMemoryOwner<byte>? privateKeyBuffer = null;
+        try
+        {
+            key.ExportEncapsulationKey(publicKeyBuffer.Memory.Span[..algorithm.EncapsulationKeySizeInBytes]);
+            privateKeyBuffer = memoryPool.Rent(algorithm.DecapsulationKeySizeInBytes, AllocationKind.Pinned);
+            key.ExportDecapsulationKey(privateKeyBuffer.Memory.Span[..algorithm.DecapsulationKeySizeInBytes]);
+        }
+        catch
+        {
+            privateKeyBuffer?.Dispose();
+            publicKeyBuffer.Dispose();
+            throw;
+        }
+
+        var publicKeyMemory = new PublicKeyMemory(publicKeyBuffer, publicKeyTag);
+        var privateKeyMemory = new PrivateKeyMemory(privateKeyBuffer, privateKeyTag);
+
+        return new PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>(publicKeyMemory, privateKeyMemory);
+    }
+
+#pragma warning restore SYSLIB5006
 
     /// <summary>
     /// Wraps one of this class's own <c>Create*Keys</c> methods into the
