@@ -543,9 +543,7 @@ internal sealed class AsicCapstoneFirewalledFlowTests
 
             byte[] containerBytes = finalContainer.AsReadOnlySpan().ToArray();
 
-            //---- Leg 3: "Verifiable creates → independent oracle verifies". ----
             AssertIndependentOraclesAccept(containerBytes, manifestEntryName, signatureEntryName, attachment.EvidenceRecordEntryName, protectedEntryNames);
-            //---- end leg 3 ----
 
             return new AsicCapstoneWireMessage
             {

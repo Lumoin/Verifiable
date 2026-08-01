@@ -716,7 +716,6 @@ internal sealed class EArkRequirementsMatrixTests
     /// </remarks>
     private static (string ClauseId, string Requirement, RequirementCoverageStatus Status, string Evidence)[] CsipMetsProfileRows { get; } =
     [
-        //---- Root element, CSIP1-CSIP6 ----
         ("CSIP1", "MUST 1..1 mets/@OBJID — Package Identifier: the package's own identifier, which the base schema leaves optional and this profile hardens.",
             RequirementCoverageStatus.Tested, MetsRootEvidence),
         ("CSIP2", "MUST 1..1 mets/@TYPE — Content Category, from the profile's own vocabulary.",
@@ -730,7 +729,6 @@ internal sealed class EArkRequirementsMatrixTests
         ("CSIP6", "MUST 1..1 mets/@PROFILE — the METS profile this manifest claims conformance to.",
             RequirementCoverageStatus.Tested, MetsRootEvidence),
 
-        //---- Package header, CSIP117 and CSIP7-CSIP16 ----
         ("CSIP117", "MUST 1..1 mets/metsHdr — Package header.",
             RequirementCoverageStatus.Tested, MetsHeaderEvidence),
         ("CSIP7", "MUST 1..1 mets/metsHdr/@CREATEDATE — Package creation datetime, a schema datetime carrying a time as well as a date.",
@@ -754,7 +752,6 @@ internal sealed class EArkRequirementsMatrixTests
         ("CSIP16", "MUST 1..1 mets/metsHdr/agent/note[@csip:NOTETYPE='SOFTWARE VERSION'] — the note's classification, a fixed value.",
             RequirementCoverageStatus.Tested, MetsHeaderEvidence),
 
-        //---- Descriptive metadata, CSIP17-CSIP30 ----
         ("CSIP17", "SHOULD 0..n mets/dmdSec — Descriptive metadata section.",
             RequirementCoverageStatus.Tested, DescriptiveMetadataEvidence),
         ("CSIP18", "MUST 1..1 mets/dmdSec/@ID — Descriptive metadata identifier, itself bound by the name production of clause 5.1.",
@@ -784,7 +781,6 @@ internal sealed class EArkRequirementsMatrixTests
         ("CSIP30", "MUST 1..1 mets/dmdSec/mdRef/@CHECKSUMTYPE — the checksum's algorithm, from the base schema's own eleven-value vocabulary.",
             RequirementCoverageStatus.Tested, "EArkFixityTests.EveryAlgorithmTheEnumerationAdmitsIsClassified (the whole vocabulary classified, including the values this library cannot recompute)"),
 
-        //---- Administrative metadata, CSIP31-CSIP57 ----
         ("CSIP31", "SHOULD 0..1 mets/amdSec — Administrative metadata section.",
             RequirementCoverageStatus.Tested, ProvenanceReferenceEvidence),
         ("CSIP32", "SHOULD 0..n mets/amdSec/digiprovMD — Digital provenance metadata, the section a preservation-metadata document moors to.",
@@ -840,7 +836,6 @@ internal sealed class EArkRequirementsMatrixTests
         ("CSIP57", "MUST 1..1 mets/amdSec/rightsMD/mdRef/@CHECKSUMTYPE — the checksum's algorithm.",
             RequirementCoverageStatus.Tested, "EArkFixityTests.AFixityStatedUnderASupportedAlgorithmReachesTheRecomputableCase"),
 
-        //---- File section, CSIP58-CSIP79 with CSIP113 and CSIP114 ----
         ("CSIP58", "SHOULD 0..1 mets/fileSec — File section: the package's own fixity manifest.",
             RequirementCoverageStatus.Tested, FileSectionEvidence),
         ("CSIP59", "MUST 1..1 mets/fileSec/@ID — File section identifier.",
@@ -890,7 +885,6 @@ internal sealed class EArkRequirementsMatrixTests
         ("CSIP79", "MUST 1..1 mets/fileSec/fileGrp/file/FLocat/@xlink:href — Resource location of the file.",
             RequirementCoverageStatus.Tested, "EArkArchivalAndFixityRuleTests.AReferenceToAFileThePackageDoesNotHoldFailsTheReferenceRule"),
 
-        //---- Structural map, CSIP80-CSIP112 with CSIP116, CSIP118 and CSIP119 ----
         ("CSIP80", "MUST 1..n mets/structMap — the structural description of the package.",
             RequirementCoverageStatus.Tested, StructuralMapEvidence),
         ("CSIP81", "MUST 1..1 mets/structMap[@TYPE='PHYSICAL'] — the type of structural description, a fixed value.",
@@ -975,7 +969,6 @@ internal sealed class EArkRequirementsMatrixTests
     /// </remarks>
     private static (string ClauseId, string Requirement, RequirementCoverageStatus Status, string Evidence)[] CsipClauseRows { get; } =
     [
-        //---- Part I clause 3, the principles: twenty-one of them, not the nineteen the preflight leg's own heading counts ----
         ("csip-principle-1.1", "MUST / MUST NOT — any type of data and metadata can be included; no type-specific restriction is imposed.",
             RequirementCoverageStatus.OutOfScope, "Design intent about what the package format must permit rather than a shape a package can be checked against; discharged by the schema-agnostic descriptive-metadata section and the generic file group the catalogue already states."),
         ("csip-principle-1.2", "MUST NOT — the package does not restrict the means, methods or tools of exchange.",
@@ -1019,7 +1012,6 @@ internal sealed class EArkRequirementsMatrixTests
         ("csip-principle-4.3", "MUST NOT — the package does not restrict the addition of supplementary metadata.",
             RequirementCoverageStatus.OutOfScope, "Design intent; the extension permissions the catalogue states are CSIPSTR8 and CSIPSTR14."),
 
-        //---- Clause 5.1 and the considerations text, the cross-cutting obligations with no identifier ----
         ("csip-5.1-ncname", "MUST — every XML identifier conforms to the name production the specification points at: it begins with a letter or an underscore and carries no other characters than letters, digits, hyphens, underscores and full stops.",
             RequirementCoverageStatus.Tested, "EArkMetadataVocabularyTests.TheIdentifierRecognitionImplementsTheProductionsClause51PointsAt (including the universally-unique-identifier trap the clause calls out) beside EArkMetadataRuleTests.ABareUniversallyUniqueIdentifierIsNotALegalSectionIdentifier"),
         ("csip-5.1-datetime", "MUST — the creation and last-modification attributes are schema datetimes and carry a time as well as a date.",
@@ -1035,7 +1027,6 @@ internal sealed class EArkRequirementsMatrixTests
         ("csip-considerations-not-embedded", "SHOULD NOT (lower case) — descriptive metadata is not embedded directly in the manifest but referenced from it.",
             RequirementCoverageStatus.Tested, MetsShapeEvidence + " (the shipped manifest model carries the reference form alone and has no slot for embedded metadata, so a manifest this library writes cannot embed any)"),
 
-        //---- The per-element narrative sentences the catalogue does not capture ----
         ("csip-filesec-checksums-blanket", "MUST (lower case) — location and checksum values are provided for all file entries, unconditionally.",
             RequirementCoverageStatus.Tested, FixityRecomputationEvidence),
         ("csip-filesec-no-nesting", "SHOULD NOT — file groups are not nested within other file groups.",
@@ -1057,7 +1048,6 @@ internal sealed class EArkRequirementsMatrixTests
         ("csip-tool-validates-preservation-metadata", "MUST (lower case) — a tool claiming to validate conformant packages also validates the preservation metadata once it exists within the package.",
             RequirementCoverageStatus.ServiceOperational, PreservationMetadataEvidence + " (this library validates the preservation-metadata catalogue beside the manifest, which is the capability the claim asks of a tool; making the claim is the tool vendor's own act)"),
 
-        //---- The numbers the catalogue does not use, and the sections it declines to constrain ----
         ("csip-retired-numbers", "Not requirements — CSIP86 and CSIP87 were deprecated (the top-level division label having to equal the package identifier, and the per-category division rule superseded by the current division catalogue), and CSIP115 was never allocated at all.",
             RequirementCoverageStatus.OutOfScope, "Three numbers of the catalogue carry no requirement. They are recorded here so a reader can tell a faithful transcription from an incomplete one, and EArkClaimIdAllocationTests.TheThreeRetiredMetsProfileNumbersStayUnallocated asserts their codes stay free in the registry."),
         ("csip-structlink", "MAY — the structural-link section is not defined or used by this specification; further own uses may occur.",
@@ -1067,7 +1057,6 @@ internal sealed class EArkRequirementsMatrixTests
         ("csip-technical-requirements", "Not requirements — the profile's technical-requirements block states, for content files, behaviour files and metadata files alike, that requirements are not stated in this specification.",
             RequirementCoverageStatus.OutOfScope, "The specification's own scope exclusion; the block carries three placeholder entries and no obligation."),
 
-        //---- Term consistency against the archival reference model, clause 1.4 item 4 ----
         ("csip-oais-1.4-4-package", "Term consistency: the specification adopts the reference model's Information Package term and its three package types, and states the package type in the manifest header through its own extension attribute, while defining Information Package structurally as a root folder holding a manifest.",
             RequirementCoverageStatus.OutOfScope, "FINDING, row-level, no defect: the specification quotes the reference model's own definitions of the three package types verbatim and adds a structural realisation of them, which is what clause 1.4 item 4 asks of a document claiming conformance — the term keeps its meaning and gains a shape. Recorded because the same clause 1.4 reading finds a real departure in the archival package's version vocabulary (row aip-oais-1.4-4-version) and a gap in the preservation-metadata layer (row premis-oais-1.4-1-pdi), and a reader needs the negative case beside them."),
     ];
@@ -1121,11 +1110,9 @@ internal sealed class EArkRequirementsMatrixTests
     /// </remarks>
     private static (string ClauseId, string Requirement, RequirementCoverageStatus Status, string Evidence)[] PreservationMetadataTableRows { get; } =
     [
-        //---- The document root ----
         ("PM1", "MUST 1..1 premis/@version — the version of the preservation-metadata vocabulary is given in the root element.",
             RequirementCoverageStatus.Tested, "EArkMetadataRuleTests.ADocumentOfTheWrongVocabularyVersionFailsTheVersionRow"),
 
-        //---- The intellectual-entity and environment object ----
         ("PM2", "MUST 1..1 object/@xsi:type='intellectualEntity' — the object category, from the Object Category vocabulary.",
             RequirementCoverageStatus.Tested, "EArkMetadataRuleTests.AnObjectCategoryTheVocabularyDoesNotNameFailsTheThreeRowsThatAskForOne"),
         ("PM3", "MUST 1..1 object/objectIdentifier — the object is given an identification.",
@@ -1151,7 +1138,6 @@ internal sealed class EArkRequirementsMatrixTests
         ("PM13", "MAY 0..1 environmentDesignation/environmentDesignationNote — free-text information about the software.",
             RequirementCoverageStatus.Tested, "EArkMetadataRuleTests.TheEnvironmentRowsBindOnlyAnEntityThatDescribesAnEnvironment"),
 
-        //---- The representation object ----
         ("PM14", "MUST 1..1 object/@xsi:type='representation' — the object category.",
             RequirementCoverageStatus.Tested, "EArkMetadataRuleTests.AnObjectCategoryTheVocabularyDoesNotNameFailsTheThreeRowsThatAskForOne"),
         ("PM15", "MUST 1..1 object/objectIdentifier — the representation is given an identification.",
@@ -1181,7 +1167,6 @@ internal sealed class EArkRequirementsMatrixTests
         ("PM27", "SHOULD 0..1 relationship/relatedEnvironmentPurpose — the purpose of the related environment.",
             RequirementCoverageStatus.Tested, PreservationMetadataEvidence),
 
-        //---- The file object ----
         ("PM28", "MUST 1..1 object/@xsi:type='file' — the object category.",
             RequirementCoverageStatus.Tested, "EArkMetadataRuleTests.AnObjectCategoryTheVocabularyDoesNotNameFailsTheThreeRowsThatAskForOne"),
         ("PM29", "MUST 1..n object/objectIdentifier — the file is given an identification.",
@@ -1265,7 +1250,6 @@ internal sealed class EArkRequirementsMatrixTests
         ("PM68", "MUST 1..1 linkingRightsStatementIdentifier/linkingRightsStatementIdentifierValue — that identifier's value.",
             RequirementCoverageStatus.Tested, PreservationShapeEvidence),
 
-        //---- The agent ----
         ("PM69", "SHOULD 0..n agent — an agent connected with an event on a digital object.",
             RequirementCoverageStatus.Tested, PreservationMetadataEvidence),
         ("PM70", "MUST 1..n agent/agentIdentifier — the agent is given an identification.",
@@ -1289,7 +1273,6 @@ internal sealed class EArkRequirementsMatrixTests
         ("PM79", "MUST 1..1 linkingRightsStatementIdentifier/linkingRightsStatementIdentifierValue — that identifier's value.",
             RequirementCoverageStatus.Tested, PreservationShapeEvidence),
 
-        //---- The event ----
         ("PM80", "CARDINALITY-ONLY 0..n event — each event on a digital object is recorded. The source table's cell carries the cardinality and no keyword at all.",
             RequirementCoverageStatus.Tested, "EArkMetadataRuleTests.TheTwoRowsWithNoKeywordAreReadAtTheLevelTheirCardinalityGives (read at the level the cardinality gives, as a stated interpretation)"),
         ("PM81", "MUST 1..n event/eventIdentifier — the event is given an identification.",
@@ -1317,7 +1300,6 @@ internal sealed class EArkRequirementsMatrixTests
         ("PM92", "MUST 1..1 linkingObjectIdentifier/linkingObjectIdentifierValue — that identifier's value.",
             RequirementCoverageStatus.Tested, PreservationShapeEvidence),
 
-        //---- The rights statement ----
         ("PM93", "SHOULD 0..1 rights — all rights statements for the objects and the agents.",
             RequirementCoverageStatus.Tested, PreservationMetadataEvidence),
         ("PM94", "MUST 1..n rights/rightsStatement — each rights statement in its own element.",
@@ -1428,7 +1410,6 @@ internal sealed class EArkRequirementsMatrixTests
         ("PREMIS-AGENT", "MUST — agents referenced in events are described through the agent element.",
             RequirementCoverageStatus.Tested, "EArkArchivalAndFixityRuleTests.AnEventWithoutAPerformerFailsTheRowThatAsksForOne"),
 
-        //---- The preservation-metadata clauses that carry no identifier ----
         ("premis-2.2-tool-conformance", "MUST (lower case) — a tool claiming to validate conformant packages also validates the preservation metadata once it exists within the package.",
             RequirementCoverageStatus.ServiceOperational, PreservationMetadataEvidence + " (the same obligation the Common Specification states, recorded at row csip-tool-validates-preservation-metadata; making the claim is the tool vendor's act)"),
         ("premis-2.2-agent-recording", "MUST — information about the agents of preservation actions is recorded in the preservation metadata rather than in the manifest, whose own agents cover package-level events alone.",
@@ -1454,7 +1435,6 @@ internal sealed class EArkRequirementsMatrixTests
         ("premis-6.1.1-root", "MUST — the root element declares its namespaces and schema location and states the vocabulary version; schema copies should be bundled in the package's own schemas folder.",
             RequirementCoverageStatus.Tested, "PremisXmlBindingTests.ADocumentWrittenToBreakTheParseIsRefusedWithTheStatusThatNamesIt (a document in the wrong namespace or with no root of this vocabulary is refused) beside EArkMetadataRuleTests.ADocumentOfTheWrongVocabularyVersionFailsTheVersionRow"),
 
-        //---- Term consistency against the archival reference model, clause 1.4 item 4 ----
         ("premis-oais-1.4-1-pdi", "Term consistency: the preservation-metadata specification carries the reference model's Fixity and Provenance content — checksums under the object characteristics, events and agents under the digital-provenance section — without ever naming Preservation Description Information, Content Information or Representation Information.",
             RequirementCoverageStatus.OutOfScope, "FINDING, row-level: clause 1.4 item 1 of the reference model asks a specification claiming conformance to map its own constructs onto the model's information objects. This specification does not claim conformance and does not make the mapping, so item 4's use-the-terms-the-same-way obligation is not engaged and there is no redefinition. Recorded because the mapping's absence is what makes the archival package's provenance chain a plain-text one — which is exactly the gap this wave's evidence-placement convention closes, at rows EArkPackageProvenanceAnchored and EArkPackageEvidencePlacement."),
     ];
@@ -1474,7 +1454,6 @@ internal sealed class EArkRequirementsMatrixTests
     /// </remarks>
     private static (string ClauseId, string Requirement, RequirementCoverageStatus Status, string Evidence)[] ArchivalPackageRows { get; } =
     [
-        //---- The METS profile catalogue ----
         ("AIPM1", "MUST — mets/@OBJID does not change during the life-cycle of the archival package.",
             RequirementCoverageStatus.ServiceOperational, MetsRootEvidence + " (the identifier slot is read from the one package a validator is given; whether it changed since an earlier generation needs the repository's own version history, which the profile itself acknowledges by giving this row no conformance test)"),
         ("AIPM2", "MUST — mets/@PROFILE states the archival package's own profile identifier.",
@@ -1490,7 +1469,6 @@ internal sealed class EArkRequirementsMatrixTests
         ("AIPM7", "SHOULD — that reference states the preservation-metadata vocabulary's major version.",
             RequirementCoverageStatus.Tested, ProvenanceReferenceEvidence + " (the conditional row, reported as not triggered when the vocabulary row above it is unmet)"),
 
-        //---- The narrative catalogue ----
         ("AIP1", "MUST — a representation divided into parts uses the same component name in every container.",
             RequirementCoverageStatus.OutOfScope, OutOfWave + " — a cross-container rule that only holds when every part is present, which is a repository's assembly step rather than one package's shape. The divided-structure requirements are outside the narrow archival subset the contract rules in."),
         ("AIP2", "MUST — the sub-paths of items are unique across the different containers.",
@@ -1526,7 +1504,6 @@ internal sealed class EArkRequirementsMatrixTests
         ("AIP28", "SHOULD — where a tape-archive packaging format is used, the content is aggregated without compression.",
             RequirementCoverageStatus.OutOfScope, OutOfWave + " — this library packages a package as an archive of the format the container layer already ships, and no tape-archive writer is built; the packaging-format rows are outside the narrow archival subset the contract rules in."),
 
-        //---- The obligations the prose states with no identifier ----
         ("AIP-IDENTIFIER-ASSIGNED", "MUST (lower case) — each archival package's root manifest is assigned a persistent and unique identifier. Distinct from AIPM1, which is about that identifier not changing once it exists.",
             RequirementCoverageStatus.Tested, MetsRootEvidence + " (the identifier is CSIP1 and its presence is a mandatory row; persistence is the repository's, recorded at row AIP-RETRIEVABLE-BY-IDENTIFIER)"),
         ("AIP-PARENT-CHAIN-LISTED", "MUST (lower case) — a parent package referenced by child packages carries a structural map listing all of them.",
@@ -1536,7 +1513,6 @@ internal sealed class EArkRequirementsMatrixTests
         ("AIP-SOLUTION-INCORPORATES-UNTRANSFORMED", "SHALL — a conformant archival solution immediately analyses and incorporates existing packages without applying data transformation.",
             RequirementCoverageStatus.ServiceOperational, "EArkPackageSnapshotTests.AReferencePackageReadFromAFolderAndFromAnArchiveIsTheSameSnapshot (a package is read as it stands, from either arrival form, with nothing rewritten; whether an archive system as a whole can incorporate it is that system's claim)"),
 
-        //---- The defects and quotations a reader of this document has to be warned about ----
         ("aip-prose-identifier-gaps", "Not requirements — the narrative identifier space is missing eleven of its twenty-eight numbers: AIP4, AIP5, AIP6, AIP9, AIP10, AIP14, AIP19 and AIP23 to AIP26 are never assigned anywhere in the specification.",
             RequirementCoverageStatus.OutOfScope, "A defect of the source document rather than of this transcription, confirmed by searching the whole specification rather than by reading one converted table. Recorded so a reader can tell a faithful transcription from an incomplete one, and EArkClaimIdAllocationTests.TheElevenUnassignedArchivalProseNumbersStayUnallocated asserts their codes stay free in the registry."),
         ("aip-bagit-quotation", "Not requirements — four mandatory-keyword sentences about serialising a package appear inside this specification's packaging section as a verbatim quotation from a WITHDRAWN section of a different, external specification, reproduced as background only.",
@@ -1544,7 +1520,6 @@ internal sealed class EArkRequirementsMatrixTests
         ("aip-ocfl-recommendation", "Informative — a layered object storage format is recommended as an optional extension for holding successive versions of one logical package.",
             RequirementCoverageStatus.OutOfScope, OutOfWave + " — framed as an optional extension by the specification itself; multi-version package STORAGE is a later wave's subject, and this wave validates and anchors one generation."),
 
-        //---- Term consistency against the archival reference model, clause 1.4 item 4 ----
         ("aip-oais-1.4-4-version", "Term consistency: the specification quotes the reference model's definition of an archival package VERSION verbatim and then adds a GENERATION of its own — a version being a logical form of the package and a generation its manifestation as one or several physical containers — a distinction the reference model does not draw.",
             RequirementCoverageStatus.OutOfScope, "FINDING, row-level: clause 1.4 item 4 obliges a document claiming conformance to the reference model to use its terms in the same manner, and this document does claim it by quoting the model's own definition. Adding a term the model does not have is not a redefinition of one it does have, so this is an extension rather than a departure — but the two words are one letter apart in usage and the specification's own examples move between them freely. Recorded so a later wave implementing multi-version storage does not read version and generation as synonyms. It also carries the finding the same clause makes about this chain: the parent-child references are plain manifest pointers with no cryptographic linkage, which the specification itself calls a risk without proposing a mitigation — the mitigation is this wave's row EArkPackageProvenanceAnchored."),
     ];

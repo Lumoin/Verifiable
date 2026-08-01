@@ -173,14 +173,17 @@ public static class OcspResponseVerification
     /// <summary>The ecdsa-with-SHA512 signature algorithm OID (RFC 5758 §3.2).</summary>
     private const string EcdsaWithSha512Oid = "1.2.840.10045.4.3.4";
 
-    /// <summary>The sha256WithRSAEncryption signature algorithm OID (RFC 8017).</summary>
-    private const string Sha256WithRsaEncryptionOid = "1.2.840.113549.1.1.11";
-
     /// <summary>The SHA-1 digest output length in bytes (FIPS 180-4).</summary>
     private const int Sha1DigestByteLength = 20;
 
     /// <summary>The only RSA public exponent the registered RSA verification seam supports (RFC 8017), matching the constraint <see cref="ManagedCmsVerification"/> enforces for the same reason.</summary>
     private static ReadOnlySpan<byte> Exponent65537 => [0x01, 0x00, 0x01];
+
+    /// <summary>The smallest RSA modulus bit length a responder key is verified at, the same band <see cref="ManagedCmsVerification"/> verifies under for the same reason.</summary>
+    private static int MinimumRsaModulusBitLength => 2048;
+
+    /// <summary>The largest RSA modulus bit length a responder key is verified at, the same band <see cref="ManagedCmsVerification"/> verifies under for the same reason.</summary>
+    private static int MaximumRsaModulusBitLength => 16384;
 
     /// <summary>
     /// The SHA-1 digest tag — composed inline because the convenience digest tags in <see cref="CryptoTags"/>
@@ -881,7 +884,7 @@ public static class OcspResponseVerification
     /// public key, dispatching on the key's algorithm exactly as <see cref="ManagedCmsVerification"/> does: an
     /// elliptic-curve key by its own curve (rejecting an <paramref name="signatureAlgorithmOid"/> that does
     /// not name that curve's canonical signature algorithm), or an RSA key restricted to
-    /// RSASSA-PKCS1-v1_5 with SHA-256. Any other key form fails closed to <see langword="false"/>.
+    /// RSASSA-PKCS1-v1_5 with SHA-256, SHA-384 or SHA-512. Any other key form fails closed to <see langword="false"/>.
     /// </summary>
     private static async ValueTask<bool> VerifySignatureAsync(
         ReadOnlyMemory<byte> message, string signatureAlgorithmOid, ReadOnlyMemory<byte> signatureValue, ManagedCertificate signer, MemoryPool<byte> pool, CancellationToken cancellationToken)
@@ -932,11 +935,22 @@ public static class OcspResponseVerification
     };
 
 
-    /// <summary>Verifies an RSASSA-PKCS1-v1_5 SHA-256 signature — the registered RSA verification seam's only supported form — against the signer's RSA public key.</summary>
+    /// <summary>Verifies an RSASSA-PKCS1-v1_5 signature under SHA-256, SHA-384 or SHA-512 — the registered hash-parameterized RSA verification seam's profile — against the signer's RSA public key.</summary>
     private static async ValueTask<bool> VerifyRsaAsync(
         ReadOnlyMemory<byte> message, string signatureAlgorithmOid, ReadOnlyMemory<byte> signatureValue, ManagedCertificate signer, CancellationToken cancellationToken)
     {
-        if(!string.Equals(signatureAlgorithmOid, Sha256WithRsaEncryptionOid, StringComparison.Ordinal))
+        //An OCSP signature algorithm is the combined identifier naming both the hash and RSA (RFC 6960 §4.3
+        //through RFC 5754 §3.2), so the bare rsaEncryption form the CMS layer also admits has no counterpart
+        //here; an identifier outside the three combined forms fails closed.
+        CryptoAlgorithm? algorithm = signatureAlgorithmOid switch
+        {
+            WellKnownOids.Sha256WithRsaEncryption => CryptoAlgorithm.RsaSha256,
+            WellKnownOids.Sha384WithRsaEncryption => CryptoAlgorithm.RsaSha384,
+            WellKnownOids.Sha512WithRsaEncryption => CryptoAlgorithm.RsaSha512,
+            _ => (CryptoAlgorithm?)null
+        };
+
+        if(algorithm is null)
         {
             return false;
         }
@@ -950,13 +964,10 @@ public static class OcspResponseVerification
             return false;
         }
 
-        CryptoAlgorithm? algorithm = signer.RsaModulus.Length switch
-        {
-            256 => CryptoAlgorithm.Rsa2048,
-            512 => CryptoAlgorithm.Rsa4096,
-            _ => null
-        };
-        if(algorithm is null)
+        //The modulus is accepted by the same policy band ManagedCmsVerification.VerifyRsaAsync verifies under
+        //rather than a 2048-/4096-bit whitelist: any non-degenerate RSA public key between the bounds, so a
+        //3072-bit responder key is inside the band.
+        if(!RsaUtilities.IsValidPublicKey(signer.RsaModulus.Span, signer.RsaExponent.Span, MinimumRsaModulusBitLength, MaximumRsaModulusBitLength))
         {
             return false;
         }

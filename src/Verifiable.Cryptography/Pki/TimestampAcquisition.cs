@@ -239,6 +239,40 @@ public static class TimestampAcquisition
 
 
     /// <summary>
+    /// Verifies a <c>TimeStampResp</c> against a computed digest carrier: the message-imprint octets and their
+    /// algorithm both come from the one carrier the registered digest seam produced and tagged, so the pair
+    /// cannot disagree the way separately passed octets and algorithm can. This is the preferred overload for
+    /// a caller that holds the digest it asked to be time-stamped; the octets-and-algorithm overload below
+    /// remains for digests that arrive without a carrier.
+    /// </summary>
+    /// <param name="response">The DER-encoded <c>TimeStampResp</c>, tagged <see cref="PkiCertificateTags.TimestampResponse"/>.</param>
+    /// <param name="messageImprint">The computed digest the originating request carried, carrying its own algorithm in its tag.</param>
+    /// <param name="requestNonce">The originating request's nonce, or <see langword="null"/> when the request sent none.</param>
+    /// <param name="requestedPolicyOid">The TSA policy the originating request asked for, or <see langword="null"/> when it named none.</param>
+    /// <param name="pool">The memory pool for every allocation this call performs.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The verified token, ready to attach. The caller owns and disposes it.</returns>
+    /// <exception cref="ArgumentNullException">When <paramref name="response"/>, <paramref name="messageImprint"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">When the carrier's tag names no digest algorithm this library states in PKI structures, or <paramref name="response"/> does not carry a <c>TimeStampResp</c>.</exception>
+    /// <exception cref="TimestampAcquisitionException">As on the octets-and-algorithm overload.</exception>
+    public static ValueTask<AcquiredTimestampToken> VerifyResponseAsync(
+        PkiCertificateMemory response,
+        DigestValue messageImprint,
+        Nonce? requestNonce,
+        string? requestedPolicyOid,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(messageImprint);
+
+        PkiDigestAlgorithm algorithm = PkiDigestAlgorithm.FromDigest(messageImprint)
+            ?? throw new ArgumentException("The digest carrier's tag names no digest algorithm this library states in PKI structures.", nameof(messageImprint));
+
+        return VerifyResponseAsync(response, messageImprint.AsReadOnlyMemory(), algorithm, requestNonce, requestedPolicyOid, pool, cancellationToken);
+    }
+
+
+    /// <summary>
     /// Verifies a <c>TimeStampResp</c> a Time-Stamping Authority returned: its <c>PKIStatus</c>, its embedded
     /// token's own CMS signature, the token's message imprint against the digest the request carried, and the
     /// token's nonce against the request's when one was sent.
@@ -472,6 +506,46 @@ public static class TimestampAcquisition
 
             return requestValue == tokenValue;
         }
+    }
+
+
+    /// <summary>
+    /// Acquires a time-stamp over a computed digest carrier: the message-imprint octets and their algorithm
+    /// both come from the one carrier the registered digest seam produced and tagged, so the pair cannot
+    /// disagree the way separately passed octets and algorithm can. This is the preferred overload for a
+    /// caller that computed the digest itself; the octets-and-algorithm overload below remains for digests
+    /// that arrive without a carrier.
+    /// </summary>
+    /// <param name="messageImprint">The computed digest of the data being time-stamped, carrying its own algorithm in its tag.</param>
+    /// <param name="tsaUri">The Time-Stamping Authority to contact.</param>
+    /// <param name="fetchResponse">The transport delegate.</param>
+    /// <param name="pool">The memory pool for every allocation this call performs.</param>
+    /// <param name="reqPolicyOid">The TSA policy the request asks for, or <see langword="null"/> to state none.</param>
+    /// <param name="nonceByteLength">The nonce length in octets; see <see cref="TimestampRequests.CreateAsync"/>.</param>
+    /// <param name="includeNonce">Whether the request carries a nonce; see <see cref="TimestampRequests.CreateAsync"/>.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The verified token, ready to attach. The caller owns and disposes it.</returns>
+    /// <exception cref="ArgumentException">When <paramref name="tsaUri"/> is null or empty, or the carrier's tag names no digest algorithm this library states in PKI structures.</exception>
+    /// <exception cref="ArgumentNullException">When <paramref name="messageImprint"/>, <paramref name="fetchResponse"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
+    /// <exception cref="TimestampAcquisitionException">As on the octets-and-algorithm overload.</exception>
+    [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings",
+        Justification = "Forwarded verbatim into the octets-and-algorithm overload, whose own suppression states the reason (the transport delegate owns URI parsing and scheme policy).")]
+    public static ValueTask<AcquiredTimestampToken> AcquireAsync(
+        DigestValue messageImprint,
+        string tsaUri,
+        FetchTimestampResponseAsyncDelegate fetchResponse,
+        MemoryPool<byte> pool,
+        string? reqPolicyOid = null,
+        int nonceByteLength = 32,
+        bool includeNonce = true,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(messageImprint);
+
+        PkiDigestAlgorithm algorithm = PkiDigestAlgorithm.FromDigest(messageImprint)
+            ?? throw new ArgumentException("The digest carrier's tag names no digest algorithm this library states in PKI structures.", nameof(messageImprint));
+
+        return AcquireAsync(messageImprint.AsReadOnlyMemory(), algorithm, tsaUri, fetchResponse, pool, reqPolicyOid, nonceByteLength, includeNonce, cancellationToken);
     }
 
 

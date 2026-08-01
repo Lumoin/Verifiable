@@ -114,7 +114,7 @@ public static class CAdESSignatureCreation
     private const string EcdsaWithSha512Oid = "1.2.840.10045.4.3.4";
 
     /// <summary>The <c>sha256WithRSAEncryption</c> signature algorithm (<see href="https://www.rfc-editor.org/rfc/rfc8017">RFC 8017</see>) — the only RSA signature scheme this surface emits, matching <see cref="ManagedCmsVerification"/>'s RSA verification support.</summary>
-    private const string Sha256WithRsaEncryptionOid = "1.2.840.113549.1.1.11";
+    private const string Sha256WithRsaEncryptionOid = WellKnownOids.Sha256WithRsaEncryption;
 
     /// <summary>The <c>CMSVersion</c> both <c>SignedData</c> and <c>SignerInfo</c> carry: clause 4.4 delegates it to RFC 5652 §5.1's version-assignment rule, whose cascade yields 1 for the <c>eContentType = id-data</c> / <c>IssuerAndSerialNumber</c> / no-attribute-certificate / no-other-format combination this surface always produces.</summary>
     private const int CmsVersion1 = 1;

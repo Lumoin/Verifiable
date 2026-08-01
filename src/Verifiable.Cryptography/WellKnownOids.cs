@@ -252,6 +252,23 @@ namespace Verifiable.Cryptography
         /// <summary>OID for the SHA-512 digest algorithm (RFC 5754 §2, NIST FIPS 180-4).</summary>
         public const string Sha512 = "2.16.840.1.101.3.4.2.3";
 
+        /// <summary>
+        /// OID for the PKCS#1 rsaEncryption algorithm
+        /// (<see href="https://www.rfc-editor.org/rfc/rfc8017#appendix-A.1">RFC 8017 Appendix A.1</see>); as a
+        /// CMS <c>SignerInfo</c> signature algorithm it carries the hash in the digest algorithm instead of
+        /// naming one itself (RFC 3370 §3.2).
+        /// </summary>
+        public const string RsaEncryption = "1.2.840.113549.1.1.1";
+
+        /// <summary>OID for the sha256WithRSAEncryption signature algorithm (<see href="https://www.rfc-editor.org/rfc/rfc8017#appendix-A.2.4">RFC 8017 Appendix A.2.4</see>).</summary>
+        public const string Sha256WithRsaEncryption = "1.2.840.113549.1.1.11";
+
+        /// <summary>OID for the sha384WithRSAEncryption signature algorithm (<see href="https://www.rfc-editor.org/rfc/rfc8017#appendix-A.2.4">RFC 8017 Appendix A.2.4</see>).</summary>
+        public const string Sha384WithRsaEncryption = "1.2.840.113549.1.1.12";
+
+        /// <summary>OID for the sha512WithRSAEncryption signature algorithm (<see href="https://www.rfc-editor.org/rfc/rfc8017#appendix-A.2.4">RFC 8017 Appendix A.2.4</see>).</summary>
+        public const string Sha512WithRsaEncryption = "1.2.840.113549.1.1.13";
+
 
         //The DER value bytes (the content after the 0x06 OBJECT IDENTIFIER tag and length) of the OIDs
         //above, for callers that compare against an OID parsed from a DER structure (e.g. a
@@ -263,6 +280,12 @@ namespace Verifiable.Cryptography
 
         /// <summary>DER value bytes of the PKCS#1 rsaEncryption OID (1.2.840.113549.1.1.1).</summary>
         public static ReadOnlySpan<byte> RsaEncryptionDerValue => [0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x01];
+
+        /// <summary>DER value bytes of <see cref="Sha256WithRsaEncryption"/>.</summary>
+        public static ReadOnlySpan<byte> Sha256WithRsaEncryptionDerValue => [0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x0B];
+
+        /// <summary>DER value bytes of <see cref="Sha512WithRsaEncryption"/>.</summary>
+        public static ReadOnlySpan<byte> Sha512WithRsaEncryptionDerValue => [0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x0D];
 
         /// <summary>DER value bytes of <see cref="EcP256"/>.</summary>
         public static ReadOnlySpan<byte> EcP256DerValue => [0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07];

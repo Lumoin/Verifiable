@@ -139,13 +139,11 @@ internal sealed class CaepInteropProfileRequirementsMatrixTests
     /// </summary>
     private static (string ClauseId, string Requirement, RequirementCoverageStatus Status, string Evidence)[] RowData { get; } =
     [
-        //---- §2.1 Transport / §2.2 CAEP version ----
         ("2.1-tls", "Transmitter MUST offer TLS-protected endpoints (TLS >= 1.2, RFC 9325); Receiver MUST perform certificate signature/chain/expiry/revocation checks.",
             RequirementCoverageStatus.OutOfScope, "Transport is a host/deployment concern; the library emits no transport policy and opens no socket of its own (drift report verdict N)."),
         ("2.2-caep-1.0-events", "The profile supports CAEP events from CAEP 1.0 — the three use-case event types are carried verbatim.",
             RequirementCoverageStatus.Tested, "CaepInteropEventTests.SessionRevokedRoundTripsWithCommonClaims (with CredentialChangeRoundTripsWithEventSpecificClaims and DeviceComplianceChangeRoundTripsWithStatuses — all three CAEP 1.0 use-case URIs are built typed, issued and received)"),
 
-        //---- §2.3 Transmitter Configuration Metadata ----
         ("2.3.1-specversion-emit", "Metadata MUST include spec_version (§2.3.1) — the emit path writes it on every document.",
             RequirementCoverageStatus.Tested, "SsfJsonWritingPropertyTests.TransmitterConfigurationWriteThenStrictParseRoundTrips (the written document strict-parses with spec_version == \"1_0\")"),
         ("2.3.1-specversion-receive", "spec_version's value MUST be 1_0 or greater — the receive-side conformance gate compares it and fails closed below the floor or when absent.",
@@ -171,7 +169,6 @@ internal sealed class CaepInteropProfileRequirementsMatrixTests
         ("2.3.8.2-authorized-operations", "Transmitter MUST support Create / Read Config / Read Status / Verification / Delete with valid authorization.",
             RequirementCoverageStatus.Tested, "SsfStreamManagementEndpointTests.ScopeEnforcementOverHttpWire (each operation is scope-gated and exercised over the wire)"),
 
-        //---- §2.4 Receiver ----
         ("2.4.1-receiver-delivery", "Receiver MUST accept events over at least one of RFC 8935 (Push) / RFC 8936 (Poll).",
             RequirementCoverageStatus.Tested, "SsfHttpFlowTests.PushedSetOverHttpIsVerifiedAcknowledgedAndDeduplicated (push) and SsfHttpFlowTests.PollRoundTripDeliversVerifiesAndAcknowledgesOverHttp (poll)"),
         ("2.4.2-receiver-jwks", "Receiver MUST obtain signing keys via jwks_uri.",
@@ -185,15 +182,12 @@ internal sealed class CaepInteropProfileRequirementsMatrixTests
         ("2.4.5.2-receiver-invocations", "Receiver MUST be able to invoke Create / Read Config / Read Status / Verification / Delete.",
             RequirementCoverageStatus.Tested, "SsfStreamManagementEndpointTests.StreamControlEndpointsOverHttpWire (every operation reached over the wire from the Receiver side)"),
 
-        //---- §2.5 Subject identifier formats ----
         ("2.5-subject-formats", "Formats email, iss_sub and opaque (Verification event only) MUST be supported; Receivers MUST accept any of them; Transmitters MUST send at least one. [SPEC-DEFECT-CANDIDATE R-2: opaque is restricted to the Verification event yet counts toward \"at least one\", so a Transmitter supporting only opaque is conformant to §2.5 yet cannot emit a single §3 use-case event.]",
             RequirementCoverageStatus.OutOfScope, "DEFERRED pending review comment R-2: all twelve formats are modelled (SubjectIdentifierFormats), but the profile's \"at least one\" set and its opaque-only-for-Verification restriction are self-contradictory in draft 01; a gate encoding them now would pin an ambiguity under active review. Re-evaluate on Final."),
 
-        //---- §2.6 Signature algorithm ----
         ("2.6-rs256", "All events MUST be signed using RS256 with a minimum of 2048-bit keys. [SPEC-DEFECT-CANDIDATE R-1: exclusive RS256 forbids ES256/EdDSA/ML-DSA for the life of a Final spec with no agility path, and \"events\" are the wrong object — the SET, not each event, carries the signature.]",
             RequirementCoverageStatus.OutOfScope, "DEFERRED pending review comment R-1, and a hard RS256 pin is forbidden by this repository's proof-algorithm-agility/PQC rule (signing stays algorithm-agile via the key Tag). A registrable interop-floor predicate is the intended shape once R-1 resolves whether RS256 is exclusive or mandatory-to-implement; encoding an exclusive pin now would both violate the house rule and risk implementing a clause under active review."),
 
-        //---- §2.7 OAuth 2.0 ----
         ("2.7-oauth-roles", "Implementations MUST support OAuth 2.0 with RS = Transmitter, Client = Receiver, AS = trusted issuer.",
             RequirementCoverageStatus.Tested, "SsfStreamManagementEndpointTests.ScopeEnforcementOverHttpWire (the Receiver presents a bearer token the Transmitter-as-Resource-Server validates through the authorization seam)"),
         ("2.7.1-short-lived-token", "AS MUST support client-credentials or authorization-code to issue a short-lived token (no more than 60 minutes). [SPEC-DEFECT-CANDIDATE R-8: 60 minutes is not short-lived, and the requirement binds only the AS with no Resource-Server-side check.]",
@@ -205,13 +199,11 @@ internal sealed class CaepInteropProfileRequirementsMatrixTests
         ("2.7.3-scope-operation-table", "The §2.7.3 scope-to-operation table assigns scopes to five operations; the shipped surface additionally gates Update/Replace Stream, Update Status and Add/Remove Subject on ssf.manage. [SPEC-DEFECT-CANDIDATE R-5: the table covers only five of the ~ten SSF Stream Management operations, so the remainder have no profile-assigned authorization and every implementer must guess.]",
             RequirementCoverageStatus.Tested, "SsfStreamManagementEndpointTests.ScopeEnforcementOverHttpWire (the management operations beyond the five named accept ssf.manage, the conservative choice this library documents pending R-5)"),
 
-        //---- §2.8 Set contents ----
         ("2.8.1-transmitter-one-event", "The events claim of the SET MUST contain only one event — the Transmitter conformance gate rejects a multi-event token. [SPEC-DEFECT-CANDIDATE R-6: §2.8.1 names no actor and silently narrows RFC 8417 §2.2's multi-event support.]",
             RequirementCoverageStatus.Tested, "CaepInteropEventTests.InteropGateRequiresNonEmptyReasonAdminAndOneEvent (a two-event token fails CaepInteropProfile.IsConformantTransmitterToken)"),
         ("2.8.1-receiver-tolerance", "Receiver side of §2.8.1: whether a Receiver MUST reject a multi-event SET is left to the actor-ambiguous reading. [SPEC-DEFECT-CANDIDATE R-6.]",
             RequirementCoverageStatus.OutOfScope, "The Receiver stays deliberately tolerant (SecurityEventTokenVerification rejects only an empty events claim, per its own remarks); imposing single-event rejection on the Receiver would encode the actor-ambiguous reading R-6 flags. The Transmitter-side single-event MUST is gated and tested (2.8.1-transmitter-one-event)."),
 
-        //---- §3 Use cases ----
         ("3-at-least-one", "A conforming implementation MUST support at least one of §3.1-§3.3. [SPEC-DEFECT-CANDIDATE R-7: the profile does not say whether an implementation MAY also emit CAEP events outside the three named use cases.]",
             RequirementCoverageStatus.Tested, "CaepInteropEventTests.InteropGateRequiresNonEmptyReasonAdminAndOneEvent (all three use cases are supported; the gate accepts the three profile events and rejects a non-profile CAEP/RISC event — the conservative closed-set reading this library documents pending R-7)"),
         ("3.1-session-revoked", "MUST support session-revoked; reason_admin MUST be a non-empty object.",

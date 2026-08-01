@@ -47,22 +47,63 @@ internal sealed class TimestampAcquisitionTests
     {
         using TsaScenario scenario = BuildScenario();
         byte[] timestampedOctets = Encoding.UTF8.GetBytes("timestamp acquisition happy path fixture");
-        (byte[] digest, PkiDigestAlgorithm algorithm) = await ComputeSha256Async(timestampedOctets, TestContext.CancellationToken).ConfigureAwait(false);
+        using DigestValue digest = await ComputeSha256Async(timestampedOctets, TestContext.CancellationToken).ConfigureAwait(false);
 
         using TimestampRequestContent request = await TimestampRequests.CreateAsync(
-            digest, algorithm, BaseMemoryPool.Shared, includeNonce: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            digest, BaseMemoryPool.Shared, includeNonce: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory token = await X509ChainTestRingTimestamping.MintTimestampTokenAsync(
             scenario.Authority, [scenario.Authority], timestampedOctets, TestClock.CanonicalEpoch, BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory response = WriteTimeStampResp(PkiStatusGranted, token.AsReadOnlySpan());
 
         using AcquiredTimestampToken acquired = await TimestampAcquisition.VerifyResponseAsync(
-            response, digest, algorithm, request.RequestNonce, request.RequestedPolicyOid, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+            response, digest,request.RequestNonce, request.RequestedPolicyOid, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(acquired.Token.IsTimestampToken, "The acquired token must carry the TimestampToken tag.");
         Assert.IsTrue(acquired.Info.IsRead, "The already-read TSTInfo facts must report Read.");
         Assert.AreEqual(TestClock.CanonicalEpoch, acquired.Info.GenerationTime, "The token's genTime must be the authority's stated generation time.");
-        Assert.IsTrue(acquired.Info.MessageImprint!.AsReadOnlySpan().SequenceEqual(digest), "The acquired token's message imprint must equal the request's digest.");
+        Assert.IsTrue(acquired.Info.MessageImprint!.AsReadOnlySpan().SequenceEqual(digest.AsReadOnlySpan()), "The acquired token's message imprint must equal the request's digest.");
+    }
+
+
+    /// <summary>
+    /// ETSI EN 319 422 clauses 4.2.3 and 4.2.4 through ETSI TS 119 312 V1.4.3: a token requester supports RSA
+    /// with SHA-512 (clause A.9 Table A.8) and post-2025 key lengths of at least 3&#160;000 bits (Tables 9-10).
+    /// A granted response whose token is signed by a 3072-bit RSA authority under
+    /// <c>sha512WithRSAEncryption</c> verifies through the shipped acquisition path, and the same token's CMS
+    /// layer verifies through the managed backend — the zero-registration fallback — so such an authority is
+    /// inside every shipped backend's profile.
+    /// </summary>
+    [TestMethod]
+    public async Task VerifiesAGrantedResponseFromA3072BitRsaAuthoritySigningSha512()
+    {
+        using RSA authorityKey = RSA.Create(3072);
+        using X509Certificate2 authority = CmsSignedDataTestFactory.MintSelfSignedTimeStampingCertificate(
+            authorityKey, TestClock.CanonicalEpoch.AddDays(-1), TestClock.CanonicalEpoch.AddYears(1));
+        byte[] timestampedOctets = Encoding.UTF8.GetBytes("timestamp acquisition rsa 3072 sha-512 fixture");
+        using DigestValue digest = await ComputeSha256Async(timestampedOctets, TestContext.CancellationToken).ConfigureAwait(false);
+
+        using TimestampRequestContent request = await TimestampRequests.CreateAsync(
+            digest, BaseMemoryPool.Shared, includeNonce: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        using PkiCertificateMemory token = await X509ChainTestRingTimestamping.MintTimestampTokenWithRsaAuthorityAsync(
+            authority, authorityKey, timestampedOctets, TestClock.CanonicalEpoch, BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        using PkiCertificateMemory response = WriteTimeStampResp(PkiStatusGranted, token.AsReadOnlySpan());
+
+        using AcquiredTimestampToken acquired = await TimestampAcquisition.VerifyResponseAsync(
+            response, digest,request.RequestNonce, request.RequestedPolicyOid, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(acquired.Info.IsRead, "The RSA-3072/SHA-512 authority's token must read through the shipped acquisition path.");
+        Assert.AreEqual(TestClock.CanonicalEpoch, acquired.Info.GenerationTime, "The token's genTime must be the authority's stated generation time.");
+        Assert.IsTrue(acquired.Info.MessageImprint!.AsReadOnlySpan().SequenceEqual(digest.AsReadOnlySpan()), "The acquired token's message imprint must equal the request's digest.");
+
+        //The managed CMS backend — what the detached seam resolves to when a host registers nothing, and the
+        //registrable fallback of the encapsulated one — accepts the same token's combined
+        //sha512WithRSAEncryption signer with the 3072-bit modulus.
+        using CmsSignedData tokenCms = CmsSignedData.FromBytes(token.AsReadOnlySpan(), BaseMemoryPool.Shared);
+        using CmsVerifiedContent managedVerified = await ManagedCmsVerification.VerifyCmsSignedDataAsync(
+            tokenCms, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsGreaterThan(0, managedVerified.Content.Length, "The managed backend surfaces the TSTInfo the token encapsulates.");
     }
 
 
@@ -72,10 +113,10 @@ internal sealed class TimestampAcquisitionTests
     {
         using TsaScenario scenario = BuildScenario();
         byte[] timestampedOctets = Encoding.UTF8.GetBytes("timestamp acquisition nonce mismatch fixture");
-        (byte[] digest, PkiDigestAlgorithm algorithm) = await ComputeSha256Async(timestampedOctets, TestContext.CancellationToken).ConfigureAwait(false);
+        using DigestValue digest = await ComputeSha256Async(timestampedOctets, TestContext.CancellationToken).ConfigureAwait(false);
 
         using TimestampRequestContent request = await TimestampRequests.CreateAsync(
-            digest, algorithm, BaseMemoryPool.Shared, includeNonce: true, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            digest, BaseMemoryPool.Shared, includeNonce: true, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory token = await X509ChainTestRingTimestamping.MintTimestampTokenAsync(
             scenario.Authority, [scenario.Authority], timestampedOctets, TestClock.CanonicalEpoch, BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -83,7 +124,7 @@ internal sealed class TimestampAcquisitionTests
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.VerifyResponseAsync(
-                response, digest, algorithm, request.RequestNonce, request.RequestedPolicyOid, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
+                response, digest,request.RequestNonce, request.RequestedPolicyOid, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
             "A request nonce with no matching token nonce must fail closed.").ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.NonceMismatch, exception.FailureKind);
@@ -97,7 +138,7 @@ internal sealed class TimestampAcquisitionTests
         using TsaScenario scenario = BuildScenario();
         byte[] mintedOver = Encoding.UTF8.GetBytes("timestamp acquisition imprint fixture — actually minted");
         byte[] requestedOver = Encoding.UTF8.GetBytes("timestamp acquisition imprint fixture — actually requested");
-        (byte[] requestDigest, PkiDigestAlgorithm algorithm) = await ComputeSha256Async(requestedOver, TestContext.CancellationToken).ConfigureAwait(false);
+        using DigestValue requestDigest = await ComputeSha256Async(requestedOver, TestContext.CancellationToken).ConfigureAwait(false);
 
         using PkiCertificateMemory token = await X509ChainTestRingTimestamping.MintTimestampTokenAsync(
             scenario.Authority, [scenario.Authority], mintedOver, TestClock.CanonicalEpoch, BaseMemoryPool.Shared,
@@ -106,7 +147,7 @@ internal sealed class TimestampAcquisitionTests
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.VerifyResponseAsync(
-                response, requestDigest, algorithm, requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
+                response, requestDigest,requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
             "A token minted over different octets than the request's digest names must fail closed.").ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.MessageImprintMismatch, exception.FailureKind);
@@ -117,13 +158,13 @@ internal sealed class TimestampAcquisitionTests
     [TestMethod]
     public async Task RejectsAResponseThatWasNotGranted()
     {
-        (byte[] digest, PkiDigestAlgorithm algorithm) = await ComputeSha256Async(
+        using DigestValue digest = await ComputeSha256Async(
             Encoding.UTF8.GetBytes("timestamp acquisition rejected fixture"), TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory response = WriteTimeStampResp(PkiStatusRejection, tokenDer: default, includeToken: false);
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.VerifyResponseAsync(
-                response, digest, algorithm, requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
+                response, digest,requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
             "A rejection status must fail closed.").ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.ResponseRejected, exception.FailureKind);
@@ -135,13 +176,13 @@ internal sealed class TimestampAcquisitionTests
     [TestMethod]
     public async Task RejectsAGrantedResponseCarryingNoToken()
     {
-        (byte[] digest, PkiDigestAlgorithm algorithm) = await ComputeSha256Async(
+        using DigestValue digest = await ComputeSha256Async(
             Encoding.UTF8.GetBytes("timestamp acquisition tokenless fixture"), TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory response = WriteTimeStampResp(PkiStatusGranted, tokenDer: default, includeToken: false);
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.VerifyResponseAsync(
-                response, digest, algorithm, requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                response, digest,requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.ResponseMalformed, exception.FailureKind);
     }
@@ -151,7 +192,7 @@ internal sealed class TimestampAcquisitionTests
     [TestMethod]
     public async Task RejectsMalformedResponseBytes()
     {
-        (byte[] digest, PkiDigestAlgorithm algorithm) = await ComputeSha256Async(
+        using DigestValue digest = await ComputeSha256Async(
             Encoding.UTF8.GetBytes("timestamp acquisition malformed fixture"), TestContext.CancellationToken).ConfigureAwait(false);
         IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(5);
         owner.Memory.Span[..5].Fill(0xFF);
@@ -159,7 +200,7 @@ internal sealed class TimestampAcquisitionTests
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.VerifyResponseAsync(
-                response, digest, algorithm, requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                response, digest,requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.ResponseMalformed, exception.FailureKind);
     }
@@ -171,7 +212,7 @@ internal sealed class TimestampAcquisitionTests
     {
         using TsaScenario scenario = BuildScenario();
         byte[] timestampedOctets = Encoding.UTF8.GetBytes("timestamp acquisition tampered fixture");
-        (byte[] digest, PkiDigestAlgorithm algorithm) = await ComputeSha256Async(timestampedOctets, TestContext.CancellationToken).ConfigureAwait(false);
+        using DigestValue digest = await ComputeSha256Async(timestampedOctets, TestContext.CancellationToken).ConfigureAwait(false);
 
         using PkiCertificateMemory token = await X509ChainTestRingTimestamping.MintTimestampTokenAsync(
             scenario.Authority, [scenario.Authority], timestampedOctets, TestClock.CanonicalEpoch, BaseMemoryPool.Shared,
@@ -183,7 +224,7 @@ internal sealed class TimestampAcquisitionTests
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.VerifyResponseAsync(
-                response, digest, algorithm, requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
+                response, digest,requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
             "A tampered signature must not verify.").ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.TokenNotVerified, exception.FailureKind);
@@ -196,7 +237,7 @@ internal sealed class TimestampAcquisitionTests
     {
         using TsaScenario scenario = BuildScenario();
         byte[] timestampedOctets = Encoding.UTF8.GetBytes("timestamp acquisition compose fixture");
-        (byte[] digest, PkiDigestAlgorithm algorithm) = await ComputeSha256Async(timestampedOctets, TestContext.CancellationToken).ConfigureAwait(false);
+        using DigestValue digest = await ComputeSha256Async(timestampedOctets, TestContext.CancellationToken).ConfigureAwait(false);
 
         using PkiCertificateMemory token = await X509ChainTestRingTimestamping.MintTimestampTokenAsync(
             scenario.Authority, [scenario.Authority], timestampedOctets, TestClock.CanonicalEpoch, BaseMemoryPool.Shared,
@@ -204,11 +245,11 @@ internal sealed class TimestampAcquisitionTests
         using var transport = new FixedTimestampResponder(WriteTimeStampResp(PkiStatusGranted, token.AsReadOnlySpan()));
 
         using AcquiredTimestampToken acquired = await TimestampAcquisition.AcquireAsync(
-            digest, algorithm, "https://tsa.example.test/", transport.FetchAsync, BaseMemoryPool.Shared,
+            digest, "https://tsa.example.test/", transport.FetchAsync, BaseMemoryPool.Shared,
             includeNonce: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(acquired.Info.IsRead);
-        Assert.IsTrue(acquired.Info.MessageImprint!.AsReadOnlySpan().SequenceEqual(digest));
+        Assert.IsTrue(acquired.Info.MessageImprint!.AsReadOnlySpan().SequenceEqual(digest.AsReadOnlySpan()));
     }
 
 
@@ -216,13 +257,13 @@ internal sealed class TimestampAcquisitionTests
     [TestMethod]
     public async Task AcquireAsyncReportsATransportFailureWhenTheAuthorityCannotBeReached()
     {
-        (byte[] digest, PkiDigestAlgorithm algorithm) = await ComputeSha256Async(
+        using DigestValue digest = await ComputeSha256Async(
             Encoding.UTF8.GetBytes("timestamp acquisition unreachable fixture"), TestContext.CancellationToken).ConfigureAwait(false);
         using var transport = new FixedTimestampResponder(response: null);
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.AcquireAsync(
-                digest, algorithm, "https://tsa.example.test/unreachable", transport.FetchAsync, BaseMemoryPool.Shared,
+                digest, "https://tsa.example.test/unreachable", transport.FetchAsync, BaseMemoryPool.Shared,
                 includeNonce: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.TransportFailure, exception.FailureKind);
@@ -279,13 +320,13 @@ internal sealed class TimestampAcquisitionTests
     {
         using TsaScenario scenario = BuildScenario();
         byte[] timestampedOctets = Encoding.UTF8.GetBytes("timestamp acquisition policy match fixture");
-        (byte[] digest, PkiDigestAlgorithm algorithm) = await ComputeSha256Async(timestampedOctets, TestContext.CancellationToken).ConfigureAwait(false);
+        using DigestValue digest = await ComputeSha256Async(timestampedOctets, TestContext.CancellationToken).ConfigureAwait(false);
 
         //A responder with no override honours the request's reqPolicy.
         var responder = new MintingTimestampResponder(scenario.Authority, [scenario.Authority], TestClock.CanonicalEpoch);
 
         using AcquiredTimestampToken acquired = await TimestampAcquisition.AcquireAsync(
-            digest, algorithm, "https://tsa.example.test/", responder.FetchAsync, BaseMemoryPool.Shared,
+            digest, "https://tsa.example.test/", responder.FetchAsync, BaseMemoryPool.Shared,
             reqPolicyOid: RequestedPolicyOid, includeNonce: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(RequestedPolicyOid, acquired.Info.PolicyOid,
@@ -304,7 +345,7 @@ internal sealed class TimestampAcquisitionTests
     {
         using TsaScenario scenario = BuildScenario();
         byte[] timestampedOctets = Encoding.UTF8.GetBytes("timestamp acquisition policy mismatch fixture");
-        (byte[] digest, PkiDigestAlgorithm algorithm) = await ComputeSha256Async(timestampedOctets, TestContext.CancellationToken).ConfigureAwait(false);
+        using DigestValue digest = await ComputeSha256Async(timestampedOctets, TestContext.CancellationToken).ConfigureAwait(false);
 
         //A non-conforming responder that ignores reqPolicy and issues under a different policy.
         var responder = new MintingTimestampResponder(
@@ -312,7 +353,7 @@ internal sealed class TimestampAcquisitionTests
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.AcquireAsync(
-                digest, algorithm, "https://tsa.example.test/", responder.FetchAsync, BaseMemoryPool.Shared,
+                digest, "https://tsa.example.test/", responder.FetchAsync, BaseMemoryPool.Shared,
                 reqPolicyOid: RequestedPolicyOid, includeNonce: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false),
             "A token issued under a policy other than the requested one must fail closed.").ConfigureAwait(false);
 
@@ -329,7 +370,7 @@ internal sealed class TimestampAcquisitionTests
     {
         using TsaScenario scenario = BuildScenario();
         byte[] timestampedOctets = Encoding.UTF8.GetBytes("timestamp acquisition failinfo fixture");
-        (byte[] digest, PkiDigestAlgorithm algorithm) = await ComputeSha256Async(timestampedOctets, TestContext.CancellationToken).ConfigureAwait(false);
+        using DigestValue digest = await ComputeSha256Async(timestampedOctets, TestContext.CancellationToken).ConfigureAwait(false);
 
         using PkiCertificateMemory token = await X509ChainTestRingTimestamping.MintTimestampTokenAsync(
             scenario.Authority, [scenario.Authority], timestampedOctets, TestClock.CanonicalEpoch, BaseMemoryPool.Shared,
@@ -338,7 +379,7 @@ internal sealed class TimestampAcquisitionTests
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.VerifyResponseAsync(
-                response, digest, algorithm, requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
+                response, digest,requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
             "A granted response carrying a set PKIFailureInfo bit must fail closed.").ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.ResponseMalformed, exception.FailureKind);
@@ -372,15 +413,11 @@ internal sealed class TimestampAcquisitionTests
     }
 
 
-    /// <summary>Computes a SHA-256 digest through the registered seam over caller-supplied octets.</summary>
-    private static async ValueTask<(byte[] Digest, PkiDigestAlgorithm Algorithm)> ComputeSha256Async(ReadOnlyMemory<byte> content, CancellationToken cancellationToken)
-    {
-        using DigestValue digestValue = await CryptographicKeyEvents.ComputeDigestAsync(
+    /// <summary>Computes a SHA-256 digest through the registered seam over caller-supplied octets, returned as the tagged carrier the acquisition surfaces consume directly — never flattened to naked bytes.</summary>
+    private static ValueTask<DigestValue> ComputeSha256Async(ReadOnlyMemory<byte> content, CancellationToken cancellationToken) =>
+        CryptographicKeyEvents.ComputeDigestAsync(
             content, PkiDigestAlgorithm.Sha256.OutputByteLength, CryptoTags.Sha256Digest, BaseMemoryPool.Shared,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        return (digestValue.AsReadOnlySpan().ToArray(), PkiDigestAlgorithm.Sha256);
-    }
+            cancellationToken: cancellationToken);
 
 
     /// <summary>

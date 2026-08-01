@@ -1,6 +1,8 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using Org.BouncyCastle.Asn1;
@@ -195,6 +197,68 @@ internal static class X509ChainTestRingTimestamping
             "2.16.840.1.101.3.4.2.3" => NistObjectIdentifiers.IdSha512,
             _ => throw new ArgumentException($"A token minted here states a SHA-2 message imprint, not one under {algorithm.Identifier.Oid}.", nameof(algorithm))
         };
+    }
+
+
+    /// <summary>
+    /// Mints a time-stamp token signed by an RSA authority under the named combined RSA signature algorithm —
+    /// the authority shape
+    /// <see href="https://www.etsi.org/deliver/etsi_ts/119300_119399/119312/01.04.03_60/ts_119312v010403p.pdf">
+    /// ETSI TS 119 312 V1.4.3</see> clause A.9 Table A.8 obliges a token requester to support (RSA with
+    /// SHA-256 or SHA-512) — through the same independent BouncyCastle generator as the ECDSA mints. The
+    /// message imprint stays SHA-256, and the <c>ESSCertIDv2</c> certificate reference stays SHA-256, exactly
+    /// as the ECDSA mints above; only the token's own signature is the authority's RSA choice.
+    /// </summary>
+    /// <param name="authorityCertificate">The authority's certificate, embedded in the token's own <c>certificates</c> field.</param>
+    /// <param name="authorityKey">The authority's RSA signing key.</param>
+    /// <param name="timestampedOctets">The octets the token's SHA-256 message imprint is taken over.</param>
+    /// <param name="generationTime">The <c>genTime</c> the authority states.</param>
+    /// <param name="pool">The memory pool the digest is rented from.</param>
+    /// <param name="signatureAlgorithm">The BouncyCastle name of the combined RSA signature algorithm the token is signed under.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The pooled DER-encoded token, tagged <see cref="PkiCertificateTags.TimestampToken"/>; the caller disposes it.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when a required argument is <see langword="null"/>.</exception>
+    internal static async ValueTask<PkiCertificateMemory> MintTimestampTokenWithRsaAuthorityAsync(
+        X509Certificate2 authorityCertificate,
+        RSA authorityKey,
+        ReadOnlyMemory<byte> timestampedOctets,
+        DateTimeOffset generationTime,
+        MemoryPool<byte> pool,
+        string signatureAlgorithm = "SHA512WITHRSA",
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(authorityCertificate);
+        ArgumentNullException.ThrowIfNull(authorityKey);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        using DigestValue messageImprint = await CryptographicKeyEvents.ComputeDigestAsync(
+            timestampedOctets, Sha256Length, CryptoTags.Sha256Digest, pool,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        BcX509Certificate bcAuthority = OcspTestFixtures.ToBouncyCastleCertificate(authorityCertificate);
+        AsymmetricKeyParameter authorityPrivateKey = OcspTestFixtures.ToBouncyCastlePrivateKey(authorityKey);
+
+        SignerInfoGenerator signerInfoGenerator = new SignerInfoGeneratorBuilder()
+            .Build(new Asn1SignatureFactory(signatureAlgorithm, authorityPrivateKey), bcAuthority);
+        var tokenGenerator = new TimeStampTokenGenerator(
+            signerInfoGenerator,
+            Asn1DigestFactory.Get(NistObjectIdentifiers.IdSha256),
+            new DerObjectIdentifier(TestPolicyOid),
+            isIssuerSerialIncluded: false);
+
+        tokenGenerator.SetCertificates(CollectionUtilities.CreateStore(new List<BcX509Certificate> { bcAuthority }));
+
+        var requestGenerator = new TimeStampRequestGenerator();
+        requestGenerator.SetCertReq(true);
+        TimeStampRequest request = requestGenerator.Generate(NistObjectIdentifiers.IdSha256, messageImprint.AsReadOnlySpan().ToArray());
+
+        using Salt serialNumber = X509ChainTestRing.CreateSerialNumber();
+        TimeStampToken token = tokenGenerator.Generate(
+            request,
+            new BcBigInteger(1, serialNumber.AsReadOnlySpan().ToArray()),
+            generationTime.UtcDateTime);
+
+        return ToTimestampTokenCarrier(token.GetEncoded());
     }
 
 

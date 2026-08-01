@@ -38,13 +38,14 @@ namespace Verifiable.Tests.Cryptography;
 /// implemented.
 /// </para>
 /// <para>
-/// <strong>Two client rows deviate and say so.</strong> The token-signature-algorithm and key-length rows
-/// (clauses 4.2.3/4.2.4, and RFC 3161 §2.4.2 through them) are <see cref="RequirementCoverageStatus.KnownDefect"/>:
-/// the default managed CMS backend verifies RSA time-stamp signatures only as PKCS#1 v1.5 with SHA-256 over
-/// 2048- or 4096-bit moduli — proven and unit-tested — but ETSI TS 119 312 V1.4.3 clause A.9 Table A.8 makes
-/// RSA-with-SHA-512 a <em>shall support</em> for token requesters and Tables 9-10 recommend ≥3 000-bit moduli
-/// after 2025, so a SHA-512-signing or 3072-bit TSU is refused. Widening the backend is the recorded work of
-/// task #11 (managed-RSA widening), and the rows cite it. The transport rows (clause 7) are
+/// <strong>The RSA profile rows carry the widened backend.</strong> ETSI TS 119 312 V1.4.3 clause A.9 Table
+/// A.8 makes RSA-with-SHA-512 a <em>shall support</em> for token requesters and Tables 9-10 recommend
+/// ≥3 000-bit moduli after 2025; the token-signature-algorithm and key-length rows (clauses 4.2.3/4.2.4, and
+/// RFC 3161 §2.4.2 through them) were <see cref="RequirementCoverageStatus.KnownDefect"/> while the default
+/// managed CMS backend verified only PKCS#1 v1.5 with SHA-256 over 2048-/4096-bit moduli, and are
+/// <see cref="RequirementCoverageStatus.Tested"/> since the managed-RSA widening: RSASSA-PKCS1-v1_5 under
+/// SHA-256, SHA-384 or SHA-512 over any 2048- to 16384-bit modulus, proven by the three-backend equivalence
+/// rows and an RSA-with-SHA-512 3072-bit acquisition leg the rows cite. The transport rows (clause 7) are
 /// <see cref="RequirementCoverageStatus.OutOfScope"/> by the owner's decision: the library ships the fetch seam
 /// and deliberately delegates the HTTP/HTTPS binding and scheme policy to the host, which the delegate's own
 /// documentation states.
@@ -88,9 +89,6 @@ internal sealed class Timestamp319422RequirementsMatrixTests
     /// <param name="Evidence">For <see cref="RequirementCoverageStatus.Tested"/> and <see cref="RequirementCoverageStatus.KnownDefect"/>, the asserting test's <c>ClassName.MethodName</c> (optionally followed by explanatory prose in parentheses) — the leading token is resolved through reflection. For <see cref="RequirementCoverageStatus.OutOfScope"/>, the stated reason.</param>
     internal sealed record RequirementMatrixRow(string ClauseId, string Requirement, RequirementCoverageStatus Status, string Evidence);
 
-
-    /// <summary>The follow-up task the two managed-RSA-narrowness rows name as the work that widens the backend.</summary>
-    private const string ManagedRsaWideningTask = "task #11";
 
     /// <summary>The cryptographic-suites specification the token-signature-algorithm and key-length rows judge against.</summary>
     private const string CryptographicSuitesSpecification = "TS 119 312";
@@ -163,18 +161,18 @@ internal sealed class Timestamp319422RequirementsMatrixTests
 
 
     /// <summary>
-    /// The two managed-RSA-narrowness rows are <see cref="RequirementCoverageStatus.KnownDefect"/> and cite both
-    /// the follow-up task that widens the backend and the cryptographic-suites specification whose recommendation
-    /// the current backend cannot yet meet — so the deviation is recorded where the requirement is, not hidden.
+    /// The token-signature-algorithm and key-length rows are <see cref="RequirementCoverageStatus.Tested"/> —
+    /// the managed-RSA widening closed what these rows recorded as a <see cref="RequirementCoverageStatus.KnownDefect"/>
+    /// — and still cite the cryptographic-suites specification they are judged against, so the profile the
+    /// evidence proves stays pinned to its normative source.
     /// </summary>
     [TestMethod]
-    public void TheManagedRsaNarrownessRowsAreKnownDefectsNamingTheFollowUpTaskAndTheSuitesSpecification()
+    public void TheRsaProfileRowsAreTestedAgainstTheSuitesSpecification()
     {
-        foreach(string clauseId in ManagedRsaNarrownessRowIdentifiers)
+        foreach(string clauseId in RsaProfileRowIdentifiers)
         {
             RequirementMatrixRow row = RowFor(clauseId);
-            Assert.AreEqual(RequirementCoverageStatus.KnownDefect, row.Status, $"{clauseId} is the managed-RSA narrowness, an implemented-in-part defect.");
-            Assert.Contains(ManagedRsaWideningTask, row.Evidence, StringComparison.Ordinal);
+            Assert.AreEqual(RequirementCoverageStatus.Tested, row.Status, $"{clauseId} is covered by the widened RSA profile.");
             Assert.Contains(CryptographicSuitesSpecification, row.Evidence, StringComparison.Ordinal);
         }
     }
@@ -277,8 +275,8 @@ internal sealed class Timestamp319422RequirementsMatrixTests
         clauseId.StartsWith('R') && clauseId.Length > 1 && char.IsDigit(clauseId[1]);
 
 
-    /// <summary>The two rows recording the managed-RSA narrowness deviation.</summary>
-    private static string[] ManagedRsaNarrownessRowIdentifiers { get; } = ["4.2.3-sigalg", "4.2.4-keylength"];
+    /// <summary>The two rows carrying the widened RSA profile (formerly the managed-RSA narrowness deviation).</summary>
+    private static string[] RsaProfileRowIdentifiers { get; } = ["4.2.3-sigalg", "4.2.4-keylength"];
 
     /// <summary>The two rows recording the transport host-obligation decision.</summary>
     private static string[] TransportRowIdentifiers { get; } = ["7-transport", "7-https"];
@@ -287,7 +285,6 @@ internal sealed class Timestamp319422RequirementsMatrixTests
     /// <summary>The requirements matrix rows, in the profile's clause order followed by the incorporated RFC deltas.</summary>
     private static (string ClauseId, string Requirement, RequirementCoverageStatus Status, string Evidence)[] RowData { get; } =
     [
-        //---- EN 319 422 clause 4 — requirements for a time-stamping client (in scope) ----
         ("4.1.1", "A time-stamping client shall support the RFC 3161 clause 2.4.1 request with the profile's amendments.",
             RequirementCoverageStatus.Tested, "TimestampRequestsTests.BuildsAWellFormedRequestTheIndependentReaderDecodesFieldByField (version, messageImprint, reqPolicy, nonce and certReq decoded field by field by an independent reader)"),
         ("4.1.2-reqpolicy", "The use of reqPolicy in the request should be supported.",
@@ -311,17 +308,15 @@ internal sealed class Timestamp319422RequirementsMatrixTests
         ("4.2.2-nonce-echo", "If a nonce is present in the request, it shall be present in the response with the same value.",
             RequirementCoverageStatus.Tested, "TimestampAcquisitionTests.RejectsANonceMismatchWhenTheTokenDoesNotEchoTheRequestsNonce"),
         ("4.2.3-sigalg", "Token signature algorithms to be supported should be as TS 119 312 clause A.9 Table A.8: a token requester shall support RSA with SHA-256 or SHA-512.",
-            RequirementCoverageStatus.KnownDefect, "CmsBackendEquivalenceTests.AllThreeBackendsVerifyAnRsaSignedDataEquivalently (the RSA PKCS#1 v1.5 with SHA-256 arm is proven and unit-tested; the RSA-with-SHA-512 arm that TS 119 312 V1.4.3 A.9 Table A.8 also mandates is not accepted by the default managed backend — the recorded managed-RSA widening of task #11)"),
+            RequirementCoverageStatus.Tested, "CmsBackendEquivalenceTests.AllThreeBackendsVerifyAnRsaSignedDataEquivalently (the RSA arm is data-driven over SHA-256, SHA-384 and SHA-512 per TS 119 312 V1.4.3 A.9 Table A.8, agreeing across the Microsoft, BouncyCastle and managed backends; CmsBackendEquivalenceTests.TheManagedBackendVerifiesCombinedRsaSignatureAlgorithmIdentifiers proves the combined shaNNNWithRSAEncryption identifier form for each hash beside the bare rsaEncryption form; TimestampAcquisitionTests.VerifiesAGrantedResponseFromA3072BitRsaAuthoritySigningSha512 drives an RSA-with-SHA-512 token through the shipped acquisition path and the managed fallback)"),
         ("4.2.4-keylength", "Key lengths should be supported as TS 119 312 Tables 9 and 10: sha256-with-rsa at at least 3 000 bits after 2025.",
-            RequirementCoverageStatus.KnownDefect, "CmsBackendEquivalenceTests.AllThreeBackendsVerifyAnRsaSignedDataEquivalently (2048- and 4096-bit RSA moduli are proven; a 3072-bit modulus — the natural post-2025 choice under TS 119 312 V1.4.3 Table 10 — is refused by the default managed backend, closed by the managed-RSA widening of task #11)"),
+            RequirementCoverageStatus.Tested, "TimestampAcquisitionTests.VerifiesAGrantedResponseFromA3072BitRsaAuthoritySigningSha512 (a 3072-bit TSU key — the natural post-2025 choice under TS 119 312 V1.4.3 Table 10 — verifies through the shipped acquisition path and the managed backend; the acceptance band spans 2048 to 16384 bits, with the sub-floor refusal proven by CmsBackendEquivalenceTests.TheManagedBackendRefusesAnRsaModulusBelowTheAcceptanceBand)"),
 
-        //---- EN 319 422 clause 7 — transport (binds the client, delegated to the host by owner decision) ----
         ("7-transport", "Client and server shall support the protocol via HTTP or HTTPS as in RFC 3161 clause 3.4.",
             RequirementCoverageStatus.OutOfScope, "Owner decision: the library ships the fetch-response delegate seam and no HTTP/HTTPS binding; the transport and its content types are a documented obligation of the host that supplies the delegate. The wire flows exercise a real socket through the host-supplied transport, but the binding itself is not library code."),
         ("7-https", "HTTPS should be used instead of HTTP.",
             RequirementCoverageStatus.OutOfScope, "Owner decision: the delegate's own documentation assigns URI parsing and scheme policy to the host, so preferring HTTPS is a host obligation this library deliberately does not pre-empt."),
 
-        //---- EN 319 422 clause 9 and the annexes ----
         ("9.1-qcstatements", "A token claimed qualified should carry one qcStatements extension in the token extension field (RFC 3739 clause 3.2.6 syntax).",
             RequirementCoverageStatus.OutOfScope, "Issuer obligation: the client ships no TSA. The authoritative EU-qualified determination this library does ship runs through the TS 119 615 trusted list, not the token extension."),
         ("9.1-qtststatement", "If present, qcStatements shall contain one esi4-qtstStatement-1.",
@@ -335,7 +330,6 @@ internal sealed class Timestamp319422RequirementsMatrixTests
         ("C-mediatype", "The media type application/vnd.etsi.timestamp-token and the file extension .tst (Annex C).",
             RequirementCoverageStatus.OutOfScope, "Definitional, no RFC 2119 verb. The .tst extension is a shipped get-only constant used across the container surfaces; the media type is a transport-layer label whose binding is the host obligation of the clause-7 rows."),
 
-        //---- EN 319 422 clause 5 — the time-stamping server (N/A-side: no TSA is shipped) ----
         ("5.1.1", "The server shall support the RFC 3161 clause 2.4.1 request.",
             RequirementCoverageStatus.OutOfScope, "Server obligation: this repository ships no TSA. The test-side responder that plays one is judged against this in the responder-fidelity notes, not claimed as a shipped capability."),
         ("5.1.2-reqpolicy", "The server shall support reqPolicy.",
@@ -365,7 +359,6 @@ internal sealed class Timestamp319422RequirementsMatrixTests
         ("5.2.3-algs", "The server's hash and signature algorithms should be as TS 119 312.",
             RequirementCoverageStatus.OutOfScope, "Server obligation: no TSA is shipped."),
 
-        //---- EN 319 422 clause 6 — the TSU certificate (N/A-side: no certificate issuer is shipped) ----
         ("6.1", "The TSU certificate shall meet EN 319 412-2 (natural person) or EN 319 412-3 (legal person).",
             RequirementCoverageStatus.OutOfScope, "Certificate-issuer obligation: this repository ships no TSU certificate issuer."),
         ("6.2-country", "countryName shall specify the country the TSA is established in.",
@@ -377,7 +370,7 @@ internal sealed class Timestamp319422RequirementsMatrixTests
         ("6.2-serialnumber", "For a natural-person TSA, one serialNumber attribute should be in the subject.",
             RequirementCoverageStatus.OutOfScope, "Certificate-issuer obligation: no TSU certificate issuer is shipped."),
         ("6.3-keylength", "The TSU key length should be as TS 119 312 (Tables 9-10 today).",
-            RequirementCoverageStatus.OutOfScope, "Certificate-issuer obligation: no TSU certificate issuer is shipped. The relying-party consequence — the default backend cannot verify a token from a TSU following the post-2025 recommendation — is the client-side defect of rows 4.2.3-sigalg / 4.2.4-keylength."),
+            RequirementCoverageStatus.OutOfScope, "Certificate-issuer obligation: no TSU certificate issuer is shipped. The relying-party counterpart — verifying a token from a TSU following the post-2025 recommendation — is the tested client-side coverage of rows 4.2.3-sigalg / 4.2.4-keylength."),
         ("6.4-eku", "The TSU certificate extended key usage shall be id-kp-timeStamping, the only EKU, marked critical (RFC 3161 clause 2.3).",
             RequirementCoverageStatus.OutOfScope, "Certificate-issuer obligation: no TSU certificate issuer is shipped. Checking the EKU on a relying party is EN 319 102-1 clause 5.4 territory, out of EN 319 422 scope per its clause 1."),
         ("6.4-pkup", "The private key usage period extension should be used.",
@@ -385,11 +378,9 @@ internal sealed class Timestamp319422RequirementsMatrixTests
         ("6.5-algs", "The TSU public key and certificate signature should use TS 119 312 algorithms.",
             RequirementCoverageStatus.OutOfScope, "Certificate-issuer obligation: no TSU certificate issuer is shipped."),
 
-        //---- EN 319 422 clause 8 — object identifiers ----
         ("8-oids", "Object identifiers are specified in TS 119 312 clause 11.",
             RequirementCoverageStatus.OutOfScope, "Definitional, no RFC 2119 verb: a pointer to the identifier registry, not an obligation on a client."),
 
-        //---- RFC 3161 §2.4.1 / §2.4.2 / §2.2 and RFC 5816, incorporated into the client's shall by clauses 4.1.1 / 4.2.1 / 1 ----
         ("R1", "RFC 3161 §2.4.1: the messageImprint length MUST match the hash algorithm's output length.",
             RequirementCoverageStatus.Tested, "TimestampRequestsTests.RejectsAMessageImprintDigestOfTheWrongLength (enforced on the way out; the reader enforces it on the way in)"),
         ("R2", "RFC 3161 §2.4.1: the hash algorithm SHOULD be a known one-way collision-resistant function.",

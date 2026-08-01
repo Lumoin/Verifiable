@@ -2,6 +2,7 @@ using System;
 using System.Buffers;
 using System.Diagnostics;
 using System.Formats.Asn1;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -57,6 +58,28 @@ public readonly record struct PkiDigestAlgorithm(AlgorithmIdentifier Identifier,
         WellKnownOids.Sha512 => Sha512,
         _ => null
     };
+
+
+    /// <summary>
+    /// Resolves the digest algorithm a computed digest carrier names in its own tag, so a caller holding a
+    /// <see cref="DigestValue"/> does not restate the algorithm beside it — two statements of one fact is the
+    /// shape a mismatch takes.
+    /// </summary>
+    /// <param name="digest">The digest carrier, tagged by the registered digest seam.</param>
+    /// <returns>The resolved algorithm, or <see langword="null"/> when the tag names no digest algorithm this library states in PKI structures.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="digest"/> is <see langword="null"/>.</exception>
+    public static PkiDigestAlgorithm? FromDigest(DigestValue digest)
+    {
+        ArgumentNullException.ThrowIfNull(digest);
+
+        return !digest.Tag.TryGet(out HashAlgorithmName name) ? null : name switch
+        {
+            var n when n == HashAlgorithmName.SHA256 => Sha256,
+            var n when n == HashAlgorithmName.SHA384 => Sha384,
+            var n when n == HashAlgorithmName.SHA512 => Sha512,
+            _ => (PkiDigestAlgorithm?)null
+        };
+    }
 }
 
 

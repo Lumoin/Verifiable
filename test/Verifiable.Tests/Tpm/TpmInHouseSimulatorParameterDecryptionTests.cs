@@ -771,7 +771,6 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
         }
     }
 
-    //---- Hand-crafted wire construction (independent HMAC oracle) --------------------------------------------
 
     /// <summary>The outcome of <see cref="SendHandCraftedCreateAsync"/>: the response code and, on success, the created object's private blob and public area.</summary>
     private sealed record HandCraftedCreateResult(TpmRcConstants ResponseCode, byte[]? OutPrivate, Tpm2bPublic? OutPublic);
@@ -1013,7 +1012,6 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     private static Tag HmacTag() =>
         Tag.Create(HashAlgorithmName.SHA256).With(Purpose.Hmac).With(EncodingScheme.Raw).With(MaterialSemantics.Direct);
 
-    //---- Wire-tampering helpers -------------------------------------------------------------------------------
 
     /// <summary>
     /// Sets a bit in the <paramref name="sessionOrdinal"/>-th (zero-based) session's <c>sessionAttributes</c>
@@ -1094,7 +1092,6 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
         return stripped;
     }
 
-    //---- Session wrapper ---------------------------------------------------------------------------------------
 
     /// <summary>
     /// Wraps a real, production <see cref="TpmSession"/> for every concern EXCEPT command-direction parameter
@@ -1156,7 +1153,6 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
         public void Dispose() => inner.Dispose();
     }
 
-    //---- Shared helpers -------------------------------------------------------------------------------------
 
     /// <summary>
     /// The format-one session-index encoding (TPM 2.0 Library Part 2, clause 6.6.2): RC + TPM_RC_S +

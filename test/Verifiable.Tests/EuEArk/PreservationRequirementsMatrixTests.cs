@@ -274,9 +274,11 @@ internal sealed class PreservationRequirementsMatrixTests
 
 
     /// <summary>
-    /// The two rows the wave carries an owner flag for cite it where the requirement is: the qualified-service
-    /// requirement whose input procedure belongs to a companion specification this repository has never
-    /// implemented, and the time-stamp-token profile whose conformance is unverified.
+    /// The row the wave still carries an owner flag for cites it where the requirement is: the
+    /// qualified-service requirement whose input procedure belongs to a companion specification this repository
+    /// has never implemented. The other formerly-flagged row — the time-stamp-token profile — is
+    /// <see cref="RequirementCoverageStatus.Tested"/> since the managed-RSA widening closed the last surviving
+    /// flag, and its evidence records that closure.
     /// </summary>
     /// <remarks>
     /// The first row also has to carry the clause-number collision, because the companion specification's
@@ -285,7 +287,7 @@ internal sealed class PreservationRequirementsMatrixTests
     /// conclude the requirement is already satisfied.
     /// </remarks>
     [TestMethod]
-    public void TheTwoBankedGapsAreCitedAtTheirOwnRows()
+    public void TheBankedGapAndTheClosedFlagAreCitedAtTheirOwnRows()
     {
         RequirementMatrixRow suitability = RowFor("OVR-A-02A");
         Assert.AreEqual(RequirementCoverageStatus.OutOfScope, suitability.Status);
@@ -294,7 +296,7 @@ internal sealed class PreservationRequirementsMatrixTests
         Assert.Contains("clause 4.4", suitability.Evidence, StringComparison.Ordinal);
 
         RequirementMatrixRow tokenProfile = RowFor("OVR-9.2-02");
-        Assert.AreEqual(RequirementCoverageStatus.OutOfScope, tokenProfile.Status);
+        Assert.AreEqual(RequirementCoverageStatus.Tested, tokenProfile.Status);
         Assert.Contains("319 422", tokenProfile.Evidence, StringComparison.Ordinal);
         Assert.Contains("owner flag", tokenProfile.Evidence, StringComparison.Ordinal);
     }
@@ -461,7 +463,6 @@ internal sealed class PreservationRequirementsMatrixTests
     /// </remarks>
     private static (string ClauseId, string Requirement, RequirementCoverageStatus Status, string Evidence)[] PreservationServiceRows { get; } =
     [
-        //---- Clause 4 — the preservation model, which states no requirement identifier anywhere ----
         ("511-4.1.2", "[WST] With Storage: the service stores the submitted data objects, the preservation objects derived from them and their evidences for a defined preservation period, delivers evidences on request, and supports update and deletion.",
             RequirementCoverageStatus.Tested, "PreservationVocabularyTests.TheGoalsAndStorageModelsRecogniseTheirOwnMembersOnly (the model is carried as the value WithStorage, and PreservationVocabularyTests.TheOperationNamesAreTheEightTheDocumentDefinesAndTwoOfThemAreGated is the half that gates retrieval and deletion on it)"),
         ("511-4.1.3", "[WTS] With Temporary Storage: the service stores the submitted data objects or their hash values only until the evidence is produced, then deletes them; evidences are produced asynchronously and retrievable during a preservation evidence retention period.",
@@ -510,11 +511,9 @@ internal sealed class PreservationRequirementsMatrixTests
         ("511-4.5", "[WST] The preservation period is the window a with-storage service keeps the preservation objects and their evidences for.",
             RequirementCoverageStatus.ServiceOperational, "PreservationAsicExtensionTests.ThePreservationPeriodRoundTripsAsACalendarDate (the companion standard's container extension carries the period; deciding and honouring it is the provider's)"),
 
-        //---- Clause 5 — risk assessment ----
         ("OVR-5-01", "The requirements of ETSI EN 319 401 clause 5 shall apply.",
             RequirementCoverageStatus.OutOfScope, "Pure delegation to a trust-service-provider policy standard whose text this repository does not hold; its risk-assessment process is an organizational activity with no library surface."),
 
-        //---- Clause 6.1 — the practice statement ----
         ("OVR-6.1-01", "The requirements of ETSI EN 319 401 clause 6.1 shall apply.",
             RequirementCoverageStatus.OutOfScope, "Pure delegation to a trust-service-provider policy standard whose text this repository does not hold."),
         ("OVR-6.1-02", "The provider should list, reference and briefly describe the supported preservation service policies in its practice statement.",
@@ -534,7 +533,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("OVR-6.1-09", "[WST] The provider shall specify what happens to the data at the end of the preservation period.",
             RequirementCoverageStatus.ServiceOperational, $"{NoEnablingPrimitive}: an end-of-period disposition is a data-lifecycle policy."),
 
-        //---- Clause 6.2 — terms and conditions ----
         ("OVR-6.2-01", "The requirements of ETSI EN 319 401 clause 6.2 shall apply.",
             RequirementCoverageStatus.OutOfScope, "Pure delegation to a trust-service-provider policy standard whose text this repository does not hold."),
         ("OVR-6.2-02", "The provider shall list all supported preservation service policies in its terms and conditions.",
@@ -552,11 +550,9 @@ internal sealed class PreservationRequirementsMatrixTests
         ("OVR-6.2-08", "[CONDITIONAL] When only hashes of the objects may be submitted, the provider shall state that the preservation covers only the submitted hashes and that the validity of the existence proof depends on the hash algorithm's strength.",
             RequirementCoverageStatus.ServiceOperational, "PreservationHashOnlySubmissionTests.AnAcceptedSubmissionCarriesTwoGoalTreatmentsAtOnce (the submitted hash is treated as general data, which is what the statement discloses)"),
 
-        //---- Clause 6.3 — information security policy ----
         ("OVR-6.3-01", "The requirements of ETSI EN 319 401 clause 6.3 shall apply.",
             RequirementCoverageStatus.OutOfScope, "Pure delegation to a trust-service-provider policy standard whose text this repository does not hold."),
 
-        //---- Clause 6.4 — preservation profiles ----
         ("OVR-6.4-01", "A preservation service shall support at least one preservation profile.",
             RequirementCoverageStatus.ServiceOperational, "PreservationProfileConformanceTests.AProfileStatingEveryItemIsConformant (the profile a service supports; how many it deploys is its own configuration)"),
         ("OVR-6.4-02", "A preservation service may support more than one preservation profile.",
@@ -586,7 +582,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("OVR-6.4-14", "The evidence and validation policies a profile references may change over time, but all versions shall stay publicly available and it shall be clear which version applied when.",
             RequirementCoverageStatus.ServiceOperational, "PreservationProfileConformanceTests.AnEvidenceNamingAnotherProfileDisagreesWithIt (an evidence carrying its own policy and profile identifiers is what makes which-version-applied answerable from the artifact; publishing every version is the provider's)"),
 
-        //---- Clause 6.5 — the preservation evidence policy ----
         ("OVR-6.5-01", "The preservation evidence policy may be in human-readable form.",
             RequirementCoverageStatus.OutOfScope, "A permission about the form of a document; it constrains nothing this library produces."),
         ("OVR-6.5-02", "[CONDITIONAL] If the policy exists in several formats or languages, the provider shall state which takes precedence.",
@@ -606,7 +601,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("OVR-6.5-09", "The policy shall state whether and how the evidence carries explicit information about a) the applicable preservation service, b) the preservation evidence policy, and c) the preservation profile.",
             RequirementCoverageStatus.Tested, "PreservationEvidenceAttributeTests.TheStandardisedAttributesAndTheHouseSelfDescriptionSayTheSameThreeThings (the three items in the companion standard's own attributes and in this library's convention, read through one code path) and EArkEvidenceSelfDescriptionTests.TheThreeCarriersHoldTheSameOctets"),
 
-        //---- Clause 6.6 — the signature validation policy ----
         ("OVR-6.6-01", "The signature validation policy may be in human-readable form.",
             RequirementCoverageStatus.OutOfScope, "A permission about the form of a document; it constrains nothing this library produces."),
         ("OVR-6.6-02", "[CONDITIONAL] If the policy exists in several formats or languages, the provider shall state which takes precedence.",
@@ -614,7 +608,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("OVR-6.6-03", "[CONDITIONAL] If a signature validation policy is present, it shall state the validation-material selection strategy, including the trust anchors and the validation model.",
             RequirementCoverageStatus.ServiceOperational, "SignatureValidationLongTermBlockTests.PastCertificateValidationPassesAtTheControlTimeAssignedByARevokedIntermediate (the validation model the policy selects is a knob of the shipped engine; the policy document itself has no machine-readable form in this version of the specification)"),
 
-        //---- Clause 6.7 — the subscriber agreement ----
         ("OVR-6.7-01", "The provider shall make a subscriber agreement available that includes acceptance of the terms and conditions.",
             RequirementCoverageStatus.ServiceOperational, $"{NoEnablingPrimitive}: a subscriber agreement is a contract."),
         ("OVR-6.7-02", "[CONDITIONAL] If a notification protocol exists, the agreement shall state whether and how the subscriber is notified.",
@@ -626,7 +619,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("OVR-6.7-05", "[WTS][WST] The agreement shall state who may request the action traces of a preservation object.",
             RequirementCoverageStatus.ServiceOperational, $"{NoEnablingPrimitive}: an access-control policy over the trace-retrieval operation."),
 
-        //---- Clause 7.1 to 7.4, 7.6, 7.7, 7.9, 7.11, 7.13, 7.17 — pure delegation ----
         ("OVR-7.1-01", "The requirements of ETSI EN 319 401 clause 7.1 (internal organization) shall apply.",
             RequirementCoverageStatus.OutOfScope, "Pure delegation to an organizational standard whose text this repository does not hold."),
         ("OVR-7.2-01", "The requirements of ETSI EN 319 401 clause 7.2 (human resources) shall apply.",
@@ -648,7 +640,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("OVR-7.17-01", "The requirements of ETSI EN 319 401 clause 7.14 (supply chain) shall apply.",
             RequirementCoverageStatus.OutOfScope, "Pure delegation to an organizational standard whose text this repository does not hold."),
 
-        //---- Clause 7.5 — cryptographic controls ----
         ("OVR-7.5-01", "The requirements of ETSI EN 319 401 clause 7.5 shall apply.",
             RequirementCoverageStatus.OutOfScope, "Pure delegation to an organizational standard whose text this repository does not hold."),
         ("OVR-7.5-02", "The provider shall ensure the preservation time-stamps come from a state-of-the-art time-stamping authority, which should conform to ETSI EN 319 421.",
@@ -664,25 +655,21 @@ internal sealed class PreservationRequirementsMatrixTests
         ("OVR-7.5-07", "[CONDITIONAL] Backup copies of the signing key shall be protected for integrity and confidentiality by the secure device before leaving it.",
             RequirementCoverageStatus.OutOfScope, "A hardware-module procedure; no library surface."),
 
-        //---- Clause 7.8 — network security ----
         ("OVR-7.8-01", "The requirements of ETSI EN 319 401 clause 7.8 shall apply.",
             RequirementCoverageStatus.OutOfScope, "Pure delegation to an organizational standard whose text this repository does not hold."),
         ("OVR-7.8-02", "[WST] Storage access that changes content shall be routable only through the preservation service.",
             RequirementCoverageStatus.ServiceOperational, $"{NoEnablingPrimitive}: a deployment topology."),
 
-        //---- Clause 7.10 — collection of evidence ----
         ("OVR-7.10-01", "The requirements of ETSI EN 319 401 clause 7.10 shall apply.",
             RequirementCoverageStatus.OutOfScope, "Pure delegation to an organizational standard whose text this repository does not hold."),
         ("OVR-7.10-02", "The preservation service shall implement event logs so that later proofs can be produced.",
             RequirementCoverageStatus.ServiceOperational, "PreservationMessageTests.EachMessageObligesTheMembersItsOwnClauseMakesMandatory (the trace response's Trace is the protocol's own reading of such a log; keeping the log is the provider's)"),
 
-        //---- Clause 7.12 — termination ----
         ("OVR-7.12-01", "The requirements of ETSI EN 319 401 clause 7.12 shall apply.",
             RequirementCoverageStatus.OutOfScope, "Pure delegation to an organizational standard whose text this repository does not hold."),
         ("OVR-7.12-02", "[WST] The termination plan shall cover what happens to the stored preservation objects at termination.",
             RequirementCoverageStatus.ServiceOperational, "PreservationContainerProfileTests.AContainerTheProfileCreatedSatisfiesTheProfile (a container a terminating service can hand over; the plan itself is a document)"),
 
-        //---- Clause 7.14 — cryptographic monitoring ----
         ("OVR-7.14-01", "For every active profile the provider shall monitor the strength of every cryptographic algorithm used with it, and shall update the preservation evidence policy or create a new profile for newly submitted objects when an algorithm or parameter is thought to weaken or a relevant certificate approaches expiry.",
             RequirementCoverageStatus.Tested, "PreservationAugmentationDecisionTests.AnAlgorithmExpiringInsideTheStatedLeadMakesAugmentationDue (the detection trigger; the certificate half is deliberately outside this function and is a fact about a chain the shipped chain machinery answers, which is recorded at the class)"),
         ("OVR-7.14-02", "[WST][CONDITIONAL] When an algorithm or parameter used in an existing preservation evidence weakens, or a relevant certificate approaches expiry, that evidence shall be augmented under a new policy version during the preservation period.",
@@ -690,7 +677,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("OVR-7.14-03", "ETSI TS 119 312 should be considered for the evaluations of OVR-7.14-01 and OVR-7.14-02.",
             RequirementCoverageStatus.Tested, "PreservationAugmentationDecisionTests.MovingATrustedUntilInstantLaterNeverMakesADecisionMoreUrgent (the property that makes the table the sole authority over the decision's urgency)"),
 
-        //---- Clause 7.15 — augmentation of preservation evidences ----
         ("OVR-7.15-01", "[WST] During the preservation period the service shall ensure the evidence can still achieve its preservation goal.",
             RequirementCoverageStatus.Tested, "PreservationAugmentationDecisionTests.AnEvidenceWhoseAlgorithmsAreReliablePastTheLeadIsSound (the ongoing-validity assertion computed at an instant)"),
         ("OVR-7.15-02", "[WTS] During the preservation evidence retention period the service shall ensure the same.",
@@ -698,7 +684,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("OVR-7.15-03", "[WST][WTS] The service shall augment the evidences before they can no longer achieve the goal. NOTE 2 names incorporating time-stamps and validation data for a signature; NOTE 3 names time-stamp renewal and hash-tree renewal for an evidence record.",
             RequirementCoverageStatus.Tested, "EvidenceRecordRenewalTests.EveryPriorChainStillVerifiesAfterEachRenewal (both renewal procedures NOTE 3 names) beside CAdESSignatureAugmentationTests.IncludesTheValidationMaterialBeforeGeneratingTheArchiveTimestamp (NOTE 2's route) and PreservationAugmentationDecisionTests.AnAlgorithmExpiringInsideTheStatedLeadMakesAugmentationDue (the before-it-expires timing, whose lead is required rather than defaulted)"),
 
-        //---- Clause 7.16 — the export-import package ----
         ("OVR-7.16-01", "[WST] The provider shall allow the client, or another authorized preservation service, to request export-import packages containing the preserved data, the evidences and all the information needed to validate the evidences.",
             RequirementCoverageStatus.Tested, "PreservationContainerProfileTests.AContainerTheProfileCreatedSatisfiesTheProfile (a container carrying the data objects and the evidence record over them; the validation material it may carry beside them is CAdESSignatureAugmentationTests.PlacesCertificatesCrlsAndOcspResponsesWhereTableOneRequiresThem)"),
         ("OVR-7.16-02", "[WST] The provider should use a standardized export-import package format.",
@@ -708,7 +693,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("OVR-7.16-04", "[WST] The provider shall keep records of every released package: the date of the event and the selection criteria used.",
             RequirementCoverageStatus.ServiceOperational, $"{NoEnablingPrimitive}: an audit-logging obligation."),
 
-        //---- Clause 8.1 — the preservation protocol ----
         ("PRP-8.1-01", "The channel between the client and the provider shall be secured: the provider shall offer client authentication and shall ensure the confidentiality of the data.",
             RequirementCoverageStatus.ServiceOperational, $"{NoEnablingPrimitive}: transport security is supplied by the caller's transport, which this library deliberately does not take a dependency on."),
         ("PRP-8.1-02", "The preservation protocol of ETSI TS 119 512 should be used.",
@@ -740,7 +724,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("PRP-8.1-15", "[WTS] A with-temporary-storage service shall allow retrieving the asynchronously produced evidences.",
             RequirementCoverageStatus.Tested, "PreservationVocabularyTests.TheOperationNamesAreTheEightTheDocumentDefinesAndTwoOfThemAreGated (the retrieval operation is admitted under this storage model too, which is what the gate states)"),
 
-        //---- Clause 8.2 — the notification protocol ----
         ("OVR-8.2-01", "A preservation service may define a notification protocol to message its subscribers. The NOTE states that how this is done is out of the scope of the document.",
             RequirementCoverageStatus.OutOfScope, "The specification disclaims defining it, and the companion protocol standard's own definitions clause repeats that the notification interface is not addressed."),
         ("OVR-8.2-02", "[CONDITIONAL] When a notification protocol exists and a referenced evidence policy becomes considered insecure, the service shall notify the subscribers using that profile.",
@@ -748,7 +731,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("OVR-8.2-03", "[CONDITIONAL] When a notification protocol exists and referenced elements affecting a profile change, the provider shall notify the subscribers using that profile.",
             RequirementCoverageStatus.ServiceOperational, $"{NoEnablingPrimitive}: the notification channel is out of scope by clause 8.2's own NOTE."),
 
-        //---- Clause 9.1 — storage of preserved data and evidences ----
         ("OVR-9.1-01", "[WOS][WTS] A service without storage or with temporary storage should not store the data after the evidence has been created.",
             RequirementCoverageStatus.ServiceOperational, $"{NoEnablingPrimitive}: a retention decision about a service's own storage."),
         ("OVR-9.1-02", "[WOS][WTS][CONDITIONAL] If such a service does store the data after the evidence has been created, it should state why in its terms and conditions.",
@@ -756,11 +738,10 @@ internal sealed class PreservationRequirementsMatrixTests
         ("OVR-9.1-03", "[WTS] A with-temporary-storage service shall not store an evidence longer than its practice statement states.",
             RequirementCoverageStatus.ServiceOperational, "PreservationProfileConformanceTests.ATemporaryStorageProfileOwesTheRetentionPeriodAndIsOnlyRecommendedTheDuration (the period the profile publishes is the bound; honouring it is the provider's)"),
 
-        //---- Clause 9.2 — preservation evidences ----
         ("OVR-9.2-01", "[CONDITIONAL] If the service uses a time-stamp token, it shall conform to IETF RFC 3161 as updated by IETF RFC 5816.",
             RequirementCoverageStatus.Tested, "TimestampRequestsTests.BuildsAWellFormedRequestTheIndependentReaderDecodesFieldByField (the request) and TimestampAcquisitionTests.VerifiesAGrantedResponseCarryingAMatchingToken (the token, verified field by field by an independent reader)"),
         ("OVR-9.2-02", "[CONDITIONAL] If used, time-stamp tokens should conform to the ETSI EN 319 422 time-stamping protocol and token profile.",
-            RequirementCoverageStatus.OutOfScope, "The profile-conformance check now exists: Timestamp319422RequirementsMatrixTests enumerates every ETSI EN 319 422 V1.1.1 normative statement and the incorporated IETF RFC 3161 and IETF RFC 5816 client deltas, each client row driven by a named test. The row stays OutOfScope rather than Tested because one owner flag survives — the default managed CMS backend verifies RSA time-stamp signatures only as PKCS#1 v1.5 with SHA-256 over 2048-/4096-bit moduli, so a SHA-512-signing or at-least-3000-bit TSU following ETSI TS 119 312 is refused (a KnownDefect row of that matrix, the managed-RSA widening of task #11). This is owner flag 1 of the wave contract, now half-closed: the profile is verified and the residual is a single scoped backend-widening, no longer an unverified client."),
+            RequirementCoverageStatus.Tested, "Timestamp319422RequirementsMatrixTests.RequirementMatrixTest (every ETSI EN 319 422 V1.1.1 normative statement and the incorporated IETF RFC 3161 and IETF RFC 5816 client deltas is a row of that matrix, each client row driven by a named test the gate resolves through reflection; TheMatrixEnumeratesTheWholeProfile pins the enumeration complete. The flag that kept this row OutOfScope — the managed backend refusing a SHA-512-signing or at-least-3000-bit TSU following ETSI TS 119 312 — is closed by the managed-RSA widening, proven at that matrix's rows 4.2.3-sigalg and 4.2.4-keylength, which closes owner flag 1 of the wave contract)"),
         ("OVR-9.2-03", "[CONDITIONAL] If the service uses an evidence record, it shall conform to IETF RFC 4998 or IETF RFC 6283.",
             RequirementCoverageStatus.Tested, "ReferenceArtifactEvidenceRecordTests.ARenewedRecordLinksItsChainsThePositionalWay (the first format, proven against third-party artifacts) and ReferenceArtifactXmlEvidenceRecordTests.ARecordOfTheCorpusProvesADataObjectOfTheCorpus (the second, validation-side; its creation side stays an owner flag from the previous wave)"),
         ("OVR-9.2-04", "[CONDITIONAL] If the preservation evidence policy cannot be identified from the context, it should be included directly in the preservation evidence.",
@@ -768,7 +749,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("OVR-9.2-05", "[CONDITIONAL] If the evidence policy is embedded in the evidence, it should be cryptographically protected.",
             RequirementCoverageStatus.Tested, "EArkEvidenceSelfDescriptionTests.AHashTreeRenewalIsWhatProtectsAnEvidenceRecordsSelfDescription (the answer is computed from the artifact rather than taken from the caller) and EArkEvidencePlacementTests.AnUnprotectedSelfDescriptionLeavesTheProtectionRowUnmet"),
 
-        //---- Clause 9.3 — preservation of digital signatures ----
         ("OVR-9.3-01", "[PDS][PDS+PGD][CONDITIONAL] If the validation data is not submitted by the client, the service shall make its best effort to collect and verify it per the signature validation policy.",
             RequirementCoverageStatus.Tested, "CAdESSignatureAugmentationTests.PlacesCertificatesCrlsAndOcspResponsesWhereTableOneRequiresThem (the collect-and-embed path; the best-effort qualifier and the policy selection are the provider's configuration)"),
         ("OVR-9.3-02", "[PDS][PDS+PGD][CONDITIONAL] If the validation data is submitted, the service should verify it against the policy and collect its own when what was submitted is inappropriate.",
@@ -786,7 +766,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("OVR-9.3-08", "[PDS][PDS+PGD][CONDITIONAL] The service shall verify that a hash-only submission's hash-function identifier is on the profile's accepted list and that each hash value's length matches the stated identifier.",
             RequirementCoverageStatus.Tested, "PreservationHashOnlySubmissionTests.AHashFunctionTheProfileDoesNotListIsRefused (the first check) and PreservationHashOnlySubmissionTests.AHashValueOfTheWrongLengthIsRefused (the second, with the offending index named)"),
 
-        //---- Annex A — the qualified preservation service ----
         ("OVR-A-01", "[PDS][PDS+PGD] All the untagged, [PDS]- and [PDS+PGD]-tagged requirements of clauses 5 to 9 shall apply to a qualified preservation service.",
             RequirementCoverageStatus.OutOfScope, "A meta-rule selecting which of the requirements above bind rather than a capability of its own. NOTE 1's exclusion of the [PGD]- and [AUG]-tagged rows is why the goal tags are carried in every row of this section."),
         ("OVR-A-02", "[PDS][PDS+PGD] The service shall preserve all the information needed to check the qualification status of the signature or seal that would not otherwise remain publicly available until the end of the preservation period.",
@@ -798,7 +777,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("OVR-A-04", "The service shall have one service digital identifier, per ETSI TS 119 612 clause 5.5.3, uniquely identifying it within a member state trusted list.",
             RequirementCoverageStatus.ServiceOperational, "TrustedListQualificationTests.TokenIssuerQualificationFollowsServiceStatus (a service's own trusted-list entry and its digital identity are modelled the same way every other party's are; being listed is the provider's own registration act)"),
 
-        //---- The informative annexes, whose content is load-bearing for the audit trail ----
         ("511-B-article-34", "Annex B maps Regulation (EU) 910/2014 Article 34.1 — extending the trustworthiness of a qualified signature beyond the technological validity period — onto clauses 7.14, 7.15, 9.2, 9.3 and OVR-A-02 of this document.",
             RequirementCoverageStatus.OutOfScope, "An informative mapping table rather than an obligation. It is recorded because it is independent confirmation that the clauses this matrix marks as the library-capability core are the legally load-bearing ones."),
         ("511-C.3", "Annex C.3 distinguishes a digital archival service, which demonstrates a proof of existence by audit alone, from a preservation service, which demonstrates it by audit AND digital signature techniques.",
@@ -810,7 +788,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("511-D.3", "Annex D.3: the countermeasure to signing-key-revocation risk is to capture and protect the revocation information by a proof of existence alongside the signature.",
             RequirementCoverageStatus.Tested, "CAdESSignatureAugmentationTests.AddsAnArchiveTimestampTheIndependentOracleAndTheCoverageComputationBothAgreeWith (the signature and its revocation material jointly time-stamped) beside OcspRevocationCheckerTests.TheRetainingCheckKeepsTheVerifiedResponseTheStatusWasDecidedFrom (the capture of the response the status was decided from)"),
 
-        //---- Term consistency against the archival reference model, clause 1.4 item 4 ----
         ("511-oais-1.4-1", "Term consistency: the archival reference model's clause 1.4 item 1 asks a conforming archive to be able to map its information onto Content Information, the five Preservation Description Information categories, Packaging Information and Descriptive Information. This document uses none of that vocabulary.",
             RequirementCoverageStatus.OutOfScope, "A grep of the cached text finds zero occurrences of Designated Community, Fixity, Provenance, Content Information and Representation Information. FINDING, non-defect: the document does not claim conformance to the reference model — it cites it only as an informative reference and as one of the audit criteria an archival service can be measured against — so clause 1.4 item 4's binding rule is not engaged and there is no redefinition. What follows is that this document discharges none of the mapping obligation; the archival-packaging specifications of the sibling matrix section are where that mapping lives."),
         ("511-oais-1.4-4-poc", "Term consistency: clause 3.1's EXAMPLE 2 states that an OAIS Submission Information Package is a Preservation Object Container. The reference model defines a Submission Information Package as an Information Package delivered by a producer for use in constructing or updating archival packages, carrying Content Information and Preservation Description Information.",
@@ -832,11 +809,9 @@ internal sealed class PreservationRequirementsMatrixTests
     /// </remarks>
     private static (string ClauseId, string Requirement, RequirementCoverageStatus Status, string Evidence)[] PreservationProtocolRows { get; } =
     [
-        //---- Clause 5.2 — which operations a conformant service owes ----
         ("512-5.2-1", "The preservation service shall support the RetrieveInfo operation. It is the one universally mandatory operation across all four schemes of Annex F.",
             RequirementCoverageStatus.Tested, "PreservationVocabularyTests.TheOperationNamesAreTheEightTheDocumentDefinesAndTwoOfThemAreGated"),
 
-        //---- Clause 5.3.1 — the base Request and Response components ----
         ("512-5.3.1.1.1-1", "The optional OptionalInputs element, if present, shall contain a sub-component defined by the external base specification.",
             RequirementCoverageStatus.Tested, "PreservationParameterNameTests.TheRequestBaseComponentStatesTheNamesTheOperationTablesRestate (the element is carried verbatim as octets, because the base specification's own text is not held by this repository and nothing is invented for it)"),
         ("512-5.3.1.1.1-2a", "The optional RequestID element, if present, shall contain one instance of a string.",
@@ -854,7 +829,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("512-5.3.1-json-base", "The Request and Response components are base types only and are never JSON instances; every concrete operation's JSON object restates the base members directly rather than referencing a shared base schema.",
             RequirementCoverageStatus.Tested, "PreservationParameterNameTests.TheBaseNamesAreRestatedExactlyWhereTheTablesRestateThem (the eleven tables that restate the base names and the four that do not)"),
 
-        //---- Clause 5.3.2 — RetrieveInfo ----
         ("512-5.3.2.1.1-1", "The RetrieveInfo request shall extend the Request component and shall inherit its sub-components.",
             RequirementCoverageStatus.Tested, "PreservationMessageTests.EveryMessageKindIsRealisedByExactlyOneMessageType"),
         ("512-5.3.2.1.1-2", "The optional Profile element may be present and shall, if present, contain a uniform resource identifier naming the profile information is retrieved for.",
@@ -868,7 +842,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("512-5.3.2.2-errors", "The result codes RetrieveInfo admits: noPermission, internalError, parameterError and notSupported.",
             RequirementCoverageStatus.Tested, "PreservationVocabularyTests.EachOperationAdmitsExactlyTheCodesItsOwnClauseEnumerates"),
 
-        //---- Clause 5.3.3 — PreservePO ----
         ("512-5.3.3.1.1-1", "The PreservePO request shall extend the Request component and shall inherit its sub-components.",
             RequirementCoverageStatus.Tested, "PreservationMessageTests.EveryMessageKindIsRealisedByExactlyOneMessageType"),
         ("512-5.3.3.1.1-2", "The Profile element shall contain one instance of a uniform resource identifier naming the operational profile used for the preservation. Unlike the discovery operation's filter of the same element name, it is mandatory here.",
@@ -884,7 +857,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("512-5.3.3.2-errors", "The result codes PreservePO admits: noPermission, internalError, parameterError, transferError, noSpaceError, notSupported, unknownPOFormat, POFormatError and externalServiceUnavailable, plus the warning lowSpace.",
             RequirementCoverageStatus.Tested, "PreservationVocabularyTests.TheOperationSpecificCodesAreStatedWhereTheirClausesStateThem (this operation is the first to carry a warning beside its errors, and PreservationVocabularyTests.EveryErrorCodeRoundTripsThroughItsOutcomeAndNothingElseReadsAsSuccess asserts a warning never reads as success)"),
 
-        //---- Clause 5.3.4 — RetrievePO ----
         ("512-5.3.4.1.1-gate", "[WST][WTS] The RetrievePO operation may only be provided in preservation schemes with storage or with temporary storage.",
             RequirementCoverageStatus.Tested, "PreservationVocabularyTests.TheOperationNamesAreTheEightTheDocumentDefinesAndTwoOfThemAreGated"),
         ("512-5.3.4.1.1-1", "The POID element shall contain one instance of a string addressing preservation objects deposited previously through PreservePO.",
@@ -908,7 +880,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("512-5.3.4.2-errors", "The result codes RetrievePO admits: noPermission, internalError, parameterError, notSupported, unknownPOFormat, unknownEvidenceFormat, unknownPOID and unknownVersionID, plus the warning requestOnlyPartlySuccessful.",
             RequirementCoverageStatus.Tested, "PreservationVocabularyTests.EachOperationAdmitsExactlyTheCodesItsOwnClauseEnumerates"),
 
-        //---- Clause 5.3.5 — DeletePO ----
         ("512-5.3.5.1.1-gate", "[WST] The DeletePO request shall only be supported in the case of a preservation scheme with storage.",
             RequirementCoverageStatus.Tested, "PreservationVocabularyTests.TheOperationNamesAreTheEightTheDocumentDefinesAndTwoOfThemAreGated"),
         ("512-5.3.5.1.1-1", "The POID element shall contain one instance of a string and shall be used for addressing preservation objects deposited previously.",
@@ -924,7 +895,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("512-5.3.5.2-errors", "The result codes DeletePO admits: noPermission, internalError, parameterError, notSupported, unknownPOID and unknownMode.",
             RequirementCoverageStatus.Tested, "PreservationVocabularyTests.EachOperationAdmitsExactlyTheCodesItsOwnClauseEnumerates"),
 
-        //---- Clause 5.3.6 — UpdatePOC ----
         ("512-5.3.6.1.1-1", "The UpdatePOC request shall extend the Request component and shall inherit its sub-components.",
             RequirementCoverageStatus.Tested, "PreservationMessageTests.EveryMessageKindIsRealisedByExactlyOneMessageType"),
         ("512-5.3.6.1-strategies", "Two update strategies exist: a simple one where several deltas are treated as plain additions, and a sophisticated one where a single delta is a full difference specification. A given container format may support either or both.",
@@ -942,7 +912,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("512-5.3.6.2-errors", "The result codes UpdatePOC admits: noPermission, internalError, parameterError, transferError, notSupported, noSpaceError, unknownPOID, unknownDeltaPOCType and DeltaPOCInternalProblem, plus the warning lowSpace.",
             RequirementCoverageStatus.Tested, "PreservationVocabularyTests.TheOperationSpecificCodesAreStatedWhereTheirClausesStateThem"),
 
-        //---- Clause 5.3.7 — RetrieveTrace ----
         ("512-5.3.7.1.1-1", "The RetrieveTrace request shall extend the Request component and shall inherit its sub-components.",
             RequirementCoverageStatus.Tested, "PreservationMessageTests.EveryMessageKindIsRealisedByExactlyOneMessageType"),
         ("512-5.3.7.1.1-2", "The POID element shall contain one instance of a string, which shall identify the submitted data objects an audit trail is requested for.",
@@ -954,7 +923,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("512-5.3.7.2-errors", "The result codes RetrieveTrace admits: noPermission, internalError, parameterError, notSupported and unknownPOID.",
             RequirementCoverageStatus.Tested, "PreservationVocabularyTests.EachOperationAdmitsExactlyTheCodesItsOwnClauseEnumerates"),
 
-        //---- Clause 5.3.8 — ValidateEvidence ----
         ("512-5.3.8.1.1-1", "The ValidateEvidence request shall extend the Request component and shall inherit its sub-components.",
             RequirementCoverageStatus.Tested, "PreservationMessageTests.EveryMessageKindIsRealisedByExactlyOneMessageType"),
         ("512-5.3.8.1.1-2", "The Evidence element shall satisfy the requirements of the Evidence component. The semantics prose makes it mandatory while the reproduced schema fragment marks it optional.",
@@ -970,7 +938,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("512-5.3.8.2-errors", "The result codes ValidateEvidence admits: noPermission, internalError, parameterError and notSupported.",
             RequirementCoverageStatus.Tested, "PreservationVocabularyTests.EachOperationAdmitsExactlyTheCodesItsOwnClauseEnumerates"),
 
-        //---- Clause 5.3.9 — Search ----
         ("512-5.3.9.1.1-1", "The Search request shall extend the Request component and shall inherit its sub-components.",
             RequirementCoverageStatus.Tested, "PreservationMessageTests.EveryMessageKindIsRealisedByExactlyOneMessageType"),
         ("512-5.3.9.1.1-2", "The optional Filter element, if present, shall contain one instance of a string structured according to the query language the profile's own operation catalogue describes. The semantics prose calls it optional while the reproduced schema fragment marks it mandatory.",
@@ -980,11 +947,9 @@ internal sealed class PreservationRequirementsMatrixTests
         ("512-5.3.9.2-errors", "The result codes Search admits: noPermission, internalError, parameterError and notSupported. The clause introduces them under a heading naming the trace response instead of its own.",
             RequirementCoverageStatus.Tested, "PreservationVocabularyTests.EachOperationAdmitsExactlyTheCodesItsOwnClauseEnumerates (the list is read as this operation's own, the misattributed heading being copy-paste residue)"),
 
-        //---- Clause 5.4.2 — DeletionMode ----
         ("512-5.4.2.1-1", "The value element shall contain one instance of a string limited to OnlySubDOs or SubDOsAndEvidence.",
             RequirementCoverageStatus.Tested, "PreservationVocabularyTests.TheDeletionModesSubjectsAndVersionSentinelRecogniseTheirOwnMembersOnly (the table maps this element to a member name although the JSON type the same clause reproduces is a bare string enumeration with no properties, which is transcribed rather than normalised)"),
 
-        //---- Clause 5.4.3 — Event ----
         ("512-5.4.3.1-1", "The Time element is mandatory and carries the instant of the event.",
             RequirementCoverageStatus.Tested, "PreservationParameterNameTests.EverySharedComponentStatesTheNamesItsOwnTableLists"),
         ("512-5.4.3.1-2a", "The Subject element is mandatory and carries a string.",
@@ -998,7 +963,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("512-5.4.3.1-5", "The optional Detail element carries free text.",
             RequirementCoverageStatus.Tested, "PreservationParameterNameTests.EverySharedComponentStatesTheNamesItsOwnTableLists"),
 
-        //---- Clause 5.4.4 — Evidence ----
         ("512-5.4.4.1-1", "The Evidence component shall extend the PO component, inheriting the mandatory sub-component carrying the value and the FormatId sub-component, which is mandatory in this case.",
             RequirementCoverageStatus.Tested, "PreservationMessageTests.TheEvidenceComponentMakesTheFormatIdentifierMandatoryAndTheObjectComponentDoesNot (the one member the wire's inheritance tightens, restated on the subtype rather than left to a nullable base property)"),
         ("512-5.4.4.1-2", "One instance of either base-64-encoded binary data or XML data, carrying the value of the preservation evidence.",
@@ -1010,7 +974,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("512-5.4.4.1-5", "The optional VersionID element, if present, shall contain one instance of a string identifying the version of the preservation object.",
             RequirementCoverageStatus.Tested, "PreservationParameterNameTests.ThreeElementNamesMapToTwoDifferentMemberNamesEach (this element's member name here is not the one the retrieval tables give it, which is the sharpest proof that the member names are not derivable)"),
 
-        //---- Clause 5.4.5 — PO ----
         ("512-5.4.5.1-1", "One instance of a sub-component carrying the value of the preservation object: either base-64-encoded binary data or XML data.",
             RequirementCoverageStatus.Tested, "PreservationSeamTests.APayloadWithNoStatedContentFormIsRefused"),
         ("512-5.4.5.1-2", "The optional FormatId element, if present, shall contain a uniform resource identifier; it shall be present when the object is an evidence, a specific submission data object or an additional output format needing treatment beyond base-64 decoding.",
@@ -1026,11 +989,9 @@ internal sealed class PreservationRequirementsMatrixTests
         ("512-5.4.5.1-6", "The optional RelatedObjects element, if present, shall contain unique identifier references. The prose says one instance while the schema type is a plural reference list.",
             RequirementCoverageStatus.Tested, "PreservationMessageTests.ARepeatableElementDefaultsToNoneRatherThanToNothing (the plural reading is taken, because the singular one would silently drop references on a round trip through a multi-target container)"),
 
-        //---- Clause 5.4.6 — PreservationStorageModel ----
         ("512-5.4.6.1-1", "The storage model is a closed enumeration of WithStorage, WithTemporaryStorage and WithoutStorage. It is the discriminator the operation availability gates read.",
             RequirementCoverageStatus.Tested, "PreservationVocabularyTests.TheGoalsAndStorageModelsRecogniseTheirOwnMembersOnly"),
 
-        //---- Clause 5.4.7 — Profile ----
         ("512-5.4.7.1-1", "The ProfileIdentifier element is a mandatory, unique uniform resource identifier.",
             RequirementCoverageStatus.Tested, "PreservationProfileConformanceTests.EveryObligationTakenAwayMakesTheProfileNonConformant"),
         ("512-5.4.7.1-2", "The Operation element is present one or more times, one per supported operation, each stating its input formats, its supported optional inputs and its output formats.",
@@ -1060,7 +1021,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("512-5.4.7-table21", "Table 21 maps every Profile sub-element to its JSON member name and to the requirement identifier of the companion policy specification's clause 6.4.",
             RequirementCoverageStatus.KnownDefect, "PreservationParameterNameTests.EverySharedComponentStatesTheNamesItsOwnTableLists (the member names are transcribed letter for letter from this table). THE DEFECT IS THE SOURCE TABLE'S: its last two correspondences appear interchanged — it maps the expected evidence duration to OVR-6.4-05 and the retention period to OVR-6.4-06, while the companion specification's clause 6.4 states those two requirements the other way round. The library follows the companion specification's own texts, and two stages reading it independently reached that reading; the interchange is transcribed verbatim in the doc comments beside the members."),
 
-        //---- Clause 5.4.8 to 5.4.10 — the remaining shared components ----
         ("512-5.4.8.1-1", "The Status component is a closed enumeration; the reproduced schema lists active and inactive while the semantics prose gives a third value, all, meaning both are returned.",
             RequirementCoverageStatus.Tested, "PreservationVocabularyTests.TheStatusVocabularyCarriesTheProseOnlyThirdValueAndKeepsBothReadingsApart (three values for the discovery filter, two for a profile's own status, kept apart so an implementer following the schema alone cannot refuse a specification-valid request)"),
         ("512-5.4.9.1-1", "The SubjectOfRetrieval component is a closed enumeration of PO, Evidence, POwithEmbeddedEvidence and POwithDetachedEvidence.",
@@ -1068,7 +1028,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("512-5.4.10.1-1", "The Trace component carries zero or more instances of the Event element.",
             RequirementCoverageStatus.Tested, "PreservationParameterNameTests.EverySharedComponentStatesTheNamesItsOwnTableLists"),
 
-        //---- Clause 5.5 — the container extensions ----
         ("512-5.5.2.1", "The ContainerID extension carries a mandatory POID and an optional VersionID, and should not be critical.",
             RequirementCoverageStatus.Tested, "PreservationAsicExtensionTests.TheContainerIdentifierRoundTripsThroughTheExtensionModel beside PreservationAsicExtensionTests.EachPayloadCarriesTheCriticalityItsOwnClauseRecommends"),
         ("512-5.5.2.1.1-1", "The POID element shall be present and shall indicate the preservation object identifier of the preservation object container.",
@@ -1098,7 +1057,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("512-5.5-criticality", "Every criticality sub-clause is a recommendation rather than an obligation, so a departure from it is reported and never refused; what fails closed is an unrecognised critical extension.",
             RequirementCoverageStatus.Tested, "PreservationAsicExtensionTests.ADepartureFromTheRecommendedCriticalityIsCarriedAndReported beside PreservationContainerProfileTests.ACriticalExtensionThePolicyDoesNotRecogniseStopsTheProfile"),
 
-        //---- Clause 5.6 — DigestList ----
         ("512-5.6.1.1-intro", "It is only admissible to submit a single PO component carrying a single DigestList component within one PreservePO call.",
             RequirementCoverageStatus.Tested, "PreservationDigestListTests.ADigestListOwnsWhatItCarries (the component and its ownership; the one-per-call bound is a rule on the submission request rather than on the component's own schema and is documented at the component)"),
         ("512-5.6.1.1-1", "The DigestMethod element shall contain one instance of a string specifying the digest algorithm as a uniform resource identifier carrying an object identifier per IETF RFC 3061.",
@@ -1110,7 +1068,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("512-5.6.1.1-note", "Submitting a digest method, a list of digest values and an evidence record allows a hash-tree renewal of the provided record.",
             RequirementCoverageStatus.KnownDefect, "PreservationDigestListTests.ASubmissionCarryingAnEvidenceRecordIsRenewedAndTheRenewalVerifies (the renewal runs and is recomputed from the clause text by an independent oracle) — but the privacy-preserving half, where the submitter supplies ONLY the hashes, cannot be served: the shipped hash-tree renewal takes the data objects and hashes them itself, and the bridge answers a documented refusal rather than doing something else, as PreservationDigestListTests.AHashOnlySubmissionIsRefusedWithTheReasonRatherThanServedWrongly asserts. Widening the renewal group with a hash-stated alternative is an owner-flagged follow-up on a previous wave's surface."),
 
-        //---- Clause 6 — requirements on preservation object data formats and containers ----
         ("512-6.1-1", "An admissible preservation object data format shall be documented in a permanent, readily available public specification, in enough detail for independent implementations to interoperate.",
             RequirementCoverageStatus.OutOfScope, "A governance requirement on a format's SPECIFICATION rather than on code."),
         ("512-6.1-2", "The format of a preservation object shall be identified by a uniform resource identifier.",
@@ -1134,7 +1091,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("512-7-scheme-requirements", "Clause 7's eight requirements bind a preservation scheme's own specification document: permanent documentation, identification by a uniform resource identifier, declaration of the storage model, of the goals and of the mandatory and optional operations, description of the evidence generation, validation and augmentation processes, and optional format recommendations.",
             RequirementCoverageStatus.OutOfScope, "These bind a scheme SPECIFICATION's completeness rather than a library. The four schemes of Annex F are this document's own demonstration against them, and their identifiers are carried by PreservationVocabularyTests.ThreeOfTheFourSchemesStateTwoIdentifiersAndTheLibraryWritesTheConsistentOne."),
 
-        //---- The two bindings and their differences ----
         ("512-binding-names", "Every JSON member name is an abbreviation of its XML element name given by a per-component table; no naming convention is stated and none reproduces the pairs.",
             RequirementCoverageStatus.Tested, "PreservationParameterNameTests.NoMechanicalDerivationReproducesTheMemberNames (three candidate derivations, each compared case-insensitively so the finding is about spelling rather than capitalisation, and each shown to disagree)"),
         ("512-binding-choice", "The XML choice between binary data and markup data collapses to binary data only in the JSON binding, which the reproduced schema fragments show by omitting the second alternative rather than by stating a rule.",
@@ -1148,7 +1104,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("512-binding-external-types", "The Request, Response, Result, OptionalInputs, OptionalOutputs, Operation, Policy, Format, internationalized-string and metadata-extension base types are defined by reference to external base specifications rather than by this document.",
             RequirementCoverageStatus.OutOfScope, "Those texts are not cached in this repository, so nothing is invented for them: the sub-components this document's own prose names are modelled and everything else rides verbatim as octets or as text. An acknowledged gap rather than a modelled one, recorded as an owner flag by the stage that shipped the vocabulary."),
 
-        //---- Annex A — the registered formats ----
         ("512-A.1", "Annex A.1 registers the submission data object formats: the three signature formats, the extended container, the markup-based archival package, and the DigestList.",
             RequirementCoverageStatus.Tested, "PreservationVocabularyTests.TheFormatIdentifiersAreTheOnesAnnexARegistersAndTheContainerProfilesDifferByCase beside PreservationDigestListTests.TheSubmissionFormatIdentifierIsTheOneItsClauseRegisters"),
         ("512-A.2", "Annex A.2 registers the preservation evidence formats: the time-stamp token, the two evidence record formats, and the three archive-time-stamp attributes of the signature families.",
@@ -1168,7 +1123,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("512-E", "Annex E walks through container versioning with a worked example, giving the update operation's delta semantics.",
             RequirementCoverageStatus.Tested, "PreservationMessageTests.ADeltaIsAPreservationObjectUnderAnotherElementName (informative prose, whose only normative consequence is the shape of the delta the update request carries)"),
 
-        //---- Annex F — the four schemes ----
         ("512-F.1", "Scheme F.1: the signature and general-data goals with augmentation, with storage, using evidence records.",
             RequirementCoverageStatus.Tested, "PreservationVocabularyTests.ThreeOfTheFourSchemesStateTwoIdentifiersAndTheLibraryWritesTheConsistentOne"),
         ("512-F.2", "Scheme F.2: the general-data goal, with temporary storage, using evidence records.",
@@ -1180,11 +1134,9 @@ internal sealed class PreservationRequirementsMatrixTests
         ("512-F-identifiers", "Three of the four schemes state two different identifiers for themselves: the identifier clause and the profile-requirements clause disagree for F.1, F.3 and F.4.",
             RequirementCoverageStatus.KnownDefect, "PreservationVocabularyTests.ThreeOfTheFourSchemesStateTwoIdentifiersAndTheLibraryWritesTheConsistentOne (THE DEFECT IS THE SOURCE DOCUMENT'S, and it is threefold rather than the single occurrence the preflight leg found: in all three disagreements the identifier clause's value agrees with the goals the scheme's own goals clause lists while the restatement contradicts them, which is the evidence for writing the first and recognising the second; both the rule and its evidence are under test)"),
 
-        //---- Annex G — the evidence exchange structure ----
         ("512-G", "Annex G gives an evidence-exchange data structure carrying full, non-reduced hash trees, for migrating or backing up a with-storage service's evidences.",
             RequirementCoverageStatus.OutOfScope, "Informative, and outside the contract's Scope list for this wave. It is the only stated route for moving full hash trees between providers, so it is recorded as a candidate rather than dropped; the reduced trees the shipped evidence records carry are unaffected."),
 
-        //---- Annexes H and I — the preservation evidence attributes ----
         ("512-H.1", "The three attributes are inserted into the preservation evidence itself: as an unsigned attribute of a signature before its archive time-stamp is applied, or as an attribute of an evidence record's archive time-stamp before the next chain covers it.",
             RequirementCoverageStatus.Tested, "PreservationEvidenceAttributeTests.ARenewalCarriesTheAttributesForwardAndProtectsThem (the chain carrying them is asserted carried forward octet for octet, which is what makes them protected) beside PreservationEvidenceAttributeTests.ASignedDataObjectCarriesTheAttributesAsUnsignedAttributes"),
         ("512-H.2", "The preservation-service-identifier attribute is a single string under its own object identifier.",
@@ -1198,7 +1150,6 @@ internal sealed class PreservationRequirementsMatrixTests
         ("512-H-versus-house", "The three attributes are the standardised spelling of the three items the companion policy specification's OVR-6.5-09 lists, and the same three this library's own self-description convention carries.",
             RequirementCoverageStatus.Tested, "PreservationEvidenceAttributeTests.TheStandardisedAttributesAndTheHouseSelfDescriptionSayTheSameThreeThings (a bridge in both directions, so a package may carry the specification's own attributes and still be read by the shipped placement rules). Which spelling a package this library writes should state is an owner decision recorded as a flag; nothing under the house convention was changed pending it."),
 
-        //---- Term consistency against the archival reference model, clause 1.4 item 4 ----
         ("512-oais-1.4-4-xaip", "Term consistency: the markup-based archival package of Annexes A.1.5 and A.3.2 is declared to be based on the archival reference model, and its clause headings spell it XML-based Archival Information Package — while the abbreviations table and the container EXAMPLE of clause 6.2 spell the same acronym XML-based Archive Information Package.",
             RequirementCoverageStatus.OutOfScope, "FINDING, row-level: the reference model's own term is Archival Information Package, and clause 1.4 item 4 obliges a document claiming conformance to it to use its terms in the same manner. Annex A.3.2 makes that claim explicitly by deriving the package from the reference model, so the two Archive spellings inside the same document are a departure from the term the model defines. Both spellings are in the cached text and neither is a conversion artefact. It changes nothing this library builds — the format is out of this wave — and is recorded so a later wave implementing it does not treat the two spellings as two things. The same document repeats the submission-package-is-a-container example recorded at row 511-oais-1.4-4-poc."),
     ];

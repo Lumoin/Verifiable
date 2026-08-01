@@ -453,9 +453,7 @@ internal sealed class EArkCapstoneFirewalledFlowTests
 
         byte[] archive = package.ArchiveBytes();
 
-        //---- Leg 3: "Verifiable creates → independent oracle verifies". ----
         AssertIndependentOraclesAccept(archive, package);
-        //---- end leg 3 ----
 
         return new EArkCapstoneWireMessage
         {

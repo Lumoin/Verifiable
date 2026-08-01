@@ -748,7 +748,6 @@ internal sealed class AsicRequirementsMatrixTests
     /// </summary>
     private static (string ClauseId, string Requirement, RequirementCoverageStatus Status, string Evidence)[] RowData { get; } =
     [
-        //---- EN 319 162-1 clause 4.2 — general requirements on every ASiC container ----
         ("p1-4.2-1", "The container format shall comply with the ZIP specification.",
             RequirementCoverageStatus.Tested, "AsicZipAuthoringTests.TheCentralDirectoryRepeatsEveryLocalFileHeader (the independent raw-ZIP oracle walks the end record, the central directory and every local file header of what this library wrote)"),
         ("p1-4.2-2a", "ASiC containers shall not use the multiple volumes split feature.",
@@ -760,7 +759,6 @@ internal sealed class AsicRequirementsMatrixTests
         ("p1-4.2-3", "At least one container type specified in clause 4.3 or 4.4 shall be supported.",
             RequirementCoverageStatus.Tested, "AsicContainerCreationTests.SimpleCAdESContainerIsTheArchiveAnnexA1Describes (ASiC-S; ASiC-E is ExtendedCAdESContainerIsTheShapeClause4442Describes)"),
 
-        //---- EN 319 162-1 clause 4.3.2 — general requirements for ASiC-S ----
         ("p1-4.3.2-1", "The ASiC-S container shall comply with clause 4.2 and with the file structure of clause 4.3.3.2.",
             RequirementCoverageStatus.Tested, "AsicContainerCreationTests.SimpleCAdESContainerIsTheArchiveAnnexA1Describes"),
         ("p1-4.3.2-2", "The signed file object may itself be a container, for example ZIP, OCF, ODF or another ASiC.",
@@ -768,7 +766,6 @@ internal sealed class AsicRequirementsMatrixTests
         ("p1-4.3.2-3", "When signing a ZIP container, the per-file comment field may state each contained file's media type as \"mimetype=\" followed by it.",
             RequirementCoverageStatus.OutOfScope, "The comment this clause admits belongs to the FOREIGN archive being signed, not to the ASiC container: it is that archive's own metadata, written by whoever produced it. This library writes ASiC containers and exposes the \"mimetype=\" convention at the container level only (AsicWellKnown.MediaTypeComment/MediaTypeFromComment, clause 4.3.3.1 item 3); AsicZipEntrySource carries no per-entry comment. Stage-10 scope line."),
 
-        //---- EN 319 162-1 clause 4.3.3.1 — media type identification, ASiC-S ----
         ("p1-4.3.3.1-1a", "The mimetype file content shall be \"application/vnd.etsi.asic-s+zip\" when the signed file object has no media type of its own.",
             RequirementCoverageStatus.Tested, "AsicContainerCreationTests.SimpleContainerStatesTheMediaTypeClause4331Item1Selects"),
         ("p1-4.3.3.1-1b", "The mimetype file content shall be the media type associated to the signed file object in all other cases.",
@@ -784,7 +781,6 @@ internal sealed class AsicRequirementsMatrixTests
         ("p1-4.3.3.1-3", "The ZIP file comment field may contain \"mimetype=\" followed by the original media type of the signed file object.",
             RequirementCoverageStatus.Tested, "AsicContainerCreationTests.TheMediaTypeArchiveCommentIsWrittenOnlyWhenAskedFor (absent by default, written when the caller states the departure)"),
 
-        //---- EN 319 162-1 clause 4.3.3.2 — contents of the container, ASiC-S ----
         ("p1-4.3.3.2-1-may", "An ASiC-S container may contain a mimetype file.",
             RequirementCoverageStatus.Tested, "AsicZipAuthoringTests.AContainerWithoutAMediaTypeCarriesNoMimetypeEntry (and AsicZipReadingTests.AContainerWithNoMimetypeEntryReadsAndStatesNoMediaType)"),
         ("p1-4.3.3.2-1-root", "The mimetype file shall be at the root level.",
@@ -824,7 +820,6 @@ internal sealed class AsicRequirementsMatrixTests
         ("p1-4.3.3.2-5c", "The META-INF folder may additionally contain other application specific information.",
             RequirementCoverageStatus.OutOfScope, "Creation admits data objects and the metadata file it writes itself; a caller-supplied extra file object is not a creation input this wave states. Stage-10 scope line, and the same boundary as clause 4.4.3.2 item 5 d) below."),
 
-        //---- EN 319 162-1 clause 4.3.4 — long term availability and integrity of ASiC-S ----
         ("p1-4.3.4-intro", "Long term availability and integrity of ASiC-S shall be achieved for the different container types as the items below state.",
             RequirementCoverageStatus.Tested, "AsicContainerAugmentationTests.ASimpleContainerResolvesItsDetachedContentFromTheSingleDataFile"),
         ("p1-4.3.4-1", "For ASiC-S containers with CAdES (or XAdES) signatures, the attributes specified in the signature specifications shall be used for long term availability and integrity.",
@@ -836,13 +831,11 @@ internal sealed class AsicRequirementsMatrixTests
         ("p1-4.3.4-3", "For ASiC-S containers with an Evidence Record, the internal mechanism of RFC 4998 and RFC 6283 shall be used.",
             RequirementCoverageStatus.Tested, "EvidenceRecordRenewalTests.EveryPriorChainStillVerifiesAfterEachRenewal (the RFC 4998 renewal mechanism; XmlEvidenceRecordsTests.BothRenewalsInSuccessionStillProveTheDataObject is the RFC 6283 half)"),
 
-        //---- EN 319 162-1 clause 4.4.2 — general requirements of ASiC-E ----
         ("p1-4.4.2-1", "ASiC-E containers shall comply with clause 4.2 items 1) and 2) and with the file structure of clause 4.4.3.2 or 4.4.4.2.",
             RequirementCoverageStatus.Tested, "AsicContainerCreationTests.ExtendedCAdESContainerIsTheShapeClause4442Describes"),
         ("p1-4.4.2-2", "One or more data files digitally signed or time asserted shall be present in any folder structure outside the root META-INF folder.",
             RequirementCoverageStatus.Tested, "AsicContainerCreationTests.ExtendedCAdESContainerIsTheShapeClause4442Describes (a data object in a sub-folder; ADataObjectInsideMetaInfIsRefused is the negative)"),
 
-        //---- EN 319 162-1 clause 4.4.3.1 — media type identification, ASiC-E with XAdES ----
         ("p1-4.4.3.1-1", "The file extension shall be \".asice\" or \".sce\".",
             RequirementCoverageStatus.OutOfScope, "XAdES-only clause; out of this wave per the arc charter. The structurally identical CAdES rule is clause 4.4.4.1 item 1 below."),
         ("p1-4.4.3.1-2", "The mimetype file content shall be \"application/vnd.etsi.asic-e+zip\" or the original media type of the container.",
@@ -850,7 +843,6 @@ internal sealed class AsicRequirementsMatrixTests
         ("p1-4.4.3.1-3", "The ZIP file comment field may state \"mimetype=application/vnd.etsi.asic-e+zip\".",
             RequirementCoverageStatus.OutOfScope, "XAdES-only clause; out of this wave per the arc charter. The CAdES flavour's own permission is clause 4.4.4.1 item 3 below."),
 
-        //---- EN 319 162-1 clause 4.4.3.2 — contents of container, ASiC-E with XAdES ----
         ("p1-4.4.3.2-intro", "Clause A.6 shall apply on referencing signed file objects.",
             RequirementCoverageStatus.OutOfScope, "Stated inside the XAdES container clause, which is out of this wave per the arc charter; Annex A.6's own rows below are Tested, and the CAdES flavour reaches them through clause 4.4.4.2."),
         ("p1-4.4.3.2-2", "One or more \"*signatures*.xml\" files shall be present under META-INF, each containing one or more XAdES signatures.",
@@ -888,7 +880,6 @@ internal sealed class AsicRequirementsMatrixTests
         ("p1-4.4.3.2-5d-ii", "Any other file object shall not be required to validate the container.",
             RequirementCoverageStatus.OutOfScope, "Same boundary as item 5 d) i): creation admits no caller-supplied extra file object this wave, so nothing this library writes can be required to validate the container. Stage-6 decision 9."),
 
-        //---- EN 319 162-1 clause 4.4.4.1 — media type identification, ASiC-E with CAdES/time assertions ----
         ("p1-4.4.4.1-1", "The file extension shall be \".asice\", or \".sce\" on file systems limited to three-character extensions.",
             RequirementCoverageStatus.Tested, "AsicContainerCreationTests.ExtendedCAdESContainerIsTheShapeClause4442Describes (the primary form; AsicWellKnownTests.EachContainerExtensionIsRecognisedByItsOwnFamily accepts both on reading)"),
         ("p1-4.4.4.1-2", "The mimetype file content shall be \"application/vnd.etsi.asic-e+zip\", with no alternative branch.",
@@ -896,7 +887,6 @@ internal sealed class AsicRequirementsMatrixTests
         ("p1-4.4.4.1-3", "The ZIP file comment field may state \"mimetype=application/vnd.etsi.asic-e+zip\".",
             RequirementCoverageStatus.Tested, "AsicContainerCreationTests.TheMediaTypeArchiveCommentIsWrittenOnlyWhenAskedFor (absent by default, written when the caller states the departure)"),
 
-        //---- EN 319 162-1 clause 4.4.4.2 — contents of container, ASiC-E with CAdES/time assertions ----
         ("p1-4.4.4.2-1-may", "A mimetype file may be present.",
             RequirementCoverageStatus.Tested, "AsicZipAuthoringTests.AContainerWithoutAMediaTypeCarriesNoMimetypeEntry"),
         ("p1-4.4.4.2-1-shall", "It shall be as defined in clause A.1 with the content specified in clause 4.4.4.1 item 2.",
@@ -930,7 +920,6 @@ internal sealed class AsicRequirementsMatrixTests
         ("p1-4.4.4.2-note2", "NOTE 2: where the SigReference references an Evidence Record, the ASiCManifest file itself is not covered by that Evidence Record.",
             RequirementCoverageStatus.Tested, "AsicContainerValidationTests.AnEvidenceRecordProvesTheManifestTargetsAndNotTheManifestFile"),
 
-        //---- EN 319 162-1 clause 4.4.5 — long term availability and integrity of ASiC-E ----
         ("p1-4.4.5-1", "For ASiC-E containers with XAdES signatures, the XAdES mechanisms or the Evidence Record specifications shall be used, for all the signatures present.",
             RequirementCoverageStatus.OutOfScope, "XAdES-only; out of this wave per the arc charter and the waveasic contract's Out list."),
         ("p1-4.4.5-2a", "For ASiC-E with CAdES/time assertions: one or more ASiCArchiveManifest files and related time-stamp tokens shall be added following clause A.7.",
@@ -940,7 +929,6 @@ internal sealed class AsicRequirementsMatrixTests
         ("p1-4.4.5-3", "For ASiC-E containers with an Evidence Record, the internal mechanism of RFC 4998 and RFC 6283 shall be used.",
             RequirementCoverageStatus.Tested, "EvidenceRecordRenewalTests.EveryPriorChainStillVerifiesAfterEachRenewal (RFC 4998; XmlEvidenceRecordsTests.BothRenewalsInSuccessionStillProveTheDataObject is the RFC 6283 half)"),
 
-        //---- EN 319 162-1 clause 5.1 — ASiC levels ----
         ("p1-5.1-scope", "All ASiC baseline container levels are defined for ASiC-S with CAdES, ASiC-S with XAdES and ASiC-E with XAdES.",
             RequirementCoverageStatus.OutOfScope, "Descriptive scoping statement, and the one this wave had to answer: ASiC-E with CAdES is absent from the list, so Part 1 states no baseline requirements table for the flavour this wave ships. The ratified-* rows below are the table this wave synthesised and holds itself to (waveasic contract R-8/R-9.1, scout fact 1)."),
         ("p1-5.1-1", "ASiC baseline containers shall contain only CAdES baseline signatures per EN 319 122-1 clause 6 or XAdES baseline signatures per EN 319 132-1 clause 6.",
@@ -948,19 +936,16 @@ internal sealed class AsicRequirementsMatrixTests
         ("p1-5.1-2", "The level of an ASiC baseline container shall be the lowest level of the incorporated baseline signatures.",
             RequirementCoverageStatus.Tested, "AsicContainerAugmentationTests.TheContainerLevelIsTheLowestLevelOfTheSignaturesItIncorporates"),
 
-        //---- EN 319 162-1 clause 5.2.1 — algorithm requirements ----
         ("p1-5.2.1-1", "The algorithms and key lengths used to generate and augment digital signatures should be as specified in ETSI TS 119 312.",
             RequirementCoverageStatus.Tested, "AsicContainerCreationTests.TheSuppliedConstraintsTableDecidesWhetherTheManifestDigestIsAllowed (the dated constraints table is consulted at the signing instant when supplied, and the same table in force lets a conformant creation proceed — the default and the departure in one test)"),
         ("p1-5.2.1-2", "MD5 shall not be used as a digest algorithm.",
             RequirementCoverageStatus.Tested, "AsicContainerCreationTests.ADigestAlgorithmCreationRefusesStopsTheContainer (MD5 and SHA-1, the latter this library's own creation-side line)"),
 
-        //---- EN 319 162-1 clause 5.3.1 Table 1 — ASiC conformance ----
         ("p1-5.3.1-table1-a", "The container shall be compliant with ISO/IEC 21320-1.",
             RequirementCoverageStatus.OutOfScope, "SOURCE GAP recorded at stage 0 of this wave and discharged at stage 4: ISO/IEC 21320-1's text is not obtainable non-interactively (the ISO publicly-available-standards URL returns a licence gate), so conformance to that document cannot be checked against it. The constraint set EN 319 162-1 clause 4.2, Annex A.1 and this table's own NOTE state — no encryption, no split archives, stored or deflate only, no ZIP64 — is implemented directly, each at a named check, and is covered by the clause 4.2 and Annex A.1 rows of this matrix. Owner flag 5 of the waveasic contract."),
         ("p1-5.3.1-table1-note", "NOTE: the additional ZIP requirement excludes encryption and allows either no compression or the deflated algorithm.",
             RequirementCoverageStatus.Tested, "AsicZipReadingTests.AnEncryptedEntryIsRefused (the exclusion; the compression half is the clause 4.2 item 2 c row above)"),
 
-        //---- EN 319 162-1 clause 5.3.2.1 Table 2 — general requirements for ASiC-S ----
         ("p1-5.3.2.1-table2-extension", "ASiC file extension is \".asics\": shall be present, cardinality 1.",
             RequirementCoverageStatus.Tested, "AsicContainerCreationTests.SimpleCAdESSignatureIsDetachedOverTheDataFile (Table 2's References column carries a published cross-reference swap; the clause 4.3.3.1 body text governs, per the waveasic contract's normative-texts note)"),
         ("p1-5.3.2.1-table2-mimetype", "mimetype: may be present, cardinality 0 or 1.",
@@ -968,7 +953,6 @@ internal sealed class AsicRequirementsMatrixTests
         ("p1-5.3.2.1-table2-datafile", "Data file: shall be present, cardinality 1.",
             RequirementCoverageStatus.Tested, "AsicContainerCreationTests.AContainerWithNoDataObjectIsRefused"),
 
-        //---- EN 319 162-1 clause 5.3.2.2 Table 3 — ASiC-S with CAdES signature ----
         ("p1-5.3.2.2-table3-signature", "META-INF/signature.p7s: shall be present, cardinality 1.",
             RequirementCoverageStatus.Tested, "AsicContainerCreationTests.SimpleCAdESContainerIsTheArchiveAnnexA1Describes"),
         ("p1-5.3.2.2-table3-a", "The CAdES signatures shall be as specified in CAdES clause 6 according to the required ASiC level.",
@@ -976,7 +960,6 @@ internal sealed class AsicRequirementsMatrixTests
         ("p1-5.3.2.2-table3-b", "No other element shall be present in the container besides this element, the mimetype file and the data file.",
             RequirementCoverageStatus.Tested, "AsicContainerCreationTests.SimpleCAdESContainerIsTheArchiveAnnexA1Describes (the produced entry set is exactly those three)"),
 
-        //---- EN 319 162-1 clause 5.3.2.3 Table 4 — ASiC-S with XAdES signature ----
         ("p1-5.3.2.3-table4-signatures-xml", "META-INF/signatures.xml: shall be present, cardinality 1.",
             RequirementCoverageStatus.OutOfScope, "XAdES-only; out of this wave per the arc charter and the waveasic contract's Out list."),
         ("p1-5.3.2.3-table4-xadessignatures", "asic:XAdESSignatures: shall be present, cardinality 1.",
@@ -988,7 +971,6 @@ internal sealed class AsicRequirementsMatrixTests
         ("p1-5.3.2.3-table4-c", "No other element shall be present in the container besides this element, the mimetype file and the signed data.",
             RequirementCoverageStatus.OutOfScope, "XAdES-only; out of this wave per the arc charter and the waveasic contract's Out list."),
 
-        //---- EN 319 162-1 clause 5.3.3 Table 5 — ASiC-E with XAdES signature ----
         ("p1-5.3.3-table5-extension", "ASiC file extension is \".asice\": shall be present, cardinality 1.",
             RequirementCoverageStatus.OutOfScope, "XAdES-only table (the only ASiC-E baseline table Part 1 defines); out of this wave per the arc charter. The CAdES flavour's equivalent is ratified-extension below."),
         ("p1-5.3.3-table5-mimetype", "mimetype: may be present, cardinality 0 or 1.",
@@ -1010,7 +992,6 @@ internal sealed class AsicRequirementsMatrixTests
         ("p1-5.3.3-table5-e", "Additional signed or unsigned file objects complying with clause 4.4.3.2 item 5 d) may be present in the META-INF folder.",
             RequirementCoverageStatus.OutOfScope, "XAdES-only table; out of this wave per the arc charter, and the same extra-file-object boundary as clause 4.4.3.2 item 5 d) above."),
 
-        //---- EN 319 162-1 Annex A.1 — the mimetype file's ZIP byte layout ----
         ("p1-A.1-1", "\"mimetype\" shall be the first file in the ASiC container.",
             RequirementCoverageStatus.Tested, "AsicZipAuthoringTests.TheMimetypeEntryIsFirstStoredAndCarriesNoExtraField (and AsicZipReadingTests.AMimetypeEntryThatIsNotFirstIsRefused)"),
         ("p1-A.1-2", "\"mimetype\" shall not contain extra fields in its ZIP header (extra field length at offset 28 shall be zero).",
@@ -1026,19 +1007,16 @@ internal sealed class AsicRequirementsMatrixTests
         ("p1-A.1-note", "NOTE: the string \"mimetype\" starting at offset 30 signals that the container media type starts at offset 38, its length being the four octets at offset 18.",
             RequirementCoverageStatus.Tested, "AsicZipAuthoringPropertyTests.TheMediaTypeIsAlwaysReadableAtOffset38 (and AsicWellKnownTests.TheThreeOffsetsAreTheOnesTheAnnexA1NoteNames for the three offsets themselves)"),
 
-        //---- EN 319 162-1 Annex A.2 — media type registrations ----
         ("p1-A.2-registrations", "The registered media types are application/vnd.etsi.asic-s+zip (asics, scs) and application/vnd.etsi.asic-e+zip (asice, sce).",
             RequirementCoverageStatus.Tested, "AsicWellKnownTests.TheTwoMediaTypesAreTheOnesAnnexA2Registers"),
         ("p1-A.2-note2", "NOTE 2: the media type Application/vnd.etsi.timestamp-token is defined in ETSI EN 319 422.",
             RequirementCoverageStatus.OutOfScope, "EN 319 422 is not one of this wave's normative texts (waveasic contract, normative-texts list). The MimeType attribute a SigReference may state is a caller-stated value the model carries verbatim (AsicContainerTimeAssertionContext.TimestampReferenceMediaType); Annex A.4.2 calls the attribute descriptive and nothing is validated against it."),
 
-        //---- EN 319 162-1 Annex A.3 — the ASiC XML schema ----
         ("p1-A.3-precedence", "The XML Schema is held in the attached file as a normative part, and in any case of difference in contents the attached file takes precedence.",
             RequirementCoverageStatus.Tested, "AsicManifestXmlBindingTests.TheProducedDocumentValidatesAgainstTheAuthenticSchema (the document is validated against the authentic attachment, not against the prose reproduction)"),
         ("p1-A.3-digest", "The attached schema file's SHA-256 is the value the annex states.",
             RequirementCoverageStatus.Tested, "AsicContainerCreationTests.TheProducedManifestValidatesAgainstTheAuthenticSchema (the schema is located BY the digest Annex A.3 states, so a substituted schema is not found at all)"),
 
-        //---- EN 319 162-1 Annex A.4.1 — ASiCManifest semantics ----
         ("p1-A.4.1-1", "The ASiCManifest element shall reference one signature file or one time assertion file using the SigReference element.",
             RequirementCoverageStatus.Tested, "AsicContainerCreationTests.EveryManifestDigestIsTheDigestOfTheEntryItNames"),
         ("p1-A.4.1-2", "The ASiCManifest element shall reference one or more data files using the DataObjectReference element.",
@@ -1050,7 +1028,6 @@ internal sealed class AsicRequirementsMatrixTests
         ("p1-A.4.1-5", "For each referenced data file, the ASiCManifest element shall allow incorporating additional information of any type qualifying it.",
             RequirementCoverageStatus.Tested, "AsicManifestXmlBindingTests.AnExtensionRoundTripsOctetForOctet"),
 
-        //---- EN 319 162-1 Annex A.4.2 — ASiCManifest syntax ----
         ("p1-A.4.2-schema", "The ASiCManifestType grammar: SigReference, one or more DataObjectReference, optional ASiCManifestExtensions, in that order.",
             RequirementCoverageStatus.Tested, "AsicManifestXmlBindingTests.TheProducedDocumentCarriesTheElementsAnnexA42StatesInOrder (and TheSchemaValidationRefusesADocumentTheGrammarDoesNotAdmit)"),
         ("p1-A.4.2-sigreference-uri", "SigReference.URI shall point to the file containing the CAdES object or the time assertion.",
@@ -1072,13 +1049,11 @@ internal sealed class AsicRequirementsMatrixTests
         ("p1-A.4.2-extension-wellformed", "An Extension element, if present, shall contain well-formed XML.",
             RequirementCoverageStatus.Tested, "AsicManifestXmlBindingTests.AnExtensionRoundTripsOctetForOctet (and AnUnrecognisedCriticalExtensionFailsClosed for the consumer-side default and its stated departure)"),
 
-        //---- EN 319 162-1 Annex A.5 — the XAdESSignatures element ----
         ("p1-A.5-1", "The XAdESSignatures element shall have one or more ds:Signature children.",
             RequirementCoverageStatus.OutOfScope, "XAdES-only; out of this wave per the arc charter and the waveasic contract's Out list."),
         ("p1-A.5-2", "The XAdESSignatures element shall be defined as in the ASiC XML schema.",
             RequirementCoverageStatus.OutOfScope, "XAdES-only; out of this wave per the arc charter. The element is nevertheless declared in the schema set the manifest binding validates against, because the authentic schema does not compile without it."),
 
-        //---- EN 319 162-1 Annex A.6 — naming and referencing data within ASiC ----
         ("p1-A.6-1", "Valid file object and metadata naming shall comply with ZIP and any supported specific container.",
             RequirementCoverageStatus.Tested, "AsicZipReadingTests.ANameThatEscapesTheContainerIsRefused (one shared rule set applies on writing and on reading)"),
         ("p1-A.6-wildcard", "The character \"*\" denotes an arbitrary character string of any length, including zero, in a file name pattern.",
@@ -1094,7 +1069,6 @@ internal sealed class AsicRequirementsMatrixTests
         ("p1-A.6-3", "References to data objects outside the container shall not be allowed.",
             RequirementCoverageStatus.Tested, "AsicContainerUriPropertyTests.NoReferenceEverResolvesToANameTheContainerLayerWouldRefuse (a CsCheck invariant over ten hostile prefixes)"),
 
-        //---- EN 319 162-1 Annex A.7 — ASiCArchiveManifest content and rules ----
         ("p1-A.7-1", "One or more ASiCArchiveManifest files may be present.",
             RequirementCoverageStatus.Tested, "AsicContainerAugmentationTests.TheFirstArchiveManifestReferencesEveryFileObjectAndCarriesNoBackwardPointer (a container carries none until one is added)"),
         ("p1-A.7-2", "Each ASiCArchiveManifest file shall contain one ASiCManifest element instance conformant to clause A.4.",
@@ -1130,7 +1104,6 @@ internal sealed class AsicRequirementsMatrixTests
         ("p1-A.7-note", "NOTE: the file named \"ASiCArchiveManifest.xml\" is always the last one added, which is what lets a validator walk the chain backward.",
             RequirementCoverageStatus.Tested, "AsicContainerValidationTests.TheArchiveManifestChainWalksBackwardThroughEveryRenewal (and AsicManifestNamingTests.TheFixedArchiveManifestNameIsRefusedWhileThePreviousOneStillOccupiesIt, which makes the rename impossible to skip)"),
 
-        //---- EN 319 162-2 clause 4.2.1 — ASiC-S time assertion additional container ----
         ("p2-4.2.1-chapeau", "The requirements specified in ASiC part 1 for ASiC-S shall apply with the additional restrictions below.",
             RequirementCoverageStatus.Tested, "AsicContainerCreationTests.SimpleTimeAssertionContainerCarriesATokenOverTheDataFile"),
         ("p2-4.2.1-a", "It shall comply with ASiC part 1 clause 4.3.3.1 item 2 a) and clause 4.3.3.2 items 4 a), 4 d) or 4 e) — the time-assertion-only branches.",
@@ -1144,7 +1117,6 @@ internal sealed class AsicRequirementsMatrixTests
         ("p2-4.2.1-d-ii", "With the additional restriction that only SignedData shall be used to include certificate and revocation information.",
             RequirementCoverageStatus.Tested, "AsicContainerAugmentationTests.TheSimpleTimeAssertionProfileRefusesTheCertificateValuesRoute (the refusal; AsicRequirementsMatrixTests.TheSimpleTimeAssertionContainerGainsTheAnnexA7ChainUnderTheSignedDataRoute is the admitted route)"),
 
-        //---- EN 319 162-2 clause 4.3.1 — ASiC-E CAdES additional container ----
         ("p2-4.3.1-chapeau", "The requirements specified in ASiC part 1 clause 4.4 for ASiC-E shall apply with the additional restrictions below.",
             RequirementCoverageStatus.Tested, "AsicContainerCreationTests.ExtendedCAdESContainerIsTheShapeClause4442Describes"),
         ("p2-4.3.1-a", "It shall comply with ASiC part 1 clause 4.4.4.1 item 1 a) and clause 4.4.4.2 item 3 a) — the \".asice\" extension and the CAdES-signature branch only.",
@@ -1152,7 +1124,6 @@ internal sealed class AsicRequirementsMatrixTests
         ("p2-4.3.1-b", "It shall support ASiC part 1 clause 4.4.5 item 2 — the container-level long-term-availability alternatives.",
             RequirementCoverageStatus.Tested, "AsicContainerAugmentationTests.TheFirstArchiveManifestReferencesEveryFileObjectAndCarriesNoBackwardPointer (branch a); AsicContainerCreationTests.ExtendedEvidenceRecordProvesTheManifestsTargetsAndNotTheManifest is branch b)"),
 
-        //---- EN 319 162-2 clause 4.3.2 — ASiC-E time assertion additional container ----
         ("p2-4.3.2-chapeau", "The requirements specified in ASiC part 1 for ASiC-E shall apply with the additional restrictions below.",
             RequirementCoverageStatus.Tested, "AsicContainerCreationTests.ExtendedTimeAssertionContainerCarriesATokenOverTheManifest"),
         ("p2-4.3.2-a", "It shall comply with ASiC part 1 clause 4.4.4.1 item 1 a) and clause 4.4.4.2 item 3 b) or 4 a) or 4 b) — excluding the CAdES-signature branch.",
@@ -1160,7 +1131,6 @@ internal sealed class AsicRequirementsMatrixTests
         ("p2-4.3.2-b", "It shall support ASiC part 1 clause 4.4.5 item 2.",
             RequirementCoverageStatus.Tested, "AsicContainerCreationTests.ExtendedEvidenceRecordProvesTheManifestsTargetsAndNotTheManifest"),
 
-        //---- EN 319 162-2 Annex A (informative) — using ASiC with existing container specifications ----
         ("p2-A-1", "The container may be realized as a physical ZIP container or, when the external specification supports it, as an abstract container with a file system model.",
             RequirementCoverageStatus.OutOfScope, "Informative annex — non-mandatory. OCF/ODF/UCF interoperability is out of this wave per the waveasic contract's Out list; this wave writes physical ZIP containers per Part 1 clause 4.2 item 1."),
         ("p2-A-2", "ASiC part 1 clause 4.4.2 item 3 and clause 4.4.3.1 should apply, and clause 4.4.3.2 should apply with the additional requirements below.",
@@ -1194,7 +1164,6 @@ internal sealed class AsicRequirementsMatrixTests
         ("p2-A-16", "Additional requirement g): the archive-level ZIP comment's presence and value should be as specified in ASiC part 1 clause 4.4.3.1 item 3.",
             RequirementCoverageStatus.OutOfScope, "Informative annex — non-mandatory. The equivalent CAdES-flavour permission (clause 4.4.4.1 item 3) is Tested above; the OCF/ODF/UCF profile itself is out of this wave per the waveasic contract's Out list."),
 
-        //---- EN 319 162-2 Annex B (informative) — ASiC application to archival systems using Evidence Records ----
         ("p2-B-1", "When one single signed data object protected with an Evidence Record is extracted from the archive, an ASiC-S container should be created.",
             RequirementCoverageStatus.OutOfScope, "Informative annex — non-mandatory. Archival-extraction guidance is out of this wave per the waveasic contract's Out list; the shipped surface it would compose on (ASiC-S Evidence Record containers) is Tested by AsicContainerCreationTests.SimpleEvidenceRecordContainerCarriesARecordProvingTheDataFile."),
         ("p2-B-2", "It should comply with ASiC part 1 clauses 4.3.2, 4.3.3 and 4.3.4 and should include the extracted signed data object in the root folder.",
@@ -1210,7 +1179,6 @@ internal sealed class AsicRequirementsMatrixTests
         ("p2-B-7", "An ASiCEvidenceRecordManifest file should be created for each extracted Evidence Record, referencing it through SigReference and the extracted files through DataObjectReference.",
             RequirementCoverageStatus.OutOfScope, "Informative annex — non-mandatory. Out of this wave per the waveasic contract's Out list; the manifest shape it describes is Tested by AsicContainerCreationTests.ExtendedEvidenceRecordProvesTheManifestsTargetsAndNotTheManifest."),
 
-        //---- The wave-ratified ASiC-E-with-CAdES baseline table (waveasic contract R-8/R-9.1) ----
         ("ratified-basis", "EN 319 162-2 clause 4.3.1 NOTE: implementations compliant with the ASiC-E CAdES additional container requirements CAN support the same levels defined for baseline containers in ASiC part 1 clause 5.",
             RequirementCoverageStatus.OutOfScope, "Not an obligation: the NOTE states a capability with \"can\", and Part 1 clause 5 defines no requirements table for ASiC-E with CAdES (row p1-5.1-scope). The ratified-* rows below are the table this wave synthesised from Part 1 clauses 4.4, 4.4.5 item 2 and Annex A.7 together with Part 2 clause 4.3.1, and holds itself to."),
         ("ratified-extension", "The container file extension is \".asice\" [Part 1 clause 4.4.4.1 item 1 a); Part 2 clause 4.3.1 a)].",

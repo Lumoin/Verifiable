@@ -372,11 +372,9 @@ internal sealed class SignatureValidationRequirementsMatrixTests
     /// </summary>
     private static (string ClauseId, string Requirement, RequirementCoverageStatus Status, string Evidence)[] RowData { get; } =
     [
-        //---- 5.1.1 General requirements (creation-side and DA-side items named here, out of clause-5 scope) ----
         ("5.1.1", "Validation always starts with the LTA process unless the DA requests a specific one, following the signature lifecycle Basic -> With-Time -> LTA.",
             RequirementCoverageStatus.Tested, "SignatureValidationProcessTests.ProcessSelectionHonoursTheRequestAndTheSupportedProcesses"),
 
-        //---- 5.1.2 Selecting validation processes ----
         ("5.1.2-cap-basic", "An SVA supporting only Basic Signatures SHALL support the Validation Process for Basic Signatures.",
             RequirementCoverageStatus.Tested, "SignatureValidationProcessTests.ProcessSelectionHonoursTheRequestAndTheSupportedProcesses (BasicSignaturesOnly capability set)"),
         ("5.1.2-cap-with-time", "An SVA supporting Signatures with Time SHALL support both the Basic process and the With-Time process, and SHALL use validation data stored within the signature.",
@@ -406,7 +404,6 @@ internal sealed class SignatureValidationRequirementsMatrixTests
         ("5.1.2-step7", "Step 7): otherwise -> INDETERMINATE with clause 5.1.3's information.",
             RequirementCoverageStatus.Tested, "SignatureValidationProcessTests.BasicValidationOfARevokedSigningCertificateIsIndeterminateRevokedNoProofOfExistence"),
 
-        //---- 5.1.3 Status indication of the process and the report ----
         ("5.1.3-report-general", "The SVA SHALL provide a comprehensive report of the validation.",
             RequirementCoverageStatus.Tested, "SignatureValidationReportTests (report-stage; SignatureValidationReportBuilder.BuildAsync over a real outcome)"),
         ("5.1.3-report-da-presentation", "The DA SHALL, when a human user is involved, be able to present the report in a way meaningful to the user.",
@@ -446,7 +443,6 @@ internal sealed class SignatureValidationRequirementsMatrixTests
         ("Table7-retry", "Table 7: the sub-indications for which the DA may retry, and their conditions.",
             RequirementCoverageStatus.Tested, "SignatureValidationModelTests.RetryConditionsAreReportedForExactlyTheSubIndicationsTable7Lists"),
 
-        //---- 5.1.4 Validation constraints ----
         ("5.1.4.1-sources", "Constraints SHALL be controlled by a set of validation constraints from the stated sources (formal policy, system-specific data, or implicit).",
             RequirementCoverageStatus.Tested, "SignatureValidationBuildingBlockGapTests (five VCI policy-selection tests exercise every clause 5.2.4.4 source branch)"),
         ("5.1.4.1-skip-disabled", "A disabled check SHALL be reported in the final report as a check disabled by policy.",
@@ -462,7 +458,6 @@ internal sealed class SignatureValidationRequirementsMatrixTests
         ("5.1.4.4-elements", "Signature elements constraints SHALL indicate requirements additional to X.509 and cryptographic ones.",
             RequirementCoverageStatus.Tested, "SignatureValidationBuildingBlockTests.AcceptsASignatureThatSatisfiesEveryElementsConstraint"),
 
-        //---- 5.2.2 Format Checking ----
         ("5.2.2.1", "FC SHALL check the signature conforms to its base format to the extent CV can process it.",
             RequirementCoverageStatus.Tested, "SignatureValidationBuildingBlockTests.ExtractsTheFactsOfACAdESBaselineSignature"),
         ("5.2.2.3-passed", "Conformant -> PASSED.",
@@ -470,7 +465,6 @@ internal sealed class SignatureValidationRequirementsMatrixTests
         ("5.2.2.3-failed", "Non-conformant -> FAILED.",
             RequirementCoverageStatus.Tested, "SignatureValidationBuildingBlockTests.FormatCheckingFailsForBytesThatAreNotACmsSignedData; SignatureValidationProcessTests.ValidationOfAnUnparsableSignedDataObjectFailsWithFormatFailure"),
 
-        //---- 5.2.3 Identification of the signing certificate ----
         ("5.2.3.3-success", "Success -> the output SHALL be the signing certificate.",
             RequirementCoverageStatus.Tested, "SignatureValidationBuildingBlockTests.IdentifiesTheSigningCertificateFromTheEssReference"),
         ("5.2.3.3-not-found", "Not identifiable -> INDETERMINATE/NO_SIGNING_CERTIFICATE_FOUND.",
@@ -484,7 +478,6 @@ internal sealed class SignatureValidationRequirementsMatrixTests
         ("5.2.3.4-no-reference", "No signing certificate identifier attribute present -> the signature's own signed copy is returned.",
             RequirementCoverageStatus.Tested, "SignatureValidationBuildingBlockTests.VerifiesTheCryptographyOfAValidCAdESSignature (uses facts.SigningCertificate, the copy the signature carries)"),
 
-        //---- 5.2.4 Validation context initialization ----
         ("5.2.4.3-passed", "PASSED -> Table 11's X.509/cryptographic/signature-elements constraints and validation parameters/data.",
             RequirementCoverageStatus.Tested, "SignatureValidationBuildingBlockTests.SelectsTheDefaultConstraintsWhenTheSignatureDeclaresNoPolicy"),
         ("5.2.4.4-default-policy", "No creation policy declared -> the block SHOULD select a default validation policy.",
@@ -502,7 +495,6 @@ internal sealed class SignatureValidationRequirementsMatrixTests
         ("5.2.4.1-scope", "VCI SHALL initialize the X.509, cryptographic and signature elements constraints and related X.509 parameters.",
             RequirementCoverageStatus.Tested, "SignatureValidationBuildingBlockTests.SelectsTheDefaultConstraintsWhenTheSignatureDeclaresNoPolicy"),
 
-        //---- 5.2.5 Revocation freshness checker ----
         ("5.2.5.4-step1-constraint-value", "Step 1): a stated maximum accepted freshness takes precedence over the nextUpdate fallback.",
             RequirementCoverageStatus.Tested, "SignatureValidationBuildingBlockTests.UsesTheConstraintValueForRevocationFreshnessWhenOneIsStated"),
         ("5.2.5.4-step1-nextupdate-fallback", "Step 1): with no stated maximum, the nextUpdate-minus-thisUpdate interval is the fallback.",
@@ -514,7 +506,6 @@ internal sealed class SignatureValidationRequirementsMatrixTests
         ("5.2.5.4-note3-thisupdate-vs-producedat", "NOTE 3: for an OCSP response the revocation status issuance time is thisUpdate, distinct from the revocation data issuance time producedAt.",
             RequirementCoverageStatus.Tested, "SignatureValidationBuildingBlockGapTests.FreshnessIsDecidedByThisUpdateNeverByProducedAt"),
 
-        //---- 5.2.6 X.509 certificate validation ----
         ("5.2.6.4-step1a", "Step 1)a): the signing certificate is a trust anchor past its sunset date -> current status NO_CERTIFICATE_CHAIN_FOUND_NO_POE, continue to step 2).",
             RequirementCoverageStatus.Tested, "SignatureValidationBuildingBlockTests.PassesWhenTheSigningCertificateIsATrustAnchorAndFailsAfterItsSunsetDate"),
         ("5.2.6.4-step1b", "Step 1)b): a trust anchor before its sunset date MAY return PASSED.",
@@ -564,7 +555,6 @@ internal sealed class SignatureValidationRequirementsMatrixTests
         ("Table13-indeterminate-rows", "Table 13's INDETERMINATE sub-indications each carry the stated chain (validated or last-built).",
             RequirementCoverageStatus.Tested, "SignatureValidationModelTests (CertificateChainReportData/CertificateChainReportKind); SignatureValidationBuildingBlockTests.ValidatesAThreeLevelChainAndReportsRevocationOutcomes"),
 
-        //---- 5.2.7 Cryptographic verification ----
         ("5.2.7.4-step1-obtain-data", "Step 1): obtain the signed data items; unobtainable -> INDETERMINATE/SIGNED_DATA_NOT_FOUND.",
             RequirementCoverageStatus.Tested, "SignatureValidationBuildingBlockTests.VerifiesTheCryptographyOfAValidCAdESSignature (encapsulated case); AsicContainerValidationTests.AnExtendedCAdESContainerValidatesWithEveryReferenceRecomputedAndTheSignatureTotalPassed (detached case, the Signer's Document supplied from the container); ReferenceArtifactSignatureValidationTests.ADetachedArtifactReportsSignedDataNotFoundNamingTheMissingSignedDataItem (the SIGNED_DATA_NOT_FOUND branch, reached when no Signer's Document accompanies a detached signature)"),
         ("5.2.7.4-step2-hash", "Step 2): integrity check of the signed data items; failure -> FAILED/HASH_FAILURE.",
@@ -576,7 +566,6 @@ internal sealed class SignatureValidationRequirementsMatrixTests
         ("Table15-vocabulary", "Table 15's outcome vocabulary and mandated report data (identifier(s) for HASH_FAILURE/SIGNED_DATA_NOT_FOUND; the certificate for SIG_CRYPTO_FAILURE).",
             RequirementCoverageStatus.Tested, "SignatureValidationBuildingBlockTests.ReportsHashFailureWhenTheContentDoesNotMatchItsDigestAttribute; SignatureValidationRequirementsMatrixTests.SignatureValueTamperingReportsSignatureCryptographicFailure"),
 
-        //---- 5.2.8 Signature Acceptance Validation ----
         ("5.2.8.4.1-malformed-as-absent", "A present-but-malformed attribute SHALL be treated as absent.",
             RequirementCoverageStatus.Tested, "SignatureAcceptanceValidation.IsPresentAndWellFormed gates every mandated/forbidden check on SignatureAttributeFacts.IsWellFormed; SignatureValidationBuildingBlockTests.AcceptsASignatureThatSatisfiesEveryElementsConstraint exercises the well-formed path this gate is the complement of"),
         ("5.2.8.4.1-crypto-failure", "An unreliable algorithm/key size used in validating the signature -> INDETERMINATE/CRYPTO_CONSTRAINTS_FAILURE_NO_POE with the list and trusted-until instants.",
@@ -614,11 +603,9 @@ internal sealed class SignatureValidationRequirementsMatrixTests
         ("Table17-vocabulary", "Table 17's PASSED/SIG_CONSTRAINTS_FAILURE/CRYPTO_CONSTRAINTS_FAILURE_NO_POE outcomes and mandated report data.",
             RequirementCoverageStatus.Tested, "SignatureValidationBuildingBlockTests.AcceptsASignatureThatSatisfiesEveryElementsConstraint; ReportsSignatureConstraintsFailureForAMissingMandatedAttribute; ReportsCryptoConstraintsFailureNoProofOfExistenceForAnUnlistedAlgorithm"),
 
-        //---- 5.2.9 (out of scope per contract) ----
         ("5.2.9", "The signature validation presentation building block (data/signer/time/attributes/policy/status presentation).",
             RequirementCoverageStatus.OutOfScope, "Contract scope: '§5.2.9 presentation building block beyond what the report records carry (DA-side)' is explicitly out of scope for this wave."),
 
-        //---- 5.3 Validation process for Basic Signatures ----
         ("5.3.4-note1-order", "NOTE 1: any step ordering producing the same result is permitted.",
             RequirementCoverageStatus.Tested, "BasicSignatureValidation runs the clause's own order (buildlog: 'the steps run in the clause's own order here'); SignatureValidationProcessTests exercises the composed result, which is order-independent by construction (no ambient state)"),
         ("5.3.4-step1-format", "Step 1): FC PASSED -> continue; else FAILED/FORMAT_FAILURE.",
@@ -652,7 +639,6 @@ internal sealed class SignatureValidationRequirementsMatrixTests
         ("5.3.4-step7-passed", "Step 7): PASSED with the chain from step 4), and SHOULD return additional signed/unsigned attribute information.",
             RequirementCoverageStatus.Tested, "SignatureValidationProcessTests.ValidationWithTimeTurnsARevokedSigningCertificateIntoTotalPassed"),
 
-        //---- 5.4 Time-stamp validation building block ----
         ("5.4.4-step1-basic", "Step 1): the token SHALL be validated as a Basic Signature, with the applicable time-stamp trust anchors/policy/certificate.",
             RequirementCoverageStatus.Tested, "SignatureValidationProcessTests.TimestampValidationReturnsTheGenerationTimeAndFailsClosedForAnUntrustedAuthority"),
         ("5.4.4-step2-passed", "Step 2): PASSED -> continue; else return the Basic process's indication and information.",
@@ -664,7 +650,6 @@ internal sealed class SignatureValidationRequirementsMatrixTests
         ("5.4.1-is-basic-signature", "A time-stamp token is itself a Basic Signature, so its own validation builds on clause 5.3.",
             RequirementCoverageStatus.Tested, "SignatureValidationProcessTests.TimestampValidationReturnsTheGenerationTimeAndFailsClosedForAnUntrustedAuthority (TimestampValidationResult.TokenSignatureValidation is the token's own BasicSignatureValidationResult)"),
 
-        //---- 5.5 Validation process for Signatures with Time / Long-Term Validation Material ----
         ("5.5.4-step1-init", "Step 1): initialize the signature time-stamp set and best-signature-time to the DA's time indication, or current time.",
             RequirementCoverageStatus.Tested, "SignatureValidationProcessTests.ValidationWithTimeLeavesARevokedCertificationAuthorityIndeterminate (BestSignatureTime equals the current-time default when no time-stamp validates)"),
         ("5.5.4-step2-basic-and-continue-set", "Step 2): Basic validation runs with the LT material included; continue on PASSED or the six named INDETERMINATE outcomes; else return verbatim.",
@@ -700,11 +685,9 @@ internal sealed class SignatureValidationRequirementsMatrixTests
         ("5.5.1-signature-with-ltvm", "Signatures with Time and Signatures with Long-Term Validation Material follow the identical process; the latter merely carries additional validation material.",
             RequirementCoverageStatus.Tested, "SignatureValidationProcessTests.ValidationWithTimeTurnsARevokedSigningCertificateIntoTotalPassed drives a signature carrying an embedded signature time-stamp through the one shared process."),
 
-        //---- 5.6.1 Introduction ----
         ("5.6.1-da-supplied-poe", "The DA MAY supply an initial set of POEs; their format is implementation-dependent.",
             RequirementCoverageStatus.Tested, "SignatureValidationInputs.ProofsOfExistence (model); AnnexAValidationFixtureTests.RevokedCertificationAuthorityWorldDrivesTheShippedEngineToTheOutcomesTheExampleStates supplies exactly one DA-asserted proof and the LTA run consumes it"),
 
-        //---- 5.6.2.1 Past certificate validation ----
         ("5.6.2.1.4-step1a-no-chain", "Step 1)a): no chain can be built -> the current status and last chain, or NO_CERTIFICATE_CHAIN_FOUND when none was built.",
             RequirementCoverageStatus.Tested, "SignatureValidationLongTermBlockTests.PastCertificateValidationReportsNoCertificateChainFoundWhenNoChainCanBeBuiltAtAll"),
         ("5.6.2.1.4-step2-date-selection", "Step 2): path validation runs at a date from the shell model's intersection of validity intervals, or from the chain model's signer-certificate validity.",
@@ -724,7 +707,6 @@ internal sealed class SignatureValidationRequirementsMatrixTests
         ("5.6.2.1.1-rationale", "A chain usable to validate a certificate at some past date/time SHALL derive the same status at the current time, provided each certificate's revocation status is ascertainable now or from proven-past data.",
             RequirementCoverageStatus.Tested, "SignatureValidationLongTermBlockTests.PastCertificateValidationPassesAtTheControlTimeAssignedByARevokedIntermediate; SignatureValidationProcessTests.LongTermValidationTurnsARevokedCertificationAuthorityIntoTotalPassed exercises the same rationale end to end via the archive time-stamp"),
 
-        //---- 5.6.2.2 Validation time sliding process ----
         ("5.6.2.2.4-step1a", "Step 1)a): a trust anchor sunset date before current time initializes control-time to that date.",
             RequirementCoverageStatus.Tested, "ValidationTimeSliding.SlideAsync's step 1) branch (model-covered by SignatureValidationBuildingBlockTests.PassesWhenTheSigningCertificateIsATrustAnchorAndFailsAfterItsSunsetDate exercising the same sunset comparison at the XCV level); no dedicated LTA-level sunset-date fixture exists this wave, so this is the block's own literal implementation of step 1)a), not an end-to-end LTA fixture."),
         ("5.6.2.2.4-step1b", "Step 1)b): otherwise control-time initializes to the current date/time.",
@@ -748,7 +730,6 @@ internal sealed class SignatureValidationRequirementsMatrixTests
         ("5.6.2.2-note6-no-slide", "NOTE 6: when every certificate validates at current time, control-time never slides and the current time is returned.",
             RequirementCoverageStatus.Tested, "AnnexAValidationFixtureTests.RevokedCertificateWorldDrivesTheShippedEngineToTheOutcomesTheExampleStates (the world's non-revoked certificates never trigger a slide component)"),
 
-        //---- 5.6.2.3 POE extraction ----
         ("5.6.2.3.4-step1-2-protected-set", "Steps 1)-2): the set S of objects and references the time-stamp protects, closed under contained objects.",
             RequirementCoverageStatus.Tested, "SignatureValidationProcessTests.ProofOfExistenceExtractionProvesEveryObjectAnArchiveTimestampProtects; SignatureValidationLongTermBlockTests.PoeExtractionDerivesTheIndirectProofOnlyWhenTheHashIsReliableUntilTheLaterInstant (References non-empty). The BOUNDARY of \"contained\" is asserted too, because a Signed Data Object contains only what it carries: EvidenceRecordSignatureValidationTests.ADetachedSignersDocumentIsNotClaimedAsContainedInTheProvenSignedDataObject shows a detached Signer's Document — linked to the signature by the message-digest attribute alone, which is step 4) territory — staying outside the closure of a proof derived from those octets, while EvidenceRecordSignatureValidationTests.TheReportAttributesTheProofOfExistenceToTheEvidenceRecord shows encapsulated content inside it"),
         ("5.6.2.3.4-step3-empty-init", "Step 3): the set P of POEs initializes empty.",
@@ -768,7 +749,6 @@ internal sealed class SignatureValidationRequirementsMatrixTests
         ("5.6.2.3-classification-by-timestamp-class", "What a time-stamp protects follows from its class (content/signature/validation-data/archive).",
             RequirementCoverageStatus.Tested, "SignatureValidationProcessTests.ProofOfExistenceExtractionProvesEveryObjectAnArchiveTimestampProtects exercises the archive class; SignatureFormatFacts.SignatureTimestampClass enumerates all four (model-covered by SignatureValidationBuildingBlockTests.ClassifiesTheSignatureTimestampOfACAdESTSignature for the signature-timestamp class)"),
 
-        //---- 5.6.2.4 Past signature validation ----
         ("5.6.2.4.4-step1-qualifying-revocation-data", "Step 1): revocation data about the signing certificate qualifies only when a POE places the issuer certificate within its own validity interval; qualifying data is retained, non-qualifying is dropped, and sig_cert_revocation_poe-status is set accordingly.",
             RequirementCoverageStatus.Tested, "SignatureValidationProcessTests.PastSignatureValidationTurnsRevokedCertificationAuthorityIntoPassed"),
         ("5.6.2.4.4-step2-past-cert", "Step 2): past certificate validation runs with the retained data; PASSED continues, else the current-time status and sub-indication are returned with an explanation.",
@@ -792,7 +772,6 @@ internal sealed class SignatureValidationRequirementsMatrixTests
         ("5.6.2.4.3-outputs", "Output: the current status verbatim, or PASSED, or FAILED/NOT_YET_VALID.",
             RequirementCoverageStatus.Tested, "SignatureValidationProcessTests.PastSignatureValidationTurnsRevokedCertificationAuthorityIntoPassed (PASSED); the NOT_YET_VALID branch is PastSignatureValidation's own literal comparison, structurally identical to the tested PASSED branch with the comparison operator reversed"),
 
-        //---- 5.6.3 Validation Process for Signatures providing Long Term Availability and Integrity of Validation Material ----
         ("5.6.3.4-step1-evidence-records", "Step 1): Evidence Records SHALL each be verified per RFC 4998/RFC 6283, extracting POEs and validating the timestamp within per clause 5.6.2.3/5.4/5.6.2.4.",
             RequirementCoverageStatus.Tested, "EvidenceRecordSignatureValidationTests.StepOneReportsWhatTheRecordAndItsTimestampConcluded (the RFC 4998 verification, the clause 5.4 validation of the record's most recent Archive Timestamp, and the proofs of existence the record establishes); the RFC 6283 XML form is verified through the supplied parse and canonicalization seams, which AsicContainerValidationTests.AnXmlFormEvidenceRecordIsVerifiedThroughTheSuppliedSeams exercises, and falls back to a typed fail-closed rejection when no seam is supplied, which AsicContainerValidationTests.AnXmlFormEvidenceRecordIsRefusedWhenNoSeamCanReadIt exercises. What the step requires BEFORE it states a proof at the record's initial archive time is asserted separately, because the proof is only as good as every link and algorithm between that instant and the token validated at the current time: EvidenceRecordSignatureValidationTests.AnEarlierChainAlgorithmTheTableDatesUnreliableAtTheRenewalWithholdsTheProof (RFC 4998 clause 5.3 step 2 d) through the caller's own dated table), TheSameRenewedRecordProvesTheSignatureWhenTheTableReachesTheRenewalInstant (the same run one date later, including the per-chain coverage run reaching the validated token) and ARunStatingNoCryptographicTableLeavesTheEvidenceRecordStepWhereItWas (no table supplied is the prior behaviour verbatim)"),
         ("5.6.3.4-step2-current-time-poe", "Step 2): the SVA SHALL add a POE for each object in the signature at the current time.",

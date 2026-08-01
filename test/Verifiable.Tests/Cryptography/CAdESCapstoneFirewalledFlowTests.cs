@@ -427,7 +427,6 @@ internal sealed class CAdESCapstoneFirewalledFlowTests
 
         byte[] sdoBytes = archived.AsReadOnlySpan().ToArray();
 
-        //---- Leg 3: "Verifiable creates → independent oracle verifies" (charter testing-architecture leg 3). ----
         using CmsSignedData forCmsOracle = CmsSignedData.FromBytes(sdoBytes, BaseMemoryPool.Shared);
         using CmsVerifiedContent verifiedByBouncyCastle = await ResolveBouncyCastleCmsVerifier()(
             forCmsOracle, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
@@ -449,7 +448,6 @@ internal sealed class CAdESCapstoneFirewalledFlowTests
         Assert.IsNotNull(attachedIndex, "The archive time-stamp token carries the ats-hash-index-v3 unsigned attribute.");
         Assert.AreSequenceEqual(independentIndex.AsReadOnlySpan().ToArray(), attachedIndex!.AsReadOnlySpan().ToArray(),
             "Leg 3: stage 3's independent hash-index reimplementation recomputes exactly the index the shipped augmentation surface grafted into the token.");
-        //---- end leg 3 ----
 
         //The content-time-stamp token octets, read back through the shipped signed-attribute reader, so the
         //verifying party's report can be checked against the exact token the archive time-stamp protects.

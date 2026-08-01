@@ -565,7 +565,8 @@ internal sealed class AsicContainerValidationTests
         }
 
         //...and the library's own managed backend, which is what the seam falls back to when a host registers
-        //nothing, does not implement the algorithm: its RSA profile is PKCS#1 v1.5 with SHA-256 alone.
+        //nothing, does not implement the algorithm: its RSA profile is RSASSA-PKCS1-v1_5 alone (SHA-256, SHA-384
+        //or SHA-512), never RSASSA-PSS — which is exactly what the registrable backend seam exists for.
         await Assert.ThrowsExactlyAsync<CryptographicException>(
             async () => (await ManagedCmsVerification.VerifyDetachedCmsSignedDataAsync(
                 authored.Signature, authored.ManifestContent, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).Dispose(),

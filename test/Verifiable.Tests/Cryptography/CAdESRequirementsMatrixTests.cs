@@ -502,7 +502,6 @@ internal sealed class CAdESRequirementsMatrixTests
     /// </summary>
     private static (string ClauseId, string Requirement, RequirementCoverageStatus Status, string Evidence)[] RowData { get; } =
     [
-        //---- Table 1 Part A (clause 6.3) ----
         ("6.3-table1a-certificates", "SignedData.certificates shall be present at every baseline level.",
             RequirementCoverageStatus.Tested, "CAdESSignatureCreationTests.AttachedEcdsaSignatureVerifiesUnderThePlatformCmsReader (the platform reader locates the signer certificate from this field)"),
         ("6.3-table1a-content-type", "content-type shall be present at every baseline level.",
@@ -546,7 +545,6 @@ internal sealed class CAdESRequirementsMatrixTests
         ("6.3-table1a-signature-time-stamp", "signature-time-stamp shall be present (cardinality >= 1) at B-T, B-LT and B-LTA; should not be present at B-B.",
             RequirementCoverageStatus.Tested, "CAdESSignatureAugmentationTests.AddsASignatureTimestampTheIndependentOraclesAccept"),
 
-        //---- Table 1 Part B (clause 6.3, corrected reproduction) ----
         ("6.3-table1b-certificate-values", "certificate-values shall not be present at B-LT/B-LTA (root SignerInfo.unsignedAttrs); at B-B/B-T it should not be present.",
             RequirementCoverageStatus.Tested, "CAdESSignatureAugmentationTests.PlacesMaterialInsideTheLatestArchiveTimestampTokenAndLeavesTheRootUntouched (the root SignerInfo never carries it; the strategy-2 exception places it inside the embedded TST's own SignerInfo, a different element)"),
         ("6.3-table1b-complete-certificate-references", "complete-certificate-references shall not be present at B-LT/B-LTA.",
@@ -572,7 +570,6 @@ internal sealed class CAdESRequirementsMatrixTests
         ("6.3-table1b-archive-time-stamp-v3", "archive-time-stamp-v3 shall be provided at B-LTA (cardinality >= 1).",
             RequirementCoverageStatus.Tested, "CAdESSignatureAugmentationTests.AddsAnArchiveTimestampTheIndependentOracleAndTheCoverageComputationBothAgreeWith"),
 
-        //---- Lettered requirements a)-t) (clause 6.3) ----
         ("6.3-req-a", "a) generator shall include the signing certificate in SignedData.certificates.",
             RequirementCoverageStatus.Tested, "CAdESSignatureCreationTests.AttachedEcdsaSignatureVerifiesUnderThePlatformCmsReader"),
         ("6.3-req-b", "b) should include all certificates needed for path-building that verifiers cannot obtain.",
@@ -616,7 +613,6 @@ internal sealed class CAdESRequirementsMatrixTests
         ("6.3-req-t", "t) at least one of content-hints/mime-type should be present, and shall describe the signed data type when present.",
             RequirementCoverageStatus.Tested, "CAdESOptionalAttributesTests.ContentHintsRoundTripsAndTheEngineAcceptsTheSignature (the SHOULD is a creation-time policy decision left to the caller — either, both or neither may be supplied, matching every other opt-in attribute's default; the SHALL is met structurally: each, when supplied, carries a contentType describing the signed data, per CAdESOptionalAttributesTests.MimeTypeRoundTripsAndTheEngineAcceptsTheSignature too)"),
 
-        //---- Clause 5.2 opt-in signed-attribute normative content (D2/D3 new surface) ----
         ("5.2.5-signerlocation-tagging", "signer-location's postalAddress [2] field shall be tagged per its own ASN.1 module (DEFINITIONS EXPLICIT TAGS): [2] wraps PostalAddress's own SEQUENCE OF tag explicitly.",
             RequirementCoverageStatus.Tested, "CAdESOptionalAttributesTests.SignerLocationRoundTripsEveryFieldAndTheEngineAcceptsTheSignature (fixed in FX3, defect D-C: BuildSignerLocationAttribute now writes postalAddress EXPLICIT — [2] { SEQUENCE { DirectoryString, ... } } — and the test pins the exact EXPLICIT-TAGS DER to the octet, so the writer and an independent reader cannot drift together)"),
         ("5.2.6.1-signerattributesv2-shalls", "signer-attributes-v2 shall carry exactly one AttributeValue of type SignerAttributeV2 identified by id-aa-ets-signerAttrV2; its claimedAttributes arm, when used, shall be a SEQUENCE OF Attribute; an empty signer-attributes-v2 shall not be created.",
@@ -626,7 +622,6 @@ internal sealed class CAdESRequirementsMatrixTests
         ("5.2.8-content-timestamp-raw-imprint", "content-time-stamp's message imprint (§5.2.8) shall be the raw hash of the encapsulated content, without the ASN.1 tag and length octets clause 5.5.3's archive-time-stamp-v3 convention would add.",
             RequirementCoverageStatus.Tested, "CAdESOptionalAttributesTests.ContentTimeStampUsesTheRawValueImprintConventionNotTheAtsv3TlvConvention"),
 
-        //---- Clause 4 dependencies this wave actually exercises ----
         ("4.1-cms-compliance", "CAdES signatures shall build on CMS (RFC 5652) and comply with its clauses 2-5.",
             RequirementCoverageStatus.Tested, "CAdESSignatureCreationTests.AttachedEcdsaSignatureVerifiesUnderThePlatformCmsReader"),
         ("4.4-version-rule", "SignedData.version and SignerInfo.version shall follow RFC 5652 §5.1's version-assignment cascade (clause 4.4 delegates to it): 1 for the id-data/IssuerAndSerialNumber/no-attribute-certificate/no-other-format combination the creation surface produces, and 5 once a B-LT validation-data placement embeds an OtherCertificateFormat certificate ([3]) or an OtherRevocationInfoFormat OCSP crls member ([1]).",
@@ -646,7 +641,6 @@ internal sealed class CAdESRequirementsMatrixTests
         ("4.9-signed-unsigned-split", "Signed attributes are covered by the signature and DER-encoded; unsigned attributes are added after signing and are not themselves signature-covered.",
             RequirementCoverageStatus.Tested, "CmsSignedDataAugmentationTests.PreservesTheOctetsOfUnsignedAttributesAlreadyPresent"),
 
-        //---- Clause 5.5.2: ats-hash-index-v3 ----
         ("5.5.2-hashIndAlgorithm-identifies", "hashIndAlgorithm shall identify the hash algorithm used to compute certificatesHashIndex/crlsHashIndex/unsignedAttrValuesHashIndex.",
             RequirementCoverageStatus.Tested, "ArchiveTimestampV3Tests.ComputesTheHashIndexTheIndependentOracleRecomputes (also witnessed end to end over a real RFC 3161 wire round trip reaching TOTAL_PASSED: CAdESMultiServerWireFlowTests.CreatesAugmentsToBLtaAndReachesTotalPassedAcrossTwoKestrelHostsWithLiveOcspDrivenRevocation)"),
         ("5.5.2-hashIndAlgorithm-matches-tst", "hashIndAlgorithm shall be the same algorithm as the enveloping time-stamp token's own message imprint algorithm.",
@@ -666,7 +660,6 @@ internal sealed class CAdESRequirementsMatrixTests
         ("5.5.2-invalidity-asymmetric", "The index is invalid iff an index entry matches no current material; current material with no corresponding index entry is not an error.",
             RequirementCoverageStatus.Tested, "ArchiveTimestampV3Tests.MaterialAddedAfterTheArchiveTimestampIsUncoveredAndNotAnError"),
 
-        //---- Clause 5.5.3: archive-time-stamp-v3 ----
         ("5.5.3-imprint-concatenation", "The archive-time-stamp-v3 message imprint input shall be the four-part concatenation: eContentType, the signed-data hash, the named SignerInfo fields, and one ATSHashIndexV3.",
             RequirementCoverageStatus.Tested, "ArchiveTimestampV3Tests.BuildsTheMessageImprintInputTheIndependentOracleAssembles (also witnessed end to end over the real wire: CAdESMultiServerWireFlowTests.CreatesAugmentsToBLtaAndReachesTotalPassedAcrossTwoKestrelHostsWithLiveOcspDrivenRevocation)"),
         ("5.5.3-step2-hash-algorithm-match", "The signed-data hash (step 2) shall use the same algorithm as the archive time-stamp's own message imprint, re-hashing the signed content rather than reusing the message-digest attribute's value.",
@@ -702,7 +695,6 @@ internal sealed class CAdESRequirementsMatrixTests
         ("5.5.3-generation-der-preserving", "When generating a new attribute carrying validation data, it shall be DER-encoded while preserving the encoding of any signed field it references.",
             RequirementCoverageStatus.Tested, "CmsSignedAttributesEncodingTests.RebuildsAnExistingSignedAttributeSetOctetForOctetWhateverOrderTheAttributesArriveIn"),
 
-        //---- Annex A.1.1.2 / A.1.2.2 closed-set rules ----
         ("a112-certvalues-closed-set", "certificate-values shall contain exactly the certificate values not already in SignedData.certificates that complete-certificate-references/attribute-certificate-references/signing-certificate-reference name; no other certificate shall be included.",
             RequirementCoverageStatus.Tested, "CAdESSignatureAugmentationTests.PlacesMaterialInsideTheLatestArchiveTimestampTokenAndLeavesTheRootUntouched (a certificate already carried by the token is offered again and only the missing one is found stated)"),
         ("a122-revocationvalues-closed-set", "revocation-values shall contain exactly the revocation elements not already in SignedData.crls that complete-revocation-references/attribute-revocation-references name; no other element shall be included.",
@@ -710,7 +702,6 @@ internal sealed class CAdESRequirementsMatrixTests
         ("a122-ocsp-type-routing", "Within revocation-values, a BasicOCSPResponse shall be placed in ocspVals; a whole OCSPResponse shall instead be carried under otherRevVals tagged id-ri-ocsp-response.",
             RequirementCoverageStatus.Tested, "CAdESSignatureAugmentationTests.RevocationValuesTagsEveryFieldWithTheModulesExplicitTagsAndRoutesBothOcspFormsByType (both forms are offered in the same call; the BasicOCSPResponse is decoded out of ocspVals and the whole OCSPResponse out of otherRevVals under the id-ri-ocsp-response OID, each verbatim — the routing proven by field inspection, not by a presence count)"),
 
-        //---- Annex A.2 deprecation rules ----
         ("a2.1-general", "Deprecated attributes shall not be added to a signature any more, except long-term-validation may still be added to a signature already containing one.",
             RequirementCoverageStatus.Tested, "CAdESSignatureAugmentationTests.TheAugmentationsEmitNoDeprecatedAttribute (the general shall-not); CAdESSignatureAugmentationTests.RefusesToPlaceMaterialWhenTheLatestLegacyAttributeIsALongTermValidationAttribute (the stated carve-out is a typed rejection this wave does not implement, per stage 5's recorded decision)"),
         ("a2.4-atsv2", "New ATSv2 (archive-time-stamp) attributes shall not be created.",
@@ -720,27 +711,22 @@ internal sealed class CAdESRequirementsMatrixTests
         ("a2.6-ats-hash-index", "ats-hash-index (pre-v3, v1/v2) is deprecated; ats-hash-index-v3 shall be used instead.",
             RequirementCoverageStatus.Tested, "CAdESSignatureAugmentationTests.TheAugmentationsEmitNoDeprecatedAttribute"),
 
-        //---- Clause 6.2.1: algorithms ----
         ("6.2.1-md5", "MD5 shall not be used as a digest algorithm.",
             RequirementCoverageStatus.Tested, "CAdESSignatureCreationTests.RefusesMd5AsACreationDigest"),
         ("6.2.1-ts119312-should", "Algorithms/key lengths should be as specified in ETSI TS 119 312.",
             RequirementCoverageStatus.OutOfScope, "Contract 'Out' list: a TS 119 312 default algorithm table is a stated CBOM/PQC follow-up; this wave consults only a caller-supplied CryptographicConstraints table (R-8) plus the hard MD5/SHA-1 refusals."),
 
-        //---- Annex A.1.5: imprint definitions (validation-side, recognised not emitted) ----
         ("a1.5.2-esc-timestamp-imprint", "The CAdES-C-timestamp (escTimeStamp) message imprint shall cover the signature value, signature-time-stamp, complete-certificate-references and complete-revocation-references attributes.",
             RequirementCoverageStatus.Tested, "CAdESTimestampCoverageTests.StatesWhatACadesCTimestampProtects"),
         ("a1.5.1-cert-crl-timestamp-imprint", "The time-stamped-certs-crls-references (certCRLTimestamp) message imprint shall cover complete-certificate-references and complete-revocation-references.",
             RequirementCoverageStatus.Tested, "CAdESTimestampCoverageTests.StatesWhatATimeStampOnCertificateAndRevocationReferencesProtects"),
 
-        //---- Clause 5.5.3 step 3): signed-attribute coverage (content-time-stamp POE) ----
         ("5.5.3-signedattrs-content-timestamp-poe", "Step 3) of the archive-time-stamp-v3 imprint concatenates the whole signedAttrs TLV verbatim, so an archive-time-stamp-v3 protects a content-time-stamp (a signed attribute, §5.2.8) even though the ats-hash-index-v3 — which indexes certificates, revocation objects and unsigned attribute values alone — never names it; the CAdES binding's StateTimestampProtectsObject filter therefore grants it a proof of existence at the archive instant (D-F: the AMENDMENT-2 hash-index-only lookup wrongly denied it).",
             RequirementCoverageStatus.Tested, "CAdESTimestampCoverageTests.AContentTimestampGainsItsProofOfExistenceFromTheArchiveTimestamp (POE set names the content-time-stamp at the archive instant, plus the negative guard that the token is a signed attribute value the ats-hash-index-v3 never names — the exact pre-fix denial); CAdESCapstoneFirewalledFlowTests.FirewalledCapstoneAttributesAContentTimestampsProofToTheArchiveTimestamp (the report-level projection end to end: ProvidesProofOfExistenceFor lists it, from wire bytes to TOTAL-PASSED)"),
 
-        //---- TS 119 102-2 clause 4.4.7 ----
         ("ts119102-2-4.4.7-poe", "The validation report shall populate ValidationObject.ProvidesProofOfExistenceFor from the accumulated proofs of existence, granting a proof only to material the archive time-stamp's own coverage genuinely protects — never to material merely appended after it (clause 5.6.3.1's class rule narrowed by the CAdES binding's own ats-hash-index-v3 coverage, AMENDMENT 2/D1).",
             RequirementCoverageStatus.Tested, "CAdESTimestampCoverageTests.MaterialAppendedAfterTheArchiveTimestampGainsNoProofOfExistenceFromIt (D1's regression test for the fix — a reachable false-POE admission this test pins shut: with the D1 filter reverted, this exact assertion fails, the other seven tests in the class still passing); AnnexAValidationReportFlowTests.Example2LongTermReportNamesWhatTheArchiveTimestampProvesTheExistenceOf (the report population itself); CAdESTimestampCoverageTests.AnOcspResponsePresentBeforeTheArchiveTimestampKeepsItsProofOfExistence (the over-filtering guard on the RFC 5940 member lookup)"),
 
-        //---- Attribute-identifier cross-check ----
         ("cross-oid-identifiers", "Every attribute OID this wave recognises or emits equals the value EN 319 122-1 Annex D (or, for ATSv2, ETSI TS 101 733) specifies.",
             RequirementCoverageStatus.Tested, "CAdESRequirementsMatrixTests.EveryAttributeOidGetterMatchesItsSpecificationValue"),
     ];

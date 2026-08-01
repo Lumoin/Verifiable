@@ -418,6 +418,12 @@ internal static class OcspTestFixtures
     internal static AsymmetricKeyParameter ToBouncyCastlePrivateKey(ECDsa key) => DotNetUtilities.GetECDsaKeyPair(key).Private;
 
 
+    /// <summary>Bridges a platform RSA private key to a BouncyCastle signing key, exclusively to drive the independent BouncyCastle generators (see class remarks).</summary>
+    /// <param name="key">The platform key.</param>
+    /// <returns>The BouncyCastle private key parameter.</returns>
+    internal static AsymmetricKeyParameter ToBouncyCastlePrivateKey(RSA key) => DotNetUtilities.GetRsaKeyPair(key).Private;
+
+
     /// <summary>
     /// Mints a <c>BasicOCSPResponse</c>-carrying <c>OCSPResponse</c> (RFC 6960 §4.2.1) with the independent
     /// BouncyCastle OCSP implementation, signed by <paramref name="signerCertificate"/>/<paramref name="signerKey"/>.
@@ -773,10 +779,11 @@ internal static class OcspTestFixtures
     /// <param name="subjectCn">The CA's common name.</param>
     /// <param name="notBefore">The validity start.</param>
     /// <param name="notAfter">The validity end.</param>
+    /// <param name="keySizeBits">The RSA modulus size the key is minted at; 3072 mints the natural post-2025 size of ETSI TS 119 312 V1.4.3 Table 10.</param>
     /// <returns>The minted certificate and its signing key; the caller disposes both.</returns>
-    internal static (X509Certificate2 Certificate, RSA Key) MintRsaRootCa(string subjectCn, DateTimeOffset notBefore, DateTimeOffset notAfter)
+    internal static (X509Certificate2 Certificate, RSA Key) MintRsaRootCa(string subjectCn, DateTimeOffset notBefore, DateTimeOffset notAfter, int keySizeBits = 2048)
     {
-        RSA key = RSA.Create(2048);
+        RSA key = RSA.Create(keySizeBits);
         try
         {
             var request = new CertificateRequest($"CN={subjectCn}", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
@@ -840,10 +847,11 @@ internal static class OcspTestFixtures
 
 
     /// <summary>
-    /// Mints a <c>BasicOCSPResponse</c>-carrying <c>OCSPResponse</c> signed with an RSA key (RSASSA-PKCS1-v1_5
-    /// SHA-256), directly by the issuer (no delegated responder), for the RSA exponent-confusion fixture. A
-    /// dedicated sibling of <see cref="MintOcspResponse"/> rather than a widened overload, so ECDSA callers are
-    /// untouched; carries only what that fixture needs — a <c>Good</c> status, no nonce, no embedded certs.
+    /// Mints a <c>BasicOCSPResponse</c>-carrying <c>OCSPResponse</c> signed with an RSA key (RSASSA-PKCS1-v1_5,
+    /// SHA-256 by default or the named combined algorithm), directly by the issuer (no delegated responder),
+    /// for the RSA fixtures. A dedicated sibling of <see cref="MintOcspResponse"/> rather than a widened
+    /// overload, so ECDSA callers are untouched; carries only what those fixtures need — a <c>Good</c> status,
+    /// no nonce, no embedded certs.
     /// </summary>
     /// <param name="targetCertificate">The certificate the single response answers for.</param>
     /// <param name="issuerCertificate">The target's issuer — the <c>CertID</c> hash input; also the direct signer.</param>
@@ -852,6 +860,7 @@ internal static class OcspTestFixtures
     /// <param name="status">The <c>CertStatus</c> to report.</param>
     /// <param name="thisUpdate">The <c>thisUpdate</c> instant.</param>
     /// <param name="nextUpdate">The optional <c>nextUpdate</c> instant.</param>
+    /// <param name="signatureAlgorithm">The BouncyCastle name of the combined RSA signature algorithm the response is signed under; "SHA512withRSA" mints the sha512WithRSAEncryption shape ETSI TS 119 312 V1.4.3 clause A.9 also mandates.</param>
     /// <returns>The pooled response carrier; the caller disposes it.</returns>
     internal static PkiCertificateMemory MintOcspResponseRsaSigned(
         X509Certificate2 targetCertificate,
@@ -860,7 +869,8 @@ internal static class OcspTestFixtures
         RSA signerKey,
         OcspCertificateStatus status,
         DateTimeOffset thisUpdate,
-        DateTimeOffset? nextUpdate)
+        DateTimeOffset? nextUpdate,
+        string signatureAlgorithm = "SHA256withRSA")
     {
         BcX509Certificate bcTarget = ToBouncyCastleCertificate(targetCertificate);
         BcX509Certificate bcIssuer = ToBouncyCastleCertificate(issuerCertificate);
@@ -879,7 +889,7 @@ internal static class OcspTestFixtures
 
         generator.AddResponse(certId, certStatus, thisUpdate.UtcDateTime, nextUpdate?.UtcDateTime, singleExtensions: null);
 
-        BasicOcspResp basicResponse = generator.Generate("SHA256withRSA", signerPrivateKey, null, thisUpdate.UtcDateTime);
+        BasicOcspResp basicResponse = generator.Generate(signatureAlgorithm, signerPrivateKey, null, thisUpdate.UtcDateTime);
 
         var responseGenerator = new OCSPRespGenerator();
         OcspResp response = responseGenerator.Generate(OcspRespStatus.Successful, basicResponse);

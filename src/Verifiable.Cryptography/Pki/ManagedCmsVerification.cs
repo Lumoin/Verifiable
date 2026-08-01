@@ -28,8 +28,9 @@ namespace Verifiable.Cryptography.Pki;
 /// signed attributes — so eMRTD Passive Authentication and CAdES verify over it unchanged.
 /// </para>
 /// <para>
-/// This slice verifies elliptic-curve (ECDSA) signers, the modern eMRTD and eID case; RSA signers are a
-/// separate slice. The signer's signature covers the signed attributes (RFC 5652 §5.4), so the signature is
+/// This verifies elliptic-curve (ECDSA) signers, the modern eMRTD and eID case, and RSASSA-PKCS1-v1_5 RSA
+/// signers under SHA-256, SHA-384 or SHA-512 (see <c>VerifyRsaAsync</c> for the exact RSA profile and its
+/// key-length band). The signer's signature covers the signed attributes (RFC 5652 §5.4), so the signature is
 /// checked over the DER re-encoding of the SignedAttributes (the implicit <c>[0]</c> tag replaced by the
 /// universal <c>SET OF</c> tag), and the <c>message-digest</c> attribute is checked to equal the hash of the
 /// encapsulated content. As with the other backends, trust in the signer certificate is the separate
@@ -47,17 +48,27 @@ public static class ManagedCmsVerification
     /// <summary>The message-digest signed attribute (RFC 5652 §11.2).</summary>
     private const string MessageDigestOid = "1.2.840.113549.1.9.4";
 
-    /// <summary>The sha256WithRSAEncryption signature algorithm object identifier (RFC 8017).</summary>
-    private const string Sha256WithRsaEncryptionOid = "1.2.840.113549.1.1.11";
-
-    /// <summary>The rsaEncryption algorithm object identifier (RFC 8017); used as the SignerInfo signature algorithm with the hash carried by the digest algorithm (RFC 3370).</summary>
-    private const string RsaEncryptionOid = "1.2.840.113549.1.1.1";
-
     /// <summary>The universal <c>SET OF</c> tag octet that replaces the signed attributes' implicit <c>[0]</c> tag for the signature (RFC 5652 §5.4).</summary>
     private const byte SetOfTag = 0x31;
 
     /// <summary>The RSA public exponent 65537 the registered RSA verification seam assumes.</summary>
     private static ReadOnlySpan<byte> Exponent65537 => [0x01, 0x00, 0x01];
+
+    /// <summary>
+    /// The smallest RSA modulus bit length an RSA signer is verified at.
+    /// <see href="https://www.etsi.org/deliver/etsi_ts/119300_119399/119312/01.04.03_60/ts_119312v010403p.pdf">
+    /// ETSI TS 119 312 V1.4.3</see> Tables 9 and 10 keep 2048-bit RSA legal for validation while sizing new
+    /// keys at 3&#160;000 bits or more after 2025, so the floor admits both without dropping to strengths the
+    /// suites specification no longer lists.
+    /// </summary>
+    private static int MinimumRsaModulusBitLength => 2048;
+
+    /// <summary>
+    /// The largest RSA modulus bit length an RSA signer is verified at — the largest the underlying providers
+    /// implement — bounding the modular-exponentiation work an untrusted certificate can demand before any
+    /// signature mathematics run.
+    /// </summary>
+    private static int MaximumRsaModulusBitLength => 16384;
 
 
     /// <summary>
@@ -131,8 +142,9 @@ public static class ManagedCmsVerification
     /// <para>
     /// This implements <see cref="VerifyDetachedCmsSignedDataDelegate"/> and is what that seam resolves to when
     /// a host registers nothing for it — the same RSA profile this file's encapsulated member accepts (see
-    /// <c>VerifyRsaAsync</c>: RSASSA-PKCS1-v1_5 with SHA-256, exponent 65537, 2048- or 4096-bit moduli), so a
-    /// host whose material is outside that profile registers a backend rather than being refused by one.
+    /// <c>VerifyRsaAsync</c>: RSASSA-PKCS1-v1_5 with SHA-256, SHA-384 or SHA-512, exponent 65537, moduli of
+    /// 2048 to 16384 bits), so a host whose material is outside that profile — RSASSA-PSS, say — registers a
+    /// backend rather than being refused by one.
     /// </para>
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -242,20 +254,43 @@ public static class ManagedCmsVerification
 
 
     /// <summary>
-    /// Verifies an RSA (RSASSA-PKCS1-v1_5 with SHA-256) signature against the certificate's RSA public key.
-    /// The registered RSA verification seam covers the modern eMRTD and eID profile — 2048- or 4096-bit keys,
-    /// public exponent 65537, PKCS#1 v1.5 padding, SHA-256 — so other parameters are reported as unsupported.
+    /// Verifies an RSA (RSASSA-PKCS1-v1_5) signature against the certificate's RSA public key through the
+    /// hash-parameterized RSA verification seam. The accepted profile is RSASSA-PKCS1-v1_5 with SHA-256,
+    /// SHA-384 or SHA-512, public exponent 65537, and a modulus inside the
+    /// <see cref="MinimumRsaModulusBitLength"/>–<see cref="MaximumRsaModulusBitLength"/> band — covering the
+    /// algorithms and post-2025 key lengths of
+    /// <see href="https://www.etsi.org/deliver/etsi_ts/119300_119399/119312/01.04.03_60/ts_119312v010403p.pdf">
+    /// ETSI TS 119 312 V1.4.3</see> clause A.9 Table A.8 and Tables 9-10 — so other parameters are reported
+    /// as unsupported.
     /// </summary>
     private static async ValueTask<bool> VerifyRsaAsync(SignerInfo signer, ManagedCertificate signerCertificate, ReadOnlyMemory<byte> signedMessage, CancellationToken cancellationToken)
     {
-        //The signature algorithm is the combined sha256WithRSAEncryption or the bare rsaEncryption with the
-        //hash carried by the digest algorithm (RFC 3370); either way the seam fixes PKCS#1 v1.5 with SHA-256.
-        bool supportedSignatureAlgorithm =
-            string.Equals(signer.SignatureAlgorithmOid, Sha256WithRsaEncryptionOid, StringComparison.Ordinal)
-            || string.Equals(signer.SignatureAlgorithmOid, RsaEncryptionOid, StringComparison.Ordinal);
-        if(!supportedSignatureAlgorithm || !string.Equals(signer.DigestAlgorithmOid, WellKnownOids.Sha256, StringComparison.Ordinal))
+        //The signature algorithm is a combined shaNNNWithRSAEncryption that pins its own hash, or the bare
+        //rsaEncryption with the hash carried by the digest algorithm (RFC 3370). A combined identifier must
+        //agree with the SignerInfo digest algorithm: an inconsistent pair names two different computations at
+        //once, the shape an algorithm-substitution attempt takes, and is refused rather than resolved in
+        //either identifier's favor.
+        string? acceptedDigestOid = signer.SignatureAlgorithmOid switch
         {
-            throw new CryptographicException($"The managed CMS verifier supports only RSASSA-PKCS1-v1_5 with SHA-256 for RSA signers (signature '{signer.SignatureAlgorithmOid}', digest '{signer.DigestAlgorithmOid}').");
+            WellKnownOids.Sha256WithRsaEncryption => WellKnownOids.Sha256,
+            WellKnownOids.Sha384WithRsaEncryption => WellKnownOids.Sha384,
+            WellKnownOids.Sha512WithRsaEncryption => WellKnownOids.Sha512,
+            WellKnownOids.RsaEncryption => signer.DigestAlgorithmOid,
+            _ => null
+        };
+
+        CryptoAlgorithm? algorithm = string.Equals(signer.DigestAlgorithmOid, acceptedDigestOid, StringComparison.Ordinal)
+            ? acceptedDigestOid switch
+            {
+                WellKnownOids.Sha256 => CryptoAlgorithm.RsaSha256,
+                WellKnownOids.Sha384 => CryptoAlgorithm.RsaSha384,
+                WellKnownOids.Sha512 => CryptoAlgorithm.RsaSha512,
+                _ => (CryptoAlgorithm?)null
+            }
+            : null;
+        if(algorithm is null)
+        {
+            throw new CryptographicException($"The managed CMS verifier supports only RSASSA-PKCS1-v1_5 with SHA-256, SHA-384 or SHA-512 for RSA signers, with the digest algorithm agreeing with the signature algorithm (signature '{signer.SignatureAlgorithmOid}', digest '{signer.DigestAlgorithmOid}').");
         }
 
         if(!signerCertificate.RsaExponent.Span.SequenceEqual(Exponent65537))
@@ -263,14 +298,15 @@ public static class ManagedCmsVerification
             throw new CryptographicException("The managed CMS verifier supports only RSA public exponent 65537.");
         }
 
-        CryptoAlgorithm algorithm = signerCertificate.RsaModulus.Length switch
+        //A policy band replaces the former 2048-/4096-bit whitelist: any non-degenerate RSA public key from
+        //MinimumRsaModulusBitLength to MaximumRsaModulusBitLength verifies, so a 3072-bit key — the natural
+        //post-2025 choice under TS 119 312 V1.4.3 Table 10 — is inside the band rather than refused.
+        if(!RsaUtilities.IsValidPublicKey(signerCertificate.RsaModulus.Span, signerCertificate.RsaExponent.Span, MinimumRsaModulusBitLength, MaximumRsaModulusBitLength))
         {
-            256 => CryptoAlgorithm.Rsa2048,
-            512 => CryptoAlgorithm.Rsa4096,
-            _ => throw new CryptographicException("The managed CMS verifier supports only 2048- and 4096-bit RSA keys.")
-        };
+            throw new CryptographicException($"The managed CMS verifier accepts RSA moduli from {MinimumRsaModulusBitLength} to {MaximumRsaModulusBitLength} bits.");
+        }
 
-        VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, Purpose.Verification);
+        VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm.Value, Purpose.Verification);
 
         //The registered RSA seam takes the raw modulus and the RSA signature as-is (no re-encoding).
         (bool isVerified, CryptoEvent? evt) = await verify(

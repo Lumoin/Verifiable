@@ -27,7 +27,7 @@ internal sealed class ManagedCertificate
     private const string EcPublicKeyOid = "1.2.840.10045.2.1";
 
     /// <summary>The rsaEncryption key type (RFC 8017).</summary>
-    private const string RsaEncryptionOid = "1.2.840.113549.1.1.1";
+    private const string RsaEncryptionOid = WellKnownOids.RsaEncryption;
 
     /// <summary>The subject key identifier extension (RFC 5280 §4.2.1.2).</summary>
     private const string SubjectKeyIdentifierOid = "2.5.29.14";

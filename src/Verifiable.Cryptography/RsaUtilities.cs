@@ -233,8 +233,9 @@ namespace Verifiable.Cryptography
         /// <param name="modulus">The RSA modulus as unsigned big-endian bytes.</param>
         /// <param name="publicExponent">The RSA public exponent as unsigned big-endian bytes.</param>
         /// <param name="minimumModulusBitLength">The minimum accepted modulus bit length; defaults to <see cref="MinimumModulusBitLength"/>.</param>
+        /// <param name="maximumModulusBitLength">The largest accepted modulus bit length, bounding the modular-exponentiation work an untrusted key can demand; <see langword="null"/> states no ceiling.</param>
         /// <returns><see langword="true"/> when the key is a valid, non-degenerate RSA public key; otherwise <see langword="false"/>.</returns>
-        public static bool IsValidPublicKey(ReadOnlySpan<byte> modulus, ReadOnlySpan<byte> publicExponent, int? minimumModulusBitLength = null)
+        public static bool IsValidPublicKey(ReadOnlySpan<byte> modulus, ReadOnlySpan<byte> publicExponent, int? minimumModulusBitLength = null, int? maximumModulusBitLength = null)
         {
             if(modulus.IsEmpty || publicExponent.IsEmpty)
             {
@@ -249,7 +250,13 @@ namespace Verifiable.Cryptography
                 return false;
             }
 
-            return !n.IsEven && n.GetBitLength() >= (minimumModulusBitLength ?? MinimumModulusBitLength);
+            long bitLength = n.GetBitLength();
+            if(maximumModulusBitLength is int maximum && bitLength > maximum)
+            {
+                return false;
+            }
+
+            return !n.IsEven && bitLength >= (minimumModulusBitLength ?? MinimumModulusBitLength);
         }
     }
 }

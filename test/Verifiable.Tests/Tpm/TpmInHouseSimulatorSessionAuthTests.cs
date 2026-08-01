@@ -812,7 +812,6 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
         }
     }
 
-    //---- Shared helpers -------------------------------------------------------------------------------------
 
     /// <summary>
     /// The format-one session-index encoding (TPM 2.0 Library Part 2, clause 6.6.2): RC + TPM_RC_S +

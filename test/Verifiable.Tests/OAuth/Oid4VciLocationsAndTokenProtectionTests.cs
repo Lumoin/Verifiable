@@ -54,9 +54,7 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
             WellKnownCapabilityIdentifiers.OAuthPushedAuthorization);
 
 
-    //----------------------------------------------------------------------
     // §5.1.1 / §6.1.1 — the authorization_details `locations` rule.
-    //----------------------------------------------------------------------
 
     /// <summary>
     /// OID4VCI 1.0 §5.1.1: "If the Credential Issuer metadata contains an authorization_servers
@@ -206,9 +204,7 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
     }
 
 
-    //----------------------------------------------------------------------
     // §13.10 — protecting a long-lived Access Token giving access to Credentials.
-    //----------------------------------------------------------------------
 
     /// <summary>
     /// OID4VCI 1.0 §13.10: "Long-lived Access Tokens giving access to Credentials MUST not be
@@ -368,9 +364,7 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
     }
 
 
-    //----------------------------------------------------------------------
     // Helpers.
-    //----------------------------------------------------------------------
 
     /// <summary>
     /// Wires the §12.2.4 Credential Issuer Metadata contribution to declare an

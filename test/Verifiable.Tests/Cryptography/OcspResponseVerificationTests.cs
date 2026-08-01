@@ -511,6 +511,80 @@ internal sealed class OcspResponseVerificationTests
     }
 
 
+    /// <summary>
+    /// The RSA responder arm accepts moduli by the same policy band the managed CMS verifier uses rather than a
+    /// 2048-/4096-bit whitelist with SHA-256 alone: every combined identifier of
+    /// <see href="https://www.etsi.org/deliver/etsi_ts/119300_119399/119312/01.04.03_60/ts_119312v010403p.pdf">
+    /// ETSI TS 119 312 V1.4.3</see>'s SHA-2 family verifies, including the 3072-bit key Table 10 makes the
+    /// natural post-2025 modulus, and the 2048-bit SHA-256 baseline that predates the widening.
+    /// </summary>
+    /// <param name="keySizeBits">The RSA modulus size the responder's key is minted at.</param>
+    /// <param name="signatureAlgorithm">The BouncyCastle name of the combined RSA signature algorithm the response is signed under.</param>
+    [TestMethod]
+    [DataRow(2048, "SHA256withRSA")]
+    [DataRow(2048, "SHA384withRSA")]
+    [DataRow(3072, "SHA512withRSA")]
+    public async Task RsaResponderSignaturesInsideTheAcceptanceBandVerify(int keySizeBits, string signatureAlgorithm)
+    {
+        (X509Certificate2 rsaRootCertificate, RSA rsaRootKey) = OcspTestFixtures.MintRsaRootCa($"OCSP Verify RSA {keySizeBits} Root", NotBefore, NotAfter, keySizeBits);
+        try
+        {
+            using PkiCertificateMemory issuer = OcspTestFixtures.ToCertificateCarrier(rsaRootCertificate);
+            using MintedCertificate leaf = OcspTestFixtures.MintRootCa($"OCSP Verify RSA {keySizeBits} Leaf Stand-In", NotBefore, NotAfter);
+            using PkiCertificateMemory leafCarrier = OcspTestFixtures.ToCertificateCarrier(leaf.Certificate);
+            using OcspRequestContent request = await OcspRequests.CreateAsync(
+                leafCarrier, issuer, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared, includeNonce: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            using PkiCertificateMemory response = OcspTestFixtures.MintOcspResponseRsaSigned(
+                leaf.Certificate, rsaRootCertificate, rsaRootCertificate, rsaRootKey, OcspCertificateStatus.Good, ThisUpdate, NextUpdate,
+                signatureAlgorithm);
+
+            OcspResponseVerificationResult result = await OcspResponseVerification.VerifyAsync(
+                response, request, issuer, ValidationTime, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(OcspResponseVerificationOutcome.Verified, result.Outcome,
+                $"A {keySizeBits}-bit {signatureAlgorithm} responder signature is inside the acceptance band and must verify.");
+        }
+        finally
+        {
+            rsaRootCertificate.Dispose();
+            rsaRootKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// The band's floor holds on the responder arm exactly as on the managed CMS verifier: a sub-2048-bit
+    /// responder key fails closed to <see cref="OcspResponseVerificationOutcome.SignatureInvalid"/> rather than
+    /// being verified at a strength ETSI TS 119 312 V1.4.3 no longer lists.
+    /// </summary>
+    [TestMethod]
+    public async Task RsaResponderWithASubFloorKeyIsSignatureInvalid()
+    {
+        (X509Certificate2 rsaRootCertificate, RSA rsaRootKey) = OcspTestFixtures.MintRsaRootCa("OCSP Verify RSA Sub-Floor Root", NotBefore, NotAfter, keySizeBits: 1024);
+        try
+        {
+            using PkiCertificateMemory issuer = OcspTestFixtures.ToCertificateCarrier(rsaRootCertificate);
+            using MintedCertificate leaf = OcspTestFixtures.MintRootCa("OCSP Verify RSA Sub-Floor Leaf Stand-In", NotBefore, NotAfter);
+            using PkiCertificateMemory leafCarrier = OcspTestFixtures.ToCertificateCarrier(leaf.Certificate);
+            using OcspRequestContent request = await OcspRequests.CreateAsync(
+                leafCarrier, issuer, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared, includeNonce: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            using PkiCertificateMemory response = OcspTestFixtures.MintOcspResponseRsaSigned(
+                leaf.Certificate, rsaRootCertificate, rsaRootCertificate, rsaRootKey, OcspCertificateStatus.Good, ThisUpdate, NextUpdate);
+
+            OcspResponseVerificationResult result = await OcspResponseVerification.VerifyAsync(
+                response, request, issuer, ValidationTime, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(OcspResponseVerificationOutcome.SignatureInvalid, result.Outcome,
+                "A genuine signature from a sub-floor responder key must fail closed, never verify below the acceptance band.");
+        }
+        finally
+        {
+            rsaRootCertificate.Dispose();
+            rsaRootKey.Dispose();
+        }
+    }
+
+
     /// <summary>Trailing bytes appended to the content of the outer signature BIT STRING, past the genuine <c>ECDSA-Sig-Value</c> SEQUENCE, must not be silently ignored.</summary>
     [TestMethod]
     public async Task TrailingBytesInsideTheEcdsaSignatureAreRejected()

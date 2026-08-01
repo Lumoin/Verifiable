@@ -652,11 +652,9 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
     /// </summary>
     private static (string ClauseId, string Requirement, RequirementCoverageStatus Status, string Evidence)[] RowData { get; } =
     [
-        //---- IETF RFC 4998 clause 2.1 — module precedence ----
         ("rfc4998-2.1-R1", "If there is a conflict between both ASN.1 modules, the 1988-ASN.1 module precedes.",
             RequirementCoverageStatus.Tested, "EvidenceRecordsTests.ARecordRoundTripsWithoutChangingItsOctets (the codec is written against Appendix B's 1988 module throughout; both modules declare IMPLICIT TAGS with identical tag numbers, so a conformant value's DER octets are the same either way, and third-party records of two independent corpora decode under this grammar in ReferenceArtifactEvidenceRecordTests.TheBinaryCorpusRenewedRecordsCarryThePositionalCombination)"),
 
-        //---- IETF RFC 4998 clause 3.1 — EvidenceRecord syntax ----
         ("rfc4998-3.1-R2", "An implementation SHOULD reject a version value below 1.",
             RequirementCoverageStatus.Tested, "EvidenceRecordRequirementsMatrixTests.AVersionBelowOneIsRefused (the floor is enforced where the octets are read; the same rewrite at the floor is read back, so the refusal is the version)"),
         ("rfc4998-3.1-R3", "cryptoInfos items may be added based on the policy used.",
@@ -666,7 +664,6 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc4998-3.1-R5", "The ordering of the digestAlgorithms values is not relevant.",
             RequirementCoverageStatus.Tested, "EvidenceRecordRenewalTests.RenewingTwiceUnderOneAlgorithmNamesItOnce (creation states each algorithm once and never sorts; the reading side never consults the field's order, which is why the two-chain third-party records of ReferenceArtifactEvidenceRecordTests.ARenewedRecordLinksItsChainsThePositionalWay verify whatever order their producers wrote)"),
 
-        //---- IETF RFC 4998 clause 4.1 — ArchiveTimeStamp syntax ----
         ("rfc4998-4.1-R6", "If the optional digestAlgorithm field is not present, the digest algorithm of the timestamp MUST be used.",
             RequirementCoverageStatus.Tested, "EvidenceRecordsTests.StatingTheDigestAlgorithmFieldIsTheOtherWayToBindTheTreesAlgorithm (both resolutions reach the same tree; the absent-field case is the default every other test of the class runs under)"),
         ("rfc4998-4.1-R7", "Attributes is a SET rather than a SEQUENCE because \"the ordering is relevant\".",
@@ -676,7 +673,6 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc4998-4.1-R9", "Other types of timestamp MAY be used if they carry time data, timestamped data and a cryptographically secure confirmation.",
             RequirementCoverageStatus.OutOfScope, "A permission this wave does not take up on the ASN.1 side: the library reads the timeStamp field as an RFC 3161 token through the shipped seam and reports EvidenceRecordVerificationStatus.TimestampNotRead for anything it cannot open, which is the graceful degradation the permission's converse demands of a verifier. The XML sibling's equivalent permission IS exercised, because RFC 6283 clause 3.1.2 registers a second named format to test against (XmlEvidenceRecordsTests.ATimeStampFormatThisLibraryDoesNotReadIsNamedAsSuch); RFC 4998 registers none."),
 
-        //---- IETF RFC 4998 clause 4.2 — ArchiveTimeStamp generation ----
         ("rfc4998-4.2-R10", "A data group's document hashes are binary sorted ascending, concatenated and hashed, over the complete output with leading zeros retained and the most significant bit first.",
             RequirementCoverageStatus.Tested, "EvidenceRecordHashTreeTests.TheComparatorIsUnsignedAndKeepsLeadingZeros (the near-misses a signed compare, zero-stripping and a hex compare would produce, each ruled out) and EvidenceRecordHashTreePropertyTests.TheComparatorAgreesWithAnIndependentUnsignedComparisonOnEveryPair"),
         ("rfc4998-4.2-R11", "Hash values are placed in groups, each group sorted binary ascending, concatenated and hashed to build the next level; any data may be hashed and used where additional hash values are needed.",
@@ -692,7 +688,6 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc4998-4.2-R15", "The data needed to verify the timestamp MUST be preserved, and SHOULD be stored in the timestamp itself unless this causes unnecessary duplication.",
             RequirementCoverageStatus.Tested, "EvidenceRecordSignatureValidationTests.StepOneReportsWhatTheRecordAndItsTimestampConcluded (the record's most recent Archive Timestamp is validated through the EN 319 102-1 clause 5.4 building block, and the certificate material that validation needs comes from the token's own SignedData — the placement the SHOULD names)"),
 
-        //---- IETF RFC 4998 clause 4.3 — ArchiveTimeStamp verification ----
         ("rfc4998-4.3-R16", "An Archive Timestamp shall prove that a data object existed at a certain time, given by timestamp.",
             RequirementCoverageStatus.Tested, "EvidenceRecordsTests.AnInitialRecordOverOneDataObjectVerifies (the goal statement the numbered procedure of R17-R21 exists to establish; the instant is reported as InitialArchiveTime and LatestArchiveTime)"),
         ("rfc4998-4.3-R17", "Step 2: search for hash value h in the first list; if not present, terminate verification with a negative result.",
@@ -706,17 +701,14 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc4998-4.3-R21", "If an additional proof is necessary that the Archive Timestamp relates to a data object group, it can be verified additionally that only the hash values of the given data objects are in the first hash-value list.",
             RequirementCoverageStatus.Tested, "EvidenceRecordsTests.TheGroupProofHoldsForTheGroupTheRecordWasCreatedFor (the exclusivity check holds for the exact group and fails for a wider one; the check is a caller-stated option, as the clause's \"if\" makes it)"),
 
-        //---- IETF RFC 4998 clause 5 (intro) — lifecycle framing ----
         ("rfc4998-5-R22", "After the renewal, always only the most recent ArchiveTimeStamp and the algorithms and timestamps it uses must be watched regarding expiration and loss of security.",
             RequirementCoverageStatus.OutOfScope, "Operational monitoring over calendar time, which the waveasic contract's Out list names explicitly (\"renewal-TIMING advisory/monitoring (operational guidance; the algorithm-constraints table is the existing seam)\"). What a monitor needs IS surfaced: EvidenceRecordVerification reports LatestArchiveTime, CoveredUntil and the per-member GenerationTime of every Archive Timestamp."),
 
-        //---- IETF RFC 4998 clause 5.1 — chain and sequence syntax ----
         ("rfc4998-5.1-R23", "ArchiveTimeStampChain and ArchiveTimeStampSequence MUST be ordered ascending by time of timestamp.",
             RequirementCoverageStatus.Tested, "EvidenceRecordRenewalTests.ARenewalWhoseTokenPredatesWhatItRenewsIsRefused (creation refuses to write a structure the clause forbids) and EvidenceRecordRenewalTests.ATimestampRenewalAppendsToTheChainItRenews (the produced order). The verifier's own ascending-time check is reported only when nothing else has already failed, so that the first reason a record stopped verifying is the one reported — stage-2 decision 10; no test reaches it, because every structure that breaks the ordering also breaks the linkage the clause-5.3 walk checks first, and the shipped creation surface cannot produce one that does not."),
         ("rfc4998-5.1-R24", "Within an ArchiveTimeStampChain, all reducedHashtrees of the contained ArchiveTimeStamps MUST use the same Hash-Algorithm.",
             RequirementCoverageStatus.Tested, "EvidenceRecordRequirementsMatrixTests.AChainWhoseMembersNameDifferentAlgorithmsIsRefused (the verifier) and EvidenceRecordRenewalTests.AHashTreeRenewalStartsANewChainUnderTheNewAlgorithm (the generator, which starts a new chain rather than mixing algorithms in one)"),
 
-        //---- IETF RFC 4998 clause 5.2 — Timestamp Renewal and Hash-Tree Renewal ----
         ("rfc4998-5.2-R25", "Before cryptographic algorithms become weak or timestamp certificates become invalid, Archive Timestamps have to be renewed by generating a new Archive Timestamp.",
             RequirementCoverageStatus.OutOfScope, "The trigger is operational monitoring over calendar time, which the waveasic contract's Out list names (renewal-TIMING advisory/monitoring). The MECHANICS the clause then prescribes are R26-R37 below, all implemented and tested."),
         ("rfc4998-5.2-R26", "In the case of Timestamp Renewal, the content of the timeStamp field of the old Archive Timestamp has to be hashed and timestamped by a new Archive Timestamp.",
@@ -744,7 +736,6 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc4998-5.2-R37", "ArchiveTimeStamps that are not necessary for verification should not be added to an ArchiveTimeStampChain or ArchiveTimeStampSequence.",
             RequirementCoverageStatus.Tested, "EvidenceRecordRenewalTests.SeveralRecordsAreRenewedTogetherByOneTimestampRenewal (one Archive Timestamp per renewal, shared by every record the batch renewed — the batched shape of clause 3.2's centralized mode, which is exactly the economy this clause asks for; nothing else is ever appended)"),
 
-        //---- IETF RFC 4998 clause 5.3 — chain and sequence verification ----
         ("rfc4998-5.3-R38", "The Archive Timestamp Chains and their relations to each other and to the data objects have to be proved.",
             RequirementCoverageStatus.Tested, "EvidenceRecordRenewalTests.EveryPriorChainStillVerifiesAfterEachRenewal (the framing the numbered steps R39-R48 implement, taken across both renewal kinds in succession)"),
         ("rfc4998-5.3-R39", "Step 1: verify that the initial Archive Timestamp contains the hash value of the data object.",
@@ -768,7 +759,6 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc4998-5.3-R48", "To prove the sequence relates to a data object group, verify that the first hash value list of the first Archive Timestamp of the first chain contains no other hash values than the group's.",
             RequirementCoverageStatus.Tested, "EvidenceRecordsTests.TheGroupProofHoldsForTheGroupTheRecordWasCreatedFor (the sequence-level analogue of R21, checked on the first chain's initial structure, which is where the data objects themselves are named)"),
 
-        //---- IETF RFC 4998 clause 6 — encryption ----
         ("rfc4998-6-R49", "Where encrypted data objects are archived, additional special precautions have to be taken.",
             RequirementCoverageStatus.Tested, "EvidenceRecordRequirementsMatrixTests.ARecordStatingEncryptionInfoIsRefusedRatherThanVerified (the precaution this library takes is to recognise the field and refuse the record: clause 3.3 step 2 requires the data objects to be re-encrypted before verification and clause 6 registers no algorithm that would say how)"),
         ("rfc4998-6-R50", "Only encryption methods should be used that make it possible to prove that archive-timestamped encrypted data objects unambiguously represent unencrypted data objects.",
@@ -784,7 +774,6 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc4998-6-R55", "The use of encryptionInfoType and encryptionInfoValue may be heavily dependent on the mechanisms and has to be defined in other specifications.",
             RequirementCoverageStatus.OutOfScope, "Addressed to other specifications, not to an implementation of this one. It is also the stated reason the field is never emitted (the R54 row)."),
 
-        //---- IETF RFC 4998 clause 7 — security considerations ----
         ("rfc4998-7-R56", "Cryptographic algorithms and parameters used within Archive Timestamps must be secure at the time of generation.",
             RequirementCoverageStatus.Tested, "XmlSignatureWellKnownTests.TheXmlFormReachesExactlyTheAlgorithmsTheObjectIdentifierFormReaches (the digest space this library computes at all is closed at SHA-256, SHA-384 and SHA-512 in one place; SHA-1 and MD5 are recognised by name and resolve to nothing, which XmlSignatureWellKnownTests.TheRefusedIdentifiersAreRecognisedByNameAndResolveToNothing asserts). A weak algorithm therefore cannot be named at generation, because the type the creation surface takes has no member for one — the waveasic contract R-10 rule, satisfied by construction rather than by a runtime gate."),
         ("rfc4998-7-R57", "Publications regarding the security suitability of cryptographic algorithms have to be considered by verifying components.",
@@ -804,7 +793,6 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc4998-7-R64", "They should use encryption algorithms and parameters that are prospected to be unbreakable as long as confidentiality of the archived data is important.",
             RequirementCoverageStatus.OutOfScope, "Same contract Out list entry as R50-R55: the encryption feature is recognition-only."),
 
-        //---- IETF RFC 4998 Appendix A — Evidence Record using CMS ----
         ("rfc4998-A-mapping", "The two attribute identifiers are used \"depending on the selection method\", but the document never states which identifier names which method.",
             RequirementCoverageStatus.Tested, "ReferenceArtifactEvidenceRecordTests.TheContentGroupOfAppendixAAppearsOnlyUnderTheExternalIdentifier — RULING (owner flag 4), made from structure and then confirmed empirically against 26 third-party CMS objects and 16 detached records: id-aa-er-internal is selection method 1 (the CMS object alone is the archived data object) and id-aa-er-external is selection method 2 (the CMS object and its detached content as a group of data objects). What survives as an assertion is what the group HOLDS, not how many members it has — cardinality does not discriminate, and the first shape of this test was wrong for exactly that reason."),
         ("rfc4998-A-R65", "Selection method 1: a hash value of the CMS object MUST be located in the first list of hash values of Archive Timestamps.",
@@ -838,7 +826,6 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc4998-A-R79", "The verification of the n+1th attribute must prove that this requirement has been met.",
             RequirementCoverageStatus.Tested, "EvidenceRecordCmsIntegrationTests.ARecordProvingAWiderViewMayNotAssertAnEarlierInstant (the consistency is checked across the DISCOVERED positions, not the encoded ones, and a violation is reported as a broken chronology)"),
 
-        //---- IETF RFC 6283 clause 2.1 — structure ----
         ("rfc6283-2.1-S1", "The renewal process MUST continue during the whole desired archiving period.",
             RequirementCoverageStatus.OutOfScope, "An operational obligation on the archive's own lifecycle, and a creation-side one: XMLERS CREATION does not ship this wave (owner flag 1 of the waveasic contract, R-3 — \"XMLERS creation does NOT ship\"; the producer emits the RFC 4998 form and XMLERS creation waits for a consumer). The equivalent monitoring obligation of the ASN.1 form is the rfc4998-5-R22 row."),
         ("rfc6283-2.1-S2", "The EvidenceRecord Version attribute MUST be included.",
@@ -884,21 +871,17 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc6283-2.1-S22", "The Order attribute is REQUIRED wherever sibling elements of the same name occur at the same level of the ArchiveTimeStampSequence structure.",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordXmlBindingTests.OrderAttributesThatAreNotTheRunAreRefused (the general rule S11, S12, S19 and S21 each instantiate, checked as the run 1..n at the seam)"),
 
-        //---- IETF RFC 6283 clause 2.2 — generation ----
         ("rfc6283-2.2-S23", "Generation of an EvidenceRecord MUST follow the three-step procedure: select the archive object, create the initial Archive Time-Stamp, refresh it by renewal when necessary.",
             RequirementCoverageStatus.OutOfScope, "XMLERS creation does not ship this wave (owner flag 1, contract R-3: the producer emits IETF RFC 4998 only and XMLERS creation waits for a consumer). Every structure the three steps produce IS verified — the initial Archive Time-Stamp, both renewals and their relations — against documents an independent factory minted."),
         ("rfc6283-2.2-lc-cryptographic-information-scope", "The CryptographicInformationList element is not to be used to store cryptographic material related to signed archive data; its use is limited to material related to the Time-Stamps. (lowercase, functions as a prohibition)",
             RequirementCoverageStatus.Tested, "EvidenceRecordRequirementsMatrixTests.TheOptionalInformationElementsOfTheXmlFormAreAllReadIntoTheModel (the element is read only as a child of a TimeStamp element and its entries are surfaced there and nowhere else, so nothing this library reads out of it is ever offered as material for the archived data's own signature; a container-borne signature's validation material comes from the signature file itself, which the ASiC validation surface supplies)"),
 
-        //---- IETF RFC 6283 clause 2.3 — verification (top level) ----
         ("rfc6283-2.3-S24", "Verification MUST follow the three-step procedure: select the archive object, re-encrypt if EncryptionInformation is used, verify the Archive Time-Stamp Sequence.",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordsTests.ARecordOverOneDataObjectProvesIt (steps 1 and 3) and XmlEvidenceRecordsTests.ARecordStatingEncryptionInformationIsRefused (step 2, which this library refuses rather than performs, because clause 5 registers no mechanism it could re-encrypt with)"),
 
-        //---- IETF RFC 6283 clause 3 (intro) — Archive Time-Stamp ----
         ("rfc6283-3-S25", "An Archive Time-Stamp MUST be renewed before it becomes invalid through a weakening algorithm, certificate invalidation or the Time-Stamping Authority ceasing operation.",
             RequirementCoverageStatus.OutOfScope, "Creation-side and operationally triggered: XMLERS creation does not ship (owner flag 1, contract R-3), and the renewal TIMING is the monitoring guidance the contract's Out list excludes. Both renewal procedures' resulting structures are verified (the S68-S75 rows' verification halves)."),
 
-        //---- IETF RFC 6283 clause 3.1.1 — hash tree ----
         ("rfc6283-3.1.1-S26", "The root hash value generated from the HashTree MUST equal the Time-Stamped value.",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordsTests.AChangedHashValueInsideTheTreeBreaksTheRoot and XmlEvidenceRecordHashTreeTests.AFourLevelTreeReachesTheRootTheOracleReaches (the recomputation cross-checked against an independent from-clause-text implementation)"),
         ("rfc6283-3.1.1-S27", "When a single Time-Stamp is obtained for a group of archive objects, a hash tree MUST be constructed to bind them.",
@@ -910,13 +893,11 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc6283-3.1.1-lc-singleton-first-sequence", "When the first Sequence element has only one DigestValue element, its binary value is added to the next list rather than hashed. (stated in clause 3.1.1's prose without a keyword)",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordHashTreeTests.AFirstSequenceOfOneValueIsCarriedForwardUnhashed (with the hashed reading asserted NOT to reach the same root) and XmlEvidenceRecordHashTreeTests.ASingleValueDeeperInTheTreeIsCombinedRatherThanCarriedForward (the exception is first-Sequence-only, exactly as the clause words it). The census ReferenceArtifactXmlEvidenceRecordTests.TheRootRuleOfClause311HoldsAcrossTheCorpus found 33 third-party records taking this reading and zero taking the other, which is also what confirmed the same ruling for the ASN.1 form, where RFC 4998 leaves the rule implicit."),
 
-        //---- IETF RFC 6283 clause 3.1.2 — time-stamp ----
         ("rfc6283-3.1.2-S30", "The TimeStamp Type attribute MUST be used to indicate the format, with the values \"XMLENTRUST\" or \"RFC3161\".",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordXmlBindingTests.ATimeStampTokenTypeOutsideTheRegistryIsRefused and XmlEvidenceRecordWellKnownTests.TheTimeStampTokenTypesAreTheTwoTheRegistryHolds (both registered values, letter for letter, compared as the NMTOKEN values they are)"),
         ("rfc6283-3.1.2-S31", "For an \"RFC3161\"-typed TimeStamp, the element MUST contain the base64 of the DER-encoded ASN.1 TimeStampToken.",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordXmlBindingTests.AWellFormedRecordParsesIntoTheModel (the base64 is decoded into a carrier and the token read through the shipped RFC 3161 surface) and XmlEvidenceRecordsTests.ATimeStampFormatThisLibraryDoesNotReadIsNamedAsSuch (the other registered value, named rather than assumed)"),
 
-        //---- IETF RFC 6283 clause 3.1.3 — cryptographic information list ----
         ("rfc6283-3.1.3-S32", "Data needed to verify the Time-Stamp Token SHOULD be stored in the token itself.",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordXmlBindingTests.AWellFormedRecordParsesIntoTheModel (the minted documents carry their certificate material inside the token, which is the placement the SHOULD names, and the token is read from there)"),
         ("rfc6283-3.1.3-S33", "When that is not possible, such data MAY be stored in the CryptographicInformationList.",
@@ -936,7 +917,6 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc6283-3.1.3-S40", "Type CERT content MUST be the base64 of a DER-encoded X.509 certificate.",
             RequirementCoverageStatus.Tested, "EvidenceRecordRequirementsMatrixTests.TheOptionalInformationElementsOfTheXmlFormAreAllReadIntoTheModel (a CERT entry carrying a minted certificate is decoded to exactly that certificate's octets and no others)"),
 
-        //---- IETF RFC 6283 clause 3.2 — generation at the Archive Time-Stamp level ----
         ("rfc6283-3.2-S41", "Initial Archive Time-Stamp generation MUST follow the five-step procedure: collect objects, select the canonicalization method, select the hash algorithm, generate the hash tree, acquire the Time-Stamp Token.",
             RequirementCoverageStatus.OutOfScope, "Creation-side; XMLERS creation does not ship (owner flag 1, contract R-3). Every structure the five steps produce is verified against documents an independent factory minted, and the reference leg proves the verification against documents this project did not produce at all (ReferenceArtifactXmlEvidenceRecordTests.ARecordOfTheCorpusProvesADataObjectOfTheCorpus)."),
         ("rfc6283-3.2-S42", "The selected canonicalization method MUST also be used for the archive data itself when that data is XML.",
@@ -946,7 +926,6 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc6283-3.2-S44", "If the hash tree is omitted for a single-object archive object, the Time-Stamped value MUST equal that object's digest value.",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordsTests.ATimeStampRenewalMayOmitItsHashTree and the third-party witness ReferenceArtifactXmlEvidenceRecordTests.ARecordOfTheCorpusProvesADataObjectOfTheCorpus (one of its five pairs is a record with no hash tree at all)"),
 
-        //---- IETF RFC 6283 clause 3.2.1 — generation of the hash tree ----
         ("rfc6283-3.2.1-S45", "DigestValue elements within a Sequence MUST be ordered in binary ascending order.",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordHashTreeTests.TheLevelRuleOrdersValuesBinaryAscendingWhateverOrderTheyArriveIn (the verifier's own recomputation replicates the sort, which is the half that ships; the comparator itself is the one primitive shared with the ASN.1 form, because \"binary ascending order\" is the single rule both documents state identically and two copies of an ordering rule are two rules that can disagree — stage-9 decision 1)"),
         ("rfc6283-3.2.1-S46", "The base64 text of a DigestValue MUST be base64-decoded before use as a binary hash value.",
@@ -966,7 +945,6 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc6283-3.2.1-S53", "The arbitrary padding values of the worked example are OPTIONAL.",
             RequirementCoverageStatus.OutOfScope, "The same creation-side permission as S51, restated by the specification inside its worked example; XMLERS creation does not ship (owner flag 1, contract R-3)."),
 
-        //---- IETF RFC 6283 clause 3.2.2 — reduction of the hash tree ----
         ("rfc6283-3.2.2-S54", "For a data-object-group archive object, the first Sequence MUST be formed from the hash values of all of its own data objects.",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordsTests.ARecordOverADataObjectGroupProvesTheWholeGroup (the verifier requires exactly that membership, in both directions by default)"),
         ("rfc6283-3.2.2-S55", "DigestValue order within each Sequence MUST be binary ascending, restated for the reduced-tree output.",
@@ -974,19 +952,16 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc6283-3.2.2-lc-procedure", "The four-step reduction procedure itself is introduced by \"can be reduced ... as follows\", with no governing capitalized keyword — treated as binding regardless.",
             RequirementCoverageStatus.OutOfScope, "The procedure is creation-side and XMLERS creation does not ship (owner flag 1, contract R-3). It is recorded as its own row because a hyper-literal RFC 2119 reading would treat the whole reduction as non-mandatory, which is the editorial defect the RFC 6283 spec leg flagged (its section 4 sharp edge 4) and which this matrix answers by carrying the row rather than by omitting it."),
 
-        //---- IETF RFC 6283 clause 3.3 — verification at the Archive Time-Stamp level ----
         ("rfc6283-3.3-S56", "Archive Time-Stamp verification MUST follow the stated five-step procedure: identify the algorithm and hash the data objects, locate the first-Sequence hashes, recompute the root and compare it to the Time-Stamped value, the single-object fallback comparison, and the Time-Stamp Token's formal validity.",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordsTests.ARecordOverOneDataObjectProvesIt (steps 1-3), XmlEvidenceRecordsTests.ATimeStampRenewalMayOmitItsHashTree (step 4's fallback) and XmlEvidenceRecordsTests.ATimeStampFormatThisLibraryDoesNotReadIsNamedAsSuch (step 5's read, beyond which the formal validity of a token is the EN 319 102-1 clause 5.4 building block the engine composes)"),
         ("rfc6283-3.3-S57", "If a group-exclusivity proof is also sought, it SHOULD additionally be verified that the first hash list contains only the group's own data-object hashes.",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordsTests.AFirstSequenceHoldingAValueTheVerifierWasNeverShownIsRefusedByDefault — RULING (contract R-3): Appendix A step 5.b states BOTH directions in one unconditional sentence while this clause conditions the second on the verifier \"also seeking\" group proof, so the strict reading ships as the default and the loose reading is a stated caller departure — both are tested, and XmlEvidenceRecordHashTreeTests.TheMembershipComparisonRunsInBothDirections asserts the comparison itself."),
 
-        //---- IETF RFC 6283 clause 4.1 — chain and sequence structure ----
         ("rfc6283-4.1-S58", "The ArchiveTimeStampChain and ArchiveTimeStamp sequences MUST both be sorted by Time-Stamp time, ascending.",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordsTests.BothRenewalsInSuccessionStillProveTheDataObject (the ascending order across a Time-Stamp Renewal and a Hash-Tree Renewal, read off the Order attributes the parse validates as the run 1..n) and XmlEvidenceRecordXmlBindingTests.OrderAttributesThatAreNotTheRunAreRefused"),
         ("rfc6283-4.1-S59", "The Archive Time-Stamp with the largest Order within the chain with the largest Order is the latest one and MUST be valid at the present time.",
             RequirementCoverageStatus.OutOfScope, "The same temporal half as the ASN.1 form's R46: the formal validity of a token at an instant is the EN 319 102-1 clause 5.4 time-stamp validation building block, which the engine composes for a record's most recent Archive Time-Stamp (EvidenceRecordSignatureValidationTests.StepOneReportsWhatTheRecordAndItsTimestampConcluded is that composition for the ASN.1 form). The XML surface identifies the latest member structurally — the model is returned sorted by Order and the conclusion carries that member's generation time — and does not evaluate trust itself."),
 
-        //---- IETF RFC 6283 clause 4.1.1 — digest method ----
         ("rfc6283-4.1.1-S60", "The DigestMethod MUST be used for all hash calculations related to Archive Time-Stamps within its chain.",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordsTests.ATokenStatingAnotherAlgorithmThanItsChainIsRefused and XmlEvidenceRecordsTests.AHashTreeRenewalStartsANewChainBoundToTheSequenceBeforeIt (the chain in force supplies the algorithm for every value the walk computes, including the digest of the preceding sequence)"),
         ("rfc6283-4.1.1-S61", "The Algorithm URI MUST be as defined in IETF RFC 3275 and IETF RFC 4051.",
@@ -996,7 +971,6 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc6283-4.1.1-S63", "When the Time-Stamping Authority's algorithm changes, a new chain MUST be started using an equal-or-stronger digest algorithm.",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordsTests.AHashTreeRenewalIntoAWeakerAlgorithmIsRefused — a ruling the contract did not anticipate (stage-9 decision 7): \"equal or stronger\" is enforced as a digest-length comparison, which is the one obligation of this clause a verifier can settle without a dated reliability table — a succeeding chain naming a shorter digest has defeated the only purpose the renewal had. The new-chain half is XmlEvidenceRecordsTests.AHashTreeRenewalStartsANewChainBoundToTheSequenceBeforeIt."),
 
-        //---- IETF RFC 6283 clause 4.1.2 — canonicalization method ----
         ("rfc6283-4.1.2-S64", "Canonicalization algorithm URIs MUST be as defined in IETF RFC 3275 and IETF RFC 4051.",
             RequirementCoverageStatus.Tested, "XmlSignatureWellKnownTests.TheCanonicalizationIdentifiersAreTheOnesTheRegistriesState (the six identifiers, letter for letter) and XmlEvidenceRecordXmlBindingTests.ACanonicalizationIdentifierOutsideTheBoundSpaceIsRefused"),
         ("rfc6283-4.1.2-S65", "Canonicalization MUST be applied to XML-structured archive data before hashing.",
@@ -1008,7 +982,6 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc6283-4.1.2-lc-preceding-chain-method", "In the case of a succeeding chain, the canonicalization method indicated within that chain must also be used for the digest value of the PRECEDING chain. (lowercase, load-bearing)",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordsTests.AHashTreeRenewalStartsANewChainBoundToTheSequenceBeforeIt — the SUCCEEDING chain's method is applied to the preceding sequence (stage-9 decision 4), and a reading that used the prefix's own method fails the two-chain third-party artifact of ReferenceArtifactXmlEvidenceRecordTests.ARecordOfTheCorpusProvesADataObjectOfTheCorpus, which is written under Canonical XML 1.0 WITH COMMENTS and carries comments inside the sequence"),
 
-        //---- IETF RFC 6283 clause 4.2.1 — Time-Stamp renewal ----
         ("rfc6283-4.2.1-S68", "Time-Stamp renewal MUST follow the stated three-step procedure: add missing cryptographic information, hash the last TimeStamp element under the chain's methods and acquire a new token, append the new Archive Time-Stamp at the end of the current chain.",
             RequirementCoverageStatus.OutOfScope, "Creation-side; XMLERS creation does not ship (owner flag 1, contract R-3). The structure the procedure produces is verified end to end by XmlEvidenceRecordsTests.ATimeStampRenewalLinksToThePreviousTimeStampElement, including that the link is to the previous TimeStamp ELEMENT's canonical binary representation."),
         ("rfc6283-4.2.1-S69", "The new Archive Time-Stamp's hash tree MUST use the same digest algorithm as the chain's DigestMethod.",
@@ -1016,7 +989,6 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc6283-4.2.1-S70", "The new Archive Time-Stamp MAY omit a hash tree entirely.",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordsTests.ATimeStampRenewalMayOmitItsHashTree (verification accepts both forms; the corpus carries renewals written each way, which ReferenceArtifactXmlEvidenceRecordTests.EveryRecordOfTheCorpusIsReadToADecision reads)"),
 
-        //---- IETF RFC 6283 clause 4.2.2 — hash-tree renewal ----
         ("rfc6283-4.2.2-S71", "The chain and Archive Time-Stamp elements MUST be processed in chronological Order when computing the digest of the sequence.",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordsTests.AHashTreeRenewalStartsANewChainBoundToTheSequenceBeforeIt (the prefix handed to the canonicalization seam is named by the chain COUNT, so the octets are the sequence's chains in Order and nothing else) and XmlEvidenceRecordXmlBindingTests.OrderAttributesThatAreNotTheRunAreRefused"),
         ("rfc6283-4.2.2-S72", "The canonicalization method MUST be applied before hashing the ArchiveTimeStampSequence.",
@@ -1032,7 +1004,6 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc6283-4.2.2-lc-first-list", "Step 7: the first hash value list in the reduced hash tree should only contain the data object's value and the sequence value. (lowercase)",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordsTests.AHashTreeRenewalStartsANewChainBoundToTheSequenceBeforeIt (the renewing chain's first Sequence holds exactly those two values, which is also what the default bidirectional membership check of the S57 row requires of it)"),
 
-        //---- IETF RFC 6283 clause 4.3 — chain and sequence verification ----
         ("rfc6283-4.3-S76", "Step 1: when the hash tree is omitted, the calculated archive-object value MUST match the Time-Stamped value.",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordsTests.ATimeStampRenewalMayOmitItsHashTree and XmlEvidenceRecordsTests.AGroupWithNoHashTreeIsRefusedForTheMissingTree (the fallback holds for one value and is refused for a group, which is exactly the condition the clause attaches to it)"),
         ("rfc6283-4.3-S77", "Step 2: if a hash tree is present in the second or later Archive Time-Stamp of a chain, its first Sequence MUST contain the hash value of the previous TimeStamp element.",
@@ -1046,11 +1017,9 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc6283-4.3-lc-procedure", "The whole four-step chain-verification procedure is governed by \"the last ATS has to be valid and ATSCs and their relations to each other have to be proved\", with no capitalized header.",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordsTests.BothRenewalsInSuccessionStillProveTheDataObject (the relations across a Time-Stamp Renewal and a Hash-Tree Renewal, proved together) — carried as its own row because a hyper-literal RFC 2119 reading would treat the entire chain verification as non-mandatory, which is the editorial defect this matrix answers by carrying the row"),
 
-        //---- IETF RFC 6283 clause 5 — encryption ----
         ("rfc6283-5-S81", "EncryptionInformation is an OPTIONAL extensible structure.",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordsTests.ARecordStatingEncryptionInformationIsRefused (recognised and the record refused, the same stance the ASN.1 form's rfc4998-6-R49 row records; the waveasic contract's Out list excludes the feature itself, and refusing is what \"recognition-only\" means for a verifier that cannot re-encrypt)"),
 
-        //---- IETF RFC 6283 clause 6 — version numbering ----
         ("rfc6283-6-S82", "Major and minor version numbers MUST be treated as separate integers.",
             RequirementCoverageStatus.OutOfScope, "Clause 8's schema fixes the Version attribute at \"1.0\", so no other value is schema-valid and the comparison machinery this clause describes is unreachable for conformant input. What ships is the attribute's presence and value, which the S2 row covers; a version comparator for values that cannot legally arrive would be code no test could reach honestly."),
         ("rfc6283-6-S83", "Each number MAY be incremented past a single digit.",
@@ -1060,7 +1029,6 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc6283-6-S85", "Leading zeros MUST NOT be sent.",
             RequirementCoverageStatus.OutOfScope, "Same reason as S82, and creation-side besides: XMLERS creation does not ship (owner flag 1, contract R-3)."),
 
-        //---- IETF RFC 6283 clause 9 — security considerations ----
         ("rfc6283-9.2-S86", "Generating and managing at least two redundant Evidence Records per data object is RECOMMENDED.",
             RequirementCoverageStatus.OutOfScope, "A deployment recommendation about how many records an archive keeps, identical in kind to the ASN.1 form's rfc4998-7-R58 row. The surface verifies one record at a time and a caller is free to keep two."),
         ("rfc6283-9.2-S87", "Redundant Evidence Records SHOULD use different hash algorithms and different Time-Stamping Authorities.",
@@ -1078,7 +1046,6 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc6283-9.4-lc-supporting-information", "Data added to SupportingInformationList after the fact must rely on its own authenticity and integrity protection mechanism. (lowercase)",
             RequirementCoverageStatus.Tested, "EvidenceRecordRequirementsMatrixTests.TheOptionalInformationElementsOfTheXmlFormAreAllReadIntoTheModel (the list sits outside everything the Archive Time-Stamp's hash tree covers — the record verifies identically with and without it — so nothing this library concludes rests on its content, which is what the clause warns a reader about)"),
 
-        //---- IETF RFC 6283 clause 10 — IANA considerations ----
         ("rfc6283-10-S92", "IANA registrations under this document MUST use the Specification Required policy.",
             RequirementCoverageStatus.OutOfScope, "Registry governance addressed to IANA, not implementer-facing. Its consequence for an implementation is that both enumerations are closed, which the S30 and S36 rows cover."),
         ("rfc6283-10-S93", "Registering a new Time-Stamp Token Type MUST provide a textual name conforming to xs:NMTOKEN and a reference to its defining specification.",
@@ -1086,7 +1053,6 @@ internal sealed class EvidenceRecordRequirementsMatrixTests
         ("rfc6283-10-S94", "Registering a new Cryptographic Information Type MUST provide a textual name conforming to xs:NMTOKEN and a reference to its defining specification.",
             RequirementCoverageStatus.OutOfScope, "Registry governance; the implementer-facing consequence is the closed four-value enumeration of the S36 row."),
 
-        //---- IETF RFC 6283 Appendix A — detailed verification process ----
         ("rfc6283-A-S95", "Step 4: the built list of digest values MUST contain exactly the objects protected by the current Archive Time-Stamp, per the sub-rules for a first-versus-later Archive Time-Stamp and chain.",
             RequirementCoverageStatus.Tested, "XmlEvidenceRecordsTests.ARecordOverOneDataObjectProvesIt (step 4.a.i), XmlEvidenceRecordsTests.AHashTreeRenewalStartsANewChainBoundToTheSequenceBeforeIt (step 4.a.ii, the sequence value joined with the data-object values) and XmlEvidenceRecordsTests.ATimeStampRenewalLinksToThePreviousTimeStampElement (step 4.b.i, the previous TimeStamp element alone) — the authoritative expansion of clause 3.3 step 1/2 and clause 4.3 steps 2-3, which is the walk the shipped verification is written against"),
         ("rfc6283-A-lc-procedure", "The whole detailed verification process is introduced by \"start with the first ATS till the last ATS ... and perform verification for each ATS, as follows\", with no capitalized header, despite being the most operationally load-bearing section of the document.",

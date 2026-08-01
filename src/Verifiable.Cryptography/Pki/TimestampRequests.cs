@@ -125,6 +125,39 @@ public static class TimestampRequests
 
 
     /// <summary>
+    /// Builds a <c>TimeStampReq</c> from a computed digest carrier: the message-imprint octets and their
+    /// algorithm both come from the one carrier the registered digest seam produced and tagged, so the pair
+    /// cannot disagree the way separately passed octets and algorithm can. This is the preferred overload for
+    /// a caller that computed the digest itself; the octets-and-algorithm overload below remains for digests
+    /// that arrive from the wire without a carrier.
+    /// </summary>
+    /// <param name="messageImprint">The computed digest of the data being time-stamped, carrying its own algorithm in its tag.</param>
+    /// <param name="pool">The memory pool for every allocation this call performs.</param>
+    /// <param name="reqPolicyOid">The TSA policy the request asks for, or <see langword="null"/> to state none.</param>
+    /// <param name="nonceByteLength">The nonce length in octets; 32 is a sound default, as on the octets-and-algorithm overload.</param>
+    /// <param name="includeNonce">Whether to include a <c>nonce</c> field. Defaults to <see langword="true"/>: a request with no nonce cannot itself detect a replayed response.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The built request and, when requested, the nonce it carries. The caller owns and disposes it.</returns>
+    /// <exception cref="ArgumentNullException">When <paramref name="messageImprint"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">When the carrier's tag names no digest algorithm this library states in PKI structures.</exception>
+    public static ValueTask<TimestampRequestContent> CreateAsync(
+        DigestValue messageImprint,
+        MemoryPool<byte> pool,
+        string? reqPolicyOid = null,
+        int nonceByteLength = 32,
+        bool includeNonce = true,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(messageImprint);
+
+        PkiDigestAlgorithm algorithm = PkiDigestAlgorithm.FromDigest(messageImprint)
+            ?? throw new ArgumentException("The digest carrier's tag names no digest algorithm this library states in PKI structures.", nameof(messageImprint));
+
+        return CreateAsync(messageImprint.AsReadOnlyMemory(), algorithm, pool, reqPolicyOid, nonceByteLength, includeNonce, cancellationToken);
+    }
+
+
+    /// <summary>
     /// Builds a <c>TimeStampReq</c>
     /// (<see href="https://www.rfc-editor.org/rfc/rfc3161#section-2.4.1">RFC 3161 §2.4.1</see>): version 1, the
     /// caller-supplied message imprint, an optional <c>reqPolicy</c>, a nonce drawn from the entropy provider
