@@ -2,6 +2,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -91,16 +92,20 @@ public sealed record XmlEvidenceRecordVerificationContext
 
 
 /// <summary>
-/// The validation-side surface for Evidence Records in the XML syntax of
+/// The surface for Evidence Records in the XML syntax of
 /// <see href="https://www.rfc-editor.org/rfc/rfc6283">IETF RFC 6283</see>: the detailed verification process of
-/// Appendix A, which is the authoritative expansion of clause 2.3, clause 3.3 and clause 4.3.
+/// Appendix A — the authoritative expansion of clause 2.3, clause 3.3 and clause 4.3 — and the initial creation
+/// of clause 3.2, through the parse, canonicalization and write seams the XML syntax needs.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <strong>Validation only.</strong> This library creates Evidence Records in the ASN.1 syntax of IETF RFC 4998
-/// and reads them in both. Clause 1.1 of RFC 6283 states that it "does not present a direct transformation of
-/// ERS in ASN.1 syntax", and EN 319 162-1 names the two as alternatives a producer chooses between — so a
-/// producer needs one and a validation application needs both, which is exactly the asymmetry shipped here.
+/// <strong>Both syntaxes are read and both are created.</strong> Clause 1.1 of RFC 6283 states that it "does
+/// not present a direct transformation of ERS in ASN.1 syntax", and EN 319 162-1 names the two as alternatives
+/// a producer chooses between — so each syntax has its own creation surface
+/// (<see cref="EvidenceRecords.CreateInitialAsync"/> for RFC 4998, <see cref="CreateInitialAsync"/> here) and
+/// nothing transforms one into the other. Renewal in this syntax remains validation-side work a custodian
+/// composes: clause 4.2's procedures digest sub-trees of the document as it stands, which is a seam-design
+/// question of its own, not part of initial creation.
 /// </para>
 /// <para>
 /// <strong>Appendix A is the algorithm, not clause 3.3.</strong> Clause 3.3 and clause 4.3 each state a
@@ -549,5 +554,359 @@ public static class XmlEvidenceRecords
         return await CryptographicKeyEvents.ComputeDigestAsync(
             binary.AsReadOnlyMemory(), algorithm.OutputByteLength, algorithm.DigestTag, pool,
             cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Creates the initial Evidence Record of clause 3.2 in the XML syntax, over the supplied archive object
+    /// groups: digest every data object (XML data through the canonicalization seam, clause 4.1.2), build the
+    /// clause 3.1.1 hash tree, obtain one time-stamp over its root, assemble one single-chain record per group
+    /// and serialise each through the write seam.
+    /// </summary>
+    /// <param name="context">The groups, the algorithms, the seams and how to reach the Time-Stamping Authority.</param>
+    /// <param name="pool">The memory pool every buffer this call rents comes from.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The produced documents. The caller owns and disposes the result.</returns>
+    /// <exception cref="ArgumentNullException">When <paramref name="context"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
+    /// <exception cref="EvidenceRecordCreationException">When no data object was supplied, an XML data object could not be canonicalized, the acquired token does not bind the tree's root, or the write seam produced no document.</exception>
+    /// <exception cref="TimestampAcquisitionException">When the authority could not be reached, or its response failed a check.</exception>
+    /// <remarks>
+    /// <para>
+    /// This is the RFC 6283 counterpart of <see cref="EvidenceRecords.CreateInitialAsync"/> and holds the same
+    /// line: the token is acquired through <see cref="TimestampAcquisition.AcquireAsync"/>, which verifies the
+    /// response before returning it, and this method additionally asserts the imprint is octet for octet the
+    /// root the tree produced. A token that does not bind the root is never written into any document.
+    /// </para>
+    /// <para>
+    /// <strong>Initial creation needs no canonicalization of the record itself.</strong> The hash tree binds
+    /// the archive data — canonicalized first when it is XML, exactly as it stands otherwise — and the root
+    /// goes into the RFC 3161 request; no digest of any Evidence Record element exists yet. The
+    /// <c>CanonicalizationMethod</c> the chain states matters at the record's FIRST renewal, when clause 4.2's
+    /// procedures digest the document's own sub-trees, so a generator states the method its custodians will
+    /// canonicalize under then.
+    /// </para>
+    /// <para>
+    /// The produced record carries one <c>ArchiveTimeStampChain</c> of one <c>ArchiveTimeStamp</c>, whose
+    /// <c>HashTree</c> is the group's reduced tree in the exact shape <see cref="VerifyAsync"/> walks back:
+    /// the first <c>Sequence</c> states the group's own object digests and nothing else (Appendix A step 5.b's
+    /// exclusive membership), and every later <c>Sequence</c> states the sibling of one combination on the
+    /// group's path to the root.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of each produced document transfers to the returned creation, which the caller disposes; the catch disposes the documents produced before a later group failed, and every intermediate model is disposed by its own using or finally.")]
+    public static async ValueTask<XmlEvidenceRecordCreation> CreateInitialAsync(
+        XmlEvidenceRecordCreationContext context,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(pool);
+        cancellationToken.ThrowIfCancellationRequested();
+        if(context.DataObjectGroups.Count == 0)
+        {
+            throw new EvidenceRecordCreationException(
+                EvidenceRecordCreationFailureKind.NoDataObject,
+                "An initial Archive Time-Stamp is created over at least one data object group (RFC 6283 clause 3.2).");
+        }
+
+        //Leaf digests first: an XML data object's digest is over its canonical binary representation under the
+        //chain's stated method (clause 4.1.2); any other object is hashed exactly as it stands.
+        var digestGroups = new List<IReadOnlyList<DigestValue>>(context.DataObjectGroups.Count);
+        try
+        {
+            for(int g = 0; g < context.DataObjectGroups.Count; ++g)
+            {
+                IReadOnlyList<XmlEvidenceRecordDataObject> group = context.DataObjectGroups[g];
+                if(group.Count == 0)
+                {
+                    throw new EvidenceRecordCreationException(
+                        EvidenceRecordCreationFailureKind.NoDataObject,
+                        "A data object group holds at least one data object (RFC 6283 clause 3.1.1).");
+                }
+
+                var digests = new List<DigestValue>(group.Count);
+                digestGroups.Add(digests);
+                for(int i = 0; i < group.Count; ++i)
+                {
+                    digests.Add(await DigestDataObjectAsync(
+                        group[i], context.CanonicalizationMethodUri, context.DigestAlgorithm, context.Canonicalize, pool,
+                        cancellationToken).ConfigureAwait(false));
+                }
+            }
+
+            using XmlEvidenceRecordHashTreeBuild build = await XmlEvidenceRecordHashTrees.BuildAsync(
+                new XmlEvidenceRecordHashTreeBuildContext
+                {
+                    DataObjectDigestGroups = digestGroups,
+                    DigestAlgorithm = context.DigestAlgorithm
+                },
+                pool,
+                cancellationToken).ConfigureAwait(false);
+
+            using AcquiredTimestampToken token = await TimestampAcquisition.AcquireAsync(
+                build.Root,
+                context.TsaUri,
+                context.FetchTimestampResponse,
+                pool,
+                context.TimestampPolicyOid,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            if(!token.Info.IsRead || token.Info.MessageImprint is null)
+            {
+                throw new EvidenceRecordCreationException(
+                    EvidenceRecordCreationFailureKind.TimestampNotUsable,
+                    "The acquired time-stamp token's TSTInfo could not be read, so what it binds cannot be established.");
+            }
+
+            if(!token.Info.MessageImprint.AsReadOnlySpan().SequenceEqual(build.Root.AsReadOnlySpan()))
+            {
+                throw new EvidenceRecordCreationException(
+                    EvidenceRecordCreationFailureKind.TimestampDoesNotBindRoot,
+                    "The acquired time-stamp token does not bind the root of the hash tree it was requested for (RFC 6283 clause 3.2).");
+            }
+
+            string digestMethodUri = XmlSignatureWellKnown.DigestUriFromAlgorithm(context.DigestAlgorithm)
+                ?? throw new EvidenceRecordCreationException(
+                    EvidenceRecordCreationFailureKind.TimestampNotUsable,
+                    $"No DigestMethod identifier is defined for '{context.DigestAlgorithm.Identifier.Oid}', so no chain can state the algorithm (RFC 6283 clause 4.1.1).");
+
+            var documents = new List<PooledMemory>(context.DataObjectGroups.Count);
+            try
+            {
+                for(int g = 0; g < context.DataObjectGroups.Count; ++g)
+                {
+                    documents.Add(await WriteRecordAsync(
+                        build.ClaimReducedHashTree(g), token.Token, digestMethodUri, context, pool, cancellationToken).ConfigureAwait(false));
+                }
+
+                return new XmlEvidenceRecordCreation(documents, token.Info.GenerationTime);
+            }
+            catch
+            {
+                for(int i = 0; i < documents.Count; ++i)
+                {
+                    documents[i].Dispose();
+                }
+
+                throw;
+            }
+        }
+        finally
+        {
+            for(int g = 0; g < digestGroups.Count; ++g)
+            {
+                for(int i = 0; i < digestGroups[g].Count; ++i)
+                {
+                    digestGroups[g][i].Dispose();
+                }
+            }
+        }
+
+
+        //Digests one data object: XML archive data through the canonicalization seam first (clause 4.1.2's
+        //"canonicalization MUST be applied over XML structured archive data"), any other object as it stands.
+        static async ValueTask<DigestValue> DigestDataObjectAsync(
+            XmlEvidenceRecordDataObject dataObject,
+            string canonicalizationMethodUri,
+            PkiDigestAlgorithm algorithm,
+            CanonicalizeXmlEvidenceRecordDelegate canonicalize,
+            MemoryPool<byte> pool,
+            CancellationToken cancellationToken)
+        {
+            if(!dataObject.IsXmlArchiveData)
+            {
+                return await CryptographicKeyEvents.ComputeDigestAsync(
+                    dataObject.Content, algorithm.OutputByteLength, algorithm.DigestTag, pool,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+
+            using XmlEvidenceRecordCanonicalizationResult canonicalized = await canonicalize(
+                new XmlEvidenceRecordCanonicalizationContext
+                {
+                    Document = ReadOnlyMemory<byte>.Empty,
+                    AlgorithmUri = canonicalizationMethodUri,
+                    Target = XmlEvidenceRecordCanonicalizationTarget.ArchiveDataObject,
+                    ArchiveData = dataObject.Content
+                },
+                pool,
+                cancellationToken).ConfigureAwait(false);
+            if(!canonicalized.IsCanonicalized || canonicalized.BinaryRepresentation is not PooledMemory binary)
+            {
+                throw new EvidenceRecordCreationException(
+                    EvidenceRecordCreationFailureKind.ArchiveDataNotCanonicalizable,
+                    $"The XML archive data object '{dataObject.Name ?? "(unnamed)"}' could not be canonicalized under '{canonicalizationMethodUri}': {canonicalized.FailureReason} (RFC 6283 clause 4.1.2).");
+            }
+
+            return await CryptographicKeyEvents.ComputeDigestAsync(
+                binary.AsReadOnlyMemory(), algorithm.OutputByteLength, algorithm.DigestTag, pool,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+
+
+        //Assembles one group's single-chain record model — claiming the group's reduced tree and copying the
+        //shared token into the model's own carrier — and serialises it through the write seam. The model is
+        //disposed here whatever happens; only the document outlives the call.
+        static async ValueTask<PooledMemory> WriteRecordAsync(
+            XmlEvidenceRecordHashTree reducedHashTree,
+            PkiCertificateMemory token,
+            string digestMethodUri,
+            XmlEvidenceRecordCreationContext context,
+            MemoryPool<byte> pool,
+            CancellationToken cancellationToken)
+        {
+            using var record = new XmlEvidenceRecord
+            {
+                Version = XmlEvidenceRecordWellKnown.Version10,
+                Chains =
+                [
+                    new XmlEvidenceRecordArchiveTimeStampChain
+                    {
+                        Order = 1,
+                        DigestMethodUri = digestMethodUri,
+                        DigestAlgorithm = context.DigestAlgorithm,
+                        CanonicalizationMethodUri = context.CanonicalizationMethodUri,
+                        ArchiveTimeStamps =
+                        [
+                            new XmlEvidenceRecordArchiveTimeStamp
+                            {
+                                Order = 1,
+                                HashTree = reducedHashTree,
+                                TimeStamp = new XmlEvidenceRecordTimeStamp
+                                {
+                                    TokenType = XmlEvidenceRecordWellKnown.Rfc3161TimeStampTokenType,
+                                    Rfc3161Token = CopyToken(token, pool)
+                                }
+                            }
+                        ]
+                    }
+                ]
+            };
+
+            using XmlEvidenceRecordWriteResult written = await context.WriteDocument(
+                new XmlEvidenceRecordWriteContext { EvidenceRecord = record }, pool, cancellationToken).ConfigureAwait(false);
+            if(!written.IsWritten || written.TakeDocument() is not PooledMemory document)
+            {
+                throw new EvidenceRecordCreationException(
+                    EvidenceRecordCreationFailureKind.DocumentNotWritable,
+                    $"The write seam produced no EvidenceRecord document: {written.FailureReason} (RFC 6283 clause 8).");
+            }
+
+            return document;
+        }
+
+
+        //Copies the shared acquired token into a carrier of the model's own, because every group's record owns
+        //its whole content and the token outlives none of them.
+        static PkiCertificateMemory CopyToken(PkiCertificateMemory token, MemoryPool<byte> pool)
+        {
+            IMemoryOwner<byte> owner = pool.Rent(token.AsReadOnlySpan().Length);
+            try
+            {
+                token.AsReadOnlySpan().CopyTo(owner.Memory.Span);
+
+                return new PkiCertificateMemory(owner, PkiCertificateTags.TimestampToken);
+            }
+            catch
+            {
+                owner.Dispose();
+
+                throw;
+            }
+        }
+    }
+}
+
+
+/// <summary>
+/// Everything one initial creation of an Evidence Record in the XML syntax is given — the RFC 6283 counterpart
+/// of <see cref="EvidenceRecordCreationContext"/>, with the two seams the XML syntax needs and the ASN.1 one
+/// does not: canonicalization for XML archive data (clause 4.1.2) and the document writer (clause 8).
+/// </summary>
+[DebuggerDisplay("XmlEvidenceRecordCreationContext: {DataObjectGroups.Count} groups")]
+[SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+    Justification = "An algorithm identifier is compared as written: RFC 6283 clause 4.1.2 identifies a canonicalization algorithm by the URI string, and System.Uri normalises case, escaping and default ports, which would make two identifiers that name different algorithms compare equal.")]
+public sealed record XmlEvidenceRecordCreationContext
+{
+    /// <summary>
+    /// The archive object groups. One Evidence Record document is produced per group, each carrying that
+    /// group's own reduced hash tree and all of them sharing the one time-stamp taken over the tree's root —
+    /// the same centralized shape <see cref="EvidenceRecordCreationContext.DataObjectGroups"/> has for the
+    /// ASN.1 syntax.
+    /// </summary>
+    public required IReadOnlyList<IReadOnlyList<XmlEvidenceRecordDataObject>> DataObjectGroups { get; init; }
+
+    /// <summary>The algorithm the whole hash tree, and the time-stamp request over its root, are computed under (clause 4.1.1: one algorithm per chain).</summary>
+    public required PkiDigestAlgorithm DigestAlgorithm { get; init; }
+
+    /// <summary>
+    /// The <c>CanonicalizationMethod</c> identifier the produced chain states (clause 4.1.2) — applied here to
+    /// any XML archive data before it is hashed, and applied by whoever renews the record to the document's
+    /// own sub-trees later.
+    /// </summary>
+    public required string CanonicalizationMethodUri { get; init; }
+
+    /// <summary>The seam producing the canonical binary representation of XML archive data (clause 4.1.2); never invoked when no data object states <see cref="XmlEvidenceRecordDataObject.IsXmlArchiveData"/>.</summary>
+    public required CanonicalizeXmlEvidenceRecordDelegate Canonicalize { get; init; }
+
+    /// <summary>The seam serialising each assembled record into its <c>EvidenceRecord</c> document (clause 8).</summary>
+    public required WriteEvidenceRecordXmlDelegate WriteDocument { get; init; }
+
+    /// <summary>The Time-Stamping Authority to contact, in whatever form the transport delegate understands.</summary>
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "Forwarded verbatim into TimestampFetchContext.TsaUri, which is deliberately a string for the reason that property gives: the transport delegate owns URI parsing and scheme policy.")]
+    public required string TsaUri { get; init; }
+
+    /// <summary>The transport that carries the time-stamp request to the authority and its response back.</summary>
+    public required FetchTimestampResponseAsyncDelegate FetchTimestampResponse { get; init; }
+
+    /// <summary>The <c>reqPolicy</c> object identifier to request, or <see langword="null"/> to request none; a response is verified against it either way (<see cref="TimestampAcquisition.VerifyResponseAsync"/>).</summary>
+    public string? TimestampPolicyOid { get; init; }
+}
+
+
+/// <summary>
+/// What one initial creation in the XML syntax produced: one <c>EvidenceRecord</c> document per data object
+/// group, and the instant their shared time-stamp asserts — the XML counterpart of
+/// <see cref="EvidenceRecordCreation"/>.
+/// </summary>
+[DebuggerDisplay("XmlEvidenceRecordCreation: {Documents.Count} documents at {ArchiveTime}")]
+public sealed class XmlEvidenceRecordCreation: IDisposable
+{
+    /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
+    private bool disposed;
+
+
+    /// <summary>
+    /// Initialises a new creation result.
+    /// </summary>
+    /// <param name="documents">One document per data object group, in the order the groups were supplied. Ownership transfers to this instance.</param>
+    /// <param name="archiveTime">The <c>genTime</c> the acquired time-stamp asserts.</param>
+    internal XmlEvidenceRecordCreation(IReadOnlyList<PooledMemory> documents, DateTimeOffset archiveTime)
+    {
+        Documents = documents;
+        ArchiveTime = archiveTime;
+    }
+
+
+    /// <summary>Gets one <c>EvidenceRecord</c> document per data object group, in the order the groups were supplied, each tagged <see cref="XmlEvidenceRecordTags.EvidenceRecord"/>. Owned by this instance.</summary>
+    public IReadOnlyList<PooledMemory> Documents { get; }
+
+    /// <summary>Gets the <c>genTime</c> the acquired time-stamp asserts — the instant every produced record proves its data objects existed at.</summary>
+    public DateTimeOffset ArchiveTime { get; }
+
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        if(!disposed)
+        {
+            for(int i = 0; i < Documents.Count; ++i)
+            {
+                Documents[i].Dispose();
+            }
+
+            disposed = true;
+        }
     }
 }

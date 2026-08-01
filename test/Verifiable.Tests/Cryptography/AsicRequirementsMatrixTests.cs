@@ -812,7 +812,7 @@ internal sealed class AsicRequirementsMatrixTests
         ("p1-4.3.3.2-4d", "\"evidencerecord.ers\" containing an RFC 4998 Evidence Record applying to the data file.",
             RequirementCoverageStatus.Tested, "AsicContainerCreationTests.SimpleEvidenceRecordContainerCarriesARecordProvingTheDataFile"),
         ("p1-4.3.3.2-4e", "\"evidencerecord.xml\" containing an RFC 6283 Evidence Record applying to the data file.",
-            RequirementCoverageStatus.Tested, "AsicContainerValidationTests.AnXmlFormEvidenceRecordIsVerifiedThroughTheSuppliedSeams (the XML form is read and verified; XMLERS CREATION remains owner flag 1 of the waveasic contract)"),
+            RequirementCoverageStatus.Tested, "AsicContainerValidationTests.AnXmlFormEvidenceRecordIsVerifiedThroughTheSuppliedSeams (the XML form is read and verified; library-level XMLERS creation ships as XmlEvidenceRecords.CreateInitialAsync — the container creation path still emits the RFC 4998 form only, and wiring an XML-form container branch is a separate consumer step)"),
         ("p1-4.3.3.2-5a", "The META-INF folder may additionally contain one or more ASiCArchiveManifest files and the time-stamp tokens that apply to them.",
             RequirementCoverageStatus.Tested, "AsicRequirementsMatrixTests.TheSimpleTimeAssertionContainerGainsTheAnnexA7ChainUnderTheSignedDataRoute"),
         ("p1-4.3.3.2-5b", "The META-INF folder may additionally contain revocation status information or certificates referenced by extended signatures.",

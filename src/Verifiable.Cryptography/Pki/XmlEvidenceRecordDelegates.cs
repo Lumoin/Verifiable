@@ -417,3 +417,152 @@ public delegate ValueTask<XmlEvidenceRecordCanonicalizationResult> CanonicalizeX
     XmlEvidenceRecordCanonicalizationContext context,
     MemoryPool<byte> pool,
     CancellationToken cancellationToken = default);
+
+
+/// <summary>
+/// Why <see cref="WriteEvidenceRecordXmlDelegate"/> did, or did not, produce a document.
+/// </summary>
+/// <remarks>
+/// <see cref="Written"/> is deliberately not zero, for the same reason every other status enumeration of this
+/// namespace reserves zero for "not computed".
+/// </remarks>
+public enum XmlEvidenceRecordWriteStatus
+{
+    /// <summary>No write has been attempted. The value of an unset field, by design.</summary>
+    NotEvaluated = 0,
+
+    /// <summary>The document's octets were produced.</summary>
+    Written = 1,
+
+    /// <summary>The model states something the implementation cannot serialise into clause 8's schema.</summary>
+    Unwritable = 2
+}
+
+
+/// <summary>
+/// The outcome of <see cref="WriteEvidenceRecordXmlDelegate"/>. On success it owns the produced octets; the
+/// caller disposes them. On failure it owns nothing.
+/// </summary>
+[DebuggerDisplay("XmlEvidenceRecordWriteResult: {Status}")]
+public sealed record XmlEvidenceRecordWriteResult: IDisposable
+{
+    /// <summary>Whether ownership of <see cref="Document"/> has been transferred out by <see cref="TakeDocument"/>.</summary>
+    private bool taken;
+
+
+    /// <summary>The outcome; <see cref="XmlEvidenceRecordWriteStatus.Written"/> is the only success.</summary>
+    public required XmlEvidenceRecordWriteStatus Status { get; init; }
+
+    /// <summary>
+    /// The <c>EvidenceRecord</c> document's octets, tagged <see cref="XmlEvidenceRecordTags.EvidenceRecord"/>;
+    /// non-<see langword="null"/> only when <see cref="Status"/> is
+    /// <see cref="XmlEvidenceRecordWriteStatus.Written"/>.
+    /// </summary>
+    public PooledMemory? Document { get; init; }
+
+    /// <summary>A short, human-readable reason, present on every non-<see cref="XmlEvidenceRecordWriteStatus.Written"/> outcome.</summary>
+    public string? FailureReason { get; init; }
+
+    /// <summary>Returns <see langword="true"/> when <see cref="Status"/> is <see cref="XmlEvidenceRecordWriteStatus.Written"/>.</summary>
+    public bool IsWritten => Status == XmlEvidenceRecordWriteStatus.Written;
+
+
+    /// <summary>Creates a successful result owning <paramref name="document"/>.</summary>
+    /// <param name="document">The produced octets; ownership transfers to the result.</param>
+    /// <returns>A <see cref="XmlEvidenceRecordWriteStatus.Written"/> result.</returns>
+    public static XmlEvidenceRecordWriteResult Written(PooledMemory document) =>
+        new() { Status = XmlEvidenceRecordWriteStatus.Written, Document = document };
+
+    /// <summary>Creates a failed result that owns nothing.</summary>
+    /// <param name="status">The failure status; must not be <see cref="XmlEvidenceRecordWriteStatus.Written"/>.</param>
+    /// <param name="reason">A short, human-readable reason.</param>
+    /// <returns>A failed result.</returns>
+    public static XmlEvidenceRecordWriteResult Failed(XmlEvidenceRecordWriteStatus status, string reason) =>
+        new() { Status = status, FailureReason = reason };
+
+
+    /// <summary>
+    /// Transfers ownership of <see cref="Document"/> out of this result, so that disposing the result no
+    /// longer releases it — the produced document outlives the write that produced it, the same transfer
+    /// <see cref="XmlEvidenceRecordRootComputation.TakeRoot"/> states for the recomputed root.
+    /// </summary>
+    /// <returns>The document, now owned by the caller, or <see langword="null"/> when none was produced.</returns>
+    internal PooledMemory? TakeDocument()
+    {
+        taken = true;
+
+        return Document;
+    }
+
+
+    /// <summary>Disposes <see cref="Document"/>, when present and not taken.</summary>
+    public void Dispose()
+    {
+        if(!taken)
+        {
+            Document?.Dispose();
+        }
+    }
+}
+
+
+/// <summary>
+/// Everything <see cref="WriteEvidenceRecordXmlDelegate"/> is given about one write.
+/// </summary>
+/// <remarks>
+/// The model travels in the context and the caller retains its ownership — the implementation reads it, writes
+/// the document, and owns nothing afterwards, the same statelessness every context record in this namespace
+/// keeps its delegate to.
+/// </remarks>
+[DebuggerDisplay("XmlEvidenceRecordWriteContext: {EvidenceRecord.Chains.Count} chains")]
+public sealed record XmlEvidenceRecordWriteContext
+{
+    /// <summary>The assembled record to serialise. The caller retains ownership.</summary>
+    public required XmlEvidenceRecord EvidenceRecord { get; init; }
+}
+
+
+/// <summary>
+/// Serialises one <see cref="XmlEvidenceRecord"/> model into an <c>EvidenceRecord</c> document conformant to
+/// <see href="https://www.rfc-editor.org/rfc/rfc6283#section-8">IETF RFC 6283 clause 8</see> — the write
+/// direction of <see cref="ParseEvidenceRecordXmlDelegate"/>.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <strong>This library ships no implementation</strong>, for the same reason
+/// <see cref="ParseEvidenceRecordXmlDelegate"/> ships none: an Evidence Record in this syntax is XML, and this
+/// project stays serialization-agnostic. A worked implementation over the base class library's own XML writer
+/// is staged as a promotable example under the test project.
+/// </para>
+/// <para>
+/// <strong>Clause 8's schema is the contract.</strong> An implementation writes the <c>EvidenceRecord</c>
+/// element in the <see cref="XmlEvidenceRecordWellKnown.EvidenceRecordNamespace"/> namespace with
+/// <c>Version</c> as the model states it, every <c>Order</c> attribute the model carries, <c>DigestMethod</c>
+/// and <c>CanonicalizationMethod</c> with their <c>Algorithm</c> attributes as written, hash values and
+/// time-stamp tokens as base64 text, and the <c>TimeStampToken</c>'s required <c>Type</c> attribute. A model
+/// stating something the schema cannot carry is refused as
+/// <see cref="XmlEvidenceRecordWriteStatus.Unwritable"/> rather than approximated — the parse seam is the
+/// strict reader of what this seam writes, and a document it refuses protects nothing.
+/// </para>
+/// <para>
+/// <strong>The emitted octets become load-bearing later.</strong> A renewal canonicalizes sub-trees of the
+/// document as it stands (<see cref="CanonicalizeXmlEvidenceRecordDelegate"/>), so the document this seam
+/// produces is the one those digests will be computed over. Nothing in the initial record's own verification
+/// digests the document itself — the hash tree binds the archive data, not the record — but an implementation
+/// still writes well-formed, namespace-correct XML whose sub-trees canonicalize under the chain's stated
+/// method, or the record it wrote cannot be renewed.
+/// </para>
+/// <para>
+/// <strong>Faults are statuses, not exceptions</strong>, exactly as the parse and canonicalization seams have
+/// it: a seam is implemented by whoever supplies it, and exception behaviour must not become part of the
+/// contract.
+/// </para>
+/// </remarks>
+/// <param name="context">The assembled record to serialise.</param>
+/// <param name="pool">The memory pool the implementation rents the produced octets' carrier from.</param>
+/// <param name="cancellationToken">A cancellation token.</param>
+/// <returns>The write result.</returns>
+public delegate ValueTask<XmlEvidenceRecordWriteResult> WriteEvidenceRecordXmlDelegate(
+    XmlEvidenceRecordWriteContext context,
+    MemoryPool<byte> pool,
+    CancellationToken cancellationToken = default);

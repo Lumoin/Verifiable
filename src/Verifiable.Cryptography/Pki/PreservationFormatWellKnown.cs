@@ -98,8 +98,8 @@ public static class PreservationFormatWellKnown
 
     /// <summary>
     /// The evidence format identifier of an XML-syntax evidence record,
-    /// <c>urn:ietf:rfc:6283:EvidenceRecord</c> (clause A.2.3) — which this library verifies through its parse and
-    /// canonicalisation seams; creating one is an open item of the preceding wave.
+    /// <c>urn:ietf:rfc:6283:EvidenceRecord</c> (clause A.2.3) — verified through the parse and canonicalisation
+    /// seams and created through <see cref="XmlEvidenceRecords.CreateInitialAsync"/> with the write seam.
     /// </summary>
     public static string XmlEvidenceRecordEvidenceFormat { get; } = "urn:ietf:rfc:6283:EvidenceRecord";
 

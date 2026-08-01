@@ -288,25 +288,6 @@ public static class XmlEvidenceRecordHashTrees
 
             throw;
         }
-
-        //Copies one hash value into a carrier of its own so the walk owns every value it carries and the caller
-        //owns exactly one thing at the end, whichever branch produced it.
-        static DigestValue Copy(ReadOnlyMemory<byte> value, PkiDigestAlgorithm algorithm, MemoryPool<byte> pool)
-        {
-            IMemoryOwner<byte> owner = pool.Rent(value.Length);
-            try
-            {
-                value.Span.CopyTo(owner.Memory.Span);
-
-                return new DigestValue(owner, algorithm.DigestTag);
-            }
-            catch
-            {
-                owner.Dispose();
-
-                throw;
-            }
-        }
     }
 
 
@@ -446,6 +427,345 @@ public static class XmlEvidenceRecordHashTrees
             }
 
             return false;
+        }
+    }
+
+
+    /// <summary>
+    /// Builds the hash tree of clause 3.1.1 over per-group leaf digests — the generation direction — and
+    /// returns the root together with one reduced hash tree per group, each shaped exactly as
+    /// <see cref="ComputeRootAsync"/> walks it back: the first <c>Sequence</c> states the group's own object
+    /// digests and nothing else (Appendix A step 5.b's exclusive membership), every later <c>Sequence</c>
+    /// states the sibling values of one combination on the group's path to the root, and a level where the
+    /// group's node passes up alone states no <c>Sequence</c> at all.
+    /// </summary>
+    /// <param name="context">The per-group leaf digests and the algorithm every level is computed under.</param>
+    /// <param name="pool">The memory pool every carrier this call produces is rented from.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The root and the per-group reduced trees. The caller owns and disposes it.</returns>
+    /// <exception cref="ArgumentNullException">When <paramref name="context"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">When no group is supplied, a group holds no digest, a digest's length is not the algorithm's output length, or a count exceeds the bounds this class walks within.</exception>
+    /// <remarks>
+    /// <para>
+    /// The single-value base case falls out of the shape rather than being special-cased twice: a group with
+    /// one object gets a first <c>Sequence</c> of one value, whose octets clause 3.1.1 carries forward
+    /// unhashed — so that group's node in the tree is the digest itself, and a single-group, single-object
+    /// build has that digest as its root, time-stamped directly.
+    /// </para>
+    /// <para>
+    /// Nodes pair two at a time in group order; an odd node passes to the next level unchanged. The pairing is
+    /// a generator's own choice — clause 3.1.1 constrains how a level combines (sorted, concatenated, hashed),
+    /// never which nodes a generator groups — and the reduced trees record whatever choice was made, which is
+    /// all a verifier ever sees.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "At every await and every rent, a value is owned by exactly one of the nodes list, the next-level list, the sequences lists, or — for one combination's unowned window — a guard that disposes it; the catch disposes all four, and the root and the sequences transfer to the returned build, which the caller disposes.")]
+    public static async ValueTask<XmlEvidenceRecordHashTreeBuild> BuildAsync(
+        XmlEvidenceRecordHashTreeBuildContext context,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(pool);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        IReadOnlyList<IReadOnlyList<DigestValue>> groups = context.DataObjectDigestGroups;
+        PkiDigestAlgorithm algorithm = context.DigestAlgorithm;
+        if(groups.Count == 0)
+        {
+            throw new ArgumentException("A hash tree is built over at least one data object group (RFC 6283 clause 3.1.1).", nameof(context));
+        }
+
+        if(groups.Count > MaximumDigestValuesPerSequence)
+        {
+            throw new ArgumentException($"A hash tree is built over at most {MaximumDigestValuesPerSequence} data object groups.", nameof(context));
+        }
+
+        for(int g = 0; g < groups.Count; ++g)
+        {
+            if(groups[g].Count == 0)
+            {
+                throw new ArgumentException("A data object group holds at least one digest (RFC 6283 clause 3.1.1: the first hash list contains the hash values of all its data objects).", nameof(context));
+            }
+
+            if(groups[g].Count > MaximumDigestValuesPerSequence)
+            {
+                throw new ArgumentException($"A data object group holds at most {MaximumDigestValuesPerSequence} digests.", nameof(context));
+            }
+
+            for(int i = 0; i < groups[g].Count; ++i)
+            {
+                if(groups[g][i].Length != algorithm.OutputByteLength)
+                {
+                    throw new ArgumentException($"Every leaf digest is exactly {algorithm.OutputByteLength} bytes for '{algorithm.Identifier.Oid}' (clause 4.1.1: one algorithm per chain).", nameof(context));
+                }
+            }
+        }
+
+        var nodes = new List<XmlEvidenceRecordBuildNode>(groups.Count);
+        var nextLevel = new List<XmlEvidenceRecordBuildNode>((groups.Count + 1) / 2);
+        var sequences = new List<List<XmlEvidenceRecordSequence>>(groups.Count);
+        try
+        {
+            for(int g = 0; g < groups.Count; ++g)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                IReadOnlyList<DigestValue> leafDigests = groups[g];
+                var firstSequenceValues = new List<DigestValue>(leafDigests.Count);
+                for(int i = 0; i < leafDigests.Count; ++i)
+                {
+                    firstSequenceValues.Add(Copy(leafDigests[i].AsReadOnlyMemory(), algorithm, pool));
+                }
+
+                sequences.Add([new XmlEvidenceRecordSequence { Order = 1, DigestValues = firstSequenceValues }]);
+
+                //The group's node: a single object's digest stands as it is (the clause 3.1.1 base case a
+                //verifier carries forward unhashed); several combine under the level rule.
+                DigestValue node = leafDigests.Count == 1
+                    ? Copy(leafDigests[0].AsReadOnlyMemory(), algorithm, pool)
+                    : await CombineAsync(AsMemories(leafDigests), algorithm, pool, cancellationToken).ConfigureAwait(false);
+                nodes.Add(new XmlEvidenceRecordBuildNode(node, [g]));
+            }
+
+            while(nodes.Count > 1)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                //The level drains from the front so a consumed node is never left behind in the source list:
+                //at every await and every rent, a value is owned by exactly one of the two lists the catch
+                //disposes, or by the one guarded window below.
+                while(nodes.Count > 1)
+                {
+                    XmlEvidenceRecordBuildNode left = nodes[0];
+                    XmlEvidenceRecordBuildNode right = nodes[1];
+                    var beneath = new List<int>(left.Groups.Count + right.Groups.Count);
+                    beneath.AddRange(left.Groups);
+                    beneath.AddRange(right.Groups);
+
+                    DigestValue combined = await CombineAsync(
+                        [left.Value.AsReadOnlyMemory(), right.Value.AsReadOnlyMemory()], algorithm, pool, cancellationToken).ConfigureAwait(false);
+                    try
+                    {
+                        AppendSiblingSequences(sequences, left.Groups, right.Value, algorithm, pool);
+                        AppendSiblingSequences(sequences, right.Groups, left.Value, algorithm, pool);
+                        nextLevel.Add(new XmlEvidenceRecordBuildNode(combined, beneath));
+                    }
+                    catch
+                    {
+                        //The combination's one unowned window: it is not yet in the next level's list, so the
+                        //outer catch cannot release it — the same guard Copy applies to its own rental.
+                        combined.Dispose();
+
+                        throw;
+                    }
+
+                    nodes.RemoveRange(0, 2);
+                    left.Value.Dispose();
+                    right.Value.Dispose();
+                }
+
+                if(nodes.Count == 1)
+                {
+                    //An odd node passes up unchanged: no combination happened, so the groups beneath it
+                    //state no Sequence for this level and the verifier's carried value crosses it as is.
+                    nextLevel.Add(nodes[0]);
+                    nodes.Clear();
+                }
+
+                nodes.AddRange(nextLevel);
+                nextLevel.Clear();
+            }
+
+            DigestValue root = nodes[0].Value;
+            var trees = new XmlEvidenceRecordHashTree[groups.Count];
+            for(int g = 0; g < groups.Count; ++g)
+            {
+                trees[g] = new XmlEvidenceRecordHashTree { Sequences = sequences[g] };
+            }
+
+            //The root stays reachable from the nodes list — and the sequences from theirs — until both
+            //transfers below cannot fail anymore.
+            nodes.Clear();
+            sequences.Clear();
+
+            return new XmlEvidenceRecordHashTreeBuild(root, trees);
+        }
+        catch
+        {
+            for(int i = 0; i < nextLevel.Count; ++i)
+            {
+                nextLevel[i].Value.Dispose();
+            }
+
+            for(int i = 0; i < nodes.Count; ++i)
+            {
+                nodes[i].Value.Dispose();
+            }
+
+            for(int g = 0; g < sequences.Count; ++g)
+            {
+                for(int i = 0; i < sequences[g].Count; ++i)
+                {
+                    sequences[g][i].Dispose();
+                }
+            }
+
+            throw;
+        }
+
+
+        //Views one group's leaf digests as the memory list the level rule combines.
+        static List<ReadOnlyMemory<byte>> AsMemories(IReadOnlyList<DigestValue> digests)
+        {
+            var memories = new List<ReadOnlyMemory<byte>>(digests.Count);
+            for(int i = 0; i < digests.Count; ++i)
+            {
+                memories.Add(digests[i].AsReadOnlyMemory());
+            }
+
+            return memories;
+        }
+
+
+        //Appends, for every group beneath one pair member, the Sequence stating the other member's value —
+        //the sibling a verifier adds its carried value to at this level.
+        static void AppendSiblingSequences(
+            List<List<XmlEvidenceRecordSequence>> sequences, IReadOnlyList<int> groups, DigestValue sibling,
+            PkiDigestAlgorithm algorithm, MemoryPool<byte> pool)
+        {
+            for(int i = 0; i < groups.Count; ++i)
+            {
+                List<XmlEvidenceRecordSequence> path = sequences[groups[i]];
+                path.Add(new XmlEvidenceRecordSequence
+                {
+                    Order = path.Count + 1,
+                    DigestValues = [Copy(sibling.AsReadOnlyMemory(), algorithm, pool)]
+                });
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// Copies one hash value into a carrier of its own, so every walk here owns every value it carries and a
+    /// caller owns exactly one thing at the end, whichever branch produced it.
+    /// </summary>
+    /// <param name="value">The octets to copy.</param>
+    /// <param name="algorithm">The algorithm whose tag the carrier states.</param>
+    /// <param name="pool">The memory pool the carrier is rented from.</param>
+    /// <returns>The owned copy.</returns>
+    private static DigestValue Copy(ReadOnlyMemory<byte> value, PkiDigestAlgorithm algorithm, MemoryPool<byte> pool)
+    {
+        IMemoryOwner<byte> owner = pool.Rent(value.Length);
+        try
+        {
+            value.Span.CopyTo(owner.Memory.Span);
+
+            return new DigestValue(owner, algorithm.DigestTag);
+        }
+        catch
+        {
+            owner.Dispose();
+
+            throw;
+        }
+    }
+
+
+    /// <summary>
+    /// One node of the build walk: its value and the indices of the groups beneath it, whose reduced trees
+    /// record this node's combinations.
+    /// </summary>
+    /// <param name="Value">The node's hash value, owned by the walk until combined or transferred.</param>
+    /// <param name="Groups">The indices of the data object groups beneath this node.</param>
+    private readonly record struct XmlEvidenceRecordBuildNode(DigestValue Value, IReadOnlyList<int> Groups);
+}
+
+
+/// <summary>
+/// What <see cref="XmlEvidenceRecordHashTrees.BuildAsync"/> is given: the leaf digests of every data object,
+/// grouped as the archive objects are, and the digest algorithm of the chain being started (clause 4.1.1 of
+/// <see href="https://www.rfc-editor.org/rfc/rfc6283#section-4.1.1">IETF RFC 6283</see>: one algorithm per
+/// chain).
+/// </summary>
+[DebuggerDisplay("XmlEvidenceRecordHashTreeBuildContext: {DataObjectDigestGroups.Count} groups")]
+public sealed record XmlEvidenceRecordHashTreeBuildContext
+{
+    /// <summary>The leaf digests, one inner list per archive object group, each computed under <see cref="DigestAlgorithm"/> — an XML data object's digest over its canonical binary representation (clause 4.1.2). The caller retains ownership of every carrier.</summary>
+    public required IReadOnlyList<IReadOnlyList<DigestValue>> DataObjectDigestGroups { get; init; }
+
+    /// <summary>The digest algorithm every level of the tree is computed under.</summary>
+    public required PkiDigestAlgorithm DigestAlgorithm { get; init; }
+}
+
+
+/// <summary>
+/// What <see cref="XmlEvidenceRecordHashTrees.BuildAsync"/> produced: the root hash value one time-stamp is
+/// obtained over, and one reduced hash tree per data object group, each ready to stand as the <c>HashTree</c>
+/// element of that group's initial <c>ArchiveTimeStamp</c> (clause 3.1.1 of
+/// <see href="https://www.rfc-editor.org/rfc/rfc6283#section-3.1.1">IETF RFC 6283</see>).
+/// </summary>
+[DebuggerDisplay("XmlEvidenceRecordHashTreeBuild: {GroupCount} groups")]
+public sealed class XmlEvidenceRecordHashTreeBuild: IDisposable
+{
+    /// <summary>The per-group reduced trees; a claimed slot is <see langword="null"/> and no longer this instance's to release.</summary>
+    private readonly XmlEvidenceRecordHashTree?[] reducedHashTrees;
+
+    /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
+    private bool disposed;
+
+
+    /// <summary>Initialises a new build outcome, taking ownership of the root and every reduced tree.</summary>
+    /// <param name="root">The root hash value. Ownership transfers to this instance.</param>
+    /// <param name="reducedHashTrees">One reduced tree per group. Ownership transfers to this instance.</param>
+    internal XmlEvidenceRecordHashTreeBuild(DigestValue root, XmlEvidenceRecordHashTree[] reducedHashTrees)
+    {
+        Root = root;
+        this.reducedHashTrees = reducedHashTrees;
+    }
+
+
+    /// <summary>Gets the root hash value the whole tree reduces to — what one time-stamp is obtained over. Owned by this instance.</summary>
+    public DigestValue Root { get; }
+
+    /// <summary>Gets the number of data object groups the tree was built over.</summary>
+    public int GroupCount => reducedHashTrees.Length;
+
+
+    /// <summary>
+    /// Transfers ownership of one group's reduced tree out of this instance — the tree becomes the claimed
+    /// record's to release, typically as the <c>HashTree</c> of the <see cref="XmlEvidenceRecordArchiveTimeStamp"/>
+    /// being assembled for that group — so disposing this build no longer releases it.
+    /// </summary>
+    /// <param name="groupIndex">The zero-based group index.</param>
+    /// <returns>The reduced tree, now owned by the caller.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">When <paramref name="groupIndex"/> names no group.</exception>
+    /// <exception cref="InvalidOperationException">When the group's tree was already claimed.</exception>
+    public XmlEvidenceRecordHashTree ClaimReducedHashTree(int groupIndex)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(groupIndex);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(groupIndex, reducedHashTrees.Length);
+        XmlEvidenceRecordHashTree claimed = reducedHashTrees[groupIndex]
+            ?? throw new InvalidOperationException($"The reduced hash tree of group {groupIndex} was already claimed; a tree has exactly one owner.");
+        reducedHashTrees[groupIndex] = null;
+
+        return claimed;
+    }
+
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        if(!disposed)
+        {
+            Root.Dispose();
+            for(int i = 0; i < reducedHashTrees.Length; ++i)
+            {
+                reducedHashTrees[i]?.Dispose();
+            }
+
+            disposed = true;
         }
     }
 }

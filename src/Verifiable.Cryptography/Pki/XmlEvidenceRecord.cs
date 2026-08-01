@@ -282,10 +282,11 @@ public sealed record XmlEvidenceRecordArchiveTimeStampChain: IDisposable
 /// context.
 /// </para>
 /// <para>
-/// <strong>This library creates no Evidence Record in this syntax.</strong> The surface is validation-side: a
-/// producer that needs to emit one emits the ASN.1 syntax of IETF RFC 4998, which this library does create.
-/// Clause 1.1 of RFC 6283 states the two are not transformations of one another, and nothing in
-/// EN 319 162-1 obliges a producer to be able to write both.
+/// <strong>The model travels both directions.</strong> A parse seam produces it for
+/// <see cref="XmlEvidenceRecords.VerifyAsync"/>, and <see cref="XmlEvidenceRecords.CreateInitialAsync"/>
+/// assembles it and hands it to a write seam (<see cref="WriteEvidenceRecordXmlDelegate"/>) to serialise.
+/// Clause 1.1 of RFC 6283 states the two syntaxes are not transformations of one another, so each has its own
+/// creation surface and nothing transforms an ASN.1 record into this shape or back.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("XmlEvidenceRecord: version {Version}, {Chains.Count} chains")]

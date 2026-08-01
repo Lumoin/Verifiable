@@ -1044,4 +1044,143 @@ public static class XmlEvidenceRecordXmlBinding
 
         return true;
     }
+
+
+    /// <summary>
+    /// Serialises an <see cref="XmlEvidenceRecord"/> model into an <c>EvidenceRecord</c> document conformant to
+    /// clause 8's schema. Has the <see cref="WriteEvidenceRecordXmlDelegate"/> shape.
+    /// </summary>
+    /// <param name="context">The assembled record to serialise.</param>
+    /// <param name="pool">The memory pool the produced octets' carrier is rented from.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The write result.</returns>
+    /// <remarks>
+    /// <para>
+    /// The document is written without inter-element whitespace, exactly as the records this binding's own
+    /// canonicalization side is exercised against are written — <see cref="BuildSequencePrefix"/>'s remark
+    /// records that a producer writing whitespace between chains would leave it behind in a renewal prefix, so
+    /// this producer writes none.
+    /// </para>
+    /// <para>
+    /// The <c>DigestValue</c> elements of every <c>Sequence</c> are emitted in binary ascending order of their
+    /// decoded octets — clause 3.2.2's generation rule, ordered by the one primitive both syntaxes state
+    /// identically (<see cref="EvidenceRecordHashTree.HashValueComparer"/>). What this example cannot write
+    /// faithfully it refuses as <see cref="XmlEvidenceRecordWriteStatus.Unwritable"/> rather than approximates:
+    /// a record stating <c>EncryptionInformation</c>, supporting information, per-member attributes,
+    /// cryptographic information, or a time-stamp of any format but RFC 3161.
+    /// </para>
+    /// </remarks>
+    public static ValueTask<XmlEvidenceRecordWriteResult> WriteAsync(
+        XmlEvidenceRecordWriteContext context,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(pool);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        XmlEvidenceRecord record = context.EvidenceRecord;
+        if(record.HasEncryptionInformation || record.SupportingInformation.Count > 0)
+        {
+            return ValueTask.FromResult(XmlEvidenceRecordWriteResult.Failed(
+                XmlEvidenceRecordWriteStatus.Unwritable,
+                "This worked example writes neither EncryptionInformation (clause 5) nor SupportingInformation; a record stating them needs a fuller writer."));
+        }
+
+        var sequenceElement = new XElement(EvidenceRecordNamespace + XmlEvidenceRecordWellKnown.ArchiveTimeStampSequenceElementName);
+        foreach(XmlEvidenceRecordArchiveTimeStampChain chain in record.Chains)
+        {
+            var chainElement = new XElement(
+                EvidenceRecordNamespace + XmlEvidenceRecordWellKnown.ArchiveTimeStampChainElementName,
+                new XAttribute(XmlEvidenceRecordWellKnown.OrderAttributeName, chain.Order),
+                new XElement(
+                    EvidenceRecordNamespace + XmlEvidenceRecordWellKnown.DigestMethodElementName,
+                    new XAttribute(XmlEvidenceRecordWellKnown.AlgorithmAttributeName, chain.DigestMethodUri)),
+                new XElement(
+                    EvidenceRecordNamespace + XmlEvidenceRecordWellKnown.CanonicalizationMethodElementName,
+                    new XAttribute(XmlEvidenceRecordWellKnown.AlgorithmAttributeName, chain.CanonicalizationMethodUri)));
+
+            foreach(XmlEvidenceRecordArchiveTimeStamp member in chain.ArchiveTimeStamps)
+            {
+                if(member.Attributes.Count > 0
+                    || member.TimeStamp.CryptographicInformation.Count > 0
+                    || !string.Equals(member.TimeStamp.TokenType, XmlEvidenceRecordWellKnown.Rfc3161TimeStampTokenType, StringComparison.Ordinal)
+                    || member.TimeStamp.Rfc3161Token is null)
+                {
+                    return ValueTask.FromResult(XmlEvidenceRecordWriteResult.Failed(
+                        XmlEvidenceRecordWriteStatus.Unwritable,
+                        "This worked example writes RFC 3161 time-stamps without attributes or cryptographic information; a record stating more needs a fuller writer."));
+                }
+
+                var memberElement = new XElement(
+                    EvidenceRecordNamespace + XmlEvidenceRecordWellKnown.ArchiveTimeStampElementName,
+                    new XAttribute(XmlEvidenceRecordWellKnown.OrderAttributeName, member.Order));
+                if(member.HashTree is XmlEvidenceRecordHashTree hashTree)
+                {
+                    memberElement.Add(BuildHashTreeElement(hashTree));
+                }
+
+                memberElement.Add(new XElement(
+                    EvidenceRecordNamespace + XmlEvidenceRecordWellKnown.TimeStampElementName,
+                    new XElement(
+                        EvidenceRecordNamespace + XmlEvidenceRecordWellKnown.TimeStampTokenElementName,
+                        new XAttribute(XmlEvidenceRecordWellKnown.TypeAttributeName, member.TimeStamp.TokenType),
+                        Convert.ToBase64String(member.TimeStamp.Rfc3161Token.AsReadOnlySpan()))));
+                chainElement.Add(memberElement);
+            }
+
+            sequenceElement.Add(chainElement);
+        }
+
+        var document = new XDocument(new XElement(
+            EvidenceRecordNamespace + XmlEvidenceRecordWellKnown.EvidenceRecordElementName,
+            new XAttribute(XmlEvidenceRecordWellKnown.VersionAttributeName, record.Version),
+            sequenceElement));
+
+        using var buffer = new MemoryStream();
+        using(XmlWriter writer = XmlWriter.Create(buffer, new XmlWriterSettings
+        {
+            Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            OmitXmlDeclaration = false,
+            Indent = false
+        }))
+        {
+            document.Save(writer);
+        }
+
+        return ValueTask.FromResult(XmlEvidenceRecordWriteResult.Written(
+            PooledMemory.FromBytes(buffer.GetBuffer().AsSpan(0, (int)buffer.Length), pool, XmlEvidenceRecordTags.EvidenceRecord)));
+
+
+        //Builds one HashTree element: every Sequence in ascending Order, its DigestValue elements emitted in
+        //binary ascending order of the decoded octets (clause 3.2.2's generation rule).
+        static XElement BuildHashTreeElement(XmlEvidenceRecordHashTree hashTree)
+        {
+            var hashTreeElement = new XElement(EvidenceRecordNamespace + XmlEvidenceRecordWellKnown.HashTreeElementName);
+            foreach(XmlEvidenceRecordSequence sequence in hashTree.Sequences)
+            {
+                var values = new List<ReadOnlyMemory<byte>>(sequence.DigestValues.Count);
+                foreach(DigestValue value in sequence.DigestValues)
+                {
+                    values.Add(value.AsReadOnlyMemory());
+                }
+
+                values.Sort(EvidenceRecordHashTree.HashValueComparer);
+
+                var sequenceElement = new XElement(
+                    EvidenceRecordNamespace + XmlEvidenceRecordWellKnown.SequenceElementName,
+                    new XAttribute(XmlEvidenceRecordWellKnown.OrderAttributeName, sequence.Order));
+                foreach(ReadOnlyMemory<byte> value in values)
+                {
+                    sequenceElement.Add(new XElement(
+                        EvidenceRecordNamespace + XmlEvidenceRecordWellKnown.DigestValueElementName,
+                        Convert.ToBase64String(value.Span)));
+                }
+
+                hashTreeElement.Add(sequenceElement);
+            }
+
+            return hashTreeElement;
+        }
+    }
 }

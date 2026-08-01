@@ -64,7 +64,22 @@ public enum EvidenceRecordCreationFailureKind
     /// "SHOULD only occur once". Attaching a further one is the documented departure a caller states through
     /// <see cref="EvidenceRecordCmsAttachmentPolicy.ChronologicalSequence"/>.
     /// </summary>
-    EvidenceRecordAlreadyAttached = 8
+    EvidenceRecordAlreadyAttached = 8,
+
+    /// <summary>
+    /// An XML archive data object could not be canonicalized into the binary representation clause 4.1.2 of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6283#section-4.1.2">IETF RFC 6283</see> hashes
+    /// ("canonicalization MUST be applied over XML structured archive data"), so its leaf digest cannot be
+    /// stated.
+    /// </summary>
+    ArchiveDataNotCanonicalizable = 9,
+
+    /// <summary>
+    /// The write seam did not produce the <c>EvidenceRecord</c> document's octets
+    /// (<see cref="WriteEvidenceRecordXmlDelegate"/>), so there is no record to hand back — the assembled
+    /// model bound a genuine time-stamp, but a record that was never serialised protects nothing.
+    /// </summary>
+    DocumentNotWritable = 10
 }
 
 
