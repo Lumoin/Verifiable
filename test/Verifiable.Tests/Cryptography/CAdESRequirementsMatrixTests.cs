@@ -274,8 +274,10 @@ internal sealed class CAdESRequirementsMatrixTests
 
     /// <summary>
     /// Clause 4.6's degenerate-no-signer prohibition ("the degenerate case where there are no signers shall
-    /// not be used"): every signature the shipped creation surface produces carries exactly one
-    /// <c>SignerInfo</c>, read back through the platform <see cref="SignedCms"/> reader.
+    /// not be used"): the one-signer <c>SignAsync</c> convenience produces exactly one <c>SignerInfo</c>,
+    /// read back through the platform <see cref="SignedCms"/> reader — and the multi-signer completion
+    /// refuses an empty signer list outright (its own refusal test), so no shipped surface reaches the
+    /// degenerate form.
     /// </summary>
     [TestMethod]
     public async Task EveryProducedSignatureCarriesExactlyOneSignerInfo()
@@ -623,13 +625,13 @@ internal sealed class CAdESRequirementsMatrixTests
             RequirementCoverageStatus.Tested, "CAdESOptionalAttributesTests.ContentTimeStampUsesTheRawValueImprintConventionNotTheAtsv3TlvConvention"),
 
         ("4.1-cms-compliance", "CAdES signatures shall build on CMS (RFC 5652) and comply with its clauses 2-5.",
-            RequirementCoverageStatus.Tested, "CAdESSignatureCreationTests.AttachedEcdsaSignatureVerifiesUnderThePlatformCmsReader"),
+            RequirementCoverageStatus.Tested, "CAdESSignatureCreationTests.AttachedEcdsaSignatureVerifiesUnderThePlatformCmsReader (the §5.1 multi-signer shape — more than one SignerInfo over one content — is CAdESParallelSignatureTests.AParallelSignerJoinsAnAttachedSignatureAndEverySignerVerifiesIndependently, with SeveralPreparedSignersCompleteOneFreshSignedDataTogether for the fresh multi-signer completion)"),
         ("4.4-version-rule", "SignedData.version and SignerInfo.version shall follow RFC 5652 §5.1's version-assignment cascade (clause 4.4 delegates to it): 1 for the id-data/IssuerAndSerialNumber/no-attribute-certificate/no-other-format combination the creation surface produces, and 5 once a B-LT validation-data placement embeds an OtherCertificateFormat certificate ([3]) or an OtherRevocationInfoFormat OCSP crls member ([1]).",
-            RequirementCoverageStatus.Tested, "CAdESSignatureAugmentationTests.AnOcspPlacementRaisesTheSignedDataVersionToFive (with ACrlOnlyPlacementLeavesTheSignedDataVersionAtOne for the crl-alternative version-1 case, AddingDataToASignatureThatAlreadyHasAnArchiveTimestampRaisesTheVersionYetTheArchiveTimestampStillValidates for the length-preserving raise past an existing archive-time-stamp-v3, and CAdESSignatureCreationTests.TheCmsAndSignerInfoVersionsAreBothOne for the created baseline's version 1)"),
+            RequirementCoverageStatus.Tested, "CAdESSignatureAugmentationTests.AnOcspPlacementRaisesTheSignedDataVersionToFive (with ACrlOnlyPlacementLeavesTheSignedDataVersionAtOne for the crl-alternative version-1 case, AddingDataToASignatureThatAlreadyHasAnArchiveTimestampRaisesTheVersionYetTheArchiveTimestampStillValidates for the length-preserving raise past an existing archive-time-stamp-v3, CAdESSignatureCreationTests.TheCmsAndSignerInfoVersionsAreBothOne for the created baseline's version 1, and CAdESParallelSignatureTests.TheParallelPlacementPreservesTheOriginalSignerAndUnionsTheDigestAlgorithms for version 1 standing across several parallel version-1 signers — the placement itself refusing a non-version-1 SignerInfo in ThePlacementRefusesDuplicatesPatchedVersionsAndNonSignerInfoOctets)"),
         ("4.5-attached-detached", "EncapsulatedContentInfo.eContent should be present, or the signed data should be archived preserving its encoding, for long-term validation; both attached and detached signing are supported.",
             RequirementCoverageStatus.Tested, "CAdESSignatureCreationTests.ADetachedSignatureOmitsEContentAndVerifiesExternally"),
         ("4.6-no-degenerate-signerinfo", "The degenerate case where there are no signers shall not be used.",
-            RequirementCoverageStatus.Tested, "CAdESRequirementsMatrixTests.EveryProducedSignatureCarriesExactlyOneSignerInfo"),
+            RequirementCoverageStatus.Tested, "CAdESRequirementsMatrixTests.EveryProducedSignatureCarriesExactlyOneSignerInfo (and the multi-signer completion refuses an empty signer list outright: CAdESParallelSignatureTests.TheMultiSignerCompletionRefusesAnEmptyListAndDisagreeingContents)"),
         ("4.7-der-signedattrs", "SignedData and signed attributes shall be DER-encoded (RFC 5652 §5.3); BER is permitted elsewhere only per X.690.",
             RequirementCoverageStatus.Tested, "CmsSignedAttributesEncodingTests.ProducesTheExactOctetsAnExistingSignatureWasComputedOver"),
         ("4.7.2-ats-computation-der-only", "Clause 4.7.2 permits BER generally, and CmsSignedDataAugmentation preserves indefinite-length BER framing rather than rejecting it (a third-party verifier may still need the original octets); this library's own ats-hash-index-v3/message-imprint computation is knowingly narrower and requires DER, so a signature left in legal indefinite-length BER form is not self-validatable by this library's own ATSv3 coverage computation (documented gap, recorded at ArchiveTimestampV3's ReadMaterial and CmsSignedDataAugmentation's class remarks).",

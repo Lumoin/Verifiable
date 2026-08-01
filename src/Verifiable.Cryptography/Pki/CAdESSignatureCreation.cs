@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using System.Threading;
@@ -20,7 +21,8 @@ namespace Verifiable.Cryptography.Pki;
 /// <strong>The three-phase split is the API's spine.</strong> <see cref="PrepareAsync"/> assembles the signed
 /// attributes and returns the exact octets a signer signs (the inverse of
 /// <see cref="ManagedCmsVerification"/>'s <c>ReencodeSignedAttributes</c>, authored through
-/// <see cref="CmsSignedAttributesEncoding"/>) together with their digest; <see cref="Complete"/> takes a
+/// <see cref="CmsSignedAttributesEncoding"/>) together with their digest;
+/// <see cref="Complete(CAdESSignaturePreparation, PkiCertificateMemory, CryptoAlgorithm, ReadOnlyMemory{byte}, IReadOnlyList{PkiCertificateMemory}?, MemoryPool{byte})"/> takes a
 /// signature value produced however the caller obtained it and assembles the final <c>SignedData</c>;
 /// <see cref="SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, MemoryPool{byte}, CancellationToken)"/>
 /// composes both phases around a <see cref="SigningDelegate"/> resolved from the signer's <see cref="Tag"/>
@@ -30,7 +32,7 @@ namespace Verifiable.Cryptography.Pki;
 /// phase 1 returns and the signature value it hands to phase 2.
 /// </para>
 /// <para>
-/// <strong>Byte-exact reuse.</strong> <see cref="Complete"/> writes <see cref="CAdESSignaturePreparation.EmbeddedForm"/>
+/// <strong>Byte-exact reuse.</strong> Every completion here writes <see cref="CAdESSignaturePreparation.EmbeddedForm"/>
 /// verbatim into <c>SignerInfo.signedAttrs</c> — the same octets the digest and the signature were computed
 /// over, so nothing is re-encoded between preparation and completion.
 /// </para>
@@ -43,8 +45,24 @@ namespace Verifiable.Cryptography.Pki;
 /// the single branch of that rule's cascade that assigns 1 — so both versions are hard-coded to 1. A later
 /// validation-data placement that embeds an other-format revocation member raises <c>SignedData.version</c>
 /// to 5, as the same §5.1 rule requires; that is <see cref="CAdESSignatureAugmentation"/>'s concern, not this
-/// creation surface's. The degenerate no-signer case (clause 4.6) cannot arise: <see cref="Complete"/> always
-/// writes exactly one <c>SignerInfo</c>.
+/// creation surface's. The degenerate no-signer case (clause 4.6) cannot arise: every completion writes at
+/// least one <c>SignerInfo</c>, and the multi-signer
+/// <see cref="Complete(IReadOnlyList{CAdESSignerCompletion}, IReadOnlyList{PkiCertificateMemory}?, MemoryPool{byte})"/>
+/// refuses an empty signer list.
+/// </para>
+/// <para>
+/// <strong>Parallel signers share the same three phases too.</strong> Several signers of the same content
+/// stand side by side as sibling <c>SignerInfo</c> structures (RFC 5652 §5.1, more than one signer), each a
+/// whole CAdES signer with its own signed attributes: <see cref="PrepareParallelSignatureAsync"/> prepares
+/// the attribute set over an existing structure's own <c>eContent</c> (or the detached content's digest
+/// carrier), <see cref="CompleteParallelSignature"/> assembles the whole <c>SignerInfo</c> through the same
+/// writer, and <see cref="CmsSignedDataAugmentation.AddSignerInfo"/> places it while preserving every octet
+/// already there;
+/// <see cref="AddParallelSignatureAsync(CmsSignedData, PkiCertificateMemory, PrivateKeyMemory, DigestValue?, DateTimeOffset, CryptographicConstraints?, bool, MemoryPool{byte}, CancellationToken, CAdESOptionalSignedAttributes?)"/>
+/// composes the three. Signers completing one fresh <c>SignedData</c> together go through the multi-signer
+/// <see cref="Complete(IReadOnlyList{CAdESSignerCompletion}, IReadOnlyList{PkiCertificateMemory}?, MemoryPool{byte})"/>
+/// instead, and the per-signer verification addressing of a multi-signer structure is
+/// <see cref="CmsSignedDataReduction.SelectSigner"/>'s projection.
 /// </para>
 /// <para>
 /// <strong>Algorithm gating (R-8).</strong> MD5 is refused unconditionally and SHA-1 is refused as a
@@ -274,7 +292,12 @@ public static class CAdESSignatureCreation
                     encoding.SigningInput.AsReadOnlyMemory(), messageDigestAlgorithm.OutputByteLength, messageDigestAlgorithm.DigestTag, pool,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
 
-                return new CAdESSignaturePreparation(encoding.SigningInput, encoding.EmbeddedForm, signingInputDigest, messageDigestAlgorithm, content);
+                //The content commitment transfers to the preparation (its ContentDigest), so the finally
+                //below releases it only on a failure path.
+                CAdESSignaturePreparation preparation = new(encoding.SigningInput, encoding.EmbeddedForm, signingInputDigest, messageDigest, messageDigestAlgorithm, content);
+                messageDigest = null;
+
+                return preparation;
             }
             catch
             {
@@ -322,8 +345,6 @@ public static class CAdESSignatureCreation
     /// <exception cref="ArgumentNullException">When <paramref name="preparation"/>, <paramref name="signerCertificate"/>, or <paramref name="pool"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">When <paramref name="signatureValue"/> is empty, or <paramref name="signingAlgorithm"/>'s natural digest does not match the digest <paramref name="preparation"/> was built under.</exception>
     /// <exception cref="NotSupportedException">When <paramref name="signingAlgorithm"/> is not one <see cref="ResolveSigningProfile"/> recognises.</exception>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of the rented buffer transfers to the returned carrier, which the caller disposes; the catch disposes it on a partial failure.")]
     public static CmsSignedData Complete(
         CAdESSignaturePreparation preparation,
         PkiCertificateMemory signerCertificate,
@@ -334,21 +355,118 @@ public static class CAdESSignatureCreation
     {
         ArgumentNullException.ThrowIfNull(preparation);
         ArgumentNullException.ThrowIfNull(signerCertificate);
-        ArgumentNullException.ThrowIfNull(pool);
-        if(signatureValue.IsEmpty)
-        {
-            throw new ArgumentException("An externally produced signature value is required to complete a CAdES signature.", nameof(signatureValue));
-        }
 
-        CAdESSigningProfile profile = ResolveSigningProfile(signingAlgorithm);
-        if(!string.Equals(profile.DigestAlgorithm.Identifier.Oid, preparation.MessageDigestAlgorithm.Identifier.Oid, StringComparison.Ordinal))
+        return Complete(
+            [new CAdESSignerCompletion(preparation, signerCertificate, signingAlgorithm, signatureValue)],
+            additionalCertificates,
+            pool);
+    }
+
+
+    /// <summary>
+    /// Assembles a CAdES-B-B <c>SignedData</c> carrying one <c>SignerInfo</c> per signer — the multi-signer
+    /// shape of <see href="https://www.rfc-editor.org/rfc/rfc5652#section-5.1">RFC 5652 §5.1</see>, where
+    /// several signers sign the same content side by side — from signature values produced however each
+    /// signer obtained them.
+    /// </summary>
+    /// <param name="signers">One completion per signer: the prepared signed attributes from <see cref="PrepareAsync"/>, the signer certificate, the signing algorithm, and the externally produced signature value. At least one; RFC 5652 §5.1 has <c>signerInfos</c> as a set of these, and the degenerate certificate-only form (clause 4.6) is not a signature this surface produces.</param>
+    /// <param name="additionalCertificates">Further certificates for <c>SignedData.certificates</c> (chains, revocation-signer, TSA certificates — requirement d); an entry whose DER is identical to one already placed is skipped (requirement e, avoid duplication).</param>
+    /// <param name="pool">The memory pool the returned carrier is rented from.</param>
+    /// <returns>The completed CAdES-B-B <c>SignedData</c> wire bytes. The caller owns and disposes it.</returns>
+    /// <exception cref="ArgumentNullException">When <paramref name="signers"/>, one of its entries or their members, or <paramref name="pool"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">When <paramref name="signers"/> is empty, a signature value is empty, a signing algorithm's natural digest does not match the digest its preparation was built under, or the preparations disagree on the content (attached against detached, differing attached octets, or two detached preparations under one digest algorithm stating different <c>message-digest</c> values — one <c>encapContentInfo</c> holds one content; detached signers under different algorithms cannot be compared without the content and are accepted, which mixed classical-plus-post-quantum signing legitimately needs).</exception>
+    /// <exception cref="NotSupportedException">When a signing algorithm is not one <see cref="ResolveSigningProfile"/> recognises.</exception>
+    /// <remarks>
+    /// <para>
+    /// Each signer's <c>SignerInfo</c> stands alone — its signature covers its own signed attributes and the
+    /// shared content, never a sibling's — so every entry is validated exactly as the single-signer
+    /// <see cref="Complete(CAdESSignaturePreparation, PkiCertificateMemory, CryptoAlgorithm, ReadOnlyMemory{byte}, IReadOnlyList{PkiCertificateMemory}?, MemoryPool{byte})"/>
+    /// validates its one signer, and the single-signer form is this method over one entry.
+    /// </para>
+    /// <para>
+    /// <c>digestAlgorithms</c> lists each distinct digest algorithm once (§5.1's collection "intended to
+    /// list" each signer's); <c>CMSVersion</c> stays 1, because every <c>SignerInfo</c> written here is
+    /// version 1 with an <c>IssuerAndSerialNumber</c> identifier and <c>eContentType</c> is <c>id-data</c>
+    /// (the same §5.1 cascade branch the class remarks state). The writer emits DER, so both
+    /// <c>SET OF</c> fields — <c>digestAlgorithms</c> and <c>signerInfos</c> — leave in X.690 clause 11.6
+    /// order whatever order the entries arrived in.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the rented buffer transfers to the returned carrier, which the caller disposes; the catch disposes it on a partial failure.")]
+    public static CmsSignedData Complete(
+        IReadOnlyList<CAdESSignerCompletion> signers,
+        IReadOnlyList<PkiCertificateMemory>? additionalCertificates,
+        MemoryPool<byte> pool)
+    {
+        ArgumentNullException.ThrowIfNull(signers);
+        ArgumentNullException.ThrowIfNull(pool);
+        if(signers.Count == 0)
         {
             throw new ArgumentException(
-                $"Signing algorithm '{signingAlgorithm}' expects digest '{profile.DigestAlgorithm.Identifier.Oid}', but the prepared signed attributes were built under '{preparation.MessageDigestAlgorithm.Identifier.Oid}'.",
-                nameof(signingAlgorithm));
+                "A SignedData this surface produces carries at least one SignerInfo; the degenerate certificate-only form (clause 4.6) is not a signature.",
+                nameof(signers));
         }
 
-        ManagedCertificate signer = ManagedCertificate.Parse(signerCertificate.AsReadOnlyMemory());
+        //Every entry is validated before the first octet is written, so a refusal leaves no partial output.
+        var profiles = new CAdESSigningProfile[signers.Count];
+        var parsedSigners = new ManagedCertificate[signers.Count];
+        ReadOnlyMemory<byte>? content = null;
+        for(int i = 0; i < signers.Count; ++i)
+        {
+            CAdESSignerCompletion signer = signers[i];
+            ArgumentNullException.ThrowIfNull(signer, nameof(signers));
+            ArgumentNullException.ThrowIfNull(signer.Preparation, nameof(signers));
+            ArgumentNullException.ThrowIfNull(signer.SignerCertificate, nameof(signers));
+            if(signer.SignatureValue.IsEmpty)
+            {
+                throw new ArgumentException("An externally produced signature value is required to complete a CAdES signature.", nameof(signers));
+            }
+
+            profiles[i] = ResolveSigningProfile(signer.SigningAlgorithm);
+            if(!string.Equals(profiles[i].DigestAlgorithm.Identifier.Oid, signer.Preparation.MessageDigestAlgorithm.Identifier.Oid, StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    $"Signing algorithm '{signer.SigningAlgorithm}' expects digest '{profiles[i].DigestAlgorithm.Identifier.Oid}', but the prepared signed attributes were built under '{signer.Preparation.MessageDigestAlgorithm.Identifier.Oid}'.",
+                    nameof(signers));
+            }
+
+            if(i == 0)
+            {
+                content = signer.Preparation.Content;
+            }
+            else if(signer.Preparation.Content is null != content is null)
+            {
+                throw new ArgumentException(
+                    "Every parallel signer signs the same content the same way: all preparations attached or all detached, because one encapContentInfo holds one content (RFC 5652 §5.1).",
+                    nameof(signers));
+            }
+            else if(signer.Preparation.Content is { } thisContent && !thisContent.Span.SequenceEqual(content!.Value.Span))
+            {
+                throw new ArgumentException(
+                    "The prepared content octets differ between signers; parallel SignerInfo structures share one eContent (RFC 5652 §5.1).",
+                    nameof(signers));
+            }
+
+            if(i > 0 && signer.Preparation.Content is null)
+            {
+                //Detached signers under one digest algorithm commit to one message-digest value; under
+                //different algorithms the external content is not here to compare, which mixed
+                //classical-plus-post-quantum signing legitimately needs.
+                for(int j = 0; j < i; ++j)
+                {
+                    if(string.Equals(signers[j].Preparation.MessageDigestAlgorithm.Identifier.Oid, signer.Preparation.MessageDigestAlgorithm.Identifier.Oid, StringComparison.Ordinal)
+                        && !signers[j].Preparation.ContentDigest.AsReadOnlySpan().SequenceEqual(signer.Preparation.ContentDigest.AsReadOnlySpan()))
+                    {
+                        throw new ArgumentException(
+                            "Two detached preparations under one digest algorithm state different message-digest values; parallel signers sign the same content (RFC 5652 §5.1), and a differing commitment is the substitution shape this surface refuses.",
+                            nameof(signers));
+                    }
+                }
+            }
+
+            parsedSigners[i] = ManagedCertificate.Parse(signer.SignerCertificate.AsReadOnlyMemory());
+        }
 
         var writer = new AsnWriter(AsnEncodingRules.DER);
         using(writer.PushSequence())                                          //ContentInfo
@@ -361,32 +479,56 @@ public static class CAdESSignatureCreation
                     writer.WriteInteger(CmsVersion1);
                     using(writer.PushSetOf())                                 //digestAlgorithms
                     {
-                        WriteDigestAlgorithmIdentifier(writer, preparation.MessageDigestAlgorithm);
+                        //One DigestAlgorithmIdentifier per distinct algorithm: the collection lists each
+                        //signer's algorithm once, however many signers share it (RFC 5652 §5.1).
+                        for(int i = 0; i < signers.Count; ++i)
+                        {
+                            if(!AppearsEarlier(signers, i))
+                            {
+                                WriteDigestAlgorithmIdentifier(writer, signers[i].Preparation.MessageDigestAlgorithm);
+                            }
+                        }
                     }
 
                     using(writer.PushSequence())                              //encapContentInfo
                     {
                         writer.WriteObjectIdentifier(DataOid);
-                        if(preparation.Content is { } content)
+                        if(content is { } attachedContent)
                         {
                             using(writer.PushSequence(ContextConstructed0))   //eContent [0] EXPLICIT
                             {
-                                writer.WriteOctetString(content.Span);
+                                writer.WriteOctetString(attachedContent.Span);
                             }
                         }
                     }
 
                     using(writer.PushSetOf(ContextConstructed0))              //certificates [0] IMPLICIT
                     {
-                        writer.WriteEncodedValue(signerCertificate.AsReadOnlySpan());
-                        WriteAdditionalCertificates(writer, signerCertificate.AsReadOnlySpan(), additionalCertificates);
+                        //Each signer's certificate once, then the additional ones, an exact-DER duplicate
+                        //skipped wherever it appears (requirement e, duplication should be avoided).
+                        var writtenCertificates = new List<ReadOnlyMemory<byte>>(signers.Count + (additionalCertificates?.Count ?? 0));
+                        for(int i = 0; i < signers.Count; ++i)
+                        {
+                            WriteCertificateOnce(writer, writtenCertificates, signers[i].SignerCertificate.AsReadOnlyMemory());
+                        }
+
+                        if(additionalCertificates is not null)
+                        {
+                            for(int i = 0; i < additionalCertificates.Count; ++i)
+                            {
+                                WriteCertificateOnce(writer, writtenCertificates, additionalCertificates[i].AsReadOnlyMemory());
+                            }
+                        }
                     }
 
                     using(writer.PushSetOf())                                 //signerInfos
                     {
                         //No unsignedAttrs at B-B (clause 6.1): level-raising augmentation adds them later,
                         //through the byte-preserving splice rather than by re-encoding this structure.
-                        WriteSignerInfo(writer, preparation, signer, profile, signatureValue, unsignedAttributes: null);
+                        for(int i = 0; i < signers.Count; ++i)
+                        {
+                            WriteSignerInfo(writer, signers[i].Preparation, parsedSigners[i], profiles[i], signers[i].SignatureValue, unsignedAttributes: null);
+                        }
                     }
                 }
             }
@@ -406,11 +548,45 @@ public static class CAdESSignatureCreation
 
             throw;
         }
+
+
+        //States whether an earlier signer already contributed this signer's digest algorithm to the set.
+        static bool AppearsEarlier(IReadOnlyList<CAdESSignerCompletion> signers, int index)
+        {
+            string oid = signers[index].Preparation.MessageDigestAlgorithm.Identifier.Oid;
+            for(int i = 0; i < index; ++i)
+            {
+                if(string.Equals(signers[i].Preparation.MessageDigestAlgorithm.Identifier.Oid, oid, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+
+        //Writes a certificate unless its exact DER was already written into the open certificates set.
+        static void WriteCertificateOnce(AsnWriter writer, List<ReadOnlyMemory<byte>> written, ReadOnlyMemory<byte> candidate)
+        {
+            for(int i = 0; i < written.Count; ++i)
+            {
+                if(written[i].Span.SequenceEqual(candidate.Span))
+                {
+                    return;
+                }
+            }
+
+            writer.WriteEncodedValue(candidate.Span);
+            written.Add(candidate);
+        }
     }
 
 
     /// <summary>
-    /// Composes <see cref="PrepareAsync"/> and <see cref="Complete"/> around a <see cref="SigningDelegate"/>
+    /// Composes <see cref="PrepareAsync"/> and
+    /// <see cref="Complete(CAdESSignaturePreparation, PkiCertificateMemory, CryptoAlgorithm, ReadOnlyMemory{byte}, IReadOnlyList{PkiCertificateMemory}?, MemoryPool{byte})"/>
+    /// around a <see cref="SigningDelegate"/>
     /// resolved from <paramref name="privateKey"/>'s <see cref="Tag"/> — phase (3), the convenience the
     /// registry-resolved <see cref="Verifiable.JCose.Cose"/>'s <c>SignAsync</c> overload mirrors.
     /// </summary>
@@ -455,7 +631,9 @@ public static class CAdESSignatureCreation
 
 
     /// <summary>
-    /// Composes <see cref="PrepareAsync"/> and <see cref="Complete"/> around an explicit
+    /// Composes <see cref="PrepareAsync"/> and
+    /// <see cref="Complete(CAdESSignaturePreparation, PkiCertificateMemory, CryptoAlgorithm, ReadOnlyMemory{byte}, IReadOnlyList{PkiCertificateMemory}?, MemoryPool{byte})"/>
+    /// around an explicit
     /// <see cref="SigningDelegate"/>, for a caller that has already resolved one (testing, or a custom
     /// cryptographic backend) rather than routing through the registry.
     /// </summary>
@@ -610,10 +788,11 @@ public static class CAdESSignatureCreation
         ReadOnlyMemory<byte> countersignedSignatureValue = CmsSignedDataAugmentation.ReadSignatureValue(
             countersignedSignature, countersignedSignerIndex);
 
+        DigestValue? messageDigest = null;
         List<CmsAttribute> attributes = [];
         try
         {
-            using DigestValue messageDigest = await CryptographicKeyEvents.ComputeDigestAsync(
+            messageDigest = await CryptographicKeyEvents.ComputeDigestAsync(
                 countersignedSignatureValue, messageDigestAlgorithm.OutputByteLength, messageDigestAlgorithm.DigestTag, pool,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
             using DigestValue certificateHash = await CryptographicKeyEvents.ComputeDigestAsync(
@@ -639,7 +818,12 @@ public static class CAdESSignatureCreation
                     encoding.SigningInput.AsReadOnlyMemory(), messageDigestAlgorithm.OutputByteLength, messageDigestAlgorithm.DigestTag, pool,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
 
-                return new CAdESSignaturePreparation(encoding.SigningInput, encoding.EmbeddedForm, signingInputDigest, messageDigestAlgorithm, content: null);
+                //The commitment — here the countersigned signature value's digest — transfers to the
+                //preparation (its ContentDigest), so the finally below releases it only on a failure path.
+                CAdESSignaturePreparation preparation = new(encoding.SigningInput, encoding.EmbeddedForm, signingInputDigest, messageDigest, messageDigestAlgorithm, content: null);
+                messageDigest = null;
+
+                return preparation;
             }
             catch
             {
@@ -654,6 +838,10 @@ public static class CAdESSignatureCreation
             DisposeAll(attributes);
 
             throw;
+        }
+        finally
+        {
+            messageDigest?.Dispose();
         }
     }
 
@@ -694,22 +882,80 @@ public static class CAdESSignatureCreation
     /// archive time-stamp exists, does not.
     /// </para>
     /// </remarks>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership of the rented buffer transfers to the returned carrier, which the caller disposes; the catch disposes it on a partial failure.")]
     public static PooledMemory CompleteCountersignature(
         CAdESSignaturePreparation preparation,
         PkiCertificateMemory countersignerCertificate,
         CryptoAlgorithm signingAlgorithm,
         ReadOnlyMemory<byte> signatureValue,
         IReadOnlyList<CmsAttribute>? unsignedAttributes,
-        MemoryPool<byte> pool)
+        MemoryPool<byte> pool) =>
+        CompleteSignerInfo(preparation, countersignerCertificate, signingAlgorithm, signatureValue, unsignedAttributes, pool, "countersignature");
+
+
+    /// <summary>
+    /// Assembles a parallel signer's whole DER <c>SignerInfo</c> — phase (2) for a signer joining an existing
+    /// <c>SignedData</c> — from a signature value produced however the caller obtained it, ready for
+    /// <see cref="CmsSignedDataAugmentation.AddSignerInfo"/>'s byte-preserving placement.
+    /// </summary>
+    /// <param name="preparation">The prepared signed attributes from <see cref="PrepareParallelSignatureAsync"/>.</param>
+    /// <param name="signerCertificate">The parallel signer's certificate, for the <c>IssuerAndSerialNumber</c> signer identifier.</param>
+    /// <param name="signingAlgorithm">The algorithm the signature value was produced under, resolving <c>SignerInfo.signatureAlgorithm</c>.</param>
+    /// <param name="signatureValue">The externally produced signature value, already in its final wire encoding.</param>
+    /// <param name="pool">The memory pool the returned carrier is rented from.</param>
+    /// <returns>The DER-encoded <c>SignerInfo</c>. The caller owns and disposes it.</returns>
+    /// <exception cref="ArgumentNullException">When <paramref name="preparation"/>, <paramref name="signerCertificate"/>, or <paramref name="pool"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">When <paramref name="signatureValue"/> is empty, or <paramref name="signingAlgorithm"/>'s natural digest does not match the digest <paramref name="preparation"/> was built under.</exception>
+    /// <exception cref="NotSupportedException">When <paramref name="signingAlgorithm"/> is not one <see cref="ResolveSigningProfile"/> recognises.</exception>
+    /// <remarks>
+    /// A parallel signer is a whole CAdES signer of the shared content — its signed attributes carry
+    /// <c>content-type</c>, <c>message-digest</c> over the same <c>eContent</c>, and its own ESS
+    /// <c>signing-certificate-v2</c> — where a <c>Countersignature</c> (RFC 5652 §11.4) signs another
+    /// signature's value and carries no <c>content-type</c>. The two completions therefore share one
+    /// <c>SignerInfo</c> writer and differ in which prepared attributes reach it, exactly as the
+    /// countersignature's own remarks state. No <c>unsignedAttrs</c> are placed at completion: augmentation
+    /// adds them later at the placed signer's own index, through the byte-preserving splice.
+    /// </remarks>
+    public static PooledMemory CompleteParallelSignature(
+        CAdESSignaturePreparation preparation,
+        PkiCertificateMemory signerCertificate,
+        CryptoAlgorithm signingAlgorithm,
+        ReadOnlyMemory<byte> signatureValue,
+        MemoryPool<byte> pool) =>
+        CompleteSignerInfo(preparation, signerCertificate, signingAlgorithm, signatureValue, unsignedAttributes: null, pool, "parallel signature");
+
+
+    /// <summary>
+    /// The one completion both <see cref="CompleteCountersignature"/> and
+    /// <see cref="CompleteParallelSignature"/> resolve to: validates the signature value and the
+    /// algorithm-digest agreement, and writes the whole DER <c>SignerInfo</c> through the same writer
+    /// <see cref="Complete(IReadOnlyList{CAdESSignerCompletion}, IReadOnlyList{PkiCertificateMemory}?, MemoryPool{byte})"/>
+    /// uses, because RFC 5652 defines both results as a <c>SignerInfo</c>.
+    /// </summary>
+    /// <param name="preparation">The prepared signed attributes.</param>
+    /// <param name="signerCertificate">The signer certificate, for the <c>IssuerAndSerialNumber</c> signer identifier.</param>
+    /// <param name="signingAlgorithm">The algorithm the signature value was produced under.</param>
+    /// <param name="signatureValue">The externally produced signature value.</param>
+    /// <param name="unsignedAttributes">Unsigned attributes to place inside the <c>SignerInfo</c>, or <see langword="null"/> to omit the field.</param>
+    /// <param name="pool">The memory pool the returned carrier is rented from.</param>
+    /// <param name="operationDescription">The operation's name for the empty-signature refusal message.</param>
+    /// <returns>The DER-encoded <c>SignerInfo</c>. The caller owns and disposes it.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the rented buffer transfers to the returned carrier, which the caller disposes; the catch disposes it on a partial failure.")]
+    private static PooledMemory CompleteSignerInfo(
+        CAdESSignaturePreparation preparation,
+        PkiCertificateMemory signerCertificate,
+        CryptoAlgorithm signingAlgorithm,
+        ReadOnlyMemory<byte> signatureValue,
+        IReadOnlyList<CmsAttribute>? unsignedAttributes,
+        MemoryPool<byte> pool,
+        string operationDescription)
     {
         ArgumentNullException.ThrowIfNull(preparation);
-        ArgumentNullException.ThrowIfNull(countersignerCertificate);
+        ArgumentNullException.ThrowIfNull(signerCertificate);
         ArgumentNullException.ThrowIfNull(pool);
         if(signatureValue.IsEmpty)
         {
-            throw new ArgumentException("An externally produced signature value is required to complete a countersignature.", nameof(signatureValue));
+            throw new ArgumentException($"An externally produced signature value is required to complete a {operationDescription}.", nameof(signatureValue));
         }
 
         CAdESSigningProfile profile = ResolveSigningProfile(signingAlgorithm);
@@ -720,10 +966,10 @@ public static class CAdESSignatureCreation
                 nameof(signingAlgorithm));
         }
 
-        ManagedCertificate countersigner = ManagedCertificate.Parse(countersignerCertificate.AsReadOnlyMemory());
+        ManagedCertificate signer = ManagedCertificate.Parse(signerCertificate.AsReadOnlyMemory());
 
         var writer = new AsnWriter(AsnEncodingRules.DER);
-        WriteSignerInfo(writer, preparation, countersigner, profile, signatureValue, unsignedAttributes);
+        WriteSignerInfo(writer, preparation, signer, profile, signatureValue, unsignedAttributes);
 
         int encodedLength = writer.GetEncodedLength();
         IMemoryOwner<byte> owner = pool.Rent(encodedLength);
@@ -857,6 +1103,238 @@ public static class CAdESSignatureCreation
                 preparation, countersignerCertificate, signingAlgorithm, signature.AsReadOnlyMemory(), unsignedAttributes: null, pool);
 
             return CmsAttribute.Create(CAdESSignatureFacts.CountersignatureAttributeOid, rsaCountersignature.AsReadOnlySpan(), pool);
+        }
+    }
+
+
+    /// <summary>
+    /// Assembles a parallel signer's CAdES-B-B signed attributes over an existing <c>SignedData</c>'s own
+    /// content — phase (1) for a signer joining it side by side
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc5652#section-5.1">RFC 5652 §5.1</see>, more than one
+    /// <c>SignerInfo</c>) — and returns the octets that signer signs together with their digest.
+    /// </summary>
+    /// <param name="signedData">The Signed Data Object being joined; its own <c>eContent</c> is what the new signer's <c>message-digest</c> covers when the content travels attached.</param>
+    /// <param name="signerCertificate">The joining signer's own certificate, hashed into its ESS <c>signing-certificate-v2</c> attribute.</param>
+    /// <param name="detachedContentDigest">For a structure that encapsulates no content (the detached form, §5.2): the digest of the externally held content, carrying its own algorithm in its tag. Refused beside an attached content — two contents with only one of them checked is the shape a substitution attack takes.</param>
+    /// <param name="messageDigestAlgorithm">The digest algorithm for the new signer's <c>message-digest</c>, ESS certificate hash, and <c>SignerInfo.digestAlgorithm</c>; a supplied <paramref name="detachedContentDigest"/>'s tag must name the same algorithm.</param>
+    /// <param name="signingTime">The <c>signing-time</c> attribute value and the instant a supplied <paramref name="algorithmConstraints"/> table is assessed at.</param>
+    /// <param name="algorithmConstraints">A caller-supplied dated cryptographic-constraints table; see <see cref="PrepareAsync"/>.</param>
+    /// <param name="cmsAlgorithmProtectionSignatureAlgorithmOid">When non-<see langword="null"/>, adds the opt-in <c>cms-algorithm-protection</c> attribute (RFC 6211) naming this signature algorithm.</param>
+    /// <param name="pool">The memory pool every allocation this call performs is rented from.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <param name="optionalAttributes">The opt-in Table 1 attribute set of clause 6.3; see <see cref="PrepareAsync"/>. The content-describing members apply here — unlike a countersignature, a parallel signer signs the content itself.</param>
+    /// <returns>The prepared signed attributes. The caller owns and disposes it.</returns>
+    /// <exception cref="ArgumentNullException">When <paramref name="signedData"/>, <paramref name="signerCertificate"/>, or <paramref name="pool"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">When <paramref name="detachedContentDigest"/> is supplied beside an attached content or missing for a detached structure, its tag names no digest algorithm this library states in PKI structures or a different one than <paramref name="messageDigestAlgorithm"/>, its length is not that algorithm's output length, or an existing signer's <c>message-digest</c> under the same algorithm states different octets (parallel signers sign the same content; a signer under a different algorithm cannot be compared without the content and does not refuse the join).</exception>
+    /// <exception cref="NotSupportedException">When the structure's <c>eContentType</c> is not <c>id-data</c> (this surface emits requirement f's <c>id-data</c> <c>content-type</c> attribute only), or <paramref name="messageDigestAlgorithm"/> is refused as <see cref="PrepareAsync"/> refuses it.</exception>
+    /// <exception cref="CryptographicException">When the structure is not a CMS SignedData this library reads, or its <c>eContent</c> is not one primitive definite-length OCTET STRING (<see cref="CmsSignedDataAugmentation.ReadEncapsulatedContentInfo"/>).</exception>
+    [SuppressMessage("Design", "CA1068:CancellationToken parameters must come last",
+        Justification = "optionalAttributes is deliberately the LAST parameter, after cancellationToken; see PrepareAsync's remarks and its matching suppression.")]
+    public static async ValueTask<CAdESSignaturePreparation> PrepareParallelSignatureAsync(
+        CmsSignedData signedData,
+        PkiCertificateMemory signerCertificate,
+        DigestValue? detachedContentDigest,
+        PkiDigestAlgorithm messageDigestAlgorithm,
+        DateTimeOffset signingTime,
+        CryptographicConstraints? algorithmConstraints,
+        string? cmsAlgorithmProtectionSignatureAlgorithmOid,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken = default,
+        CAdESOptionalSignedAttributes? optionalAttributes = null)
+    {
+        ArgumentNullException.ThrowIfNull(signedData);
+        ArgumentNullException.ThrowIfNull(signerCertificate);
+        ArgumentNullException.ThrowIfNull(pool);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        CmsEncapsulatedContent encapsulated = CmsSignedDataAugmentation.ReadEncapsulatedContentInfo(signedData);
+        if(!string.Equals(encapsulated.ContentType, DataOid, StringComparison.Ordinal))
+        {
+            throw new NotSupportedException(
+                $"A parallel signature is prepared over eContentType id-data only — the one content type this surface's content-type attribute states (requirement f) — and the structure states '{encapsulated.ContentType}'.");
+        }
+
+        if(encapsulated.Content is { } attachedContent)
+        {
+            if(detachedContentDigest is not null)
+            {
+                throw new ArgumentException(
+                    "The structure encapsulates its own content; a detached content digest beside it is the two-contents shape a substitution attack takes.",
+                    nameof(detachedContentDigest));
+            }
+
+            return await PrepareAsync(
+                signerCertificate, attachedContent, detachedContentDigest: null, messageDigestAlgorithm, signingTime,
+                algorithmConstraints, cmsAlgorithmProtectionSignatureAlgorithmOid, pool,
+                cancellationToken: cancellationToken, optionalAttributes: optionalAttributes).ConfigureAwait(false);
+        }
+
+        if(detachedContentDigest is null)
+        {
+            throw new ArgumentException(
+                "The structure encapsulates no content (the detached form, RFC 5652 §5.2); the digest of the externally held content is required.",
+                nameof(detachedContentDigest));
+        }
+
+        PkiDigestAlgorithm carried = PkiDigestAlgorithm.FromDigest(detachedContentDigest)
+            ?? throw new ArgumentException(
+                "The digest carrier's tag names no digest algorithm this library states in PKI structures.",
+                nameof(detachedContentDigest));
+        if(!string.Equals(carried.Identifier.Oid, messageDigestAlgorithm.Identifier.Oid, StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"The digest carrier's tag names '{carried.Identifier.Oid}', but the parallel signature is being prepared under '{messageDigestAlgorithm.Identifier.Oid}'.",
+                nameof(detachedContentDigest));
+        }
+
+        //The structure's own signers state their commitments in their message-digest attributes; where one
+        //shares this preparation's algorithm, it must state these very octets. Under a different algorithm
+        //the external content is not here to compare — which mixed classical-plus-post-quantum signing
+        //legitimately needs — so only the comparable case is held.
+        foreach(CmsSignedDataAugmentation.SignerContentCommitment commitment in CmsSignedDataAugmentation.ReadSignerContentCommitments(signedData))
+        {
+            if(commitment.HasMessageDigest
+                && string.Equals(commitment.DigestAlgorithmOid, messageDigestAlgorithm.Identifier.Oid, StringComparison.Ordinal)
+                && !commitment.MessageDigest.Span.SequenceEqual(detachedContentDigest.AsReadOnlySpan()))
+            {
+                throw new ArgumentException(
+                    "An existing signer's message-digest under the same algorithm states different octets; parallel signers sign the same content (RFC 5652 §5.1), and a differing commitment is the substitution shape this surface refuses.",
+                    nameof(detachedContentDigest));
+            }
+        }
+
+        return await PrepareAsync(
+            signerCertificate, content: null, detachedContentDigest.AsReadOnlyMemory(), messageDigestAlgorithm, signingTime,
+            algorithmConstraints, cmsAlgorithmProtectionSignatureAlgorithmOid, pool,
+            cancellationToken: cancellationToken, optionalAttributes: optionalAttributes).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Composes <see cref="PrepareParallelSignatureAsync"/>, <see cref="CompleteParallelSignature"/>, and
+    /// <see cref="CmsSignedDataAugmentation.AddSignerInfo"/> around a <see cref="SigningDelegate"/> resolved
+    /// from <paramref name="privateKey"/>'s <see cref="Tag"/> — phase (3) for a signer joining an existing
+    /// <c>SignedData</c> side by side, the parallel counterpart of
+    /// <see cref="CountersignAsync(CmsSignedData, int, PkiCertificateMemory, PrivateKeyMemory, DateTimeOffset, CryptographicConstraints?, bool, MemoryPool{byte}, CancellationToken)"/>.
+    /// </summary>
+    /// <param name="signedData">The Signed Data Object being joined. Not modified; the result is a new carrier.</param>
+    /// <param name="signerCertificate">The joining signer's own certificate; placed into <c>SignedData.certificates</c> (requirement a) alongside the new <c>SignerInfo</c>.</param>
+    /// <param name="privateKey">The signing key; its <see cref="Tag"/> resolves both the <see cref="SigningDelegate"/> and the ESS/CMS algorithm identities.</param>
+    /// <param name="detachedContentDigest">For a detached structure: the digest of the externally held content, carrying its own algorithm in its tag; see <see cref="PrepareParallelSignatureAsync"/>.</param>
+    /// <param name="signingTime">The <c>signing-time</c> attribute value.</param>
+    /// <param name="algorithmConstraints">A caller-supplied dated cryptographic-constraints table; see <see cref="PrepareAsync"/>.</param>
+    /// <param name="includeCmsAlgorithmProtection">Whether to add the opt-in <c>cms-algorithm-protection</c> attribute (RFC 6211).</param>
+    /// <param name="pool">The memory pool every allocation this call performs is rented from.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <param name="optionalAttributes">The opt-in Table 1 attribute set of clause 6.3; see <see cref="PrepareParallelSignatureAsync"/>.</param>
+    /// <returns>The Signed Data Object with the new parallel <c>SignerInfo</c> placed. The caller owns and disposes it.</returns>
+    /// <exception cref="ArgumentNullException">When a required argument is <see langword="null"/>.</exception>
+    [SuppressMessage("Design", "CA1068:CancellationToken parameters must come last",
+        Justification = "optionalAttributes is deliberately the LAST parameter, after cancellationToken; see PrepareAsync's remarks and its matching suppression.")]
+    public static ValueTask<CmsSignedData> AddParallelSignatureAsync(
+        CmsSignedData signedData,
+        PkiCertificateMemory signerCertificate,
+        PrivateKeyMemory privateKey,
+        DigestValue? detachedContentDigest,
+        DateTimeOffset signingTime,
+        CryptographicConstraints? algorithmConstraints,
+        bool includeCmsAlgorithmProtection,
+        MemoryPool<byte> pool,
+        CancellationToken cancellationToken = default,
+        CAdESOptionalSignedAttributes? optionalAttributes = null)
+    {
+        ArgumentNullException.ThrowIfNull(privateKey);
+
+        CryptoAlgorithm algorithm = privateKey.Tag.Get<CryptoAlgorithm>();
+        Purpose purpose = privateKey.Tag.Get<Purpose>();
+        SigningDelegate signingDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(algorithm, purpose);
+
+        return AddParallelSignatureAsync(
+            signedData, signerCertificate, privateKey, signingDelegate, detachedContentDigest, signingTime,
+            algorithmConstraints, includeCmsAlgorithmProtection, pool,
+            cancellationToken: cancellationToken, optionalAttributes: optionalAttributes);
+    }
+
+
+    /// <summary>
+    /// Composes <see cref="PrepareParallelSignatureAsync"/>, <see cref="CompleteParallelSignature"/>, and
+    /// <see cref="CmsSignedDataAugmentation.AddSignerInfo"/> around an explicit <see cref="SigningDelegate"/>,
+    /// for a caller that has already resolved one.
+    /// </summary>
+    /// <param name="signedData">The Signed Data Object being joined. Not modified; the result is a new carrier.</param>
+    /// <param name="signerCertificate">The joining signer's own certificate.</param>
+    /// <param name="privateKey">The signing key; its <see cref="Tag"/> resolves the ESS/CMS algorithm identities.</param>
+    /// <param name="signingDelegate">The signing delegate to invoke.</param>
+    /// <param name="detachedContentDigest">For a detached structure: the digest of the externally held content, carrying its own algorithm in its tag.</param>
+    /// <param name="signingTime">The <c>signing-time</c> attribute value.</param>
+    /// <param name="algorithmConstraints">A caller-supplied dated cryptographic-constraints table; see <see cref="PrepareAsync"/>.</param>
+    /// <param name="includeCmsAlgorithmProtection">Whether to add the opt-in <c>cms-algorithm-protection</c> attribute (RFC 6211).</param>
+    /// <param name="pool">The memory pool every allocation this call performs is rented from.</param>
+    /// <param name="eventSink">
+    /// Receives the <see cref="SignatureProducedEvent"/> <paramref name="signingDelegate"/> constructs, or
+    /// <see langword="null"/> to route it to <see cref="CryptographicKeyEvents.DefaultSink"/>.
+    /// </param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <param name="optionalAttributes">The opt-in Table 1 attribute set of clause 6.3; see <see cref="PrepareParallelSignatureAsync"/>.</param>
+    /// <returns>The Signed Data Object with the new parallel <c>SignerInfo</c> placed. The caller owns and disposes it.</returns>
+    /// <exception cref="ArgumentNullException">When a required argument is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">When <paramref name="privateKey"/>'s algorithm is not one <see cref="ResolveSigningProfile"/> recognises, or the structure's <c>eContentType</c> is not <c>id-data</c>.</exception>
+    [SuppressMessage("Design", "CA1068:CancellationToken parameters must come last",
+        Justification = "optionalAttributes is deliberately the LAST parameter, after cancellationToken; see PrepareAsync's remarks and its matching suppression.")]
+    public static async ValueTask<CmsSignedData> AddParallelSignatureAsync(
+        CmsSignedData signedData,
+        PkiCertificateMemory signerCertificate,
+        PrivateKeyMemory privateKey,
+        SigningDelegate signingDelegate,
+        DigestValue? detachedContentDigest,
+        DateTimeOffset signingTime,
+        CryptographicConstraints? algorithmConstraints,
+        bool includeCmsAlgorithmProtection,
+        MemoryPool<byte> pool,
+        CryptoEventSink? eventSink = null,
+        CancellationToken cancellationToken = default,
+        CAdESOptionalSignedAttributes? optionalAttributes = null)
+    {
+        ArgumentNullException.ThrowIfNull(signedData);
+        ArgumentNullException.ThrowIfNull(signerCertificate);
+        ArgumentNullException.ThrowIfNull(privateKey);
+        ArgumentNullException.ThrowIfNull(signingDelegate);
+        ArgumentNullException.ThrowIfNull(pool);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        CryptoAlgorithm signingAlgorithm = privateKey.Tag.Get<CryptoAlgorithm>();
+        CAdESSigningProfile profile = ResolveSigningProfile(signingAlgorithm);
+        string? cmsAlgorithmProtectionOid = includeCmsAlgorithmProtection ? profile.SignatureAlgorithmOid : null;
+
+        using CAdESSignaturePreparation preparation = await PrepareParallelSignatureAsync(
+            signedData, signerCertificate, detachedContentDigest, profile.DigestAlgorithm, signingTime,
+            algorithmConstraints, cmsAlgorithmProtectionOid, pool,
+            cancellationToken: cancellationToken, optionalAttributes: optionalAttributes).ConfigureAwait(false);
+
+        (Signature signature, CryptoEvent? evt) = await signingDelegate(
+            privateKey.AsReadOnlyMemory(), preparation.SigningInput.AsReadOnlyMemory(), pool,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        using(signature)
+        {
+            if(evt is not null)
+            {
+                (eventSink ?? CryptographicKeyEvents.DefaultSink)(evt);
+            }
+
+            if(profile.IsEllipticCurve)
+            {
+                using IMemoryOwner<byte> derSignature = EcdsaSignatureEncoding.ConvertP1363ToDer(signature.AsReadOnlySpan(), pool, out int derLength);
+                using PooledMemory ecdsaSignerInfo = CompleteParallelSignature(
+                    preparation, signerCertificate, signingAlgorithm, derSignature.Memory[..derLength], pool);
+
+                return CmsSignedDataAugmentation.AddSignerInfo(signedData, ecdsaSignerInfo, [signerCertificate.AsReadOnlyMemory()], pool);
+            }
+
+            using PooledMemory rsaSignerInfo = CompleteParallelSignature(
+                preparation, signerCertificate, signingAlgorithm, signature.AsReadOnlyMemory(), pool);
+
+            return CmsSignedDataAugmentation.AddSignerInfo(signedData, rsaSignerInfo, [signerCertificate.AsReadOnlyMemory()], pool);
         }
     }
 
@@ -1323,10 +1801,11 @@ public static class CAdESSignatureCreation
     /// <param name="signatureValue">The signature value, already in its final wire encoding.</param>
     /// <param name="unsignedAttributes">The <c>unsignedAttrs</c> to write, or <see langword="null"/>/empty to omit the field.</param>
     /// <remarks>
-    /// One writer serves both the outer signer of <see cref="Complete"/> and the <c>Countersignature</c> of
-    /// <see cref="CompleteCountersignature"/>, because RFC 5652 §11.4 defines
-    /// <c>Countersignature ::= SignerInfo</c> — the two differ in which signed attributes reach
-    /// <paramref name="preparation"/> and in what encloses the result, never in this structure.
+    /// One writer serves every completion here — the outer signers of both <c>Complete</c> forms, the
+    /// <c>Countersignature</c> of <see cref="CompleteCountersignature"/>, and the parallel signer of
+    /// <see cref="CompleteParallelSignature"/> — because RFC 5652 defines each result as a
+    /// <c>SignerInfo</c>: they differ in which signed attributes reach <paramref name="preparation"/> and in
+    /// what encloses the result, never in this structure.
     /// </remarks>
     private static void WriteSignerInfo(
         AsnWriter writer,
@@ -1407,30 +1886,6 @@ public static class CAdESSignatureCreation
 
 
     /// <summary>
-    /// Writes <paramref name="additionalCertificates"/> into an open <c>certificates [0] IMPLICIT</c> SET OF,
-    /// skipping any entry whose DER is identical to <paramref name="signerCertificateDer"/> (requirement e,
-    /// duplication should be avoided) — the same skip-exact-duplicate rule
-    /// <see cref="ManagedCmsVerification"/>'s own certificate assembly applies.
-    /// </summary>
-    private static void WriteAdditionalCertificates(AsnWriter writer, ReadOnlySpan<byte> signerCertificateDer, IReadOnlyList<PkiCertificateMemory>? additionalCertificates)
-    {
-        if(additionalCertificates is null)
-        {
-            return;
-        }
-
-        for(int i = 0; i < additionalCertificates.Count; ++i)
-        {
-            ReadOnlySpan<byte> candidate = additionalCertificates[i].AsReadOnlySpan();
-            if(!candidate.SequenceEqual(signerCertificateDer))
-            {
-                writer.WriteEncodedValue(candidate);
-            }
-        }
-    }
-
-
-    /// <summary>
     /// Encodes the completed value <paramref name="valueWriter"/> holds into a whole <c>Attribute</c> SEQUENCE
     /// via <see cref="CmsAttribute.Create(string, ReadOnlySpan{byte}, MemoryPool{byte})"/>, using a stack
     /// buffer for the small, bounded values every attribute this surface builds encodes to.
@@ -1484,23 +1939,26 @@ public sealed class CAdESSignaturePreparation: IDisposable
 
 
     /// <summary>
-    /// Initializes a new <see cref="CAdESSignaturePreparation"/>, taking ownership of the three owned carriers.
+    /// Initializes a new <see cref="CAdESSignaturePreparation"/>, taking ownership of the four owned carriers.
     /// </summary>
     /// <param name="signingInput">The universal <c>SET OF</c> form — the octets a signer signs. Ownership transfers to this instance.</param>
     /// <param name="embeddedForm">The <c>[0] IMPLICIT</c> form — the octets that go into <c>SignerInfo.signedAttrs</c> verbatim. Ownership transfers to this instance.</param>
     /// <param name="digest">The digest of <paramref name="signingInput"/> under <paramref name="messageDigestAlgorithm"/>, for a signer that consumes a pre-hashed value. Ownership transfers to this instance.</param>
+    /// <param name="contentDigest">The <c>message-digest</c> attribute's own value — the digest of what this signer commits to (the content, or a countersigned signature value), computed or wrapped during preparation. Ownership transfers to this instance.</param>
     /// <param name="messageDigestAlgorithm">The digest algorithm every digest in this preparation was computed under.</param>
     /// <param name="content">The attached content, when one was supplied; <see langword="null"/> for a detached signature. Not owned — a borrowed view of the caller's own memory.</param>
-    /// <exception cref="ArgumentNullException">When <paramref name="signingInput"/>, <paramref name="embeddedForm"/>, or <paramref name="digest"/> is <see langword="null"/>.</exception>
-    public CAdESSignaturePreparation(PooledMemory signingInput, PooledMemory embeddedForm, DigestValue digest, PkiDigestAlgorithm messageDigestAlgorithm, ReadOnlyMemory<byte>? content)
+    /// <exception cref="ArgumentNullException">When <paramref name="signingInput"/>, <paramref name="embeddedForm"/>, <paramref name="digest"/>, or <paramref name="contentDigest"/> is <see langword="null"/>.</exception>
+    public CAdESSignaturePreparation(PooledMemory signingInput, PooledMemory embeddedForm, DigestValue digest, DigestValue contentDigest, PkiDigestAlgorithm messageDigestAlgorithm, ReadOnlyMemory<byte>? content)
     {
         ArgumentNullException.ThrowIfNull(signingInput);
         ArgumentNullException.ThrowIfNull(embeddedForm);
         ArgumentNullException.ThrowIfNull(digest);
+        ArgumentNullException.ThrowIfNull(contentDigest);
 
         SigningInput = signingInput;
         EmbeddedForm = embeddedForm;
         Digest = digest;
+        ContentDigest = contentDigest;
         MessageDigestAlgorithm = messageDigestAlgorithm;
         Content = content;
     }
@@ -1514,6 +1972,9 @@ public sealed class CAdESSignaturePreparation: IDisposable
 
     /// <summary>Gets the digest of <see cref="SigningInput"/> under <see cref="MessageDigestAlgorithm"/> — for a signer (CSC, PKCS#11) that signs a pre-hashed value rather than hashing itself. Owned by this instance.</summary>
     public DigestValue Digest { get; }
+
+    /// <summary>Gets the <c>message-digest</c> attribute's value (RFC 5652 §5.4/§11.2) — the digest of what this signer commits to — surviving preparation so a multi-signer completion can hold detached signers under one algorithm to one commitment. Owned by this instance.</summary>
+    public DigestValue ContentDigest { get; }
 
     /// <summary>Gets the digest algorithm every digest in this preparation was computed under.</summary>
     public PkiDigestAlgorithm MessageDigestAlgorithm { get; }
@@ -1530,7 +1991,26 @@ public sealed class CAdESSignaturePreparation: IDisposable
             SigningInput.Dispose();
             EmbeddedForm.Dispose();
             Digest.Dispose();
+            ContentDigest.Dispose();
             disposed = true;
         }
     }
 }
+
+
+/// <summary>
+/// One signer's inputs to the multi-signer
+/// <see cref="CAdESSignatureCreation.Complete(IReadOnlyList{CAdESSignerCompletion}, IReadOnlyList{PkiCertificateMemory}?, MemoryPool{byte})"/> —
+/// one <c>SignerInfo</c> per signer, the multi-signer shape of
+/// <see href="https://www.rfc-editor.org/rfc/rfc5652#section-5.1">RFC 5652 §5.1</see>.
+/// </summary>
+/// <param name="Preparation">The signer's prepared signed attributes from <see cref="CAdESSignatureCreation.PrepareAsync"/>. Borrowed — the caller keeps ownership and disposes it after completion.</param>
+/// <param name="SignerCertificate">The signer's own certificate, for the <c>IssuerAndSerialNumber</c> signer identifier and <c>SignedData.certificates</c> (requirement a). Borrowed.</param>
+/// <param name="SigningAlgorithm">The algorithm the signature value was produced under, resolving <c>SignerInfo.signatureAlgorithm</c>.</param>
+/// <param name="SignatureValue">The externally produced signature value, already in its final wire encoding (a DER <c>Ecdsa-Sig-Value</c> for an ECDSA signer, the raw RSA signature for an RSA signer).</param>
+[DebuggerDisplay("CAdESSignerCompletion({SigningAlgorithm}, digest {Preparation.MessageDigestAlgorithm.Identifier.Oid,nq})")]
+public sealed record CAdESSignerCompletion(
+    CAdESSignaturePreparation Preparation,
+    PkiCertificateMemory SignerCertificate,
+    CryptoAlgorithm SigningAlgorithm,
+    ReadOnlyMemory<byte> SignatureValue);

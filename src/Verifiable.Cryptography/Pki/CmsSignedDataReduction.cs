@@ -71,6 +71,9 @@ public static class CmsSignedDataReduction
     /// <summary>The largest number of unsigned attributes counted while deciding whether the whole set is being emptied.</summary>
     private const int MaximumUnsignedAttributes = 64;
 
+    /// <summary>The largest number of <c>SignerInfo</c> structures the per-signer projection walks, matching the bound the augmentation surface traverses the same set within.</summary>
+    private const int MaximumSignerInfos = 64;
+
 
     /// <summary>
     /// Produces the Signed Data Object that stands after the addressed unsigned attribute values have been
@@ -213,10 +216,126 @@ public static class CmsSignedDataReduction
             }
         }
 
+        return ApplyReduction(source, edits, target.Chain, chainLength, shrink, pool);
+    }
+
+
+    /// <summary>
+    /// Produces the Signed Data Object that carries only the addressed <c>SignerInfo</c>, every other member of
+    /// <c>signerInfos</c> removed and every remaining octet the input's own — the per-signer projection that
+    /// lets a single-signature verifier (a registered <see cref="VerifyCmsSignedDataDelegate"/> backend) verify
+    /// exactly the addressed signer of a multi-signer structure
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc5652#section-5.1">RFC 5652 §5.1</see>).
+    /// </summary>
+    /// <param name="signedData">The Signed Data Object to project. Not modified; the result is a new carrier.</param>
+    /// <param name="signerIndex">The zero-based index of the <c>SignerInfo</c> to keep, in encoding order.</param>
+    /// <param name="pool">The memory pool the result is rented from.</param>
+    /// <returns>The projected Signed Data Object, or an untouched copy when the addressed signer is already the only one. The caller owns and disposes it.</returns>
+    /// <exception cref="ArgumentNullException">When <paramref name="signedData"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">When <paramref name="signerIndex"/> is negative.</exception>
+    /// <exception cref="CryptographicException">When the input is not a CMS SignedData holding a <c>SignerInfo</c> at that index, or a container whose length has to be re-derived carries a non-minimally encoded definite length.</exception>
+    /// <exception cref="AsnContentException">When the input is malformed, truncated, carries octets after the outer ContentInfo, or exceeds the bounds this walk stays within.</exception>
+    /// <remarks>
+    /// <para>
+    /// <strong>Why a projection and not a wider verify seam.</strong> Each <c>SignerInfo</c> stands alone:
+    /// its signature covers its own signed attributes and the shared encapsulated content, never a sibling
+    /// (RFC 5652 §5.4/§5.6), and ETSI EN 319 102-1 validates one signature at a time. Keeping one member and
+    /// removing the others therefore changes no octet any remaining signature covers, and every already
+    /// registered backend verifies the addressed signer with no seam change.
+    /// </para>
+    /// <para>
+    /// <strong>What stays.</strong> <c>digestAlgorithms</c> and <c>certificates</c> keep every member,
+    /// including those only the removed signers used: RFC 5652 §5.1 words both as collections that may hold
+    /// more than a reader needs, and removing only the sibling <c>SignerInfo</c> members keeps this walk to
+    /// the one set it addresses. Removing members of a DER-sorted <c>signerInfos</c> set leaves it DER-sorted;
+    /// a BER structure keeps its members' order the same way.
+    /// </para>
+    /// <para>
+    /// The projection serves verification addressing. It is not the structure whole-object evidence was
+    /// computed over — an archive time-stamp or Evidence Record covering the full multi-signer octets is
+    /// verified against those octets, not against a projection.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned carrier, which the caller disposes; the write pass disposes it on a partial failure.")]
+    public static CmsSignedData SelectSigner(CmsSignedData signedData, int signerIndex, MemoryPool<byte> pool)
+    {
+        ArgumentNullException.ThrowIfNull(signedData);
+        ArgumentNullException.ThrowIfNull(pool);
+        ArgumentOutOfRangeException.ThrowIfNegative(signerIndex);
+
+        ReadOnlySpan<byte> source = signedData.AsReadOnlySpan();
+
+        //The insertion walk locates the same containers a removal has to shrink and refuses an index the
+        //structure does not carry; its chain holds the outer envelope down to the signerInfos set.
+        SpliceTarget target = CmsSignedDataAugmentation.LocateTarget(source, signerIndex);
+        CmsElement signerInfos = target.Chain[3];
+
+        var edits = new List<ReductionEdit>();
+        int shrink = 0;
+        int memberIndex = 0;
+        int position = signerInfos.ContentStart;
+        while(position < signerInfos.ContentEnd)
+        {
+            if(memberIndex == MaximumSignerInfos)
+            {
+                throw new AsnContentException($"A CMS 'signerInfos' field is walked with at most {MaximumSignerInfos} members.");
+            }
+
+            CmsElement member = CmsSignedDataAugmentation.ReadElement(source, position, signerInfos.ContentEnd);
+            if(member.Tag != Asn1Tag.Sequence)
+            {
+                throw new CryptographicException("A CMS signerInfos set holds SignerInfo SEQUENCE structures (RFC 5652 §5.1).");
+            }
+
+            if(memberIndex != signerIndex)
+            {
+                edits.Add(ReductionEdit.Removal(member.Start, member.End));
+                shrink += member.End - member.Start;
+            }
+
+            position = member.End;
+            ++memberIndex;
+        }
+
+        if(edits.Count == 0)
+        {
+            //The addressed signer is already the only member, so the projection is the input itself; the copy
+            //keeps the caller's ownership contract the same either way.
+            return CmsSignedData.FromBytes(source, pool);
+        }
+
+        //The chain the shrink cascades up ends at the signerInfos set: the kept member and everything outside
+        //the removed regions is copied verbatim.
+        return ApplyReduction(source, edits, target.Chain, chainLength: 4, shrink, pool);
+    }
+
+
+    /// <summary>
+    /// Applies assembled removal and header-rewrite edits: cascades the shrink up the enclosing
+    /// <paramref name="chain"/>, orders every edit by offset, and writes the output with each unedited octet
+    /// of the input carried through unchanged.
+    /// </summary>
+    /// <param name="source">The Signed Data Object octets.</param>
+    /// <param name="edits">The removals and inner header rewrites; this call adds the chain's own rewrites.</param>
+    /// <param name="chain">The containers enclosing the edited region, outermost first.</param>
+    /// <param name="chainLength">The number of meaningful entries in <paramref name="chain"/>.</param>
+    /// <param name="shrink">The number of content octets the innermost enclosing container loses.</param>
+    /// <param name="pool">The memory pool the result is rented from.</param>
+    /// <returns>The reduced Signed Data Object. The caller owns and disposes it.</returns>
+    /// <exception cref="CryptographicException">When a container whose length has to be re-derived carries a non-minimally encoded definite length.</exception>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned carrier, which the caller disposes; the catch disposes it on a partial failure.")]
+    private static CmsSignedData ApplyReduction(
+        ReadOnlySpan<byte> source,
+        List<ReductionEdit> edits,
+        CmsElement[] chain,
+        int chainLength,
+        int shrink,
+        MemoryPool<byte> pool)
+    {
         int growth = -shrink;
         for(int i = chainLength - 1; i >= 0; --i)
         {
-            CmsElement element = target.Chain[i];
+            CmsElement element = chain[i];
             if(element.IsIndefinite)
             {
                 //An indefinite-length container states no length to re-derive, so its header is not an edit at

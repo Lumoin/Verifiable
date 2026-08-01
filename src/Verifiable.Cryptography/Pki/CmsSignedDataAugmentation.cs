@@ -91,6 +91,9 @@ public static class CmsSignedDataAugmentation
     /// <summary>The id-signedData content type (RFC 5652 §5.1).</summary>
     private const string SignedDataOid = "1.2.840.113549.1.7.2";
 
+    /// <summary>The <c>message-digest</c> attribute type (<see href="https://www.rfc-editor.org/rfc/rfc5652#section-11.2">RFC 5652 §11.2</see>), read for the parallel-signer content cross-check.</summary>
+    private const string MessageDigestAttributeOid = "1.2.840.113549.1.9.4";
+
     /// <summary>
     /// The largest number of <c>SignerInfo</c> structures traversed while looking for the chosen signer. The
     /// set is unbounded in the syntax, so the traversal an attacker can provoke is bounded here.
@@ -478,6 +481,99 @@ public static class CmsSignedDataAugmentation
 
 
     /// <summary>
+    /// Reads what each signer of a Signed Data Object commits to: its <c>digestAlgorithm</c>'s algorithm
+    /// object identifier and, when its <c>signedAttrs</c> carries the <c>message-digest</c> attribute
+    /// (RFC 5652 §11.2), that attribute's digest octets — the per-signer content commitment a joining
+    /// parallel signer's own digest is held against
+    /// (<see cref="CAdESSignatureCreation.PrepareParallelSignatureAsync"/>).
+    /// </summary>
+    /// <param name="signedData">The Signed Data Object.</param>
+    /// <returns>One commitment per <c>SignerInfo</c>, in encoding order; a signer with no <c>signedAttrs</c>, no <c>message-digest</c> attribute, or a value that is not one primitive OCTET STRING states none.</returns>
+    /// <exception cref="CryptographicException">When the input is not a CMS SignedData, or a <c>SignerInfo</c> is not of the syntax's shape down to its <c>digestAlgorithm</c>.</exception>
+    /// <exception cref="AsnContentException">When the input is malformed, truncated, carries trailing octets, or exceeds the bounds this walk stays within.</exception>
+    internal static List<SignerContentCommitment> ReadSignerContentCommitments(CmsSignedData signedData)
+    {
+        ReadOnlySpan<byte> source = signedData.AsReadOnlySpan();
+        SignedDataLayout layout = LocateSignedDataLayout(source);
+        List<CmsElement> members = ReadSetMembers(source, layout.SignerInfos, MaximumSignerInfos, "signerInfos");
+        ReadOnlyMemory<byte> whole = signedData.AsReadOnlyMemory();
+        var commitments = new List<SignerContentCommitment>(members.Count);
+        for(int i = 0; i < members.Count; ++i)
+        {
+            CmsElement member = members[i];
+            if(member.Tag != Asn1Tag.Sequence)
+            {
+                throw new CryptographicException("A CMS signerInfos set holds SignerInfo SEQUENCE structures (RFC 5652 §5.1).");
+            }
+
+            CmsElement version = ReadElement(source, member.ContentStart, member.ContentEnd);
+            CmsElement signerIdentifier = ReadElement(source, version.End, member.ContentEnd);
+            CmsElement digestAlgorithm = ReadElement(source, signerIdentifier.End, member.ContentEnd);
+            if(digestAlgorithm.Tag != Asn1Tag.Sequence || digestAlgorithm.ContentLength == 0)
+            {
+                throw new CryptographicException("A CMS SignerInfo carries its digestAlgorithm as an AlgorithmIdentifier SEQUENCE (RFC 5652 §5.3).");
+            }
+
+            CmsElement algorithmOidElement = ReadElement(source, digestAlgorithm.ContentStart, digestAlgorithm.ContentEnd);
+            if(algorithmOidElement.Tag != Asn1Tag.ObjectIdentifier)
+            {
+                throw new CryptographicException("An AlgorithmIdentifier opens with its algorithm object identifier (RFC 5652 §10.1.1).");
+            }
+
+            string algorithmOid = AsnDecoder.ReadObjectIdentifier(source[algorithmOidElement.Start..algorithmOidElement.End], AsnEncodingRules.BER, out _);
+            CmsElement candidate = ReadElement(source, digestAlgorithm.End, member.ContentEnd);
+            if(candidate.Tag != ContextConstructed0)
+            {
+                commitments.Add(new SignerContentCommitment(algorithmOid, ReadOnlyMemory<byte>.Empty, HasMessageDigest: false));
+
+                continue;
+            }
+
+            commitments.Add(LocateMessageDigestCommitment(source, whole, candidate, algorithmOid));
+        }
+
+        return commitments;
+
+
+        //Finds the signer's message-digest attribute value among its signed attributes: the commitment is its
+        //OCTET STRING content octets, and a value of any other shape states none.
+        static SignerContentCommitment LocateMessageDigestCommitment(ReadOnlySpan<byte> source, ReadOnlyMemory<byte> whole, CmsElement signedAttributes, string algorithmOid)
+        {
+            List<UnsignedAttributeValueSite> sites = WalkUnsignedAttributeValues(source, signedAttributes);
+            for(int i = 0; i < sites.Count; ++i)
+            {
+                if(!string.Equals(sites[i].AttributeType, MessageDigestAttributeOid, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                CmsElement value = sites[i].Value;
+                bool isPrimitiveOctetString = value.Tag.TagClass == TagClass.Universal
+                    && value.Tag.TagValue == OctetStringTagNumber
+                    && !value.Tag.IsConstructed;
+
+                return isPrimitiveOctetString
+                    ? new SignerContentCommitment(algorithmOid, whole[value.ContentStart..value.ContentEnd], HasMessageDigest: true)
+                    : new SignerContentCommitment(algorithmOid, ReadOnlyMemory<byte>.Empty, HasMessageDigest: false);
+            }
+
+            return new SignerContentCommitment(algorithmOid, ReadOnlyMemory<byte>.Empty, HasMessageDigest: false);
+        }
+    }
+
+
+    /// <summary>
+    /// One signer's content commitment: the digest algorithm its <c>SignerInfo</c> states and, when present,
+    /// the <c>message-digest</c> attribute's digest octets (RFC 5652 §11.2).
+    /// </summary>
+    /// <param name="DigestAlgorithmOid">The signer's <c>digestAlgorithm</c> algorithm object identifier in dotted-decimal form.</param>
+    /// <param name="MessageDigest">A view of the <c>message-digest</c> value's content octets within the Signed Data Object's own memory, valid while it is; empty when <paramref name="HasMessageDigest"/> does not hold.</param>
+    /// <param name="HasMessageDigest">Whether the signer states a <c>message-digest</c> commitment at all.</param>
+    [DebuggerDisplay("SignerContentCommitment({DigestAlgorithmOid}, {HasMessageDigest ? \"committed\" : \"none\",nq})")]
+    internal readonly record struct SignerContentCommitment(string DigestAlgorithmOid, ReadOnlyMemory<byte> MessageDigest, bool HasMessageDigest);
+
+
+    /// <summary>
     /// Enumerates every <c>AttributeValue</c> of every unsigned attribute one <c>SignerInfo</c> carries, in
     /// encoding order, with the attribute type each belongs to.
     /// </summary>
@@ -645,6 +741,355 @@ public static class CmsSignedDataAugmentation
     /// </remarks>
     public static CmsSignedData AddRevocationInformation(CmsSignedData signedData, IReadOnlyList<ReadOnlyMemory<byte>> revocationInformation, MemoryPool<byte> pool) =>
         AddToOptionalSet(signedData, revocationInformation, ContextConstructed1, pool);
+
+
+    /// <summary>
+    /// Adds one parallel <c>SignerInfo</c> to <c>SignedData.signerInfos</c>, preserving every octet already
+    /// there — the multi-signer shape of <see href="https://www.rfc-editor.org/rfc/rfc5652#section-5.1">RFC 5652
+    /// §5.1</see>, where several signers sign the same encapsulated content side by side, as distinct from a
+    /// countersignature (<see href="https://www.rfc-editor.org/rfc/rfc5652#section-11.4">§11.4</see>), which
+    /// signs another signature's value and lives inside that signature's unsigned attributes.
+    /// </summary>
+    /// <param name="signedData">The Signed Data Object to augment. Not modified; the result is a new carrier.</param>
+    /// <param name="signerInfo">The whole DER-encoded <c>SignerInfo</c> to add, as the completion surfaces produce it.</param>
+    /// <param name="certificates">The whole encodings of <c>CertificateChoices</c> instances to place alongside — the new signer's own certificate and chain (ETSI EN 319 122-1 Table 1 requirements a and d) — or <see langword="null"/> to add none.</param>
+    /// <param name="pool">The memory pool the result and every intermediate are rented from.</param>
+    /// <returns>The augmented Signed Data Object. The caller owns and disposes it.</returns>
+    /// <exception cref="ArgumentNullException">When <paramref name="signedData"/>, <paramref name="signerInfo"/>, or <paramref name="pool"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">When <paramref name="signerInfo"/> is not exactly one DER <c>SignerInfo</c> this operation places (see the remarks), or the structure already carries the identical <c>SignerInfo</c>.</exception>
+    /// <exception cref="CryptographicException">When the input is not a CMS SignedData this operation can preserve.</exception>
+    /// <exception cref="AsnContentException">When the input is malformed, truncated, carries octets after the outer ContentInfo, or holds more members than this walk stays within.</exception>
+    /// <remarks>
+    /// <para>
+    /// <strong>Placement keeps a DER structure DER.</strong> The strict reader of this library's own managed
+    /// backend reads <c>signerInfos</c> and <c>digestAlgorithms</c> as DER <c>SET OF</c> structures, whose
+    /// members X.690 clause 11.6 orders by their encoded octets. The new member is therefore inserted at its
+    /// clause 11.6 position rather than appended: a set that was DER-sorted stays DER-sorted, every existing
+    /// member keeps its own octets and its relative order either way, and a BER structure met in the wild —
+    /// where the clause does not apply — is only ever changed by the insertion itself and the enclosing length
+    /// octets, exactly as the class remarks state for every splice here.
+    /// </para>
+    /// <para>
+    /// <strong>The digest algorithm travels with the signer.</strong> RFC 5652 §5.1 has <c>digestAlgorithms</c>
+    /// as the collection "intended to list" each signer's digest algorithm, so the new signer's whole
+    /// <c>DigestAlgorithmIdentifier</c> encoding is unioned into that set when its exact octets are not already
+    /// a member — read out of the supplied <c>SignerInfo</c> itself rather than passed beside it, so the pair
+    /// cannot disagree.
+    /// </para>
+    /// <para>
+    /// <strong>Only a version 1 <c>SignerInfo</c> is placed.</strong> RFC 5652 §5.1's version rule raises
+    /// <c>SignedData.version</c> to 3 once any <c>SignerInfo</c> is version 3 (a <c>subjectKeyIdentifier</c>
+    /// signer identifier, §5.3). This operation refuses such a member rather than rewriting the version octet
+    /// of a structure it otherwise preserves: every <c>SignerInfo</c> this library's creation surfaces produce
+    /// is version 1 with an <c>IssuerAndSerialNumber</c> identifier, and a widening that places version 3
+    /// members and applies §5.1's rule is separate work if ever wanted.
+    /// </para>
+    /// <para>
+    /// <strong>Adding a signer changes what whole-structure evidence covers.</strong> An archive time-stamp or
+    /// an Evidence Record whose imprint covers the whole Signed Data Object octets no longer matches the
+    /// augmented structure — the same caution ETSI EN 319 122-1 clause 5.5.3 NOTE 6 gives for adding to a
+    /// protected structure. Parallel signers are placed before such whole-object evidence is, not after.
+    /// </para>
+    /// </remarks>
+    public static CmsSignedData AddSignerInfo(
+        CmsSignedData signedData,
+        PooledMemory signerInfo,
+        IReadOnlyList<ReadOnlyMemory<byte>>? certificates,
+        MemoryPool<byte> pool)
+    {
+        ArgumentNullException.ThrowIfNull(signedData);
+        ArgumentNullException.ThrowIfNull(signerInfo);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        ReadOnlySpan<byte> addition = signerInfo.AsReadOnlySpan();
+        CmsElement additionDigestAlgorithm = ValidateSignerInfoAddition(addition, nameof(signerInfo));
+        ReadOnlySpan<byte> algorithmEncoding = addition[additionDigestAlgorithm.Start..additionDigestAlgorithm.End];
+
+        CmsSignedData? withAlgorithm = null;
+        CmsSignedData? withSigner = null;
+        try
+        {
+            withAlgorithm = InsertDigestAlgorithmIfAbsent(signedData.AsReadOnlySpan(), algorithmEncoding, pool);
+            withSigner = InsertSignerInfoMember((withAlgorithm ?? signedData).AsReadOnlySpan(), addition, nameof(signerInfo), pool);
+            if(certificates is null)
+            {
+                CmsSignedData signerResult = withSigner;
+                withSigner = null;
+
+                return signerResult;
+            }
+
+            return AddCertificates(withSigner, certificates, pool);
+        }
+        finally
+        {
+            withAlgorithm?.Dispose();
+            withSigner?.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// Validates that a parallel-signer addition is exactly one DER <c>SignerInfo</c> this operation places —
+    /// the whole field walk of <see href="https://www.rfc-editor.org/rfc/rfc5652#section-5.3">RFC 5652
+    /// §5.3</see>, the same order <see cref="LocateUnsignedAttributes"/> enforces when this class reads: a
+    /// SEQUENCE whose <c>version</c> is 1, whose <c>sid</c> is the <c>IssuerAndSerialNumber</c> alternative
+    /// (the one combination that leaves <c>SignedData.version</c> untouched under §5.1's version rule), whose
+    /// <c>digestAlgorithm</c> opens with its algorithm object identifier (its whole octets are what the
+    /// <c>digestAlgorithms</c> union carries), and whose mandatory <c>signatureAlgorithm</c> and
+    /// <c>signature</c> follow the optional <c>signedAttrs</c>, with an optional <c>unsignedAttrs</c> closing
+    /// the SEQUENCE exactly — so nothing this class's own readers would then throw on is ever spliced in.
+    /// </summary>
+    /// <param name="addition">The offered <c>SignerInfo</c> octets.</param>
+    /// <param name="parameterName">The caller's parameter name for the refusal messages.</param>
+    /// <returns>The <c>digestAlgorithm</c> <c>AlgorithmIdentifier</c> element within <paramref name="addition"/>.</returns>
+    /// <exception cref="ArgumentException">When the offered octets are not such a <c>SignerInfo</c>.</exception>
+    private static CmsElement ValidateSignerInfoAddition(ReadOnlySpan<byte> addition, string parameterName)
+    {
+        if(addition.IsEmpty)
+        {
+            throw new ArgumentException("A parallel-signer addition places one whole DER SignerInfo (RFC 5652 §5.3).", parameterName);
+        }
+
+        AsnDecoder.ReadEncodedValue(addition, AsnEncodingRules.DER, out _, out _, out int consumed);
+        if(consumed != addition.Length)
+        {
+            throw new ArgumentException("A parallel-signer addition is exactly one DER value (RFC 5652 §5.3).", parameterName);
+        }
+
+        CmsElement element = ReadElement(addition, 0, addition.Length);
+        if(element.Tag != Asn1Tag.Sequence)
+        {
+            throw new ArgumentException("A SignerInfo is a SEQUENCE (RFC 5652 §5.3).", parameterName);
+        }
+
+        CmsElement version = ReadElement(addition, element.ContentStart, element.ContentEnd);
+        if(version.Tag != Asn1Tag.Integer || version.ContentLength != 1 || addition[version.ContentStart] != 1)
+        {
+            throw new ArgumentException(
+                "A parallel-signer addition places a version 1 SignerInfo only: any other version changes what RFC 5652 §5.1's version rule assigns to SignedData.version, which this preserving operation does not rewrite.",
+                parameterName);
+        }
+
+        CmsElement signerIdentifier = ReadElement(addition, version.End, element.ContentEnd);
+        if(signerIdentifier.Tag != Asn1Tag.Sequence)
+        {
+            throw new ArgumentException(
+                "A version 1 SignerInfo carries the IssuerAndSerialNumber signer identifier alternative (RFC 5652 §5.3).",
+                parameterName);
+        }
+
+        CmsElement digestAlgorithm = ReadElement(addition, signerIdentifier.End, element.ContentEnd);
+        if(digestAlgorithm.Tag != Asn1Tag.Sequence)
+        {
+            throw new ArgumentException("A SignerInfo carries its digestAlgorithm as a SEQUENCE (RFC 5652 §5.3).", parameterName);
+        }
+
+        if(digestAlgorithm.ContentLength == 0 || ReadElement(addition, digestAlgorithm.ContentStart, digestAlgorithm.ContentEnd).Tag != Asn1Tag.ObjectIdentifier)
+        {
+            throw new ArgumentException(
+                "A SignerInfo digestAlgorithm is an AlgorithmIdentifier opening with its algorithm object identifier (RFC 5652 §5.3), and its whole octets are what the digestAlgorithms union carries.",
+                parameterName);
+        }
+
+        //signedAttrs [0] IMPLICIT is optional and precedes signatureAlgorithm (RFC 5652 §5.3).
+        CmsElement candidate = ReadElement(addition, digestAlgorithm.End, element.ContentEnd);
+        if(candidate.Tag == ContextConstructed0)
+        {
+            candidate = ReadElement(addition, candidate.End, element.ContentEnd);
+        }
+
+        if(candidate.Tag != Asn1Tag.Sequence)
+        {
+            throw new ArgumentException("A SignerInfo carries its signatureAlgorithm as a SEQUENCE (RFC 5652 §5.3).", parameterName);
+        }
+
+        CmsElement signature = ReadElement(addition, candidate.End, element.ContentEnd);
+        bool isPrimitiveOctetString = signature.Tag.TagClass == TagClass.Universal
+            && signature.Tag.TagValue == OctetStringTagNumber
+            && !signature.Tag.IsConstructed;
+        if(!isPrimitiveOctetString)
+        {
+            throw new ArgumentException("A SignerInfo carries its signature as a primitive OCTET STRING (RFC 5652 §5.3; X.690 clause 8.7).", parameterName);
+        }
+
+        if(signature.End != element.ContentEnd)
+        {
+            CmsElement unsignedAttributes = ReadElement(addition, signature.End, element.ContentEnd);
+            if(unsignedAttributes.Tag != ContextConstructed1 || unsignedAttributes.End != element.ContentEnd)
+            {
+                throw new ArgumentException(
+                    "A SignerInfo ends with its optional unsignedAttrs [1] IMPLICIT field and nothing after it (RFC 5652 §5.3).",
+                    parameterName);
+            }
+        }
+
+        return digestAlgorithm;
+    }
+
+
+    /// <summary>
+    /// Splices a new signer's <c>DigestAlgorithmIdentifier</c> into <c>SignedData.digestAlgorithms</c> at its
+    /// X.690 clause 11.6 position, or reports the union already holds it.
+    /// </summary>
+    /// <param name="source">The Signed Data Object octets.</param>
+    /// <param name="algorithmEncoding">The whole <c>AlgorithmIdentifier</c> encoding to union in.</param>
+    /// <param name="pool">The memory pool the result is rented from.</param>
+    /// <returns>The spliced Signed Data Object, or <see langword="null"/> when the exact octets are already a member. The caller owns and disposes a returned carrier.</returns>
+    private static CmsSignedData? InsertDigestAlgorithmIfAbsent(ReadOnlySpan<byte> source, ReadOnlySpan<byte> algorithmEncoding, MemoryPool<byte> pool)
+    {
+        SignedDataLayout layout = LocateSignedDataLayout(source);
+        List<CmsElement> members = ReadSetMembers(source, layout.DigestAlgorithms, MaximumEmbeddedObjects, "digestAlgorithms");
+        int insertionOffset = layout.DigestAlgorithms.ContentEnd;
+        bool positioned = false;
+        for(int i = 0; i < members.Count; ++i)
+        {
+            ReadOnlySpan<byte> member = source[members[i].Start..members[i].End];
+            if(member.SequenceEqual(algorithmEncoding))
+            {
+                return null;
+            }
+
+            if(!positioned && CompareSetOfMemberOrder(algorithmEncoding, member) < 0)
+            {
+                insertionOffset = members[i].Start;
+                positioned = true;
+            }
+        }
+
+        var chain = new CmsElement[MaximumChainLength];
+        chain[0] = layout.ContentInfo;
+        chain[1] = layout.ExplicitContent;
+        chain[2] = layout.SignedData;
+        chain[3] = layout.DigestAlgorithms;
+
+        return Splice(source, chain, chainLength: 4, insertionOffset, insertionOffset, algorithmEncoding, pool);
+    }
+
+
+    /// <summary>
+    /// Splices a whole <c>SignerInfo</c> into <c>SignedData.signerInfos</c> at its X.690 clause 11.6 position.
+    /// </summary>
+    /// <param name="source">The Signed Data Object octets.</param>
+    /// <param name="addition">The whole <c>SignerInfo</c> encoding to place.</param>
+    /// <param name="parameterName">The caller's parameter name for the duplicate refusal.</param>
+    /// <param name="pool">The memory pool the result is rented from.</param>
+    /// <returns>The spliced Signed Data Object. The caller owns and disposes it.</returns>
+    /// <exception cref="ArgumentException">When the structure already carries the identical <c>SignerInfo</c>.</exception>
+    /// <exception cref="AsnContentException">When the set already holds as many members as this walk stays within.</exception>
+    private static CmsSignedData InsertSignerInfoMember(ReadOnlySpan<byte> source, ReadOnlySpan<byte> addition, string parameterName, MemoryPool<byte> pool)
+    {
+        SignedDataLayout layout = LocateSignedDataLayout(source);
+        List<CmsElement> members = ReadSetMembers(source, layout.SignerInfos, MaximumSignerInfos, "signerInfos");
+        if(members.Count == MaximumSignerInfos)
+        {
+            throw new AsnContentException($"A CMS 'signerInfos' field is walked with at most {MaximumSignerInfos} members, which the set already holds.");
+        }
+
+        int insertionOffset = layout.SignerInfos.ContentEnd;
+        bool positioned = false;
+        for(int i = 0; i < members.Count; ++i)
+        {
+            ReadOnlySpan<byte> member = source[members[i].Start..members[i].End];
+            if(member.SequenceEqual(addition))
+            {
+                throw new ArgumentException("The Signed Data Object already carries this exact SignerInfo; a SET OF holds distinct values (X.690 clause 11.6).", parameterName);
+            }
+
+            if(!positioned && CompareSetOfMemberOrder(addition, member) < 0)
+            {
+                insertionOffset = members[i].Start;
+                positioned = true;
+            }
+        }
+
+        var chain = new CmsElement[MaximumChainLength];
+        chain[0] = layout.ContentInfo;
+        chain[1] = layout.ExplicitContent;
+        chain[2] = layout.SignedData;
+        chain[3] = layout.SignerInfos;
+
+        return Splice(source, chain, chainLength: 4, insertionOffset, insertionOffset, addition, pool);
+    }
+
+
+    /// <summary>
+    /// Orders two <c>SET OF</c> member encodings as X.690 clause 11.6 does for DER: compared as octet strings
+    /// in ascending order, the shorter one padded at its trailing end with zero octets.
+    /// </summary>
+    /// <param name="left">One member encoding.</param>
+    /// <param name="right">The other member encoding.</param>
+    /// <returns>A negative value when <paramref name="left"/> orders first, positive when <paramref name="right"/> does, zero when the padded encodings are equal.</returns>
+    private static int CompareSetOfMemberOrder(ReadOnlySpan<byte> left, ReadOnlySpan<byte> right)
+    {
+        int sharedLength = Math.Min(left.Length, right.Length);
+        int order = left[..sharedLength].SequenceCompareTo(right[..sharedLength]);
+        if(order != 0 || left.Length == right.Length)
+        {
+            return order;
+        }
+
+        //An equal prefix defers to the tail of the longer encoding against the shorter one's zero padding:
+        //any non-zero tail octet orders the longer encoding after the padded shorter one.
+        ReadOnlySpan<byte> tail = left.Length > right.Length ? left[sharedLength..] : right[sharedLength..];
+        for(int i = 0; i < tail.Length; ++i)
+        {
+            if(tail[i] != 0)
+            {
+                return left.Length > right.Length ? 1 : -1;
+            }
+        }
+
+        return 0;
+    }
+
+
+    /// <summary>
+    /// Returns what <c>SignedData.encapContentInfo</c> states: the content type, and — for the attached form —
+    /// a view of the <c>eContent</c> octets a parallel signer's <c>message-digest</c> attribute is computed
+    /// over (<see href="https://www.rfc-editor.org/rfc/rfc5652#section-5.2">RFC 5652 §5.2</see>).
+    /// </summary>
+    /// <param name="signedData">The Signed Data Object.</param>
+    /// <returns>The content type and, when the content travels attached, a view of its octets within <paramref name="signedData"/>'s own memory, valid while it is.</returns>
+    /// <exception cref="ArgumentNullException">When <paramref name="signedData"/> is <see langword="null"/>.</exception>
+    /// <exception cref="CryptographicException">When the input is not a CMS SignedData, or its <c>eContent</c> is not one primitive definite-length OCTET STRING — the constructed or indefinite-length BER forms state the same content in an encoding this read does not reassemble, the same DER scope <see cref="ArchiveTimestampV3"/> already applies.</exception>
+    /// <exception cref="AsnContentException">When the input is malformed, truncated, or carries octets after the outer ContentInfo.</exception>
+    public static CmsEncapsulatedContent ReadEncapsulatedContentInfo(CmsSignedData signedData)
+    {
+        ArgumentNullException.ThrowIfNull(signedData);
+
+        ReadOnlySpan<byte> source = signedData.AsReadOnlySpan();
+        SignedDataLayout layout = LocateSignedDataLayout(source);
+        CmsElement contentType = ReadElement(source, layout.EncapContentInfo.ContentStart, layout.EncapContentInfo.ContentEnd);
+        if(contentType.Tag != Asn1Tag.ObjectIdentifier)
+        {
+            throw new CryptographicException("A CMS EncapsulatedContentInfo begins with its eContentType object identifier (RFC 5652 §5.2).");
+        }
+
+        string contentTypeOid = AsnDecoder.ReadObjectIdentifier(source[contentType.Start..contentType.End], AsnEncodingRules.BER, out _);
+        if(contentType.End == layout.EncapContentInfo.ContentEnd)
+        {
+            return new CmsEncapsulatedContent(contentTypeOid, null);
+        }
+
+        CmsElement explicitEContent = ReadElement(source, contentType.End, layout.EncapContentInfo.ContentEnd);
+        if(explicitEContent.Tag != ContextConstructed0 || explicitEContent.End != layout.EncapContentInfo.ContentEnd)
+        {
+            throw new CryptographicException("A CMS EncapsulatedContentInfo ends with its optional eContent [0] EXPLICIT field (RFC 5652 §5.2).");
+        }
+
+        CmsElement octets = ReadElement(source, explicitEContent.ContentStart, explicitEContent.ContentEnd);
+        bool isPrimitiveOctetString = octets.Tag.TagClass == TagClass.Universal
+            && octets.Tag.TagValue == OctetStringTagNumber
+            && !octets.Tag.IsConstructed;
+        if(!isPrimitiveOctetString || octets.IsIndefinite || octets.End != explicitEContent.ContentEnd)
+        {
+            throw new CryptographicException(
+                "A CMS eContent is read as one primitive definite-length OCTET STRING; a constructed or indefinite-length BER form is not reassembled here (RFC 5652 §5.2; X.690 clause 8.7).");
+        }
+
+        return new CmsEncapsulatedContent(contentTypeOid, signedData.AsReadOnlyMemory()[octets.ContentStart..octets.ContentEnd]);
+    }
 
 
     /// <summary>
@@ -1195,6 +1640,7 @@ public static class CmsSignedDataAugmentation
             explicitContent,
             signedDataSequence,
             version,
+            digestAlgorithms,
             encapContentInfo,
             certificates,
             hasCertificates,
@@ -1558,6 +2004,7 @@ public static class CmsSignedDataAugmentation
     /// <param name="ExplicitContent">The <c>[0] EXPLICIT</c> content field of the <c>ContentInfo</c>.</param>
     /// <param name="SignedData">The <c>SignedData</c> SEQUENCE.</param>
     /// <param name="Version">The <c>version</c> <c>CMSVersion</c> INTEGER, the first field of the <c>SignedData</c>, whose one content octet a validation-data placement raises to 5 when it adds an other-format member (RFC 5652 §5.1).</param>
+    /// <param name="DigestAlgorithms">The <c>digestAlgorithms</c> SET, which a parallel-signer addition unions the new signer's digest algorithm into (RFC 5652 §5.1: "the collection of message digest algorithms" is "intended to list" each signer's).</param>
     /// <param name="EncapContentInfo">The <c>encapContentInfo</c> SEQUENCE, which the optional sets follow.</param>
     /// <param name="Certificates">The <c>certificates [0] IMPLICIT</c> set, meaningful only when <paramref name="HasCertificates"/> holds.</param>
     /// <param name="HasCertificates">Whether the <c>SignedData</c> carries a <c>certificates</c> field.</param>
@@ -1569,6 +2016,7 @@ public static class CmsSignedDataAugmentation
         CmsElement ExplicitContent,
         CmsElement SignedData,
         CmsElement Version,
+        CmsElement DigestAlgorithms,
         CmsElement EncapContentInfo,
         CmsElement Certificates,
         bool HasCertificates,
@@ -1614,3 +2062,14 @@ public static class CmsSignedDataAugmentation
 /// </remarks>
 [DebuggerDisplay("CmsUnsignedAttributeValueLocation({AttributeType}, attribute {AttributeIndex}, value {ValueIndex})")]
 public readonly record struct CmsUnsignedAttributeValueLocation(int AttributeIndex, int ValueIndex, string AttributeType);
+
+
+/// <summary>
+/// What <c>SignedData.encapContentInfo</c> states (<see href="https://www.rfc-editor.org/rfc/rfc5652#section-5.2">
+/// RFC 5652 §5.2</see>): the content type, and — for the attached form — the <c>eContent</c> octets a signer's
+/// <c>message-digest</c> attribute is computed over.
+/// </summary>
+/// <param name="ContentType">The <c>eContentType</c> object identifier in dotted-decimal form.</param>
+/// <param name="Content">A view of the <c>eContent</c> OCTET STRING content octets within the Signed Data Object's own memory, valid while that carrier is; <see langword="null"/> for the detached form, whose content travels by other means (§5.2).</param>
+[DebuggerDisplay("CmsEncapsulatedContent({ContentType}, {Content == null ? \"detached\" : \"attached\",nq})")]
+public readonly record struct CmsEncapsulatedContent(string ContentType, ReadOnlyMemory<byte>? Content);
