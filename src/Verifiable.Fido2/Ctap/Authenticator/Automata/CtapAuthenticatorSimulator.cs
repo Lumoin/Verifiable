@@ -2224,7 +2224,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         //against the just-verified current hash rather than the possibly-stale action.CurrentStoredPin.
         static DigestValue CopyConfirmedCurrentPinHash(ReadOnlySpan<byte> confirmedHash, BaseMemoryPool pool)
         {
-            IMemoryOwner<byte> copy = pool.Rent(confirmedHash.Length);
+            IMemoryOwner<byte> copy = pool.Rent(confirmedHash.Length, AllocationKind.Pinned);
             try
             {
                 confirmedHash.CopyTo(copy.Memory.Span);
@@ -2626,7 +2626,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     {
         using DigestValue fullDigest = CryptographicKeyEvents.ComputeDigest(newPin, Sha256Length, CryptoTags.Sha256Digest, pool);
 
-        IMemoryOwner<byte> truncated = pool.Rent(StoredPinHashLength);
+        IMemoryOwner<byte> truncated = pool.Rent(StoredPinHashLength, AllocationKind.Pinned);
         try
         {
             fullDigest.AsReadOnlySpan()[..StoredPinHashLength].CopyTo(truncated.Memory.Span);
@@ -2763,13 +2763,13 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             //shape below (stackalloc scratch -> pool rental -> copy -> clear scratch), run twice.
             Span<byte> credRandomWithUVBytes = stackalloc byte[CredRandomLength];
             context.Rng(credRandomWithUVBytes);
-            credRandomWithUV = context.Pool.Rent(CredRandomLength);
+            credRandomWithUV = context.Pool.Rent(CredRandomLength, AllocationKind.Pinned);
             credRandomWithUVBytes.CopyTo(credRandomWithUV.Memory.Span);
             credRandomWithUVBytes.Clear();
 
             Span<byte> credRandomWithoutUVBytes = stackalloc byte[CredRandomLength];
             context.Rng(credRandomWithoutUVBytes);
-            credRandomWithoutUV = context.Pool.Rent(CredRandomLength);
+            credRandomWithoutUV = context.Pool.Rent(CredRandomLength, AllocationKind.Pinned);
             credRandomWithoutUVBytes.CopyTo(credRandomWithoutUV.Memory.Span);
             credRandomWithoutUVBytes.Clear();
 
@@ -2782,7 +2782,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
                 //authoritative custody home, so the stack scratch is cleared the moment the copy lands.
                 Span<byte> largeBlobKeyBytes = stackalloc byte[LargeBlobKeyLength];
                 context.Rng(largeBlobKeyBytes);
-                largeBlobKey = context.Pool.Rent(LargeBlobKeyLength);
+                largeBlobKey = context.Pool.Rent(LargeBlobKeyLength, AllocationKind.Pinned);
                 largeBlobKeyBytes.CopyTo(largeBlobKey.Memory.Span);
                 largeBlobKeyBytes.Clear();
             }
@@ -3224,7 +3224,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
         if(saltBytes.Length == HmacSecretSaltLength)
         {
-            IMemoryOwner<byte> plaintext = context.Pool.Rent(HmacSecretSaltLength);
+            IMemoryOwner<byte> plaintext = context.Pool.Rent(HmacSecretSaltLength, AllocationKind.Pinned);
             output1.AsReadOnlySpan().CopyTo(plaintext.Memory.Span);
 
             return plaintext;
@@ -3234,7 +3234,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         using HmacValue output2 = await CryptographicKeyEvents.ComputeHmacAsync(
             salt2, credRandom.Memory, HmacSecretSaltLength, CryptoTags.HmacSha256Value, context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        IMemoryOwner<byte> twoSaltPlaintext = context.Pool.Rent(HmacSecretTwoSaltLength);
+        IMemoryOwner<byte> twoSaltPlaintext = context.Pool.Rent(HmacSecretTwoSaltLength, AllocationKind.Pinned);
         output1.AsReadOnlySpan().CopyTo(twoSaltPlaintext.Memory.Span);
         output2.AsReadOnlySpan().CopyTo(twoSaltPlaintext.Memory.Span[HmacSecretSaltLength..]);
 

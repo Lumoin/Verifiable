@@ -107,7 +107,7 @@ public static class MicrosoftHmacFunctions
             activity.SetTag(CryptoTelemetry.Hmac.OutputLength, outputByteLength);
         }
 
-        IMemoryOwner<byte> owner = pool.Rent(outputByteLength);
+        IMemoryOwner<byte> owner = pool.Rent(outputByteLength, AllocationKind.Pinned);
         int written;
         try
         {
@@ -224,7 +224,7 @@ public static class MicrosoftHmacFunctions
         }
 
         bool isValid;
-        using(IMemoryOwner<byte> tempOwner = pool.Rent(outputByteLength))
+        using(IMemoryOwner<byte> tempOwner = pool.Rent(outputByteLength, AllocationKind.Pinned))
         {
             Span<byte> tempSpan = tempOwner.Memory.Span[..outputByteLength];
 

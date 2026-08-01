@@ -167,7 +167,7 @@ namespace Verifiable.BouncyCastle
                 activity.SetTag(CryptoTelemetry.Digest.OutputLength, outputByteLength);
             }
 
-            IMemoryOwner<byte> owner = pool.Rent(outputByteLength);
+            IMemoryOwner<byte> owner = pool.Rent(outputByteLength, AllocationKind.Pinned);
             try
             {
                 var blake3 = new Blake3Digest();
@@ -524,7 +524,7 @@ namespace Verifiable.BouncyCastle
             var sharedSecret = new byte[agreement.AgreementSize];
             agreement.CalculateAgreement(publicKeyParams, sharedSecret, 0);
 
-            var memoryOwner = memoryPool.Rent(sharedSecret.Length);
+            var memoryOwner = memoryPool.Rent(sharedSecret.Length, AllocationKind.Pinned);
             if(memoryOwner.Memory.Length < sharedSecret.Length)
             {
                 memoryOwner.Dispose();
@@ -1246,7 +1246,7 @@ namespace Verifiable.BouncyCastle
             IMemoryOwner<byte> ciphertextMemory = memoryPool.Rent(ciphertext.Length);
             ciphertext.CopyTo(ciphertextMemory.Memory.Span);
 
-            IMemoryOwner<byte> secretMemory = memoryPool.Rent(sharedSecret.Length);
+            IMemoryOwner<byte> secretMemory = memoryPool.Rent(sharedSecret.Length, AllocationKind.Pinned);
             sharedSecret.CopyTo(secretMemory.Memory.Span);
 
             Array.Clear(sharedSecret, 0, sharedSecret.Length);
@@ -1286,7 +1286,7 @@ namespace Verifiable.BouncyCastle
             byte[] sharedSecret = new byte[decapsulator.SecretLength];
             decapsulator.Decapsulate(ciphertext.ToArray(), 0, ciphertext.Length, sharedSecret, 0, sharedSecret.Length);
 
-            IMemoryOwner<byte> secretMemory = memoryPool.Rent(sharedSecret.Length);
+            IMemoryOwner<byte> secretMemory = memoryPool.Rent(sharedSecret.Length, AllocationKind.Pinned);
             sharedSecret.CopyTo(secretMemory.Memory.Span);
             Array.Clear(sharedSecret, 0, sharedSecret.Length);
 

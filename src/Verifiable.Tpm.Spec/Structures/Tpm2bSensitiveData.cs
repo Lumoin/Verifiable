@@ -75,7 +75,7 @@ public sealed class Tpm2bSensitiveData: SensitiveMemory, ITpmWireType
             return EmptyInstance;
         }
 
-        IMemoryOwner<byte> storage = pool.Rent(length);
+        IMemoryOwner<byte> storage = pool.Rent(length, AllocationKind.Pinned);
         ReadOnlySpan<byte> sourceBytes = reader.ReadBytes(length);
         sourceBytes.CopyTo(storage.Memory.Span.Slice(0, length));
 
@@ -115,7 +115,7 @@ public sealed class Tpm2bSensitiveData: SensitiveMemory, ITpmWireType
             return EmptyInstance;
         }
 
-        IMemoryOwner<byte> storage = pool.Rent(bytes.Length);
+        IMemoryOwner<byte> storage = pool.Rent(bytes.Length, AllocationKind.Pinned);
         bytes.CopyTo(storage.Memory.Span);
 
         return new Tpm2bSensitiveData(storage);

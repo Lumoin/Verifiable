@@ -371,7 +371,7 @@ public sealed record CtapPinUvAuthProtocol(
 
         using(digest)
         {
-            IMemoryOwner<byte> sharedSecret = pool.Rent(Sha256DigestLength);
+            IMemoryOwner<byte> sharedSecret = pool.Rent(Sha256DigestLength, AllocationKind.Pinned);
             digest.AsReadOnlySpan().CopyTo(sharedSecret.Memory.Span);
 
             return sharedSecret;
@@ -402,7 +402,7 @@ public sealed record CtapPinUvAuthProtocol(
                 HashAlgorithmName.SHA256, salt, z, ProtocolTwoAesKeyInfo, Sha256DigestLength, pool, cancellationToken).ConfigureAwait(false);
             try
             {
-                IMemoryOwner<byte> sharedSecret = pool.Rent(ProtocolTwoSharedSecretLength);
+                IMemoryOwner<byte> sharedSecret = pool.Rent(ProtocolTwoSharedSecretLength, AllocationKind.Pinned);
                 hmacKeyHalf.Memory.Span[..ProtocolTwoHmacKeyLength].CopyTo(sharedSecret.Memory.Span);
                 aesKeyHalf.Memory.Span[..Sha256DigestLength].CopyTo(sharedSecret.Memory.Span[ProtocolTwoHmacKeyLength..]);
 

@@ -135,11 +135,11 @@ public static class MicrosoftKeyMaterialCreator
             parameters.Q.Y!.CopyTo(uncompressed, 33);
 
             var publicKeyMemory = new PublicKeyMemory(
-                AsPooledMemory(uncompressed, memoryPool),
+                AsPooledMemory(uncompressed, memoryPool, AllocationKind.Managed),
                 CryptoTags.P256ExchangePublicKey);
 
             var privateKeyMemory = new PrivateKeyMemory(
-                AsPooledMemory(parameters.D!, memoryPool),
+                AsPooledMemory(parameters.D!, memoryPool, AllocationKind.Pinned),
                 CryptoTags.P256ExchangePrivateKey);
 
             Array.Clear(uncompressed, 0, uncompressed.Length);
@@ -232,11 +232,11 @@ public static class MicrosoftKeyMaterialCreator
             parameters.Q.Y!.CopyTo(uncompressed, 1 + coordinateLength);
 
             var publicKeyMemory = new PublicKeyMemory(
-                AsPooledMemory(uncompressed, memoryPool),
+                AsPooledMemory(uncompressed, memoryPool, AllocationKind.Managed),
                 publicKeyTag);
 
             var privateKeyMemory = new PrivateKeyMemory(
-                AsPooledMemory(parameters.D!, memoryPool),
+                AsPooledMemory(parameters.D!, memoryPool, AllocationKind.Pinned),
                 privateKeyTag);
 
             Array.Clear(uncompressed, 0, uncompressed.Length);
@@ -287,9 +287,9 @@ public static class MicrosoftKeyMaterialCreator
             parameters.Q.X, parameters.Q.Y);
 
         var publicKeyMemory = new PublicKeyMemory(
-            AsPooledMemory(compressedKeyMaterial, memoryPool), publicKeyTag);
+            AsPooledMemory(compressedKeyMaterial, memoryPool, AllocationKind.Managed), publicKeyTag);
         var privateKeyMemory = new PrivateKeyMemory(
-            AsPooledMemory(parameters.D!, memoryPool), privateKeyTag);
+            AsPooledMemory(parameters.D!, memoryPool, AllocationKind.Pinned), privateKeyTag);
 
         CryptographicOperations.ZeroMemory(compressedKeyMaterial);
         CryptographicOperations.ZeroMemory(parameters.Q.X);
@@ -332,9 +332,9 @@ public static class MicrosoftKeyMaterialCreator
         byte[] derEncodedPublicKey = RsaUtilities.Encode(parameters.Modulus!);
 
         var publicKeyMemory = new PublicKeyMemory(
-            AsPooledMemory(derEncodedPublicKey, memoryPool), publicKeyTag);
+            AsPooledMemory(derEncodedPublicKey, memoryPool, AllocationKind.Managed), publicKeyTag);
         var privateKeyMemory = new PrivateKeyMemory(
-            AsPooledMemory(key.ExportRSAPrivateKey(), memoryPool), privateKeyTag);
+            AsPooledMemory(key.ExportRSAPrivateKey(), memoryPool, AllocationKind.Pinned), privateKeyTag);
 
         CryptographicOperations.ZeroMemory(derEncodedPublicKey);
         CryptographicOperations.ZeroMemory(parameters.Modulus);
@@ -377,9 +377,19 @@ public static class MicrosoftKeyMaterialCreator
     }
 
 
-    private static IMemoryOwner<byte> AsPooledMemory(byte[] keyBytes, BaseMemoryPool memoryPool)
+    /// <summary>
+    /// Copies <paramref name="keyBytes"/> into an exact-length pool rental of the requested
+    /// <paramref name="kind"/> — <see cref="AllocationKind.Pinned"/> for private key bytes so the
+    /// zeroize-on-dispose actually wipes the memory rather than a GC-moved copy,
+    /// <see cref="AllocationKind.Managed"/> for public key encodings.
+    /// </summary>
+    /// <param name="keyBytes">The key bytes to copy into pooled memory.</param>
+    /// <param name="memoryPool">The pool to rent the copy from.</param>
+    /// <param name="kind">The allocation kind the rental requests.</param>
+    /// <returns>The pool-owned copy; ownership transfers to the caller.</returns>
+    private static IMemoryOwner<byte> AsPooledMemory(byte[] keyBytes, BaseMemoryPool memoryPool, AllocationKind kind)
     {
-        IMemoryOwner<byte> keyBuffer = memoryPool.Rent(keyBytes.Length);
+        IMemoryOwner<byte> keyBuffer = memoryPool.Rent(keyBytes.Length, kind);
 
         if(keyBuffer.Memory.Length != keyBytes.Length)
         {

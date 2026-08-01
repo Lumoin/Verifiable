@@ -394,7 +394,7 @@ public static class TpmCommandExecutor
                 {
                     if(hasResponseSessions)
                     {
-                        responseParamsOwner = pool.Rent(Math.Max(layout.ParametersLength, 1));
+                        responseParamsOwner = pool.Rent(Math.Max(layout.ParametersLength, 1), AllocationKind.Pinned);
                         responseParamsMemory = responseParamsOwner.Memory[..layout.ParametersLength];
                         response.AsReadOnlySpan().Slice(layout.ParametersStart, layout.ParametersLength).CopyTo(responseParamsMemory.Span);
 

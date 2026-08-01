@@ -90,7 +90,7 @@ namespace Verifiable.Microsoft
                 activity.SetTag(CryptoTelemetry.Digest.OutputLength, outputByteLength);
             }
 
-            IMemoryOwner<byte> owner = pool.Rent(outputByteLength);
+            IMemoryOwner<byte> owner = pool.Rent(outputByteLength, AllocationKind.Pinned);
             int written;
             try
             {

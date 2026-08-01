@@ -218,7 +218,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
             }
             else
             {
-                keyOwner = pool.Rent(keyLength);
+                keyOwner = pool.Rent(keyLength, AllocationKind.Pinned);
                 bindAuthValue.CopyTo(keyOwner.Memory);
                 salt.CopyTo(keyOwner.Memory[bindAuthValue.Length..]);
                 key = keyOwner.Memory[..keyLength];
@@ -564,7 +564,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
             return (null, ReadOnlyMemory<byte>.Empty);
         }
 
-        IMemoryOwner<byte> owner = pool.Rent(size);
+        IMemoryOwner<byte> owner = pool.Rent(size, AllocationKind.Pinned);
         Memory<byte> buffer = owner.Memory[..size];
         sessionKeyMem.CopyTo(buffer);
         authValueMem.CopyTo(buffer[sessionKeyMem.Length..]);

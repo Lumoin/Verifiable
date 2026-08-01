@@ -82,7 +82,7 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
             return EmptyInstance;
         }
 
-        IMemoryOwner<byte> storage = pool.Rent(length);
+        IMemoryOwner<byte> storage = pool.Rent(length, AllocationKind.Pinned);
 
         //Copy auth bytes into owned storage.
         ReadOnlySpan<byte> sourceBytes = reader.ReadBytes(length);
@@ -139,7 +139,7 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
             return EmptyInstance;
         }
 
-        IMemoryOwner<byte> storage = pool.Rent(bytes.Length);
+        IMemoryOwner<byte> storage = pool.Rent(bytes.Length, AllocationKind.Pinned);
         bytes.CopyTo(storage.Memory.Span);
         return new Tpm2bAuth(storage);
     }
@@ -187,7 +187,7 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
             return EmptyInstance;
         }
 
-        IMemoryOwner<byte> storage = pool.Rent(length);
+        IMemoryOwner<byte> storage = pool.Rent(length, AllocationKind.Pinned);
         passwordBytes.AsSpan(0, length).CopyTo(storage.Memory.Span);
 
         //Clear the temporary array.

@@ -124,8 +124,8 @@ public static class BouncyCastleKeyMaterialCreator
         byte[] publicKey = ((Ed25519PublicKeyParameters)keyPair.Public).GetEncoded();
         byte[] privateKey = ((Ed25519PrivateKeyParameters)keyPair.Private).GetEncoded();
 
-        var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(publicKey, memoryPool), CryptoTags.Ed25519PublicKey);
-        var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKey, memoryPool), CryptoTags.Ed25519PrivateKey);
+        var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(publicKey, memoryPool, AllocationKind.Managed), CryptoTags.Ed25519PublicKey);
+        var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKey, memoryPool, AllocationKind.Pinned), CryptoTags.Ed25519PrivateKey);
 
         Array.Clear(publicKey, 0, publicKey.Length);
         Array.Clear(privateKey, 0, privateKey.Length);
@@ -159,8 +159,8 @@ public static class BouncyCastleKeyMaterialCreator
         byte[] publicKey = ((X25519PublicKeyParameters)keyPair.Public).GetEncoded();
         byte[] privateKey = ((X25519PrivateKeyParameters)keyPair.Private).GetEncoded();
 
-        var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(publicKey, memoryPool), CryptoTags.X25519PublicKey);
-        var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKey, memoryPool), CryptoTags.X25519PrivateKey);
+        var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(publicKey, memoryPool, AllocationKind.Managed), CryptoTags.X25519PublicKey);
+        var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKey, memoryPool, AllocationKind.Pinned), CryptoTags.X25519PrivateKey);
 
         Array.Clear(publicKey, 0, publicKey.Length);
         Array.Clear(privateKey, 0, privateKey.Length);
@@ -224,7 +224,7 @@ public static class BouncyCastleKeyMaterialCreator
             try
             {
                 int fieldSize = (secCurve.Curve.FieldSize + 7) / 8;
-                IMemoryOwner<byte> privateKeyBuffer = memoryPool.Rent(fieldSize);
+                IMemoryOwner<byte> privateKeyBuffer = memoryPool.Rent(fieldSize, AllocationKind.Pinned);
                 privateKeyBuffer.Memory.Span.Clear();
 
                 if(dBytes.Length < fieldSize)
@@ -237,7 +237,7 @@ public static class BouncyCastleKeyMaterialCreator
                 }
 
                 var publicKeyMemory = new PublicKeyMemory(
-                    AsPooledMemory(uncompressed, memoryPool),
+                    AsPooledMemory(uncompressed, memoryPool, AllocationKind.Managed),
                     CryptoTags.P256ExchangePublicKey);
                 var privateKeyMemory = new PrivateKeyMemory(
                     privateKeyBuffer,
@@ -493,16 +493,16 @@ public static class BouncyCastleKeyMaterialCreator
 
         if(privateKeyBytes.Length < expectedKeySize)
         {
-            privateKeyBuffer = memoryPool.Rent(expectedKeySize);
+            privateKeyBuffer = memoryPool.Rent(expectedKeySize, AllocationKind.Pinned);
             privateKeyBuffer.Memory.Span.Clear();
             privateKeyBytes.CopyTo(privateKeyBuffer.Memory.Span[(expectedKeySize - privateKeyBytes.Length)..]);
         }
         else
         {
-            privateKeyBuffer = AsPooledMemory(privateKeyBytes, memoryPool);
+            privateKeyBuffer = AsPooledMemory(privateKeyBytes, memoryPool, AllocationKind.Pinned);
         }
 
-        var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(compressedPublicKey, memoryPool), publicKeyTag);
+        var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(compressedPublicKey, memoryPool, AllocationKind.Managed), publicKeyTag);
         var privateKeyMemory = new PrivateKeyMemory(privateKeyBuffer, privateKeyTag);
 
         Array.Clear(compressedPublicKey, 0, compressedPublicKey.Length);
@@ -553,16 +553,16 @@ public static class BouncyCastleKeyMaterialCreator
 
         if(privateKeyBytes.Length < expectedKeySize)
         {
-            privateKeyBuffer = memoryPool.Rent(expectedKeySize);
+            privateKeyBuffer = memoryPool.Rent(expectedKeySize, AllocationKind.Pinned);
             privateKeyBuffer.Memory.Span.Clear();
             privateKeyBytes.CopyTo(privateKeyBuffer.Memory.Span[(expectedKeySize - privateKeyBytes.Length)..]);
         }
         else
         {
-            privateKeyBuffer = AsPooledMemory(privateKeyBytes, memoryPool);
+            privateKeyBuffer = AsPooledMemory(privateKeyBytes, memoryPool, AllocationKind.Pinned);
         }
 
-        var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(uncompressedPublicKey, memoryPool), publicKeyTag);
+        var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(uncompressedPublicKey, memoryPool, AllocationKind.Managed), publicKeyTag);
         var privateKeyMemory = new PrivateKeyMemory(privateKeyBuffer, privateKeyTag);
 
         Array.Clear(uncompressedPublicKey, 0, uncompressedPublicKey.Length);
@@ -611,16 +611,16 @@ public static class BouncyCastleKeyMaterialCreator
 
         if(privateKeyBytes.Length < expectedKeySize)
         {
-            privateKeyBuffer = memoryPool.Rent(expectedKeySize);
+            privateKeyBuffer = memoryPool.Rent(expectedKeySize, AllocationKind.Pinned);
             privateKeyBuffer.Memory.Span.Clear();
             privateKeyBytes.CopyTo(privateKeyBuffer.Memory.Span[(expectedKeySize - privateKeyBytes.Length)..]);
         }
         else
         {
-            privateKeyBuffer = AsPooledMemory(privateKeyBytes, memoryPool);
+            privateKeyBuffer = AsPooledMemory(privateKeyBytes, memoryPool, AllocationKind.Pinned);
         }
 
-        var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(uncompressedPublicKey, memoryPool), publicKeyTag);
+        var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(uncompressedPublicKey, memoryPool, AllocationKind.Managed), publicKeyTag);
         var privateKeyMemory = new PrivateKeyMemory(privateKeyBuffer, privateKeyTag);
 
         Array.Clear(uncompressedPublicKey, 0, uncompressedPublicKey.Length);
@@ -666,16 +666,16 @@ public static class BouncyCastleKeyMaterialCreator
 
         if(privateKeyBytes.Length < expectedKeySize)
         {
-            privateKeyBuffer = memoryPool.Rent(expectedKeySize);
+            privateKeyBuffer = memoryPool.Rent(expectedKeySize, AllocationKind.Pinned);
             privateKeyBuffer.Memory.Span.Clear();
             privateKeyBytes.CopyTo(privateKeyBuffer.Memory.Span[(expectedKeySize - privateKeyBytes.Length)..]);
         }
         else
         {
-            privateKeyBuffer = AsPooledMemory(privateKeyBytes, memoryPool);
+            privateKeyBuffer = AsPooledMemory(privateKeyBytes, memoryPool, AllocationKind.Pinned);
         }
 
-        var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(compressedPublicKey, memoryPool), publicKeyTag);
+        var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(compressedPublicKey, memoryPool, AllocationKind.Managed), publicKeyTag);
         var privateKeyMemory = new PrivateKeyMemory(privateKeyBuffer, privateKeyTag);
 
         Array.Clear(compressedPublicKey, 0, compressedPublicKey.Length);
@@ -729,8 +729,8 @@ public static class BouncyCastleKeyMaterialCreator
             privateKeyParam.DQ,
             privateKeyParam.QInv)).GetDerEncoded();
 
-        var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(derEncodedPublicKey, memoryPool), publicKeyTag);
-        var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKeyBytes, memoryPool), privateKeyTag);
+        var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(derEncodedPublicKey, memoryPool, AllocationKind.Managed), publicKeyTag);
+        var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKeyBytes, memoryPool, AllocationKind.Pinned), privateKeyTag);
 
         Array.Clear(modulusBytes, 0, modulusBytes.Length);
         Array.Clear(derEncodedPublicKey, 0, derEncodedPublicKey.Length);
@@ -765,8 +765,8 @@ public static class BouncyCastleKeyMaterialCreator
         byte[] publicKeyBytes = ((MLDsaPublicKeyParameters)keyPair.Public).GetEncoded();
         byte[] privateKeyBytes = ((MLDsaPrivateKeyParameters)keyPair.Private).GetEncoded();
 
-        var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(publicKeyBytes, memoryPool), publicKeyTag);
-        var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKeyBytes, memoryPool), privateKeyTag);
+        var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(publicKeyBytes, memoryPool, AllocationKind.Managed), publicKeyTag);
+        var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKeyBytes, memoryPool, AllocationKind.Pinned), privateKeyTag);
 
         Array.Clear(publicKeyBytes, 0, publicKeyBytes.Length);
         Array.Clear(privateKeyBytes, 0, privateKeyBytes.Length);
@@ -800,8 +800,8 @@ public static class BouncyCastleKeyMaterialCreator
         byte[] publicKeyBytes = ((MLKemPublicKeyParameters)keyPair.Public).GetEncoded();
         byte[] privateKeyBytes = ((MLKemPrivateKeyParameters)keyPair.Private).GetEncoded();
 
-        var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(publicKeyBytes, memoryPool), publicKeyTag);
-        var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKeyBytes, memoryPool), privateKeyTag);
+        var publicKeyMemory = new PublicKeyMemory(AsPooledMemory(publicKeyBytes, memoryPool, AllocationKind.Managed), publicKeyTag);
+        var privateKeyMemory = new PrivateKeyMemory(AsPooledMemory(privateKeyBytes, memoryPool, AllocationKind.Pinned), privateKeyTag);
 
         Array.Clear(publicKeyBytes, 0, publicKeyBytes.Length);
         Array.Clear(privateKeyBytes, 0, privateKeyBytes.Length);
@@ -842,12 +842,22 @@ public static class BouncyCastleKeyMaterialCreator
     }
 
 
-    private static IMemoryOwner<byte> AsPooledMemory(byte[] keyBytes, BaseMemoryPool memoryPool)
+    /// <summary>
+    /// Copies <paramref name="keyBytes"/> into an exact-length pool rental of the requested
+    /// <paramref name="kind"/> — <see cref="AllocationKind.Pinned"/> for private key bytes so the
+    /// zeroize-on-dispose actually wipes the memory rather than a GC-moved copy,
+    /// <see cref="AllocationKind.Managed"/> for public key encodings.
+    /// </summary>
+    /// <param name="keyBytes">The key bytes to copy into pooled memory.</param>
+    /// <param name="memoryPool">The pool to rent the copy from.</param>
+    /// <param name="kind">The allocation kind the rental requests.</param>
+    /// <returns>The pool-owned copy; ownership transfers to the caller.</returns>
+    private static IMemoryOwner<byte> AsPooledMemory(byte[] keyBytes, BaseMemoryPool memoryPool, AllocationKind kind)
     {
         ArgumentNullException.ThrowIfNull(keyBytes);
         ArgumentNullException.ThrowIfNull(memoryPool);
 
-        IMemoryOwner<byte> keyBuffer = memoryPool.Rent(keyBytes.Length);
+        IMemoryOwner<byte> keyBuffer = memoryPool.Rent(keyBytes.Length, kind);
 
         if(keyBuffer.Memory.Length != keyBytes.Length)
         {

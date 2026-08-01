@@ -46,8 +46,10 @@ namespace Verifiable.Cryptography;
 /// </para>
 /// <para>
 /// All intermediate allocations come from the supplied <see cref="MemoryPool{T}"/>. The shared value <c>Z</c>
-/// is secret, so the assembled hash input (which embeds it) is zeroed before disposal. The returned owner holds
-/// derived key material; the caller must zero and dispose it after use.
+/// is secret, so the assembled hash input (which embeds it) and the derived output are both
+/// <see cref="AllocationKind.Pinned"/> and zeroed before disposal — pinning ensures the zeroize actually
+/// wipes the memory rather than a GC-moved copy. The returned owner holds derived key material; the caller
+/// must zero and dispose it after use.
 /// </para>
 /// </remarks>
 public static class Kdfe
@@ -111,8 +113,8 @@ public static class Kdfe
             + partyUInfo.Length
             + partyVInfo.Length;
 
-        IMemoryOwner<byte> output = pool.Rent(outputBytes);
-        using IMemoryOwner<byte> inputOwner = pool.Rent(inputLength);
+        IMemoryOwner<byte> output = pool.Rent(outputBytes, AllocationKind.Pinned);
+        using IMemoryOwner<byte> inputOwner = pool.Rent(inputLength, AllocationKind.Pinned);
 
         //The buffer is held as Memory across the hash awaits; Span is taken only at synchronous points (a Span
         //cannot survive an await boundary).

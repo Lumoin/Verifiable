@@ -74,7 +74,7 @@ public static class LibsodiumKeyConversion
                 nameof(ed25519PrivateKeySeed));
         }
 
-        IMemoryOwner<byte> curve25519PrivateKeyOwner = memoryPool.Rent(LibsodiumNativeMethods.X25519ScalarLength);
+        IMemoryOwner<byte> curve25519PrivateKeyOwner = memoryPool.Rent(LibsodiumNativeMethods.X25519ScalarLength, AllocationKind.Pinned);
 
         try
         {

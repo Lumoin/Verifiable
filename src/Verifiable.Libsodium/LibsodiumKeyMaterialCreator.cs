@@ -61,9 +61,13 @@ namespace Verifiable.Libsodium
             }
 
             IMemoryOwner<byte> publicKeyOwner = memoryPool.Rent(LibsodiumNativeMethods.Ed25519PublicKeyLength);
-            IMemoryOwner<byte> privateKeyOwner = memoryPool.Rent(LibsodiumNativeMethods.Ed25519SeedLength);
+            IMemoryOwner<byte> privateKeyOwner = memoryPool.Rent(LibsodiumNativeMethods.Ed25519SeedLength, AllocationKind.Pinned);
 
-            Span<byte> seed = stackalloc byte[LibsodiumNativeMethods.Ed25519SeedLength];
+            //The seed IS the stored private key (libsodium's seed form), so it is generated directly
+            //into the pinned rental and no transient copy of it ever lives in movable memory,
+            //mirroring the X25519 path below. On failure the pool's zero-on-return wipes it at
+            //dispose, so no separate clear may touch the span after the owner is disposed.
+            Span<byte> seed = privateKeyOwner.Memory.Span[..LibsodiumNativeMethods.Ed25519SeedLength];
             LibsodiumNativeMethods.randombytes_buf(seed, (nuint)seed.Length);
 
             try
@@ -84,18 +88,12 @@ namespace Verifiable.Libsodium
                 {
                     throw new CryptographicException("libsodium failed to generate an Ed25519 keypair.");
                 }
-
-                seed.CopyTo(privateKeyOwner.Memory.Span[..LibsodiumNativeMethods.Ed25519SeedLength]);
             }
             catch
             {
                 publicKeyOwner.Dispose();
                 privateKeyOwner.Dispose();
                 throw;
-            }
-            finally
-            {
-                seed.Clear();
             }
 
             var publicKeyMemory = new PublicKeyMemory(publicKeyOwner, CryptoTags.Ed25519PublicKey);
@@ -126,7 +124,7 @@ namespace Verifiable.Libsodium
                 activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
             }
 
-            IMemoryOwner<byte> privateKeyOwner = memoryPool.Rent(LibsodiumNativeMethods.X25519ScalarLength);
+            IMemoryOwner<byte> privateKeyOwner = memoryPool.Rent(LibsodiumNativeMethods.X25519ScalarLength, AllocationKind.Pinned);
             LibsodiumNativeMethods.randombytes_buf(
                 privateKeyOwner.Memory.Span[..LibsodiumNativeMethods.X25519ScalarLength], (nuint)LibsodiumNativeMethods.X25519ScalarLength);
 

@@ -115,7 +115,7 @@ public static class MicrosoftKeyAgreementFunctions
             await Task.CompletedTask.ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
 
-            IMemoryOwner<byte> zOwner = pool.Rent(sharedSecret.Length);
+            IMemoryOwner<byte> zOwner = pool.Rent(sharedSecret.Length, AllocationKind.Pinned);
             sharedSecret.CopyTo(zOwner.Memory.Span);
             var z = new SharedSecret(zOwner, CryptoTags.P256ExchangePrivateKey);
 
@@ -194,7 +194,7 @@ public static class MicrosoftKeyAgreementFunctions
 
         try
         {
-            IMemoryOwner<byte> zOwner = pool.Rent(sharedSecret.Length);
+            IMemoryOwner<byte> zOwner = pool.Rent(sharedSecret.Length, AllocationKind.Pinned);
             sharedSecret.CopyTo(zOwner.Memory.Span);
 
             return ValueTask.FromResult(
@@ -277,7 +277,7 @@ public static class MicrosoftKeyAgreementFunctions
             await Task.CompletedTask.ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
 
-            IMemoryOwner<byte> zOwner = pool.Rent(sharedSecret.Length);
+            IMemoryOwner<byte> zOwner = pool.Rent(sharedSecret.Length, AllocationKind.Pinned);
             sharedSecret.CopyTo(zOwner.Memory.Span);
             var z = new SharedSecret(zOwner, sharedSecretTag);
 
@@ -349,7 +349,7 @@ public static class MicrosoftKeyAgreementFunctions
 
         try
         {
-            IMemoryOwner<byte> zOwner = pool.Rent(sharedSecret.Length);
+            IMemoryOwner<byte> zOwner = pool.Rent(sharedSecret.Length, AllocationKind.Pinned);
             sharedSecret.CopyTo(zOwner.Memory.Span);
 
             return ValueTask.FromResult(new SharedSecret(zOwner, sharedSecretTag));
@@ -493,7 +493,7 @@ public static class MicrosoftKeyAgreementFunctions
             await Task.CompletedTask.ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
 
-            IMemoryOwner<byte> zOwner = pool.Rent(ze.Length + zs.Length);
+            IMemoryOwner<byte> zOwner = pool.Rent(ze.Length + zs.Length, AllocationKind.Pinned);
             ze.CopyTo(zOwner.Memory.Span);
             zs.CopyTo(zOwner.Memory.Span[ze.Length..]);
             var z = new SharedSecret(zOwner, sharedSecretTag);
@@ -568,7 +568,7 @@ public static class MicrosoftKeyAgreementFunctions
 
         try
         {
-            IMemoryOwner<byte> zOwner = pool.Rent(ze.Length + zs.Length);
+            IMemoryOwner<byte> zOwner = pool.Rent(ze.Length + zs.Length, AllocationKind.Pinned);
             ze.CopyTo(zOwner.Memory.Span);
             zs.CopyTo(zOwner.Memory.Span[ze.Length..]);
 
@@ -652,7 +652,7 @@ public static class MicrosoftKeyAgreementFunctions
             await Task.CompletedTask.ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
 
-            IMemoryOwner<byte> zOwner = pool.Rent(ze.Length);
+            IMemoryOwner<byte> zOwner = pool.Rent(ze.Length, AllocationKind.Pinned);
             ze.CopyTo(zOwner.Memory.Span);
 
             return new SharedSecret(zOwner, sharedSecretTag);
@@ -706,7 +706,7 @@ public static class MicrosoftKeyAgreementFunctions
             await Task.CompletedTask.ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
 
-            IMemoryOwner<byte> zOwner = pool.Rent(ze.Length + zs.Length);
+            IMemoryOwner<byte> zOwner = pool.Rent(ze.Length + zs.Length, AllocationKind.Pinned);
             ze.CopyTo(zOwner.Memory.Span);
             zs.CopyTo(zOwner.Memory.Span[ze.Length..]);
 
@@ -755,7 +755,7 @@ public static class MicrosoftKeyAgreementFunctions
         }
 
         int n = keyData.Length / 8;
-        IMemoryOwner<byte> wrappedOwner = pool.Rent(8 * (n + 1));
+        IMemoryOwner<byte> wrappedOwner = pool.Rent(8 * (n + 1), AllocationKind.Pinned);
         Span<byte> wrapped = wrappedOwner.Memory.Span[..(8 * (n + 1))];
 
         //Register layout per RFC 3394 §2.2.1: A occupies the first block of the output
@@ -824,7 +824,7 @@ public static class MicrosoftKeyAgreementFunctions
         cancellationToken.ThrowIfCancellationRequested();
 
         int n = wrappedKey.Length / 8 - 1;
-        IMemoryOwner<byte> keyOwner = pool.Rent(8 * n);
+        IMemoryOwner<byte> keyOwner = pool.Rent(8 * n, AllocationKind.Pinned);
         Span<byte> keyData = keyOwner.Memory.Span[..(8 * n)];
         wrappedKey.Span[8..].CopyTo(keyData);
 

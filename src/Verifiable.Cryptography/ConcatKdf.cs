@@ -35,8 +35,10 @@ namespace Verifiable.Cryptography;
 /// </para>
 /// <para>
 /// All intermediate allocations come from the supplied <see cref="MemoryPool{T}"/> and
-/// are zeroed before disposal. The returned owner must also be zeroed and disposed by
-/// the caller immediately after use.
+/// are zeroed before disposal. The hash input (which embeds the shared secret <c>Z</c>)
+/// and the derived output are both <see cref="AllocationKind.Pinned"/>, so the
+/// zeroize-on-dispose actually wipes the memory rather than a GC-moved copy. The
+/// returned owner must also be zeroed and disposed by the caller immediately after use.
 /// </para>
 /// </remarks>
 public static class ConcatKdf
@@ -163,7 +165,7 @@ public static class ConcatKdf
             + 4
             + (committedTag.IsEmpty ? 0 : 4 + committedTag.Length);
 
-        using IMemoryOwner<byte> hashInputOwner = pool.Rent(hashInputLength);
+        using IMemoryOwner<byte> hashInputOwner = pool.Rent(hashInputLength, AllocationKind.Pinned);
         Span<byte> hashInput = hashInputOwner.Memory.Span[..hashInputLength];
         hashInput.Clear();
 
@@ -205,7 +207,7 @@ public static class ConcatKdf
         //identical to the single-round RFC 7518 §4.6.2 derivation.
         int reps = (outputByteLength + SHA256.HashSizeInBytes - 1) / SHA256.HashSizeInBytes;
 
-        IMemoryOwner<byte> outputOwner = pool.Rent(outputByteLength);
+        IMemoryOwner<byte> outputOwner = pool.Rent(outputByteLength, AllocationKind.Pinned);
 
         try
         {

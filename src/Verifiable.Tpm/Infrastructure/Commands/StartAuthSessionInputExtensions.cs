@@ -316,7 +316,7 @@ public static class StartAuthSessionInputExtensions
             RandomNumberGenerator.Fill(nonce);
 
             int saltSize = GetDigestSize(tpmKeyNameAlg);
-            IMemoryOwner<byte> salt = pool.Rent(saltSize);
+            IMemoryOwner<byte> salt = pool.Rent(saltSize, AllocationKind.Pinned);
             RandomNumberGenerator.Fill(salt.Memory.Span[..saltSize]);
 
             byte[] encryptedSalt;

@@ -278,7 +278,7 @@ public sealed record CtapPinUvAuthTokenState(
     {
         using Nonce entropy = CryptographicKeyEvents.GenerateNonce(TokenLength, CryptoTags.HmacSha256Key, pool);
 
-        IMemoryOwner<byte> owner = pool.Rent(TokenLength);
+        IMemoryOwner<byte> owner = pool.Rent(TokenLength, AllocationKind.Pinned);
         try
         {
             entropy.AsReadOnlySpan().CopyTo(owner.Memory.Span);

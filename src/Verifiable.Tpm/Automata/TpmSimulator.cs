@@ -559,13 +559,13 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     private static async ValueTask<IMemoryOwner<byte>> DeriveHierarchyProofAsync(ReadOnlyMemory<byte> seed, uint hierarchy, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         int inputSize = seed.Length + sizeof(uint);
-        using IMemoryOwner<byte> input = pool.Rent(inputSize);
+        using IMemoryOwner<byte> input = pool.Rent(inputSize, AllocationKind.Pinned);
         WriteProofInput(input.Memory.Span[..inputSize], seed.Span, hierarchy);
 
         using DigestValue proof = await CryptographicKeyEvents.ComputeDigestAsync(
             input.Memory[..inputSize], CreationDigestSize, CryptoTags.Sha256Digest, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        IMemoryOwner<byte> owner = pool.Rent(CreationDigestSize);
+        IMemoryOwner<byte> owner = pool.Rent(CreationDigestSize, AllocationKind.Pinned);
         try
         {
             proof.AsReadOnlySpan().CopyTo(owner.Memory.Span[..CreationDigestSize]);
@@ -983,7 +983,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                         TpmCreateResponseSession session = action.ResponseSessions[i];
 
                         int sessionValueLength = session.SessionKey.Length + session.AuthValue.Length;
-                        using IMemoryOwner<byte> sessionValueOwner = context.Pool.Rent(Math.Max(sessionValueLength, 1));
+                        using IMemoryOwner<byte> sessionValueOwner = context.Pool.Rent(Math.Max(sessionValueLength, 1), AllocationKind.Pinned);
                         Memory<byte> sessionValue = sessionValueOwner.Memory[..sessionValueLength];
                         session.SessionKey.CopyTo(sessionValue);
                         session.AuthValue.CopyTo(sessionValue[session.SessionKey.Length..]);
@@ -2343,7 +2343,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
         else
         {
-            keyOwner = pool.Rent(keyLength);
+            keyOwner = pool.Rent(keyLength, AllocationKind.Pinned);
             bindAuthValue.CopyTo(keyOwner.Memory);
             salt.CopyTo(keyOwner.Memory[bindAuthValue.Length..]);
             key = keyOwner.Memory[..keyLength];
@@ -2507,7 +2507,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                     TpmUnsealResponseSession session = action.HmacResponseSessions[i];
 
                     int sessionValueLength = session.SessionKey.Length + session.AuthValue.Length;
-                    using IMemoryOwner<byte> sessionValueOwner = context.Pool.Rent(Math.Max(sessionValueLength, 1));
+                    using IMemoryOwner<byte> sessionValueOwner = context.Pool.Rent(Math.Max(sessionValueLength, 1), AllocationKind.Pinned);
                     Memory<byte> sessionValue = sessionValueOwner.Memory[..sessionValueLength];
                     session.SessionKey.CopyTo(sessionValue);
                     session.AuthValue.CopyTo(sessionValue[session.SessionKey.Length..]);
@@ -2769,7 +2769,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         int digestSize = SessionDigestSize(sessionAlg);
         int keyLength = sessionKey.Length + authValue.Length;
-        using IMemoryOwner<byte> keyOwner = pool.Rent(Math.Max(keyLength, 1));
+        using IMemoryOwner<byte> keyOwner = pool.Rent(Math.Max(keyLength, 1), AllocationKind.Pinned);
         Memory<byte> key = keyOwner.Memory[..keyLength];
 
         int messageLength = cpHash.Length + nonceCaller.Length + nonceTpm.Length + foldedNonces.Length + sizeof(byte);
@@ -2942,7 +2942,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         using IMemoryOwner<byte> symKey = await Kdfa.DeriveAsync(
             hashName, seed, CredentialStorageLabel, objectName, ReadOnlyMemory<byte>.Empty, CredentialSymmetricKeyBits, pool, cancellationToken).ConfigureAwait(false);
-        using IMemoryOwner<byte> encIdentity = pool.Rent(innerLen);
+        using IMemoryOwner<byte> encIdentity = pool.Rent(innerLen, AllocationKind.Pinned);
 
         //Lay out the marshaled credential and AES-CFB-encrypt it in place (synchronous; no await inside the block).
         {
@@ -3031,7 +3031,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
         //A fresh random seed drawn from the simulator's RNG seam (R-4 sizing) — not derived from an ephemeral key
         //pair, unlike the ECC arm.
-        using IMemoryOwner<byte> seed = pool.Rent(seedSize);
+        using IMemoryOwner<byte> seed = pool.Rent(seedSize, AllocationKind.Pinned);
         context.Rng(seed.Memory.Span[..seedSize]);
 
         try
@@ -3176,7 +3176,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             hashName, seed.Memory[..seedSize], CredentialStorageLabel, action.ActivateObjectName, ReadOnlyMemory<byte>.Empty, CredentialSymmetricKeyBits, pool, cancellationToken).ConfigureAwait(false);
         seed.Memory.Span[..seedSize].Clear();
 
-        using IMemoryOwner<byte> plaintext = pool.Rent(Math.Max(encIdentity.Length, 1));
+        using IMemoryOwner<byte> plaintext = pool.Rent(Math.Max(encIdentity.Length, 1), AllocationKind.Pinned);
         try
         {
             //Decrypt and read the credential synchronously (no await between the decrypt and the copy-out).
@@ -3192,7 +3192,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 credLen = reader.ReadUInt16();
                 ReadOnlySpan<byte> credential = reader.ReadBytes(credLen);
 
-                certInfo = pool.Rent(Math.Max(credLen, 1));
+                certInfo = pool.Rent(Math.Max(credLen, 1), AllocationKind.Pinned);
                 try
                 {
                     credential.CopyTo(certInfo.Memory.Span);
@@ -3268,7 +3268,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             return new TpmCredentialActivated(TpmRcConstants.TPM_RC_SIZE, null, 0);
         }
 
-        using IMemoryOwner<byte> seed = pool.Rent(seedSize);
+        using IMemoryOwner<byte> seed = pool.Rent(seedSize, AllocationKind.Pinned);
         IMemoryOwner<byte>? decoded = await backend.DecryptOaep(
             action.CredentialKeyPrivateKey, ciphertext, CredentialIdentityLabelOctets, action.NameAlg, action.NameAlg, pool, cancellationToken).ConfigureAwait(false);
         if(decoded is not null && decoded.Memory.Length == seedSize)
@@ -3314,7 +3314,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             hashName, seed.Memory[..seedSize], CredentialStorageLabel, action.ActivateObjectName, ReadOnlyMemory<byte>.Empty, CredentialSymmetricKeyBits, pool, cancellationToken).ConfigureAwait(false);
         seed.Memory.Span[..seedSize].Clear();
 
-        using IMemoryOwner<byte> plaintext = pool.Rent(Math.Max(encIdentity.Length, 1));
+        using IMemoryOwner<byte> plaintext = pool.Rent(Math.Max(encIdentity.Length, 1), AllocationKind.Pinned);
         try
         {
             //Decrypt and read the credential synchronously (no await between the decrypt and the copy-out).
@@ -3330,7 +3330,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 credLen = reader.ReadUInt16();
                 ReadOnlySpan<byte> credential = reader.ReadBytes(credLen);
 
-                certInfo = pool.Rent(Math.Max(credLen, 1));
+                certInfo = pool.Rent(Math.Max(credLen, 1), AllocationKind.Pinned);
                 try
                 {
                     credential.CopyTo(certInfo.Memory.Span);

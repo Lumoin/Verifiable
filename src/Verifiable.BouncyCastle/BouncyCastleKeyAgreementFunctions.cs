@@ -158,7 +158,7 @@ public static class BouncyCastleKeyAgreementFunctions
             await Task.CompletedTask.ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
 
-            IMemoryOwner<byte> zOwner = pool.Rent(32);
+            IMemoryOwner<byte> zOwner = pool.Rent(32, AllocationKind.Pinned);
             zOwner.Memory.Span.Clear();
 
             if(zRaw.Length < 32)
@@ -249,7 +249,7 @@ public static class BouncyCastleKeyAgreementFunctions
         BigInteger z = agreement.CalculateAgreement(epkParam);
         byte[] zRaw = z.ToByteArrayUnsigned();
 
-        IMemoryOwner<byte> zOwner = pool.Rent(32);
+        IMemoryOwner<byte> zOwner = pool.Rent(32, AllocationKind.Pinned);
         zOwner.Memory.Span.Clear();
 
         if(zRaw.Length < 32)
@@ -382,7 +382,7 @@ public static class BouncyCastleKeyAgreementFunctions
 
         //Write the 32-byte shared secret straight into pooled memory the SharedSecret owns
         //and zeroes on dispose — no naked byte[] of secret material at any point.
-        IMemoryOwner<byte> zOwner = pool.Rent(agreement.AgreementSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(agreement.AgreementSize, AllocationKind.Pinned);
         agreement.CalculateAgreement(recipientPublic, zOwner.Memory.Span[..agreement.AgreementSize]);
         var sharedSecret = new SharedSecret(zOwner, CryptoTags.X25519PrivateKey);
 
@@ -444,7 +444,7 @@ public static class BouncyCastleKeyAgreementFunctions
         agreement.Init(privateKeyParam);
 
         //Write the 32-byte shared secret straight into pooled memory — no naked byte[].
-        IMemoryOwner<byte> zOwner = pool.Rent(agreement.AgreementSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(agreement.AgreementSize, AllocationKind.Pinned);
         agreement.CalculateAgreement(epkParam, zOwner.Memory.Span[..agreement.AgreementSize]);
 
         //Reject a degenerate (all-zero) secret from a low-order epk before it derives a key (RFC 7748 §6.1).
@@ -508,7 +508,7 @@ public static class BouncyCastleKeyAgreementFunctions
             await Task.CompletedTask.ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
 
-            IMemoryOwner<byte> zOwner = pool.Rent(sharedSecretSize);
+            IMemoryOwner<byte> zOwner = pool.Rent(sharedSecretSize, AllocationKind.Pinned);
             zOwner.Memory.Span[..sharedSecretSize].Clear();
             CopyLeftPadded(zRaw, zOwner.Memory.Span[..sharedSecretSize]);
             var sharedSecret = new SharedSecret(zOwner, sharedSecretTag);
@@ -567,7 +567,7 @@ public static class BouncyCastleKeyAgreementFunctions
         BigInteger z = agreement.CalculateAgreement(epkParam);
         byte[] zRaw = z.ToByteArrayUnsigned();
 
-        IMemoryOwner<byte> zOwner = pool.Rent(sharedSecretSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(sharedSecretSize, AllocationKind.Pinned);
         zOwner.Memory.Span[..sharedSecretSize].Clear();
         CopyLeftPadded(zRaw, zOwner.Memory.Span[..sharedSecretSize]);
         CryptographicOperations.ZeroMemory(zRaw);
@@ -624,7 +624,7 @@ public static class BouncyCastleKeyAgreementFunctions
             await Task.CompletedTask.ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
 
-            IMemoryOwner<byte> zOwner = pool.Rent(sharedSecretSize);
+            IMemoryOwner<byte> zOwner = pool.Rent(sharedSecretSize, AllocationKind.Pinned);
             zOwner.Memory.Span[..sharedSecretSize].Clear();
             CopyLeftPadded(zRaw, zOwner.Memory.Span[..sharedSecretSize]);
             var sharedSecret = new SharedSecret(zOwner, sharedSecretTag);
@@ -683,7 +683,7 @@ public static class BouncyCastleKeyAgreementFunctions
         BigInteger z = agreement.CalculateAgreement(epkParam);
         byte[] zRaw = z.ToByteArrayUnsigned();
 
-        IMemoryOwner<byte> zOwner = pool.Rent(sharedSecretSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(sharedSecretSize, AllocationKind.Pinned);
         zOwner.Memory.Span[..sharedSecretSize].Clear();
         CopyLeftPadded(zRaw, zOwner.Memory.Span[..sharedSecretSize]);
         CryptographicOperations.ZeroMemory(zRaw);
@@ -1130,7 +1130,7 @@ public static class BouncyCastleKeyAgreementFunctions
 
         //Z = Ze || Zs written straight into pooled memory the SharedSecret owns and
         //zeroes on dispose — no naked byte[] of secret material at any point.
-        IMemoryOwner<byte> zOwner = pool.Rent(2 * X25519SharedSecretSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(2 * X25519SharedSecretSize, AllocationKind.Pinned);
         ephemeralAgreement.CalculateAgreement(recipientPublic, zOwner.Memory.Span[..X25519SharedSecretSize]);
         staticAgreement.CalculateAgreement(recipientPublic, zOwner.Memory.Span[X25519SharedSecretSize..(2 * X25519SharedSecretSize)]);
         var sharedSecret = new SharedSecret(zOwner, CryptoTags.X25519PrivateKey);
@@ -1175,7 +1175,7 @@ public static class BouncyCastleKeyAgreementFunctions
         var agreement = new X25519Agreement();
         agreement.Init(privateKeyParam);
 
-        IMemoryOwner<byte> zOwner = pool.Rent(2 * X25519SharedSecretSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(2 * X25519SharedSecretSize, AllocationKind.Pinned);
         agreement.CalculateAgreement(epkParam, zOwner.Memory.Span[..X25519SharedSecretSize]);
 
         //The ephemeral half (Ze) is derived from the attacker-supplied epk; reject a degenerate (all-zero)
@@ -1273,7 +1273,7 @@ public static class BouncyCastleKeyAgreementFunctions
             await Task.CompletedTask.ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
 
-            IMemoryOwner<byte> zOwner = pool.Rent(2 * sharedSecretSize);
+            IMemoryOwner<byte> zOwner = pool.Rent(2 * sharedSecretSize, AllocationKind.Pinned);
             zOwner.Memory.Span[..(2 * sharedSecretSize)].Clear();
             CopyLeftPadded(zeRaw, zOwner.Memory.Span[..sharedSecretSize]);
             CopyLeftPadded(zsRaw, zOwner.Memory.Span[sharedSecretSize..(2 * sharedSecretSize)]);
@@ -1330,7 +1330,7 @@ public static class BouncyCastleKeyAgreementFunctions
         byte[] zeRaw = agreement.CalculateAgreement(epkParam).ToByteArrayUnsigned();
         byte[] zsRaw = agreement.CalculateAgreement(senderParam).ToByteArrayUnsigned();
 
-        IMemoryOwner<byte> zOwner = pool.Rent(2 * sharedSecretSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(2 * sharedSecretSize, AllocationKind.Pinned);
         zOwner.Memory.Span[..(2 * sharedSecretSize)].Clear();
         CopyLeftPadded(zeRaw, zOwner.Memory.Span[..sharedSecretSize]);
         CopyLeftPadded(zsRaw, zOwner.Memory.Span[sharedSecretSize..(2 * sharedSecretSize)]);
@@ -1370,7 +1370,7 @@ public static class BouncyCastleKeyAgreementFunctions
         agreement.Init(ephemeralPrivate);
 
         //Write the shared secret straight into pooled memory — no naked byte[].
-        IMemoryOwner<byte> zOwner = pool.Rent(X25519SharedSecretSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(X25519SharedSecretSize, AllocationKind.Pinned);
         agreement.CalculateAgreement(recipientPublic, zOwner.Memory.Span[..X25519SharedSecretSize]);
 
         return ValueTask.FromResult(new SharedSecret(zOwner, CryptoTags.X25519PrivateKey));
@@ -1409,7 +1409,7 @@ public static class BouncyCastleKeyAgreementFunctions
         staticAgreement.Init(senderPrivate);
 
         //Z = Ze || Zs written straight into pooled memory — no naked byte[] of secret material.
-        IMemoryOwner<byte> zOwner = pool.Rent(2 * X25519SharedSecretSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(2 * X25519SharedSecretSize, AllocationKind.Pinned);
         ephemeralAgreement.CalculateAgreement(recipientPublic, zOwner.Memory.Span[..X25519SharedSecretSize]);
         staticAgreement.CalculateAgreement(recipientPublic, zOwner.Memory.Span[X25519SharedSecretSize..(2 * X25519SharedSecretSize)]);
 
@@ -1477,7 +1477,7 @@ public static class BouncyCastleKeyAgreementFunctions
         agreement.Init(ephemeralPrivate);
         byte[] zeRaw = agreement.CalculateAgreement(recipientParam).ToByteArrayUnsigned();
 
-        IMemoryOwner<byte> zOwner = pool.Rent(sharedSecretSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(sharedSecretSize, AllocationKind.Pinned);
         zOwner.Memory.Span[..sharedSecretSize].Clear();
         CopyLeftPadded(zeRaw, zOwner.Memory.Span[..sharedSecretSize]);
         CryptographicOperations.ZeroMemory(zeRaw);
@@ -1522,7 +1522,7 @@ public static class BouncyCastleKeyAgreementFunctions
         staticAgreement.Init(senderPrivate);
         byte[] zsRaw = staticAgreement.CalculateAgreement(recipientParam).ToByteArrayUnsigned();
 
-        IMemoryOwner<byte> zOwner = pool.Rent(2 * sharedSecretSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(2 * sharedSecretSize, AllocationKind.Pinned);
         zOwner.Memory.Span[..(2 * sharedSecretSize)].Clear();
         CopyLeftPadded(zeRaw, zOwner.Memory.Span[..sharedSecretSize]);
         CopyLeftPadded(zsRaw, zOwner.Memory.Span[sharedSecretSize..(2 * sharedSecretSize)]);
@@ -1627,7 +1627,7 @@ public static class BouncyCastleKeyAgreementFunctions
                 throw new CryptographicException("AES Key Wrap integrity check failed.", e);
             }
 
-            IMemoryOwner<byte> keyOwner = pool.Rent(unwrapped.Length);
+            IMemoryOwner<byte> keyOwner = pool.Rent(unwrapped.Length, AllocationKind.Pinned);
             unwrapped.CopyTo(keyOwner.Memory.Span);
 
             return new SymmetricKeyMemory(keyOwner, CryptoTags.AesKwUnwrappedKey);

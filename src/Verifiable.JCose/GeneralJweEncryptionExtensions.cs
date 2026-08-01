@@ -320,7 +320,7 @@ public static class GeneralJweEncryptionExtensions
         //CBOM/telemetry attributes it to the actual algorithm (GCM/XC20P/CBC-HMAC). Provenance only — no
         //cryptographic behaviour depends on the tag.
         (Nonce cekEntropy, _) = generateContentEncryptionKey(cekByteLength, cekTag, pool);
-        IMemoryOwner<byte> cekOwner = pool.Rent(cekByteLength);
+        IMemoryOwner<byte> cekOwner = pool.Rent(cekByteLength, AllocationKind.Pinned);
         AeadEncryptResult? encryptResult = null;
         var recipientEntries = new List<GeneralJweRecipient>(recipients.Count);
 
