@@ -250,7 +250,20 @@ public static class SignatureAcceptanceValidation
         MemoryPool<byte> pool,
         CancellationToken cancellationToken)
     {
-        if(signature.SigningCertificateReferences.Count == 0 || certificateChain.Count == 0)
+        if(signature.SigningCertificateReferences.Count == 0)
+        {
+            if(constraints.RequireSignedSigningCertificateBinding)
+            {
+                unsatisfied.Add(new ValidationConstraintEvaluation(
+                    ValidationConstraintIdentifier.SigningCertificateReferences,
+                    BuildingBlockIndication.Failed,
+                    "The constraints require a signed binding of the signing certificate, and the signature carries none."));
+            }
+
+            return;
+        }
+
+        if(certificateChain.Count == 0)
         {
             return;
         }

@@ -383,6 +383,19 @@ public sealed record SignatureElementsConstraints
     public bool RequireSigningCertificateReferencesForFullPath { get; init; }
 
     /// <summary>
+    /// Whether the signature is required to carry a signed binding of the signing certificate — a signed
+    /// reference, or a signed copy where the format expresses one — surfaced by the format binding as
+    /// <see cref="SignatureFacts.SigningCertificateReferences"/> and checked under clause 5.2.8.4.2.1.
+    /// Defaults to <see langword="false"/>: without a constraint, clause 5.2.3.4's last paragraph accepts the
+    /// unsigned copy of the signing certificate the signature carries, which is the branch the specification
+    /// itself takes. Constraint (h) of REQ-4.2-03 of
+    /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11917204/01.02.01_60/ts_11917204v010201p.pdf">
+    /// ETSI TS 119 172-4 V1.2.1</see> sets this ("the signature elements constraints shall enforce the
+    /// presence of a signed reference or signed copy of the signing certificate").
+    /// </summary>
+    public bool RequireSignedSigningCertificateBinding { get; init; }
+
+    /// <summary>
     /// Whether a signature time-stamp token that fails validation fails the signature. Defaults to
     /// <see langword="false"/>: step 3)b) of clause 5.5.4 removes a failing token from the set and tries the
     /// next one unless "specific constraints mandating the validity of the attribute are specified".

@@ -274,23 +274,23 @@ internal sealed class PreservationRequirementsMatrixTests
 
 
     /// <summary>
-    /// The row the wave still carries an owner flag for cites it where the requirement is: the
-    /// qualified-service requirement whose input procedure belongs to a companion specification this repository
-    /// has never implemented. The other formerly-flagged row — the time-stamp-token profile — is
-    /// <see cref="RequirementCoverageStatus.Tested"/> since the managed-RSA widening closed the last surviving
-    /// flag, and its evidence records that closure.
+    /// The two formerly-flagged rows record their closures where the requirements are: the qualified-service
+    /// suitability requirement is <see cref="RequirementCoverageStatus.Tested"/> since the ETSI TS 119 172-4
+    /// technical applicability rules checking shipped (the long-banked TS 119 172-family gap), and the
+    /// time-stamp-token profile is <see cref="RequirementCoverageStatus.Tested"/> since the managed-RSA
+    /// widening closed the last surviving flag.
     /// </summary>
     /// <remarks>
-    /// The first row also has to carry the clause-number collision, because the companion specification's
-    /// central procedure and the trusted-list specification this arc DID implement are both numbered clause
-    /// 4.4 — a reader skimming for a clause-4.4 qualification determination in the shipped code would wrongly
-    /// conclude the requirement is already satisfied.
+    /// The first row keeps carrying the clause-number collision for readers, because the companion
+    /// specification's central procedure and the trusted-list specification's determination are both numbered
+    /// clause 4.4 while answering different questions — the evidence now states their real relationship: the
+    /// TS 119 615 determination is an intermediate the TS 119 172-4 process composes.
     /// </remarks>
     [TestMethod]
     public void TheBankedGapAndTheClosedFlagAreCitedAtTheirOwnRows()
     {
         RequirementMatrixRow suitability = RowFor("OVR-A-02A");
-        Assert.AreEqual(RequirementCoverageStatus.OutOfScope, suitability.Status);
+        Assert.AreEqual(RequirementCoverageStatus.Tested, suitability.Status);
         Assert.Contains("119 172-4", suitability.Evidence, StringComparison.Ordinal);
         Assert.Contains("119 615", suitability.Evidence, StringComparison.Ordinal);
         Assert.Contains("clause 4.4", suitability.Evidence, StringComparison.Ordinal);
@@ -771,7 +771,7 @@ internal sealed class PreservationRequirementsMatrixTests
         ("OVR-A-02", "[PDS][PDS+PGD] The service shall preserve all the information needed to check the qualification status of the signature or seal that would not otherwise remain publicly available until the end of the preservation period.",
             RequirementCoverageStatus.Tested, "TrustedListQualificationTests.EvaluationBeforeCurrentStatusSelectsHistoryInstance (the determination is computed from preserved inputs at a stated instant, which is what preserving the information needed to check it makes possible) beside CAdESSignatureAugmentationTests.PlacesCertificatesCrlsAndOcspResponsesWhereTableOneRequiresThem (the preservation of those inputs)"),
         ("OVR-A-02A", "[PDS][PDS+PGD] The service shall ensure that, at any time during the preservation period, the preserved information fed as input to clause 4.4 of ETSI TS 119 172-4 yields an output clearly determining whether the signature or seal was, at preservation time, technically suitable to implement an EU-qualified signature or seal.",
-            RequirementCoverageStatus.OutOfScope, "The cited procedure is clause 4.4 of ETSI TS 119 172-4, whose text is not cached anywhere in this repository and which no wave of this arc has implemented. THE COLLISION TRAP: the shipped trusted-list qualification implements clause 4.4 of ETSI TS 119 615 — a different document that happens to number its central procedure the same — and answers a different question (is this CERTIFICATE EU-qualified) from the one this requirement asks (was this SIGNATURE, at time T, technically suitable to be one). A reader matching on the clause number alone would wrongly conclude the requirement is covered. Banked as the recurring TS 119 172-family gap first recorded by the validation arc; the contract's Out list keeps it there."),
+            RequirementCoverageStatus.Tested, "SignatureApplicabilityRulesTests.CheckDeterminesSuitabilityForAQualifiedSignatureWithQscdAndTotalPassed (the cited procedure — clause 4.4 of ETSI TS 119 172-4, the technical applicability rules checking — is shipped: preserved inputs at a stated best signature time yield the clear suitable/neither determination, enumerated row by row in SignatureApplicabilityRulesRequirementsMatrixTests; feeding it continuously through the preservation period is the provider's operation of it). THE COLLISION TRAP still stands for readers: clause 4.4 of ETSI TS 119 615 — a different document numbering its central procedure the same — answers a different question (is this CERTIFICATE EU-qualified) and is one intermediate step the clause 4.4 of ETSI TS 119 172-4 process composes, never its substitute."),
         ("OVR-A-03", "[PDS][PDS+PGD] The time-stamps within the evidence should come from a qualified time-stamping authority.",
             RequirementCoverageStatus.ServiceOperational, "TrustedListQualificationTests.TimeStampDeterminationPassesWhenBothInstantsAgree (whether an authority is qualified is determinable from the trusted list; selecting one is the provider's)"),
         ("OVR-A-04", "The service shall have one service digital identifier, per ETSI TS 119 612 clause 5.5.3, uniquely identifying it within a member state trusted list.",

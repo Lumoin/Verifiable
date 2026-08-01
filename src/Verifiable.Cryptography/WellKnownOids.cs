@@ -115,6 +115,13 @@ namespace Verifiable.Cryptography
         public const string CommonName = "2.5.4.3";
 
         /// <summary>
+        /// OID for the X.520 Pseudonym attribute type (pseudonym) per RFC 5280 §4.1.2.4, used in a
+        /// certificate's Subject distinguished name, whose presence ETSI TS 119 172-4 REQ-4.5-01 c)
+        /// requires an applicability rules checking report to clearly indicate.
+        /// </summary>
+        public const string Pseudonym = "2.5.4.65";
+
+        /// <summary>
         /// OID for the ETSI EN 319 412-5 <c>id-etsi-qcs-QcCompliance</c> statement asserting the
         /// certificate is an EU qualified certificate.
         /// </summary>
@@ -161,6 +168,98 @@ namespace Verifiable.Cryptography
         /// the Directive 1999/93/EC era, which ETSI TS 119 615 PRO-4.4.4-33 and PRO-4.5.4-03 read.
         /// </summary>
         public const string QcpPublicWithSscd = "0.4.0.1456.1.1";
+
+        /// <summary>
+        /// OID for the ETSI TS 119 172-4 <c>id-etsi-sars</c> arc under which
+        /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11917204/01.02.01_60/ts_11917204v010201p.pdf">
+        /// ETSI TS 119 172-4 V1.2.1 Annex A</see> allocates the signature applicability rules and digital
+        /// signature type identifiers below.
+        /// </summary>
+        public const string SignatureApplicabilityRules = "0.4.0.191724.1";
+
+        /// <summary>
+        /// OID for the ETSI TS 119 172-4 <c>id-etsi-sars-SpCompliance</c> arc of
+        /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11917204/01.02.01_60/ts_11917204v010201p.pdf">
+        /// ETSI TS 119 172-4 V1.2.1 Annex A</see>, whose children indicate that validation and reporting
+        /// comply with one of that document's two sets of signature applicability rules.
+        /// </summary>
+        public const string SignatureApplicabilityRulesSpCompliance = "0.4.0.191724.1.1";
+
+        /// <summary>
+        /// OID for the ETSI TS 119 172-4 <c>id-etsi-sarc-realTimeReq</c> signature applicability rules of
+        /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11917204/01.02.01_60/ts_11917204v010201p.pdf">
+        /// ETSI TS 119 172-4 V1.2.1 Annex A</see>: the rule set for contexts where a real time validation
+        /// response is required and basic signatures are acceptable (clause 4.1 set 1).
+        /// </summary>
+        public const string SignatureApplicabilityRulesRealTimeRequired = "0.4.0.191724.1.1.1";
+
+        /// <summary>
+        /// OID for the ETSI TS 119 172-4 <c>id-etsi-sarc-realTimeNotReq</c> signature applicability rules of
+        /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11917204/01.02.01_60/ts_11917204v010201p.pdf">
+        /// ETSI TS 119 172-4 V1.2.1 Annex A</see>: the rule set for contexts where a validation response
+        /// delay of up to 24 hours is acceptable, or the minimum acceptable class of signature is a
+        /// signature with time (clause 4.1 set 2).
+        /// </summary>
+        public const string SignatureApplicabilityRulesRealTimeNotRequired = "0.4.0.191724.1.1.2";
+
+        /// <summary>
+        /// OID for the ETSI TS 119 172-4 <c>id-etsi-sars-SigType</c> arc of
+        /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11917204/01.02.01_60/ts_11917204v010201p.pdf">
+        /// ETSI TS 119 172-4 V1.2.1 Annex A</see>, whose children identify the type of a digital signature
+        /// in an applicability rules checking report (REQ-4.5-02).
+        /// </summary>
+        public const string SignatureApplicabilityRulesSigType = "0.4.0.191724.1.2";
+
+        /// <summary>
+        /// OID for the ETSI TS 119 172-4 <c>id-etsi-dst-euqesig</c> digital signature type of
+        /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11917204/01.02.01_60/ts_11917204v010201p.pdf">
+        /// ETSI TS 119 172-4 V1.2.1 Annex A</see>: an EU qualified electronic signature.
+        /// </summary>
+        public const string DigitalSignatureTypeEuQualifiedSignature = "0.4.0.191724.1.2.1";
+
+        /// <summary>
+        /// OID for the ETSI TS 119 172-4 <c>id-etsi-dst-adesigqc</c> digital signature type of
+        /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11917204/01.02.01_60/ts_11917204v010201p.pdf">
+        /// ETSI TS 119 172-4 V1.2.1 Annex A</see>: an advanced electronic signature supported by an EU
+        /// qualified certificate for electronic signature.
+        /// </summary>
+        public const string DigitalSignatureTypeAdvancedSignatureWithQualifiedCertificate = "0.4.0.191724.1.2.2";
+
+        /// <summary>
+        /// OID for the ETSI TS 119 172-4 <c>id-etsi-dst-adesig</c> digital signature type of
+        /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11917204/01.02.01_60/ts_11917204v010201p.pdf">
+        /// ETSI TS 119 172-4 V1.2.1 Annex A</see>: an advanced electronic signature.
+        /// </summary>
+        public const string DigitalSignatureTypeAdvancedSignature = "0.4.0.191724.1.2.3";
+
+        /// <summary>
+        /// OID for the ETSI TS 119 172-4 <c>id-etsi-dst-euqeseal</c> digital signature type of
+        /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11917204/01.02.01_60/ts_11917204v010201p.pdf">
+        /// ETSI TS 119 172-4 V1.2.1 Annex A</see>: an EU qualified electronic seal.
+        /// </summary>
+        public const string DigitalSignatureTypeEuQualifiedSeal = "0.4.0.191724.1.2.4";
+
+        /// <summary>
+        /// OID for the ETSI TS 119 172-4 <c>id-etsi-dst-adesealqc</c> digital signature type of
+        /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11917204/01.02.01_60/ts_11917204v010201p.pdf">
+        /// ETSI TS 119 172-4 V1.2.1 Annex A</see>: an advanced electronic seal supported by an EU
+        /// qualified certificate for electronic seal.
+        /// </summary>
+        public const string DigitalSignatureTypeAdvancedSealWithQualifiedCertificate = "0.4.0.191724.1.2.5";
+
+        /// <summary>
+        /// OID for the ETSI TS 119 172-4 <c>id-etsi-dst-adeseal</c> digital signature type of
+        /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11917204/01.02.01_60/ts_11917204v010201p.pdf">
+        /// ETSI TS 119 172-4 V1.2.1 Annex A</see>: an advanced electronic seal.
+        /// </summary>
+        public const string DigitalSignatureTypeAdvancedSeal = "0.4.0.191724.1.2.6";
+
+        /// <summary>
+        /// OID for the ETSI TS 119 172-4 <c>id-etsi-dst-euqtst</c> digital signature type of
+        /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11917204/01.02.01_60/ts_11917204v010201p.pdf">
+        /// ETSI TS 119 172-4 V1.2.1 Annex A</see>: an EU qualified electronic time stamp.
+        /// </summary>
+        public const string DigitalSignatureTypeEuQualifiedTimeStamp = "0.4.0.191724.1.2.7";
 
         /// <summary>
         /// OID for the X.509 Authority Information Access certificate extension (id-pe-authorityInfoAccess)

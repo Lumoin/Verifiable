@@ -138,6 +138,14 @@ public readonly record struct TrustServiceTypeIdentifier(string Value)
     /// <summary>A Trust Service Authority issuing qualified electronic time stamps.</summary>
     public static TrustServiceTypeIdentifier QualifiedTimeStampAuthority { get; } = new("http://uri.etsi.org/TrstSvc/Svctype/TSA/QTST");
 
+    /// <summary>
+    /// A time-stamping generation service not further qualified. Named alongside
+    /// <see cref="QualifiedTimeStampAuthority"/> by ETSI TS 119 172-4 REQ-4.5-01 d) i), whose report
+    /// information point covers the absence of a time-stamping trust anchor of either type from an EU
+    /// Member State trusted list.
+    /// </summary>
+    public static TrustServiceTypeIdentifier TimeStampAuthority { get; } = new("http://uri.etsi.org/TrstSvc/Svctype/TSA");
+
     /// <summary>A Registration Authority.</summary>
     public static TrustServiceTypeIdentifier RegistrationAuthority { get; } = new("http://uri.etsi.org/TrstSvc/Svctype/RA");
 

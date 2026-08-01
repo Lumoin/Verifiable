@@ -569,6 +569,72 @@ internal sealed class SignatureValidationBuildingBlockTests
 
 
     /// <summary>
+    /// The signed signing-certificate binding constraint of ETSI TS 119 172-4 REQ-4.2-03 h): a plain CMS
+    /// signature carries no signing certificate identifier attribute, so under
+    /// <see cref="SignatureElementsConstraints.RequireSignedSigningCertificateBinding"/> the acceptance is
+    /// <c>INDETERMINATE</c>/<c>SIG_CONSTRAINTS_FAILURE</c> with the signing-certificate-references
+    /// constraint reported unmet.
+    /// </summary>
+    [TestMethod]
+    public async Task RequiredSignedSigningCertificateBindingFailsASignatureCarryingNone()
+    {
+        using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var signerCertificate = CmsSignedDataTestFactory.MintSelfSignedCertificate(signingKey, NotBefore, NotAfter);
+        using CmsSignedData carrier = CmsSignedDataTestFactory.SignAsCms("the plain cms content"u8, signerCertificate);
+        using SignatureFacts facts = await ExtractAsync(carrier).ConfigureAwait(false);
+
+        SignatureAcceptanceValidationResult result = await SignatureAcceptanceValidation.ValidateAsync(
+            facts,
+            [],
+            new SignatureElementsConstraints { RequireSignedSigningCertificateBinding = true },
+            ReliableAlgorithms(facts),
+            validateTimestampToken: null,
+            SigningTime,
+            BaseMemoryPool.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(BuildingBlockIndication.Indeterminate, result.Conclusion.Indication, "A missing signed signing-certificate binding is an unmet constraint (INDETERMINATE).");
+        Assert.Contains(SignatureValidationSubIndication.SignatureConstraintsFailure, result.Conclusion.SubIndications, "The sub-indication is SIG_CONSTRAINTS_FAILURE.");
+        Assert.Contains(
+            evaluation => evaluation.Identifier == ValidationConstraintIdentifier.SigningCertificateReferences,
+            result.Conclusion.ConstraintEvaluations,
+            "The unmet constraint is reported under the signing-certificate-references identity.");
+    }
+
+
+    /// <summary>
+    /// The same plain CMS signature is accepted when no constraint requires the signed binding — the
+    /// clause 5.2.3.4 branch that accepts the carried copy of the signing certificate stays the default —
+    /// and a CAdES signature, which carries the signing-certificate-v2 attribute, satisfies the constraint
+    /// when it is required.
+    /// </summary>
+    [TestMethod]
+    public async Task SignedSigningCertificateBindingIsNotRequiredByDefaultAndACAdESSignatureSatisfiesIt()
+    {
+        using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var signerCertificate = CmsSignedDataTestFactory.MintSelfSignedCertificate(signingKey, NotBefore, NotAfter);
+
+        using CmsSignedData plainCarrier = CmsSignedDataTestFactory.SignAsCms("the plain cms content"u8, signerCertificate);
+        using SignatureFacts plainFacts = await ExtractAsync(plainCarrier).ConfigureAwait(false);
+        SignatureAcceptanceValidationResult defaultResult = await SignatureAcceptanceValidation.ValidateAsync(
+            plainFacts, [], new SignatureElementsConstraints(), ReliableAlgorithms(plainFacts),
+            validateTimestampToken: null, SigningTime, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(BuildingBlockIndication.Passed, defaultResult.Conclusion.Indication,
+            "Without the constraint, a signature with no signed binding stays accepted — the specification's own no-constraint branch.");
+
+        using CmsSignedData cadesCarrier = CmsSignedDataTestFactory.SignAsCAdES("the cades content"u8, signerCertificate, SigningTime);
+        using SignatureFacts cadesFacts = await ExtractAsync(cadesCarrier).ConfigureAwait(false);
+        SignatureAcceptanceValidationResult constrainedResult = await SignatureAcceptanceValidation.ValidateAsync(
+            cadesFacts, [], new SignatureElementsConstraints { RequireSignedSigningCertificateBinding = true }, ReliableAlgorithms(cadesFacts),
+            validateTimestampToken: null, SigningTime, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(BuildingBlockIndication.Passed, constrainedResult.Conclusion.Indication,
+            "A CAdES signature carries the signing-certificate-v2 signed attribute, which satisfies the required binding.");
+    }
+
+
+    /// <summary>
     /// An algorithm the dated reliability table does not list is never reliable, so the signature acceptance
     /// validation reports <c>INDETERMINATE</c>/<c>CRYPTO_CONSTRAINTS_FAILURE_NO_POE</c> with the assessment.
     /// </summary>
