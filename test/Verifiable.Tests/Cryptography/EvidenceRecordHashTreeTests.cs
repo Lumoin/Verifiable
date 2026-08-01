@@ -50,7 +50,7 @@ internal sealed class EvidenceRecordHashTreeTests
         using EvidenceRecordHashTreeBuild build = await BuildAsync([dataObjects], nodeArity: 2).ConfigureAwait(false);
 
         byte[] expected = EvidenceRecordOracle.Hash(dataObjects[0], Algorithm);
-        Assert.IsTrue(build.Root.Span.SequenceEqual(expected), "The root of a one-leaf tree is that leaf.");
+        Assert.IsTrue(build.Root.AsReadOnlySpan().SequenceEqual(expected), "The root of a one-leaf tree is that leaf.");
         Assert.HasCount(1, build.ReducedHashtrees);
         Assert.HasCount(1, build.ReducedHashtrees[0]);
         Assert.HasCount(1, build.ReducedHashtrees[0][0].HashValues);
@@ -70,7 +70,7 @@ internal sealed class EvidenceRecordHashTreeTests
         using EvidenceRecordHashTreeBuild build = await BuildAsync([group], nodeArity: 2).ConfigureAwait(false);
 
         byte[] expected = EvidenceRecordOracle.LeafOf(group, Algorithm);
-        Assert.IsTrue(build.Root.Span.SequenceEqual(expected), "The root of a one-group tree is that group's leaf.");
+        Assert.IsTrue(build.Root.AsReadOnlySpan().SequenceEqual(expected), "The root of a one-group tree is that group's leaf.");
         Assert.HasCount(1, build.ReducedHashtrees[0]);
         Assert.HasCount(3, build.ReducedHashtrees[0][0].HashValues);
 
@@ -99,7 +99,7 @@ internal sealed class EvidenceRecordHashTreeTests
         using EvidenceRecordHashTreeBuild build = await BuildAsync([group1, group2, group3], nodeArity: 2).ConfigureAwait(false);
 
         byte[] expectedRoot = EvidenceRecordOracle.BuildRoot([group1, group2, group3], Algorithm, nodeArity: 2);
-        Assert.IsTrue(build.Root.Span.SequenceEqual(expectedRoot), "The root is the one the independent build reaches.");
+        Assert.IsTrue(build.Root.AsReadOnlySpan().SequenceEqual(expectedRoot), "The root is the one the independent build reaches.");
 
         Assert.HasCount(2, build.ReducedHashtrees[0], "Figure 2 prints two partial hash trees for data group 1.");
         Assert.HasCount(2, build.ReducedHashtrees[0][0].HashValues, "The first holds h1 and h2abc.");
@@ -157,7 +157,7 @@ internal sealed class EvidenceRecordHashTreeTests
         using EvidenceRecordHashTreeBuild build = await BuildAsync(groups, nodeArity: 2).ConfigureAwait(false);
 
         Assert.IsTrue(
-            build.Root.Span.SequenceEqual(EvidenceRecordOracle.BuildRoot(groups, Algorithm, nodeArity: 2)),
+            build.Root.AsReadOnlySpan().SequenceEqual(EvidenceRecordOracle.BuildRoot(groups, Algorithm, nodeArity: 2)),
             "The root is the one the independent build reaches.");
 
         await AssertReducedTreesReachTheRootAsync(build, groups).ConfigureAwait(false);
@@ -183,7 +183,7 @@ internal sealed class EvidenceRecordHashTreeTests
         using EvidenceRecordHashTreeBuild build = await BuildAsync(groups, nodeArity).ConfigureAwait(false);
 
         Assert.IsTrue(
-            build.Root.Span.SequenceEqual(EvidenceRecordOracle.BuildRoot(groups, Algorithm, nodeArity)),
+            build.Root.AsReadOnlySpan().SequenceEqual(EvidenceRecordOracle.BuildRoot(groups, Algorithm, nodeArity)),
             "The root is the one the independent build reaches.");
 
         await AssertReducedTreesReachTheRootAsync(build, groups).ConfigureAwait(false);
@@ -418,7 +418,7 @@ internal sealed class EvidenceRecordHashTreeTests
     /// <returns>A task that completes when every group has been checked.</returns>
     private async ValueTask AssertReducedTreesReachTheRootAsync(EvidenceRecordHashTreeBuild build, List<byte[][]> groups)
     {
-        byte[] root = build.Root.ToArray();
+        byte[] root = build.Root.AsReadOnlySpan().ToArray();
         for(int groupIndex = 0; groupIndex < groups.Count; ++groupIndex)
         {
             IReadOnlyList<EvidenceRecordPartialHashtree> reduced = build.ReducedHashtrees[groupIndex];

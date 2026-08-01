@@ -125,21 +125,28 @@ public static class TimestampRequests
 
 
     /// <summary>
-    /// Builds a <c>TimeStampReq</c> from a computed digest carrier: the message-imprint octets and their
-    /// algorithm both come from the one carrier the registered digest seam produced and tagged, so the pair
-    /// cannot disagree the way separately passed octets and algorithm can. This is the preferred overload for
-    /// a caller that computed the digest itself; the octets-and-algorithm overload below remains for digests
-    /// that arrive from the wire without a carrier.
+    /// Builds a <c>TimeStampReq</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc3161#section-2.4.1">RFC 3161 §2.4.1</see>): version 1, the
+    /// message imprint from the computed digest carrier — the octets and their algorithm both come from the
+    /// one carrier the registered digest seam produced and tagged, so the pair cannot disagree the way
+    /// separately passed octets and an algorithm could — an optional <c>reqPolicy</c>, a nonce drawn from the
+    /// entropy provider unless suppressed, and <c>certReq</c> always <see langword="true"/> — a creation-side
+    /// request always asks for the Time-Stamping Authority's certificate, since the token has to be verified
+    /// (<see cref="TimestampAcquisition"/>) and later embedded. A caller holding wire-sourced digest octets
+    /// wraps them in a <see cref="DigestValue"/> under the algorithm's own digest tag first; the octets never
+    /// cross this surface bare.
     /// </summary>
     /// <param name="messageImprint">The computed digest of the data being time-stamped, carrying its own algorithm in its tag.</param>
     /// <param name="pool">The memory pool for every allocation this call performs.</param>
     /// <param name="reqPolicyOid">The TSA policy the request asks for, or <see langword="null"/> to state none.</param>
-    /// <param name="nonceByteLength">The nonce length in octets; 32 is a sound default, as on the octets-and-algorithm overload.</param>
+    /// <param name="nonceByteLength">The nonce length in octets; 32 is a sound default (matching <see cref="OcspRequests.CreateAsync"/>'s own), not an RFC-mandated one — RFC 3161 places no <c>SIZE</c> bound on the <c>nonce</c> field.</param>
     /// <param name="includeNonce">Whether to include a <c>nonce</c> field. Defaults to <see langword="true"/>: a request with no nonce cannot itself detect a replayed response.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The built request and, when requested, the nonce it carries. The caller owns and disposes it.</returns>
     /// <exception cref="ArgumentNullException">When <paramref name="messageImprint"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">When the carrier's tag names no digest algorithm this library states in PKI structures.</exception>
+    /// <exception cref="ArgumentException">When the carrier's tag names no digest algorithm this library states in PKI structures, or its length is not that algorithm's <see cref="PkiDigestAlgorithm.OutputByteLength"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">When <paramref name="nonceByteLength"/> is outside this builder's accepted range.</exception>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the built request (and, when drawn, the nonce) transfers to the returned carrier, which the caller disposes; the nested catch blocks dispose them on a partial failure. The ValueTask.FromResult wrapper this method returns through is what defeats the analyzer's own escape analysis here.")]
     public static ValueTask<TimestampRequestContent> CreateAsync(
         DigestValue messageImprint,
         MemoryPool<byte> pool,
@@ -149,50 +156,16 @@ public static class TimestampRequests
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(messageImprint);
+        ArgumentNullException.ThrowIfNull(pool);
+        cancellationToken.ThrowIfCancellationRequested();
 
         PkiDigestAlgorithm algorithm = PkiDigestAlgorithm.FromDigest(messageImprint)
             ?? throw new ArgumentException("The digest carrier's tag names no digest algorithm this library states in PKI structures.", nameof(messageImprint));
-
-        return CreateAsync(messageImprint.AsReadOnlyMemory(), algorithm, pool, reqPolicyOid, nonceByteLength, includeNonce, cancellationToken);
-    }
-
-
-    /// <summary>
-    /// Builds a <c>TimeStampReq</c>
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc3161#section-2.4.1">RFC 3161 §2.4.1</see>): version 1, the
-    /// caller-supplied message imprint, an optional <c>reqPolicy</c>, a nonce drawn from the entropy provider
-    /// unless suppressed, and <c>certReq</c> always <see langword="true"/> — a creation-side request always
-    /// asks for the Time-Stamping Authority's certificate, since the token has to be verified
-    /// (<see cref="TimestampAcquisition"/>) and later embedded.
-    /// </summary>
-    /// <param name="messageImprintDigest">The caller-computed digest of the data being time-stamped, exactly <paramref name="messageImprintAlgorithm"/>'s <see cref="PkiDigestAlgorithm.OutputByteLength"/> bytes.</param>
-    /// <param name="messageImprintAlgorithm">The digest algorithm <paramref name="messageImprintDigest"/> was computed under.</param>
-    /// <param name="pool">The memory pool for every allocation this call performs.</param>
-    /// <param name="reqPolicyOid">The TSA policy the request asks for, or <see langword="null"/> to state none.</param>
-    /// <param name="nonceByteLength">The nonce length in octets; 32 is a sound default (matching <see cref="OcspRequests.CreateAsync"/>'s own), not an RFC-mandated one — RFC 3161 places no <c>SIZE</c> bound on the <c>nonce</c> field.</param>
-    /// <param name="includeNonce">Whether to include a <c>nonce</c> field. Defaults to <see langword="true"/>: a request with no nonce cannot itself detect a replayed response.</param>
-    /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>The built request and, when requested, the nonce it carries. The caller owns and disposes it.</returns>
-    /// <exception cref="ArgumentNullException">When <paramref name="pool"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">When <paramref name="messageImprintDigest"/>'s length does not match <paramref name="messageImprintAlgorithm"/>'s <see cref="PkiDigestAlgorithm.OutputByteLength"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">When <paramref name="nonceByteLength"/> is outside this builder's accepted range.</exception>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the built request (and, when drawn, the nonce) transfers to the returned carrier, which the caller disposes; the nested catch blocks dispose them on a partial failure. The ValueTask.FromResult wrapper this method returns through is what defeats the analyzer's own escape analysis here.")]
-    public static ValueTask<TimestampRequestContent> CreateAsync(
-        ReadOnlyMemory<byte> messageImprintDigest,
-        PkiDigestAlgorithm messageImprintAlgorithm,
-        MemoryPool<byte> pool,
-        string? reqPolicyOid = null,
-        int nonceByteLength = 32,
-        bool includeNonce = true,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(pool);
-        cancellationToken.ThrowIfCancellationRequested();
-        if(messageImprintDigest.Length != messageImprintAlgorithm.OutputByteLength)
+        if(messageImprint.Length != algorithm.OutputByteLength)
         {
             throw new ArgumentException(
-                $"The message imprint digest must be exactly {messageImprintAlgorithm.OutputByteLength} bytes for '{messageImprintAlgorithm.Identifier.Oid}'.",
-                nameof(messageImprintDigest));
+                $"The message imprint digest must be exactly {algorithm.OutputByteLength} bytes for '{algorithm.Identifier.Oid}'.",
+                nameof(messageImprint));
         }
 
         ArgumentOutOfRangeException.ThrowIfLessThan(nonceByteLength, MinimumNonceByteLength);
@@ -204,7 +177,7 @@ public static class TimestampRequests
         try
         {
             var writer = new AsnWriter(AsnEncodingRules.DER);
-            WriteTimeStampReq(writer, messageImprintAlgorithm.Identifier.Oid, messageImprintDigest.Span, reqPolicyOid, nonce);
+            WriteTimeStampReq(writer, algorithm.Identifier.Oid, messageImprint.AsReadOnlySpan(), reqPolicyOid, nonce);
 
             int encodedLength = writer.GetEncodedLength();
             IMemoryOwner<byte> requestOwner = pool.Rent(encodedLength);

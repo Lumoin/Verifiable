@@ -357,7 +357,6 @@ public static class EvidenceRecords
 
         using AcquiredTimestampToken token = await TimestampAcquisition.AcquireAsync(
             build.Root,
-            context.DigestAlgorithm,
             context.TsaUri,
             context.FetchTimestampResponse,
             pool,
@@ -371,7 +370,7 @@ public static class EvidenceRecords
                 "The acquired time-stamp token's TSTInfo could not be read, so what it binds cannot be established.");
         }
 
-        if(!token.Info.MessageImprint.AsReadOnlySpan().SequenceEqual(build.Root.Span))
+        if(!token.Info.MessageImprint.AsReadOnlySpan().SequenceEqual(build.Root.AsReadOnlySpan()))
         {
             throw new EvidenceRecordCreationException(
                 EvidenceRecordCreationFailureKind.TimestampDoesNotBindRoot,
@@ -516,7 +515,7 @@ public static class EvidenceRecords
             cancellationToken).ConfigureAwait(false);
 
         using AcquiredTimestampToken token = await AcquireRenewalTokenAsync(
-            build.Root, algorithm, sources, context.TsaUri, context.FetchTimestampResponse, context.TimestampPolicyOid, pool, cancellationToken).ConfigureAwait(false);
+            build.Root, sources, context.TsaUri, context.FetchTimestampResponse, context.TimestampPolicyOid, pool, cancellationToken).ConfigureAwait(false);
 
         AlgorithmIdentifier? statedAlgorithm = context.StateDigestAlgorithmField ? algorithm.Identifier : null;
         var renewed = new List<EvidenceRecord>(context.EvidenceRecords.Count);
@@ -686,7 +685,7 @@ public static class EvidenceRecords
                 cancellationToken).ConfigureAwait(false);
 
             using AcquiredTimestampToken token = await AcquireRenewalTokenAsync(
-                build.Root, algorithm, sources, context.TsaUri, context.FetchTimestampResponse, context.TimestampPolicyOid, pool, cancellationToken).ConfigureAwait(false);
+                build.Root, sources, context.TsaUri, context.FetchTimestampResponse, context.TimestampPolicyOid, pool, cancellationToken).ConfigureAwait(false);
 
             AlgorithmIdentifier? statedAlgorithm = context.StateDigestAlgorithmField ? algorithm.Identifier : null;
             var renewed = new List<EvidenceRecord>(context.DataObjectGroups.Count);
@@ -1368,8 +1367,7 @@ public static class EvidenceRecords
     /// Acquires the time-stamp a renewal attaches, and refuses it unless it binds the root the renewal's tree
     /// produced and asserts an instant after every Archive Timestamp being renewed.
     /// </summary>
-    /// <param name="root">The root of the renewal's hash tree.</param>
-    /// <param name="algorithm">The algorithm the tree was built under and the request is made under.</param>
+    /// <param name="root">The root of the renewal's hash tree, carrying the algorithm the tree was built under in its own tag.</param>
     /// <param name="sources">The Archive Timestamps being renewed, whose asserted instants the new one has to follow.</param>
     /// <param name="tsaUri">The authority to contact.</param>
     /// <param name="fetchTimestampResponse">The transport that carries the request and its response.</param>
@@ -1382,8 +1380,7 @@ public static class EvidenceRecords
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the acquired token transfers to the caller; the catch disposes it when this method refuses it.")]
     private static async ValueTask<AcquiredTimestampToken> AcquireRenewalTokenAsync(
-        ReadOnlyMemory<byte> root,
-        PkiDigestAlgorithm algorithm,
+        DigestValue root,
         IReadOnlyList<EvidenceRecordRenewalSource> sources,
         string tsaUri,
         FetchTimestampResponseAsyncDelegate fetchTimestampResponse,
@@ -1392,7 +1389,7 @@ public static class EvidenceRecords
         CancellationToken cancellationToken)
     {
         AcquiredTimestampToken token = await TimestampAcquisition.AcquireAsync(
-            root, algorithm, tsaUri, fetchTimestampResponse, pool, timestampPolicyOid, cancellationToken: cancellationToken).ConfigureAwait(false);
+            root, tsaUri, fetchTimestampResponse, pool, timestampPolicyOid, cancellationToken: cancellationToken).ConfigureAwait(false);
         try
         {
             if(!token.Info.IsRead || token.Info.MessageImprint is null)
@@ -1402,7 +1399,7 @@ public static class EvidenceRecords
                     "The acquired time-stamp token's TSTInfo could not be read, so what it binds cannot be established.");
             }
 
-            if(!token.Info.MessageImprint.AsReadOnlySpan().SequenceEqual(root.Span))
+            if(!token.Info.MessageImprint.AsReadOnlySpan().SequenceEqual(root.AsReadOnlySpan()))
             {
                 throw new EvidenceRecordCreationException(
                     EvidenceRecordCreationFailureKind.TimestampDoesNotBindRoot,

@@ -531,7 +531,7 @@ public static class CAdESSignatureAugmentation
         using DigestValue imprint = await CryptographicKeyEvents.ComputeDigestAsync(
             signatureValue, algorithm.OutputByteLength, algorithm.DigestTag, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
         using AcquiredTimestampToken token = await TimestampAcquisition.AcquireAsync(
-            imprint.AsReadOnlyMemory(), algorithm, context.TsaUri, context.FetchResponse, pool,
+            imprint, context.TsaUri, context.FetchResponse, pool,
             context.ReqPolicyOid, context.NonceByteLength, context.IncludeNonce, cancellationToken).ConfigureAwait(false);
         EnsureRequirementMSatisfied(
             token, context.SigningCertificate, context.SigningCertificateRevokedAt, context.EnforceSigningCertificateValidity);
@@ -1016,7 +1016,7 @@ public static class CAdESSignatureAugmentation
             using DigestValue imprint = await CryptographicKeyEvents.ComputeDigestAsync(
                 imprintInput.AsReadOnlyMemory(), algorithm.OutputByteLength, algorithm.DigestTag, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
             using AcquiredTimestampToken token = await TimestampAcquisition.AcquireAsync(
-                imprint.AsReadOnlyMemory(), algorithm, context.TsaUri, context.FetchResponse, pool,
+                imprint, context.TsaUri, context.FetchResponse, pool,
                 context.ReqPolicyOid, context.NonceByteLength, context.IncludeNonce, cancellationToken).ConfigureAwait(false);
             EnsureRequirementMSatisfied(
                 token, context.SigningCertificate, context.SigningCertificateRevokedAt, context.EnforceSigningCertificateValidity);

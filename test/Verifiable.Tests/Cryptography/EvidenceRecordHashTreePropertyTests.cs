@@ -169,7 +169,7 @@ internal sealed class EvidenceRecordHashTreePropertyTests
 
         byte[] expected = EvidenceRecordOracle.BuildRoot(groups, Algorithm, nodeArity);
 
-        return first.Root.Span.SequenceEqual(second.Root.Span) && first.Root.Span.SequenceEqual(expected);
+        return first.Root.AsReadOnlySpan().SequenceEqual(second.Root.AsReadOnlySpan()) && first.Root.AsReadOnlySpan().SequenceEqual(expected);
     }
 
 
@@ -189,7 +189,7 @@ internal sealed class EvidenceRecordHashTreePropertyTests
     {
         List<byte[][]> groups = MintGroups(groupCount, objectsPerGroup, seed);
         using EvidenceRecordHashTreeBuild build = BuildTree(groups, nodeArity, cancellationToken);
-        byte[] root = build.Root.ToArray();
+        byte[] root = build.Root.AsReadOnlySpan().ToArray();
 
         for(int groupIndex = 0; groupIndex < groups.Count; ++groupIndex)
         {

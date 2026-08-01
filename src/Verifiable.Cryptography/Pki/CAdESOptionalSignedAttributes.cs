@@ -72,7 +72,7 @@ public sealed record CAdESOptionalSignedAttributes
     /// <summary>
     /// Gets the <c>content-time-stamp</c> requests (clause 5.2.8) to acquire and embed, cardinality
     /// <c>&gt;= 0</c>: zero, one, or several tokens, each obtained through
-    /// <see cref="TimestampAcquisition.AcquireAsync"/> over the same raw message-digest octets and algorithm
+    /// <see cref="TimestampAcquisition.AcquireAsync"/> over the same message-digest carrier
     /// <see cref="CAdESSignatureCreation.PrepareAsync"/> uses for the <c>message-digest</c> attribute — the
     /// RAW-value imprint convention clause 5.2.8 states, never the <c>archive-time-stamp-v3</c> TLV
     /// concatenation of clause 5.5.3. <see langword="null"/> or empty adds none.

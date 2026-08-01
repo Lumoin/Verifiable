@@ -158,7 +158,7 @@ internal sealed class EvidenceRecordRenewalPropertyTests
                 cancellationToken).AsTask().GetAwaiter().GetResult();
 
             byte[] expectedRoot = EvidenceRecordOracle.BuildRootFromHashValues(oracleGroups, algorithm, nodeArity);
-            if(!build.Root.Span.SequenceEqual(expectedRoot))
+            if(!build.Root.AsReadOnlySpan().SequenceEqual(expectedRoot))
             {
                 return false;
             }

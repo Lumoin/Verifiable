@@ -187,29 +187,25 @@ public static class CAdESSignatureCreation
                 nameof(detachedContentDigest));
         }
 
-        DigestValue? computedContentDigest = null;
+        DigestValue? messageDigest = null;
         List<CmsAttribute> attributes = [];
         try
         {
-            ReadOnlyMemory<byte> messageDigestValue;
-            if(content is { } attachedContent)
-            {
-                computedContentDigest = await CryptographicKeyEvents.ComputeDigestAsync(
+            //The attached case computes the content digest; the detached case wraps the caller-supplied octets
+            //in the same tagged carrier, so the message-digest attribute and the content-time-stamp acquisition
+            //consume one semantic digest whichever way the content arrived.
+            messageDigest = content is { } attachedContent
+                ? await CryptographicKeyEvents.ComputeDigestAsync(
                     attachedContent, messageDigestAlgorithm.OutputByteLength, messageDigestAlgorithm.DigestTag, pool,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
-                messageDigestValue = computedContentDigest.AsReadOnlyMemory();
-            }
-            else
-            {
-                messageDigestValue = detachedContentDigest!.Value;
-            }
+                    cancellationToken: cancellationToken).ConfigureAwait(false)
+                : WrapDetachedDigest(detachedContentDigest!.Value, messageDigestAlgorithm, pool);
 
             using DigestValue certificateHash = await CryptographicKeyEvents.ComputeDigestAsync(
                 signerCertificate.AsReadOnlyMemory(), messageDigestAlgorithm.OutputByteLength, messageDigestAlgorithm.DigestTag, pool,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
             attributes.Add(BuildContentTypeAttribute(pool));
-            attributes.Add(BuildMessageDigestAttribute(messageDigestValue.Span, pool));
+            attributes.Add(BuildMessageDigestAttribute(messageDigest.AsReadOnlySpan(), pool));
             attributes.Add(BuildSigningTimeAttribute(signingTime, pool));
             attributes.Add(BuildSigningCertificateV2Attribute(certificateHash.AsReadOnlySpan(), messageDigestAlgorithm, pool));
             if(cmsAlgorithmProtectionSignatureAlgorithmOid is not null)
@@ -262,7 +258,7 @@ public static class CAdESSignatureCreation
                 if(optionalAttributes.ContentTimestampRequests is { Count: > 0 } contentTimestampRequests)
                 {
                     attributes.Add(await BuildContentTimestampAttributeAsync(
-                        contentTimestampRequests, messageDigestValue, messageDigestAlgorithm, pool, cancellationToken).ConfigureAwait(false));
+                        contentTimestampRequests, messageDigest, pool, cancellationToken).ConfigureAwait(false));
                 }
             }
 
@@ -296,7 +292,18 @@ public static class CAdESSignatureCreation
         }
         finally
         {
-            computedContentDigest?.Dispose();
+            messageDigest?.Dispose();
+        }
+
+
+        //Wraps a caller-supplied detached content digest in the tagged carrier the message-digest attribute and
+        //the content-time-stamp acquisition consume; copied because the carrier owns its memory.
+        static DigestValue WrapDetachedDigest(ReadOnlyMemory<byte> digest, PkiDigestAlgorithm algorithm, MemoryPool<byte> pool)
+        {
+            IMemoryOwner<byte> owner = pool.Rent(digest.Length);
+            digest.Span.CopyTo(owner.Memory.Span);
+
+            return new DigestValue(owner, algorithm.DigestTag);
         }
     }
 
@@ -1267,13 +1274,12 @@ public static class CAdESSignatureCreation
     /// octets are trusted enough to embed — the same verify-before-attach discipline the level-raising surfaces
     /// use. Clause 5.2.8's message imprint is the RAW hash of the signed content, without ASN.1 tag and length —
     /// never the <c>archive-time-stamp-v3</c> TLV concatenation of clause 5.5.3 — which is exactly what
-    /// <paramref name="messageImprintDigest"/> already is (the same digest the <c>message-digest</c> attribute
-    /// carries).
+    /// <paramref name="messageImprint"/> already carries (the same digest the <c>message-digest</c> attribute
+    /// states).
     /// </summary>
     private static async ValueTask<CmsAttribute> BuildContentTimestampAttributeAsync(
         IReadOnlyList<CAdESContentTimestampRequest> requests,
-        ReadOnlyMemory<byte> messageImprintDigest,
-        PkiDigestAlgorithm messageImprintAlgorithm,
+        DigestValue messageImprint,
         MemoryPool<byte> pool,
         CancellationToken cancellationToken)
     {
@@ -1285,7 +1291,7 @@ public static class CAdESSignatureCreation
             {
                 CAdESContentTimestampRequest request = requests[i];
                 AcquiredTimestampToken token = await TimestampAcquisition.AcquireAsync(
-                    messageImprintDigest, messageImprintAlgorithm, request.TsaUri, request.FetchResponse, pool,
+                    messageImprint, request.TsaUri, request.FetchResponse, pool,
                     request.ReqPolicyOid, request.NonceByteLength, request.IncludeNonce, cancellationToken).ConfigureAwait(false);
                 tokens.Add(token);
                 values.Add(token.Token.AsReadOnlyMemory());

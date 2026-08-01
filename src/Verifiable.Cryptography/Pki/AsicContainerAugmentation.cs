@@ -919,8 +919,7 @@ public static class AsicContainerAugmentation
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
             using AcquiredTimestampToken token = await TimestampAcquisition.AcquireAsync(
-                imprint.AsReadOnlyMemory(),
-                context.ImprintAlgorithm,
+                imprint,
                 context.TsaUri,
                 context.FetchTimestampResponse,
                 pool,

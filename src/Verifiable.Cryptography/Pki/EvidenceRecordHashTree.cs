@@ -216,11 +216,11 @@ public sealed class EvidenceRecordHashTreeBuild: IDisposable
     /// <summary>
     /// Initialises a new build.
     /// </summary>
-    /// <param name="root">The root hash value, a view into one of <paramref name="ownedDigests"/>.</param>
+    /// <param name="root">The root hash carrier, one of <paramref name="ownedDigests"/>.</param>
     /// <param name="reducedHashtrees">One reduced hash tree per data object group, in the order the groups were supplied.</param>
     /// <param name="ownedDigests">Every digest computed while building. Ownership transfers to this instance.</param>
     internal EvidenceRecordHashTreeBuild(
-        ReadOnlyMemory<byte> root,
+        DigestValue root,
         IReadOnlyList<IReadOnlyList<EvidenceRecordPartialHashtree>> reducedHashtrees,
         List<DigestValue> ownedDigests)
     {
@@ -230,8 +230,8 @@ public sealed class EvidenceRecordHashTreeBuild: IDisposable
     }
 
 
-    /// <summary>Gets the root hash value of the tree — the value clause 4.2 step 5 obtains a time-stamp for.</summary>
-    public ReadOnlyMemory<byte> Root { get; }
+    /// <summary>Gets the root hash of the tree — the value clause 4.2 step 5 obtains a time-stamp for — as the tagged carrier this build owns and disposes.</summary>
+    public DigestValue Root { get; }
 
     /// <summary>Gets one reduced hash tree per data object group, in the order the groups were supplied.</summary>
     public IReadOnlyList<IReadOnlyList<EvidenceRecordPartialHashtree>> ReducedHashtrees { get; }
@@ -685,7 +685,13 @@ public static class EvidenceRecordHashTree
                 reducedHashtrees.Add(Reduce(groupIndex, groupMemberHashes[groupIndex], firstListNamesTheGroupAlone, levels, partitionsPerLevel));
             }
 
-            return new EvidenceRecordHashTreeBuild(current[0], reducedHashtrees, owned);
+            //The root is materialised as its own owned carrier whichever way it arose — a combined node, or a
+            //caller-supplied member hash promoted unchanged to the top — so the build hands out one uniform
+            //tagged digest rather than a view whose ownership depends on the tree's shape.
+            DigestValue root = CopyDigest(current[0].Span, algorithm.DigestTag, pool);
+            owned.Add(root);
+
+            return new EvidenceRecordHashTreeBuild(root, reducedHashtrees, owned);
         }
         catch
         {

@@ -239,54 +239,22 @@ public static class TimestampAcquisition
 
 
     /// <summary>
-    /// Verifies a <c>TimeStampResp</c> against a computed digest carrier: the message-imprint octets and their
-    /// algorithm both come from the one carrier the registered digest seam produced and tagged, so the pair
-    /// cannot disagree the way separately passed octets and algorithm can. This is the preferred overload for
-    /// a caller that holds the digest it asked to be time-stamped; the octets-and-algorithm overload below
-    /// remains for digests that arrive without a carrier.
+    /// Verifies a <c>TimeStampResp</c> a Time-Stamping Authority returned: its <c>PKIStatus</c>, its embedded
+    /// token's own CMS signature, the token's message imprint against the digest the request carried, and the
+    /// token's nonce against the request's when one was sent. The message-imprint octets and their algorithm
+    /// both come from the one carrier the registered digest seam produced and tagged, so the pair cannot
+    /// disagree the way separately passed octets and an algorithm could; a caller holding wire-sourced digest
+    /// octets wraps them in a <see cref="DigestValue"/> under the algorithm's own digest tag first.
     /// </summary>
     /// <param name="response">The DER-encoded <c>TimeStampResp</c>, tagged <see cref="PkiCertificateTags.TimestampResponse"/>.</param>
     /// <param name="messageImprint">The computed digest the originating request carried, carrying its own algorithm in its tag.</param>
-    /// <param name="requestNonce">The originating request's nonce, or <see langword="null"/> when the request sent none.</param>
-    /// <param name="requestedPolicyOid">The TSA policy the originating request asked for, or <see langword="null"/> when it named none.</param>
-    /// <param name="pool">The memory pool for every allocation this call performs.</param>
-    /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>The verified token, ready to attach. The caller owns and disposes it.</returns>
-    /// <exception cref="ArgumentNullException">When <paramref name="response"/>, <paramref name="messageImprint"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">When the carrier's tag names no digest algorithm this library states in PKI structures, or <paramref name="response"/> does not carry a <c>TimeStampResp</c>.</exception>
-    /// <exception cref="TimestampAcquisitionException">As on the octets-and-algorithm overload.</exception>
-    public static ValueTask<AcquiredTimestampToken> VerifyResponseAsync(
-        PkiCertificateMemory response,
-        DigestValue messageImprint,
-        Nonce? requestNonce,
-        string? requestedPolicyOid,
-        MemoryPool<byte> pool,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(messageImprint);
-
-        PkiDigestAlgorithm algorithm = PkiDigestAlgorithm.FromDigest(messageImprint)
-            ?? throw new ArgumentException("The digest carrier's tag names no digest algorithm this library states in PKI structures.", nameof(messageImprint));
-
-        return VerifyResponseAsync(response, messageImprint.AsReadOnlyMemory(), algorithm, requestNonce, requestedPolicyOid, pool, cancellationToken);
-    }
-
-
-    /// <summary>
-    /// Verifies a <c>TimeStampResp</c> a Time-Stamping Authority returned: its <c>PKIStatus</c>, its embedded
-    /// token's own CMS signature, the token's message imprint against the digest the request carried, and the
-    /// token's nonce against the request's when one was sent.
-    /// </summary>
-    /// <param name="response">The DER-encoded <c>TimeStampResp</c>, tagged <see cref="PkiCertificateTags.TimestampResponse"/>.</param>
-    /// <param name="messageImprintDigest">The same digest bytes the originating request carried.</param>
-    /// <param name="messageImprintAlgorithm">The digest algorithm <paramref name="messageImprintDigest"/> was computed under.</param>
     /// <param name="requestNonce">The originating request's nonce, or <see langword="null"/> when the request sent none.</param>
     /// <param name="requestedPolicyOid">The TSA policy the originating request asked for (<c>reqPolicy</c>), or <see langword="null"/> when it named none. When non-<see langword="null"/>, the token's <c>policy</c> MUST equal it (RFC 3161 §2.4.2) or acquisition fails <see cref="TimestampAcquisitionFailureKind.PolicyMismatch"/>.</param>
     /// <param name="pool">The memory pool for every allocation this call performs.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The verified token, ready to attach. The caller owns and disposes it.</returns>
-    /// <exception cref="ArgumentNullException">When <paramref name="response"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">When <paramref name="response"/> does not carry a <c>TimeStampResp</c>, or <paramref name="messageImprintDigest"/>'s length does not match <paramref name="messageImprintAlgorithm"/>'s <see cref="PkiDigestAlgorithm.OutputByteLength"/>.</exception>
+    /// <exception cref="ArgumentNullException">When <paramref name="response"/>, <paramref name="messageImprint"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">When <paramref name="response"/> does not carry a <c>TimeStampResp</c>, the carrier's tag names no digest algorithm this library states in PKI structures, or its length is not that algorithm's <see cref="PkiDigestAlgorithm.OutputByteLength"/>.</exception>
     /// <exception cref="TimestampAcquisitionException">
     /// When the response is malformed, was not granted, or the token it carries does not verify, does not
     /// match the message imprint, does not match the nonce, or was issued under a different policy than the
@@ -294,25 +262,27 @@ public static class TimestampAcquisition
     /// </exception>
     public static async ValueTask<AcquiredTimestampToken> VerifyResponseAsync(
         PkiCertificateMemory response,
-        ReadOnlyMemory<byte> messageImprintDigest,
-        PkiDigestAlgorithm messageImprintAlgorithm,
+        DigestValue messageImprint,
         Nonce? requestNonce,
         string? requestedPolicyOid,
         MemoryPool<byte> pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(response);
+        ArgumentNullException.ThrowIfNull(messageImprint);
         ArgumentNullException.ThrowIfNull(pool);
         if(!response.IsTimestampResponse)
         {
             throw new ArgumentException("The carrier must hold a DER-encoded TimeStampResp.", nameof(response));
         }
 
-        if(messageImprintDigest.Length != messageImprintAlgorithm.OutputByteLength)
+        PkiDigestAlgorithm messageImprintAlgorithm = PkiDigestAlgorithm.FromDigest(messageImprint)
+            ?? throw new ArgumentException("The digest carrier's tag names no digest algorithm this library states in PKI structures.", nameof(messageImprint));
+        if(messageImprint.Length != messageImprintAlgorithm.OutputByteLength)
         {
             throw new ArgumentException(
                 $"The message imprint digest must be exactly {messageImprintAlgorithm.OutputByteLength} bytes for '{messageImprintAlgorithm.Identifier.Oid}'.",
-                nameof(messageImprintDigest));
+                nameof(messageImprint));
         }
 
         (int status, ReadOnlyMemory<byte>? tokenDer, bool failInfoHasSetBits) parsed;
@@ -366,7 +336,7 @@ public static class TimestampAcquisition
             }
 
             if(!string.Equals(info.MessageImprintAlgorithm.Oid, messageImprintAlgorithm.Identifier.Oid, StringComparison.Ordinal)
-                || !tokenImprint.AsReadOnlySpan().SequenceEqual(messageImprintDigest.Span))
+                || !tokenImprint.AsReadOnlySpan().SequenceEqual(messageImprint.AsReadOnlySpan()))
             {
                 throw new TimestampAcquisitionException(
                     TimestampAcquisitionFailureKind.MessageImprintMismatch,
@@ -510,11 +480,12 @@ public static class TimestampAcquisition
 
 
     /// <summary>
-    /// Acquires a time-stamp over a computed digest carrier: the message-imprint octets and their algorithm
-    /// both come from the one carrier the registered digest seam produced and tagged, so the pair cannot
-    /// disagree the way separately passed octets and algorithm can. This is the preferred overload for a
-    /// caller that computed the digest itself; the octets-and-algorithm overload below remains for digests
-    /// that arrive without a carrier.
+    /// Builds a request (<see cref="TimestampRequests.CreateAsync"/>), sends it through
+    /// <paramref name="fetchResponse"/>, and verifies the response (<see cref="VerifyResponseAsync"/>) before
+    /// returning — the convenience compose of this file's two other deliverables, for a caller that has no
+    /// reason to keep the request/response steps separate. The message-imprint octets and their algorithm both
+    /// come from the one carrier the registered digest seam produced and tagged; a caller holding wire-sourced
+    /// digest octets wraps them in a <see cref="DigestValue"/> under the algorithm's own digest tag first.
     /// </summary>
     /// <param name="messageImprint">The computed digest of the data being time-stamped, carrying its own algorithm in its tag.</param>
     /// <param name="tsaUri">The Time-Stamping Authority to contact.</param>
@@ -527,10 +498,12 @@ public static class TimestampAcquisition
     /// <returns>The verified token, ready to attach. The caller owns and disposes it.</returns>
     /// <exception cref="ArgumentException">When <paramref name="tsaUri"/> is null or empty, or the carrier's tag names no digest algorithm this library states in PKI structures.</exception>
     /// <exception cref="ArgumentNullException">When <paramref name="messageImprint"/>, <paramref name="fetchResponse"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
-    /// <exception cref="TimestampAcquisitionException">As on the octets-and-algorithm overload.</exception>
+    /// <exception cref="TimestampAcquisitionException">
+    /// When the authority could not be reached, or the response fails any check <see cref="VerifyResponseAsync"/> performs.
+    /// </exception>
     [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings",
-        Justification = "Forwarded verbatim into the octets-and-algorithm overload, whose own suppression states the reason (the transport delegate owns URI parsing and scheme policy).")]
-    public static ValueTask<AcquiredTimestampToken> AcquireAsync(
+        Justification = "Forwarded verbatim into TimestampFetchContext.TsaUri, which is deliberately a string for the same reason that property gives (the transport delegate owns URI parsing and scheme policy); promoting to System.Uri here would impose platform URI semantics before that policy runs.")]
+    public static async ValueTask<AcquiredTimestampToken> AcquireAsync(
         DigestValue messageImprint,
         string tsaUri,
         FetchTimestampResponseAsyncDelegate fetchResponse,
@@ -541,54 +514,12 @@ public static class TimestampAcquisition
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(messageImprint);
-
-        PkiDigestAlgorithm algorithm = PkiDigestAlgorithm.FromDigest(messageImprint)
-            ?? throw new ArgumentException("The digest carrier's tag names no digest algorithm this library states in PKI structures.", nameof(messageImprint));
-
-        return AcquireAsync(messageImprint.AsReadOnlyMemory(), algorithm, tsaUri, fetchResponse, pool, reqPolicyOid, nonceByteLength, includeNonce, cancellationToken);
-    }
-
-
-    /// <summary>
-    /// Builds a request (<see cref="TimestampRequests.CreateAsync"/>), sends it through
-    /// <paramref name="fetchResponse"/>, and verifies the response (<see cref="VerifyResponseAsync"/>) before
-    /// returning — the convenience compose of this file's two other deliverables, for a caller that has no
-    /// reason to keep the request/response steps separate.
-    /// </summary>
-    /// <param name="messageImprintDigest">The caller-computed digest of the data being time-stamped.</param>
-    /// <param name="messageImprintAlgorithm">The digest algorithm <paramref name="messageImprintDigest"/> was computed under.</param>
-    /// <param name="tsaUri">The Time-Stamping Authority to contact.</param>
-    /// <param name="fetchResponse">The transport delegate.</param>
-    /// <param name="pool">The memory pool for every allocation this call performs.</param>
-    /// <param name="reqPolicyOid">The TSA policy the request asks for, or <see langword="null"/> to state none.</param>
-    /// <param name="nonceByteLength">The nonce length in octets; see <see cref="TimestampRequests.CreateAsync"/>.</param>
-    /// <param name="includeNonce">Whether the request carries a nonce; see <see cref="TimestampRequests.CreateAsync"/>.</param>
-    /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>The verified token, ready to attach. The caller owns and disposes it.</returns>
-    /// <exception cref="ArgumentException">When <paramref name="tsaUri"/> is null or empty.</exception>
-    /// <exception cref="ArgumentNullException">When <paramref name="fetchResponse"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
-    /// <exception cref="TimestampAcquisitionException">
-    /// When the authority could not be reached, or the response fails any check <see cref="VerifyResponseAsync"/> performs.
-    /// </exception>
-    [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings",
-        Justification = "Forwarded verbatim into TimestampFetchContext.TsaUri, which is deliberately a string for the same reason that property gives (the transport delegate owns URI parsing and scheme policy); promoting to System.Uri here would impose platform URI semantics before that policy runs.")]
-    public static async ValueTask<AcquiredTimestampToken> AcquireAsync(
-        ReadOnlyMemory<byte> messageImprintDigest,
-        PkiDigestAlgorithm messageImprintAlgorithm,
-        string tsaUri,
-        FetchTimestampResponseAsyncDelegate fetchResponse,
-        MemoryPool<byte> pool,
-        string? reqPolicyOid = null,
-        int nonceByteLength = 32,
-        bool includeNonce = true,
-        CancellationToken cancellationToken = default)
-    {
         ArgumentException.ThrowIfNullOrEmpty(tsaUri);
         ArgumentNullException.ThrowIfNull(fetchResponse);
         ArgumentNullException.ThrowIfNull(pool);
 
         using TimestampRequestContent request = await TimestampRequests.CreateAsync(
-            messageImprintDigest, messageImprintAlgorithm, pool, reqPolicyOid, nonceByteLength, includeNonce, cancellationToken).ConfigureAwait(false);
+            messageImprint, pool, reqPolicyOid, nonceByteLength, includeNonce, cancellationToken).ConfigureAwait(false);
 
         var fetchContext = new TimestampFetchContext { TsaUri = tsaUri, Request = request.Request };
         PkiCertificateMemory? response = await fetchResponse(fetchContext, pool, cancellationToken).ConfigureAwait(false);
@@ -602,7 +533,7 @@ public static class TimestampAcquisition
         using(response)
         {
             return await VerifyResponseAsync(
-                response, messageImprintDigest, messageImprintAlgorithm, request.RequestNonce,
+                response, messageImprint, request.RequestNonce,
                 request.RequestedPolicyOid, pool, cancellationToken).ConfigureAwait(false);
         }
     }
