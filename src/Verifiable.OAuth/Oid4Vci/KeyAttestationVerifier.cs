@@ -85,7 +85,7 @@ public static class KeyAttestationVerifier
         ExchangeContext context,
         DecodeDelegate base64UrlDecoder,
         TimeProvider timeProvider,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeSpan clockSkew,
         CancellationToken cancellationToken) =>
         VerifyCoreAsync(
@@ -133,7 +133,7 @@ public static class KeyAttestationVerifier
         ExchangeContext context,
         DecodeDelegate base64UrlDecoder,
         TimeProvider timeProvider,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeSpan clockSkew,
         CancellationToken cancellationToken)
     {
@@ -167,7 +167,7 @@ public static class KeyAttestationVerifier
         ExchangeContext context,
         DecodeDelegate base64UrlDecoder,
         TimeProvider timeProvider,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeSpan clockSkew,
         CancellationToken cancellationToken)
     {

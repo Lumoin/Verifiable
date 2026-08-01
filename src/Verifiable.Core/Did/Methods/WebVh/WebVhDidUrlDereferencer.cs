@@ -67,7 +67,7 @@ public static class WebVhDidUrlDereferencer
         ProofOptionsSerializeDelegate proofOptionsSerializer,
         DecodeDelegate base58Decoder,
         ComputeDigestDelegate computeDigest,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(resolve);
         ArgumentNullException.ThrowIfNull(transport);
@@ -180,7 +180,7 @@ public static class WebVhDidUrlDereferencer
         ProofOptionsSerializeDelegate proofOptionsSerializer,
         DecodeDelegate base58Decoder,
         ComputeDigestDelegate computeDigest,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {

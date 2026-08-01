@@ -45,5 +45,5 @@ public delegate ValueTask<SharedSecret> AuthenticatedKeyAgreementDecryptDelegate
     ReadOnlyMemory<byte> recipientPrivateKeyBytes,
     PublicKeyMemory ephemeralPublicKey,
     PublicKeyMemory senderPublicKey,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);

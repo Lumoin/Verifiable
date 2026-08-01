@@ -62,7 +62,7 @@ internal sealed class CtapAuthenticatorSimulatorTests
             CtapMakeCredentialExtensionOutputsCborWriter.Write,
             CtapGetAssertionExtensionOutputsCborWriter.Write,
             rng: FillFixedPattern);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //Independent oracle: computed from the same fixed fill pattern handed to the simulator,
         //not read back from the simulator's own state.
@@ -107,7 +107,7 @@ internal sealed class CtapAuthenticatorSimulatorTests
             CtapLargeBlobsResponseCborWriter.Write,
             CtapMakeCredentialExtensionOutputsCborWriter.Write,
             CtapGetAssertionExtensionOutputsCborWriter.Write);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //0xFE: unrecognized, unlike WellKnownCtapCommands.GetInfo (0x04) or any other registered command byte.
         byte[] request = [0xFE];
@@ -142,7 +142,7 @@ internal sealed class CtapAuthenticatorSimulatorTests
             CtapLargeBlobsResponseCborWriter.Write,
             CtapMakeCredentialExtensionOutputsCborWriter.Write,
             CtapGetAssertionExtensionOutputsCborWriter.Write);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using PooledMemory response = await simulator.TransceiveAsync(ReadOnlyMemory<byte>.Empty, pool, TestContext.CancellationToken);
 
@@ -176,7 +176,7 @@ internal sealed class CtapAuthenticatorSimulatorTests
             CtapMakeCredentialExtensionOutputsCborWriter.Write,
             CtapGetAssertionExtensionOutputsCborWriter.Write,
             rng: FillFixedPattern);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] request = [WellKnownCtapCommands.GetInfo];
 
         using PooledMemory first = await simulator.TransceiveAsync(request, pool, TestContext.CancellationToken);
@@ -202,7 +202,7 @@ internal sealed class CtapAuthenticatorSimulatorTests
     public async Task MakeCredentialAssociatesUserNameAndDisplayNameWithTheStoredRecord()
     {
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-user-name-fidelity");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var trace = new TestObserver<TraceEntry<CtapAuthenticatorState, CtapAuthenticatorInput>>();
         byte[] credentialIdBytes;

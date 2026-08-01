@@ -614,7 +614,7 @@ public static class AsicContainerAugmentation
     public static AsicContainerLevelReport StateContainerLevel(
         ReadOnlyMemory<byte> containerBytes,
         AsicZipReadLimits limits,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(limits);
         ArgumentNullException.ThrowIfNull(pool);
@@ -659,7 +659,7 @@ public static class AsicContainerAugmentation
     /// <exception cref="TimestampAcquisitionException">When the authority could not be reached, or its answer does not verify.</exception>
     public static async ValueTask<AsicContainerAugmentationResult> AddSignatureTimestampsAsync(
         AsicContainerSignatureTimestampContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -712,7 +712,7 @@ public static class AsicContainerAugmentation
     /// </remarks>
     public static AsicContainerAugmentationResult AddSignatureValidationData(
         AsicContainerValidationDataContext context,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(context.ValidationMaterial);
@@ -764,7 +764,7 @@ public static class AsicContainerAugmentation
         Justification = "Every carrier the loop builds is owned by a using of that iteration and the replacements the finally disposes; the rule's data flow does not follow ownership across the awaited augmentations inside the loop. The try/finally shape the rule prescribes was written first and does not satisfy it either.")]
     public static async ValueTask<AsicContainerAugmentationResult> AddSignatureArchiveTimestampsAsync(
         AsicContainerSignatureArchiveTimestampContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -855,7 +855,7 @@ public static class AsicContainerAugmentation
     /// </remarks>
     public static async ValueTask<AsicContainerAugmentationResult> AddContainerArchiveTimestampAsync(
         AsicContainerArchiveTimestampContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -984,7 +984,7 @@ public static class AsicContainerAugmentation
     /// <exception cref="AsicContainerAugmentationException">When the octets are not a container this library reads.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the read result transfers to the caller on success; the failure path disposes it before throwing.")]
-    private static AsicZipReadResult ReadContainer(ReadOnlyMemory<byte> containerBytes, AsicZipReadLimits limits, MemoryPool<byte> pool)
+    private static AsicZipReadResult ReadContainer(ReadOnlyMemory<byte> containerBytes, AsicZipReadLimits limits, BaseMemoryPool pool)
     {
         AsicZipReadResult read = AsicZipReading.Read(containerBytes, limits, pool);
         if(!read.IsRead)
@@ -1182,7 +1182,7 @@ public static class AsicContainerAugmentation
     /// <param name="signature">The CAdES object's octets.</param>
     /// <param name="pool">The memory pool every allocation this call performs is rented from.</param>
     /// <returns>The level.</returns>
-    private static AsicContainerLevel StateSignatureLevel(ReadOnlySpan<byte> signature, MemoryPool<byte> pool)
+    private static AsicContainerLevel StateSignatureLevel(ReadOnlySpan<byte> signature, BaseMemoryPool pool)
     {
         using CmsSignedData signedData = CmsSignedData.FromBytes(signature, pool);
         bool carriesRevocationInformation = CmsSignedDataAugmentation.ReadRevocationInformation(signedData).Count > 0;
@@ -1244,7 +1244,7 @@ public static class AsicContainerAugmentation
     private static async ValueTask<CmsSignedData> AddSignatureTimestampToEverySignerAsync(
         ReadOnlyMemory<byte> signature,
         AsicContainerSignatureTimestampContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         CmsSignedData? current = null;
@@ -1301,7 +1301,7 @@ public static class AsicContainerAugmentation
         ReadOnlyMemory<byte> signature,
         AsicContainerSignatureArchiveTimestampContext context,
         DigestValue detachedContentDigest,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         CmsSignedData? current = null;
@@ -1366,7 +1366,7 @@ public static class AsicContainerAugmentation
         string entryName,
         CAdESValidationMaterial material,
         AsicValidationMaterialPlacement placement,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         using CmsSignedData signedData = CmsSignedData.FromBytes(objectOctets, pool);
         CAdESValidationDataPlacement selected = CAdESSignatureAugmentation.DetectValidationDataPlacement(signedData);
@@ -1411,7 +1411,7 @@ public static class AsicContainerAugmentation
         string entryName,
         CAdESValidationMaterial material,
         AsicValidationMaterialPlacement placement,
-        MemoryPool<byte> pool) =>
+        BaseMemoryPool pool) =>
         material.IsEmpty
             ? CmsSignedData.FromBytes(objectOctets, pool)
             : PlaceValidationMaterial(objectOctets, entryName, material, placement, pool);
@@ -1433,7 +1433,7 @@ public static class AsicContainerAugmentation
         CAdESValidationMaterial material,
         AsicValidationMaterialPlacement placement,
         Dictionary<string, PooledMemory> replacements,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         for(int i = 0; i < container.Entries.Count; ++i)
         {
@@ -1471,7 +1471,7 @@ public static class AsicContainerAugmentation
         ParseAsicManifestDelegate? parseManifest,
         AsicManifestParseLimits limits,
         int maximumEntryNameByteLength,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         var resolved = new Dictionary<string, ReadOnlyMemory<byte>>(StringComparer.Ordinal);
@@ -1603,7 +1603,7 @@ public static class AsicContainerAugmentation
         ParseAsicManifestDelegate? parseManifest,
         AsicManifestParseLimits limits,
         int maximumEntryNameByteLength,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(parseManifest is null)
@@ -1723,7 +1723,7 @@ public static class AsicContainerAugmentation
         List<AsicZipEntrySource> covered,
         string timestampEntryName,
         string? renamedArchiveManifest,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         var references = new List<AsicDataObjectReference>(covered.Count);
@@ -1838,7 +1838,7 @@ public static class AsicContainerAugmentation
         AsicZipContainer container,
         List<AsicZipEntrySource> entries,
         DateTimeOffset lastModified,
-        MemoryPool<byte> pool) =>
+        BaseMemoryPool pool) =>
         AsicZipAuthoring.Write(
             new AsicZipAuthoringContext
             {
@@ -1909,7 +1909,7 @@ public static class AsicContainerAugmentation
         Dictionary<string, PooledMemory> replacements,
         List<AsicZipEntry> signatures,
         DateTimeOffset lastModified,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         List<AsicZipEntrySource> entries = CarryEntriesForward(container, replacements, new Dictionary<string, string>(StringComparer.Ordinal), lastModified);
         PooledMemory augmented = WriteContainer(container, entries, lastModified, pool);

@@ -30,7 +30,7 @@ internal sealed class DidResolverCompositionTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly MemoryPool<byte> Pool = BaseMemoryPool.Shared;
+    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
 
     private const string KeyDid = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
     private const string CheqdDid = "did:cheqd:mainnet:zF7rhDBfUt9d1gJPjx7s1JXfUY7oVWkY";

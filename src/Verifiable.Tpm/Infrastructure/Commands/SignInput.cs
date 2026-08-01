@@ -72,7 +72,7 @@ public sealed class SignInput: ITpmCommandInput, IDisposable
         TpmiDhObject keyHandle,
         ReadOnlySpan<byte> digest,
         TpmAlgIdConstants schemeHashAlg,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return Create(keyHandle, digest, TpmAlgIdConstants.TPM_ALG_ECDSA, schemeHashAlg, pool);
     }
@@ -93,7 +93,7 @@ public sealed class SignInput: ITpmCommandInput, IDisposable
         TpmiDhObject keyHandle,
         ReadOnlySpan<byte> digest,
         TpmAlgIdConstants schemeHashAlg,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return Create(keyHandle, digest, TpmAlgIdConstants.TPM_ALG_RSASSA, schemeHashAlg, pool);
     }
@@ -114,7 +114,7 @@ public sealed class SignInput: ITpmCommandInput, IDisposable
         TpmiDhObject keyHandle,
         ReadOnlySpan<byte> digest,
         TpmAlgIdConstants schemeHashAlg,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return Create(keyHandle, digest, TpmAlgIdConstants.TPM_ALG_RSAPSS, schemeHashAlg, pool);
     }
@@ -137,7 +137,7 @@ public sealed class SignInput: ITpmCommandInput, IDisposable
         ReadOnlySpan<byte> digest,
         TpmAlgIdConstants signatureScheme,
         TpmAlgIdConstants schemeHashAlg,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         IMemoryOwner<byte> owner = pool.Rent(digest.Length);

@@ -42,7 +42,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
     /// <summary>The End-User the offered Credential is about — the seam-resolved subject.</summary>
     private const string OfferSubject = "urn:uuid:end-user-42";
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     /// <summary>
     /// The capabilities a truly grant-only tenant needs: the grant capability itself, plus discovery

@@ -85,7 +85,7 @@ public static class GeneralJweEncryptionExtensions
         KeyDerivationDelegate keyDerivationDelegate,
         KeyWrapDelegate keyWrapDelegate,
         AeadEncryptDelegate aeadEncryptDelegate,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(recipients);
@@ -180,7 +180,7 @@ public static class GeneralJweEncryptionExtensions
         AuthenticatedKeyDerivationDelegate authenticatedKeyDerivationDelegate,
         KeyWrapDelegate keyWrapDelegate,
         AeadEncryptDelegate aeadEncryptDelegate,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(recipients);
@@ -260,7 +260,7 @@ public static class GeneralJweEncryptionExtensions
         AuthenticatedKeyDerivationDelegate? authenticatedKeyDerivationDelegate,
         KeyWrapDelegate keyWrapDelegate,
         AeadEncryptDelegate aeadEncryptDelegate,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         PublicKeyMemory ephemeralPublic = ephemeralKey.PublicKey;
@@ -419,7 +419,7 @@ public static class GeneralJweEncryptionExtensions
         MultiRecipientKeyAgreementEncryptDelegate agreement,
         PublicKeyMemory recipientPublicKey,
         PrivateKeyMemory ephemeralPrivate,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken) =>
         ephemeralPrivate.WithKeyBytesAsync(
             static (ephemeralBytes, state) =>
@@ -440,7 +440,7 @@ public static class GeneralJweEncryptionExtensions
         PublicKeyMemory recipientPublicKey,
         PrivateKeyMemory ephemeralPrivate,
         PrivateKeyMemory senderPrivate,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken) =>
         ephemeralPrivate.WithKeyBytesAsync(
             static (ephemeralBytes, outer) =>
@@ -495,7 +495,7 @@ public static class GeneralJweEncryptionExtensions
     }
 
 
-    private static PublicKeyMemory CopyPublicKey(PublicKeyMemory source, MemoryPool<byte> pool)
+    private static PublicKeyMemory CopyPublicKey(PublicKeyMemory source, BaseMemoryPool pool)
     {
         ReadOnlySpan<byte> span = source.AsReadOnlySpan();
         IMemoryOwner<byte> owner = pool.Rent(span.Length);
@@ -511,7 +511,7 @@ public static class GeneralJweEncryptionExtensions
     private static IMemoryOwner<byte>? DecodeOptionalHeaderValue(
         JwtHeader header,
         string parameterName,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         out int length)
     {
         length = 0;

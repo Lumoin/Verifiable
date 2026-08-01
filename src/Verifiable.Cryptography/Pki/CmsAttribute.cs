@@ -103,7 +103,7 @@ public sealed class CmsAttribute: SensitiveMemory, IEquatable<CmsAttribute>
     /// <exception cref="ArgumentException">When <paramref name="attributeType"/> is not a well-formed object identifier, or <paramref name="attributeValue"/> is empty.</exception>
     /// <exception cref="ArgumentNullException">When <paramref name="pool"/> is <see langword="null"/>.</exception>
     /// <exception cref="AsnContentException">When <paramref name="attributeValue"/> is not exactly one DER-encoded value.</exception>
-    public static CmsAttribute Create(string attributeType, ReadOnlySpan<byte> attributeValue, MemoryPool<byte> pool)
+    public static CmsAttribute Create(string attributeType, ReadOnlySpan<byte> attributeValue, BaseMemoryPool pool)
     {
         ArgumentException.ThrowIfNullOrEmpty(attributeType);
         ArgumentNullException.ThrowIfNull(pool);
@@ -134,7 +134,7 @@ public sealed class CmsAttribute: SensitiveMemory, IEquatable<CmsAttribute>
     /// <exception cref="ArgumentException">When <paramref name="attributeType"/> is not a well-formed object identifier, or <paramref name="attributeValues"/> is empty or exceeds the supported count.</exception>
     /// <exception cref="ArgumentNullException">When <paramref name="attributeValues"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
     /// <exception cref="AsnContentException">When a value is not exactly one DER-encoded value.</exception>
-    public static CmsAttribute Create(string attributeType, IReadOnlyList<ReadOnlyMemory<byte>> attributeValues, MemoryPool<byte> pool)
+    public static CmsAttribute Create(string attributeType, IReadOnlyList<ReadOnlyMemory<byte>> attributeValues, BaseMemoryPool pool)
     {
         ArgumentException.ThrowIfNullOrEmpty(attributeType);
         ArgumentNullException.ThrowIfNull(attributeValues);
@@ -179,7 +179,7 @@ public sealed class CmsAttribute: SensitiveMemory, IEquatable<CmsAttribute>
     /// <param name="pool">The memory pool the buffer is rented from.</param>
     /// <returns>The encoded attribute carrier.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned carrier, which the caller disposes; the catch disposes it on a partial failure.")]
-    private static CmsAttribute Materialise(string attributeType, AsnWriter writer, MemoryPool<byte> pool)
+    private static CmsAttribute Materialise(string attributeType, AsnWriter writer, BaseMemoryPool pool)
     {
         int encodedLength = writer.GetEncodedLength();
         IMemoryOwner<byte> owner = pool.Rent(encodedLength);

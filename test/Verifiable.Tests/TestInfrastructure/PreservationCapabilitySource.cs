@@ -207,7 +207,7 @@ internal static class PreservationCapabilitySource
         PkiDigestAlgorithm algorithm,
         IReadOnlyList<string> signedDataObjects,
         string? hashFunctionIdentifier,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(signedDataObjects);
@@ -266,7 +266,7 @@ internal static class PreservationCapabilitySource
     internal static PreservationHashOnlySubmission SubmissionWithValueOfLength(
         PkiDigestAlgorithm statedAlgorithm,
         int valueLength,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

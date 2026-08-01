@@ -112,7 +112,7 @@ public static class PastSignatureValidation
         SignatureValidationSeams seams,
         DateTimeOffset currentTime,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(inputs);
@@ -334,7 +334,7 @@ public static class PastSignatureValidation
     private static async ValueTask<bool> HasTargetIssuerProofWithinValidityAsync(
         PastSignatureValidationInputs inputs,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(FindIssuerCertificate(inputs) is not PkiCertificateMemory issuer)
@@ -431,7 +431,7 @@ public static class PastSignatureValidation
     private static async ValueTask<bool> HasRevocationDataProofAsync(
         PastSignatureValidationInputs inputs,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(inputs.CertificationAuthorityRevocationTime is not DateTimeOffset authorityRevocationTime)

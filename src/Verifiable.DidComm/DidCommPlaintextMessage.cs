@@ -62,7 +62,7 @@ public sealed class DidCommPlaintextMessage: SensitiveMemory, IEquatable<DidComm
     /// <param name="pool">The pool the owning buffer is drawn from.</param>
     /// <param name="lifetime">Optional OTel activity bracketing this message's lifetime.</param>
     /// <returns>A new <see cref="DidCommPlaintextMessage"/> owning a pooled copy of <paramref name="wireBytes"/>.</returns>
-    public static DidCommPlaintextMessage Create(ReadOnlySpan<byte> wireBytes, Tag tag, MemoryPool<byte> pool, Activity? lifetime = null)
+    public static DidCommPlaintextMessage Create(ReadOnlySpan<byte> wireBytes, Tag tag, BaseMemoryPool pool, Activity? lifetime = null)
     {
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);

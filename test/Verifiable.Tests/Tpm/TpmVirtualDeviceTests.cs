@@ -26,7 +26,7 @@ internal sealed class TpmVirtualDeviceTests
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The TpmResponse is owned by the returned TpmResult and disposed by the caller under test.")]
-    private static TpmResult<TpmResponse> SuccessFrame(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
+    private static TpmResult<TpmResponse> SuccessFrame(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(bytes.Length);
         bytes.CopyTo(owner.Memory.Span);
@@ -66,7 +66,7 @@ internal sealed class TpmVirtualDeviceTests
         Assert.IsTrue(virtualDevice.HasResponse(command));
         Assert.IsFalse(virtualDevice.HasResponse([0x80, 0x01, 0x00, 0x00, 0x00, 0x0A, 0x00, 0x00, 0x01, 0x7B]));
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResult<TpmResponse> result = await virtualDevice.SubmitAsync(
             command, pool, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -86,7 +86,7 @@ internal sealed class TpmVirtualDeviceTests
         var virtualDevice = new TpmVirtualDevice();
         byte[] command = [0x80, 0x01, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x01, 0x7B, 0x00, 0x10];
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResult<TpmResponse> result = await virtualDevice.SubmitAsync(
             command, pool, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -120,7 +120,7 @@ internal sealed class TpmVirtualDeviceTests
     public async Task ReplaysGetRandomThroughExecutor()
     {
         const int RequestedBytes = 16;
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
 
@@ -132,7 +132,7 @@ internal sealed class TpmVirtualDeviceTests
 
         ValueTask<TpmResult<TpmResponse>> CaptureHandler(
             ReadOnlyMemory<byte> command,
-            MemoryPool<byte> handlerPool,
+            BaseMemoryPool handlerPool,
             CancellationToken cancellationToken)
         {
             capturedCommand = command.ToArray();

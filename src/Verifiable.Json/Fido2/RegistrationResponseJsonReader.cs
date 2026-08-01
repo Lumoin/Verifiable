@@ -106,7 +106,7 @@ public static class RegistrationResponseJsonReader
     /// disagree, a <c>Base64URLString</c> member is padded or is not valid base64url, or nesting
     /// exceeds the depth bound.
     /// </exception>
-    public static WebAuthnRegistrationResponseEnvelope Read(ReadOnlyMemory<byte> document, MemoryPool<byte> pool)
+    public static WebAuthnRegistrationResponseEnvelope Read(ReadOnlyMemory<byte> document, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -127,7 +127,7 @@ public static class RegistrationResponseJsonReader
     /// decoding each <c>Base64URLString</c> member straight into the pooled carrier
     /// <see cref="Fido2RegistrationVerifier"/> consumes.
     /// </summary>
-    private static WebAuthnRegistrationResponseEnvelope ReadObject(ReadOnlySpan<byte> document, MemoryPool<byte> pool)
+    private static WebAuthnRegistrationResponseEnvelope ReadObject(ReadOnlySpan<byte> document, BaseMemoryPool pool)
     {
         Utf8JsonReader reader = new(document, ReaderOptions);
         if(!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
@@ -417,7 +417,7 @@ public static class RegistrationResponseJsonReader
     /// </summary>
     /// <param name="decoded">The member's decoded bytes, valid only for the call's duration.</param>
     /// <param name="pool">The memory pool the resulting carrier rents from.</param>
-    private delegate TResult DecodedBase64UrlFactory<TResult>(ReadOnlySpan<byte> decoded, MemoryPool<byte> pool);
+    private delegate TResult DecodedBase64UrlFactory<TResult>(ReadOnlySpan<byte> decoded, BaseMemoryPool pool);
 
 
     /// <summary>
@@ -428,7 +428,7 @@ public static class RegistrationResponseJsonReader
     /// <paramref name="factory"/> so it lands directly in the caller's pool-backed wire carrier rather
     /// than a standalone heap array.
     /// </summary>
-    private static TResult DecodeBase64Url<TResult>(string encoded, string memberName, MemoryPool<byte> pool, DecodedBase64UrlFactory<TResult> factory)
+    private static TResult DecodeBase64Url<TResult>(string encoded, string memberName, BaseMemoryPool pool, DecodedBase64UrlFactory<TResult> factory)
     {
         if(encoded.Contains('=', StringComparison.Ordinal))
         {

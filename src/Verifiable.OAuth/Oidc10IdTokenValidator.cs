@@ -102,7 +102,7 @@ public static class Oidc10IdTokenValidator
         JwsAccessTokenJsonParser parser,
         DecodeDelegate base64UrlDecoder,
         TimeProvider timeProvider,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeSpan iatSkew,
         TenantId tenantId,
         ExchangeContext context,

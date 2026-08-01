@@ -18,7 +18,7 @@ public static class LibsodiumKeyConversion
     /// <returns>A pooled buffer containing the 32-byte X25519 public key. The caller owns disposal.</returns>
     /// <exception cref="ArgumentException"><paramref name="ed25519PublicKey"/> is not exactly 32 bytes.</exception>
     /// <exception cref="CryptographicException">libsodium rejected the conversion (<c>ret != 0</c>).</exception>
-    public static IMemoryOwner<byte> ConvertEd25519PublicKeyToCurve25519PublicKey(ReadOnlySpan<byte> ed25519PublicKey, MemoryPool<byte> memoryPool)
+    public static IMemoryOwner<byte> ConvertEd25519PublicKeyToCurve25519PublicKey(ReadOnlySpan<byte> ed25519PublicKey, BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         LibsodiumNativeMethods.EnsureInitialized();
@@ -62,7 +62,7 @@ public static class LibsodiumKeyConversion
     /// managed memory — it is reached only by pinning the owner's native memory — and the scratch owner
     /// is disposed (wiped and freed) before this method returns.
     /// </remarks>
-    public static IMemoryOwner<byte> ConvertEd25519PrivateKeyToCurve25519PrivateKey(ReadOnlySpan<byte> ed25519PrivateKeySeed, MemoryPool<byte> memoryPool)
+    public static IMemoryOwner<byte> ConvertEd25519PrivateKeyToCurve25519PrivateKey(ReadOnlySpan<byte> ed25519PrivateKeySeed, BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         LibsodiumNativeMethods.EnsureInitialized();

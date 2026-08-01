@@ -46,7 +46,7 @@ public static class CtapAuthenticatorConfigClient
         Ctap2TransceiveDelegate transceive,
         EncodeCtapAuthenticatorConfigRequestDelegate encodeRequest,
         CtapAuthenticatorConfigRequest request,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(transceive);

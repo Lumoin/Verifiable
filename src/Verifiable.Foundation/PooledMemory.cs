@@ -23,7 +23,7 @@ namespace Verifiable.Foundation;
 /// <para>
 /// <strong>Ownership:</strong> The constructor taking an <see cref="IMemoryOwner{T}"/> transfers
 /// ownership of that owner to the new <see cref="PooledMemory"/> instance with no copy; the caller
-/// must not use the owner afterwards. <see cref="FromBytes(ReadOnlySpan{byte}, MemoryPool{byte}, Tag)"/>
+/// must not use the owner afterwards. <see cref="FromBytes(ReadOnlySpan{byte}, BaseMemoryPool, Tag)"/>
 /// rents a fresh buffer and copies into it, for callers that only have a span to hand over. Either way,
 /// the resulting <see cref="PooledMemory"/> is owned by its caller, who must dispose it; disposal clears
 /// the memory and returns it to the pool, per <see cref="SensitiveMemory"/>'s contract.
@@ -64,7 +64,7 @@ public sealed class PooledMemory: SensitiveMemory
     /// <param name="tag">Metadata describing the buffer's role.</param>
     /// <returns>A <see cref="PooledMemory"/> wrapping a pooled copy of <paramref name="bytes"/>.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="pool"/> is <see langword="null"/>.</exception>
-    public static PooledMemory FromBytes(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool, Tag tag)
+    public static PooledMemory FromBytes(ReadOnlySpan<byte> bytes, BaseMemoryPool pool, Tag tag)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

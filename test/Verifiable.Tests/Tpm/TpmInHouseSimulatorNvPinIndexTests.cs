@@ -112,7 +112,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     {
         const uint PinLimit = 2;
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -152,7 +152,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     {
         const uint PinLimit = 2;
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -198,7 +198,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     {
         const uint PinLimit = 3;
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -229,7 +229,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     [TestMethod]
     public async Task NvDefineSpaceOfPinFailIndexWithoutNoDaReturnsAttributes()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -248,7 +248,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     [TestMethod]
     public async Task NvDefineSpaceWithUnsupportedIndexTypeReturnsAttributes()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -268,7 +268,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     [TestMethod]
     public async Task NvReadOfUnwrittenPinIndexReturnsAuthUnavailable()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -289,7 +289,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     [TestMethod]
     public async Task NvDefineSpaceOfPinIndexWithAuthWriteSetReturnsAttributes()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -314,7 +314,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     {
         const uint PinLimit = 5;
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -354,7 +354,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     {
         const uint PinLimit = 1;
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -396,7 +396,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     [TestMethod]
     public async Task OwnerAuthNvWriteAgainstIndexWithoutOwnerWriteReturnsAuthorization()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -423,7 +423,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     {
         const uint PinLimit = 2;
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -469,7 +469,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     [TestMethod]
     public async Task OwnerReadNvReadWithWrongOwnerAuthReturnsBadAuth()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -493,7 +493,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     [TestMethod]
     public async Task OwnerReadNvReadAgainstIndexWithoutOwnerReadReturnsAuthorizationBeforeComparingOwnerAuth()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -519,7 +519,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     [TestMethod]
     public async Task OwnerReadNvReadAgainstIndexWithoutOwnerReadReturnsAuthorizationEvenWithCorrectOwnerAuth()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -545,7 +545,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     [TestMethod]
     public async Task OwnerReadNvReadOfUnwrittenPinIndexReturnsUninitialized()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -566,7 +566,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     [TestMethod]
     public async Task NvUndefineSpaceWithWrongOwnerAuthReturnsBadAuthAndLeavesTheIndexDefined()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -592,7 +592,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     [TestMethod]
     public async Task NvUndefineSpaceWithNonOwnerAuthHandleReturnsHandle()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -618,7 +618,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     {
         const uint PinLimit = 1;
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -675,7 +675,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     /// <param name="ownerAuthSupplied">The owner authorization value to supply.</param>
     /// <returns>The read result; on success, the caller owns and must dispose <see cref="TpmResult{T}.Value"/>.</returns>
     private async Task<TpmResult<NvReadResponse>> ReadIndexAsOwnerAsync(
-        TpmDevice device, MemoryPool<byte> pool, TpmResponseRegistry registry, uint nvIndex, ReadOnlyMemory<byte> ownerAuthSupplied)
+        TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry, uint nvIndex, ReadOnlyMemory<byte> ownerAuthSupplied)
     {
         using TpmPasswordSession session = TpmPasswordSession.Create(ownerAuthSupplied.Span, pool);
         var readInput = new NvReadInput(AuthHandle: (uint)TpmRh.TPM_RH_OWNER, NvIndex: nvIndex, Size: PinCounterParametersSize, Offset: 0);
@@ -696,7 +696,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     /// <param name="authSupplied">The authorization value to supply.</param>
     /// <returns>The undefine-space result.</returns>
     private async Task<TpmResult<NvUndefineSpaceResponse>> UndefineIndexAsync(
-        TpmDevice device, MemoryPool<byte> pool, TpmResponseRegistry registry, TpmRh authHandle, uint nvIndex, ReadOnlyMemory<byte> authSupplied)
+        TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry, TpmRh authHandle, uint nvIndex, ReadOnlyMemory<byte> authSupplied)
     {
         using TpmPasswordSession session = TpmPasswordSession.Create(authSupplied.Span, pool);
         var input = new NvUndefineSpaceInput(authHandle, nvIndex);
@@ -735,7 +735,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     /// <param name="attributes">The Index's TPMA_NV attributes.</param>
     /// <returns>The define-space result.</returns>
     private async Task<TpmResult<NvDefineSpaceResponse>> DefineIndexAsync(
-        TpmDevice device, MemoryPool<byte> pool, TpmResponseRegistry registry, uint nvIndex, TpmaNv attributes)
+        TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry, uint nvIndex, TpmaNv attributes)
     {
         using TpmPasswordSession ownerSession = TpmPasswordSession.CreateEmpty(pool);
 
@@ -760,7 +760,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     /// <param name="suppliedAuth">The authValue (PIN) the caller supplies for the Index.</param>
     /// <returns>The read result; on success, the caller owns and must dispose <see cref="TpmResult{T}.Value"/>.</returns>
     private async Task<TpmResult<NvReadResponse>> ReadIndexAsync(
-        TpmDevice device, MemoryPool<byte> pool, TpmResponseRegistry registry, uint nvIndex, ReadOnlyMemory<byte> suppliedAuth)
+        TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry, uint nvIndex, ReadOnlyMemory<byte> suppliedAuth)
     {
         using TpmPasswordSession session = TpmPasswordSession.Create(suppliedAuth.Span, pool);
         var readInput = new NvReadInput(AuthHandle: nvIndex, NvIndex: nvIndex, Size: PinCounterParametersSize, Offset: 0);
@@ -784,7 +784,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     /// <param name="pinLimit">The pinLimit value to store.</param>
     /// <returns>The write result.</returns>
     private async Task<TpmResult<NvWriteResponse>> WritePinCounterParametersAsync(
-        TpmDevice device, MemoryPool<byte> pool, TpmResponseRegistry registry, uint nvIndex, uint pinCount, uint pinLimit)
+        TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry, uint nvIndex, uint pinCount, uint pinLimit)
     {
         using TpmPasswordSession ownerSession = TpmPasswordSession.CreateEmpty(pool);
         using IMemoryOwner<byte> owner = pool.Rent(PinCounterParametersSize);
@@ -811,7 +811,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     /// <param name="suppliedAuth">The authValue (PIN) supplied for the Index.</param>
     /// <returns>The write result.</returns>
     private async Task<TpmResult<NvWriteResponse>> WriteIndexAuthValueAsync(
-        TpmDevice device, MemoryPool<byte> pool, TpmResponseRegistry registry, uint nvIndex, ReadOnlyMemory<byte> suppliedAuth)
+        TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry, uint nvIndex, ReadOnlyMemory<byte> suppliedAuth)
     {
         using TpmPasswordSession session = TpmPasswordSession.Create(suppliedAuth.Span, pool);
         var writeInput = new NvWriteInput(nvIndex, nvIndex, new Tpm2bMaxBuffer(RejectedWriteAttempt), Offset: 0);
@@ -830,7 +830,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         var simulator = new TpmSimulator("tpm-in-house-nv-pin-index");
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
         using IMemoryOwner<byte> owner = pool.Rent(length);

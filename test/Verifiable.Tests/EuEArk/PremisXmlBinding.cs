@@ -61,7 +61,7 @@ public static class PremisXmlBinding
     /// <returns>The parse result.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of every fixity carrier built here transfers to the successful PremisParseResult, which the caller disposes; the failure paths dispose everything the reader has built so far.")]
-    public static ValueTask<PremisParseResult> ParseAsync(PremisParseContext context, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static ValueTask<PremisParseResult> ParseAsync(PremisParseContext context, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(pool);
@@ -143,7 +143,7 @@ public static class PremisXmlBinding
     /// <param name="pool">The memory pool the produced document's carrier is rented from.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The encoding result.</returns>
-    public static ValueTask<PremisEncodeResult> EncodeAsync(PremisEncodeContext context, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static ValueTask<PremisEncodeResult> EncodeAsync(PremisEncodeContext context, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(pool);
@@ -411,7 +411,7 @@ public static class PremisXmlBinding
     /// <returns>The parse result.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of every object built here, and of the document built around them, transfers to the returned PremisParseResult, which the caller disposes; every failure path returns before the document is built and the fixities the caller collected are disposed by ParseAsync.")]
-    private static PremisParseResult ReadDocument(XElement root, PremisParseLimits limits, MemoryPool<byte> pool, List<EArkFixity> fixities)
+    private static PremisParseResult ReadDocument(XElement root, PremisParseLimits limits, BaseMemoryPool pool, List<EArkFixity> fixities)
     {
         string? version = (string?)root.Attribute("version");
         if(version is null)
@@ -1036,7 +1036,7 @@ public static class PremisXmlBinding
     /// <param name="root">The <c>premis</c> element to write.</param>
     /// <param name="pool">The memory pool the carrier is rented from.</param>
     /// <returns>The produced octets. The caller owns and disposes them.</returns>
-    private static PooledMemory Serialize(XElement root, MemoryPool<byte> pool)
+    private static PooledMemory Serialize(XElement root, BaseMemoryPool pool)
     {
         var writerSettings = new XmlWriterSettings
         {

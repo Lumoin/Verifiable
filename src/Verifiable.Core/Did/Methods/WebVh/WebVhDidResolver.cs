@@ -186,7 +186,7 @@ public static class WebVhDidResolver
         WebVhCanonicalizer canonicalizer,
         EncodeDelegate base58Encoder,
         DecodeDelegate base58Decoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TimeProvider timeProvider)
         => Build(transport, lineParser, witnessFileParser, documentIdentityReader, stateDeserializer, canonicalizer,
             ResolveRegisteredDigest(), base58Encoder, base58Decoder, pool, timeProvider);
@@ -218,7 +218,7 @@ public static class WebVhDidResolver
         ComputeDigestDelegate computeDigest,
         EncodeDelegate base58Encoder,
         DecodeDelegate base58Decoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(transport);

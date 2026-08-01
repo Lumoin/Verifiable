@@ -68,7 +68,7 @@ public static class BouncyCastleEntropyFunctions
     public static (Nonce Result, CryptoEvent? Event) GenerateNonce(
         int byteLength,
         Tag tag,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);
@@ -112,7 +112,7 @@ public static class BouncyCastleEntropyFunctions
     public static (Salt Result, CryptoEvent? Event) GenerateSalt(
         int byteLength,
         Tag tag,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);

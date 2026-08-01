@@ -65,7 +65,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     [TestMethod]
     public async Task GetPinUvAuthTokenUsingUvWithPermissionsWithoutEnrollmentsReturnsNotAllowed()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = CreateSimulator("0x06-not-configured");
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, DefaultProtocol, DefaultPin, TestContext.CancellationToken);
 
@@ -88,7 +88,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     [DataRow(PcmrPermission, DisplayName = "pcmr")]
     public async Task GetPinUvAuthTokenUsingUvWithPermissionsRequestingDeniedPermissionReturnsUnauthorizedPermission(int deniedPermission)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = await CreateEnrolledSimulatorAsync($"0x06-denied-{deniedPermission:X2}", pool);
 
         byte status = await SendUvTokenRequestExpectingErrorAsync(simulator, pool, deniedPermission);
@@ -106,7 +106,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     [TestMethod]
     public async Task GetPinUvAuthTokenUsingUvWithPermissionsGrantsLbwAlone()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = await CreateEnrolledSimulatorAsync("0x06-grants-lbw-alone", pool);
 
         var trace = new TestObserver<TraceEntry<CtapAuthenticatorState, CtapAuthenticatorInput>>();
@@ -130,7 +130,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     [TestMethod]
     public async Task GetPinUvAuthTokenUsingUvWithPermissionsGrantsRequestedPermissionsAndAssociatesRpId()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = await CreateEnrolledSimulatorAsync("0x06-grants-permissions-rpid", pool);
 
         byte[] token = await IssueUvTokenAsync(simulator, pool, WellKnownCtapPinUvAuthTokenPermissions.Mc, rpId: DefaultRpId);
@@ -151,7 +151,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     [TestMethod]
     public async Task GetPinUvAuthTokenUsingUvWithPermissionsMintsTokenWithUserPresentTrueUnlikePinPathToken()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = await CreateEnrolledSimulatorAsync("0x06-userpresent-true", pool);
 
         var pinPathTrace = new TestObserver<TraceEntry<CtapAuthenticatorState, CtapAuthenticatorInput>>();
@@ -181,7 +181,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     [TestMethod]
     public async Task GetPinUvAuthTokenUsingUvWithPermissionsInvalidatesEveryExistingTokenForAllProtocols()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = await CreateEnrolledSimulatorAsync("0x06-resets-all-protocols", pool);
 
         byte[] protocolOneMcToken = await CtapWaveConfigFixtures.IssueTokenAsync(
@@ -212,7 +212,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     [TestMethod]
     public async Task GetPinUvAuthTokenUsingUvWithPermissionsMatchFailureLadderReachesBlockedThenStaysBlocked()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = await CreateEnrolledSimulatorAsync(
             "0x06-match-failure-ladder", pool, simulateBuiltInUv: static () => CtapBuiltInUvAttemptOutcome.MatchFailure);
 
@@ -240,7 +240,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     [TestMethod]
     public async Task GetPinUvAuthTokenUsingUvWithPermissionsTimeoutReturnsUserActionTimeoutAndConsumesOneDecrement()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = await CreateEnrolledSimulatorAsync(
             "0x06-timeout", pool, simulateBuiltInUv: static () => CtapBuiltInUvAttemptOutcome.UserActionTimeout);
 
@@ -260,7 +260,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     [TestMethod]
     public async Task GetPinUvAuthTokenUsingUvWithPermissionsAttemptsExactlyOnceSinceInternalRetryIsFalse()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         int invocationCount = 0;
         CtapBuiltInUvAttemptOutcome CountingSimulateBuiltInUv()
         {
@@ -286,7 +286,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     [TestMethod]
     public async Task PerformBuiltInUvPinLockoutDragsUvRetriesToZero()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = await CreateEnrolledSimulatorAsync("0x06-pin-lockout-dragdown", pool);
 
         await DrainPinRetriesToZeroAsync(simulator, pool);
@@ -309,7 +309,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     [TestMethod]
     public async Task CorrectPinEntryRestoresUvRetriesAlongsidePinRetries()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = await CreateEnrolledSimulatorAsync(
             "0x06-pin-restore", pool, simulateBuiltInUv: static () => CtapBuiltInUvAttemptOutcome.MatchFailure);
 
@@ -327,7 +327,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     [TestMethod]
     public async Task MakeCredentialOptionsUvTrueWithoutEnrollmentReturnsInvalidOption()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-uv-unconfigured");
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, DefaultProtocol, DefaultPin, TestContext.CancellationToken);
 
@@ -347,7 +347,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     [TestMethod]
     public async Task MakeCredentialOptionsUvTrueSucceedsAfterOneInternalFailureAndResetsUvRetries()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var scriptedOutcomes = new Queue<CtapBuiltInUvAttemptOutcome>([CtapBuiltInUvAttemptOutcome.MatchFailure, CtapBuiltInUvAttemptOutcome.Success]);
         int invocationCount = 0;
         CtapBuiltInUvAttemptOutcome SimulateScriptedSequence()
@@ -385,7 +385,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     [TestMethod]
     public async Task GetAssertionOptionsUvTrueWithUvRetriesExhaustedReturnsPuatRequiredNotPinBlocked()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = await CreateEnrolledSimulatorAsync(
             "ga-uv-lockout", pool, simulateBuiltInUv: static () => CtapBuiltInUvAttemptOutcome.MatchFailure);
 
@@ -411,7 +411,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     [TestMethod]
     public async Task MakeCredentialAlwaysUvForcesBuiltInUvWhenNeitherParamNorUvRequested()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-alwaysuv-forced-uv");
 
         var enableRequest = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.ToggleAlwaysUv);
@@ -448,7 +448,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     [TestMethod]
     public async Task GetAssertionLevelThreeCredProtectInvisibleWithoutUvVisibleThroughBuiltInUv()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-level3-credprotect-uv");
 
         CtapWave2RegisteredCredential registered = await RegisterCredentialAsync(
@@ -489,7 +489,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     /// <returns>The enrolled simulator. The caller owns it and must dispose it.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the returned CtapAuthenticatorSimulator transfers to the caller, which every call site wraps in its own using declaration.")]
-    private async Task<CtapAuthenticatorSimulator> CreateEnrolledSimulatorAsync(string runId, MemoryPool<byte> pool, SimulateBuiltInUvDelegate? simulateBuiltInUv = null)
+    private async Task<CtapAuthenticatorSimulator> CreateEnrolledSimulatorAsync(string runId, BaseMemoryPool pool, SimulateBuiltInUvDelegate? simulateBuiltInUv = null)
     {
         CtapAuthenticatorSimulator simulator = CreateSimulator(runId, simulateBuiltInUv: simulateBuiltInUv);
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, DefaultProtocol, DefaultPin, TestContext.CancellationToken);
@@ -507,7 +507,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     /// simulated sensor) to reach <c>remainingSamples</c> zero — mirroring
     /// <c>CtapAuthenticatorBioEnrollmentTests.CompleteEnrollmentAsync</c>'s own shape.
     /// </summary>
-    private async Task CompleteEnrollmentAsync(CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, byte[] beToken)
+    private async Task CompleteEnrollmentAsync(CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, byte[] beToken)
     {
         byte[] beginParam = await ComputeBioMessageSignatureAsync(beToken, WellKnownCtapBioEnrollmentSubCommands.EnrollBegin, ReadOnlyMemory<byte>.Empty, pool);
         var beginRequest = new CtapBioEnrollmentRequest(
@@ -534,7 +534,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
 
 
     /// <summary>Computes a gated bioEnrollment subcommand's own <c>pinUvAuthParam</c> (the TWO-byte <c>modality || subCommand [|| subCommandParams]</c> prefix).</summary>
-    private async Task<byte[]> ComputeBioMessageSignatureAsync(byte[] token, int subCommand, ReadOnlyMemory<byte> subCommandParams, MemoryPool<byte> pool)
+    private async Task<byte[]> ComputeBioMessageSignatureAsync(byte[] token, int subCommand, ReadOnlyMemory<byte> subCommandParams, BaseMemoryPool pool)
     {
         byte[] message = BuildMessage(WellKnownCtapBioEnrollmentModalities.Fingerprint, subCommand, subCommandParams);
 
@@ -543,12 +543,12 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
 
 
     /// <summary>Issues a permissions-scoped <c>pinUvAuthToken</c> via 0x06 under <see cref="DefaultProtocol"/>.</summary>
-    private async Task<byte[]> IssueUvTokenAsync(CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, int permissions, string? rpId = null) =>
+    private async Task<byte[]> IssueUvTokenAsync(CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, int permissions, string? rpId = null) =>
         await CtapWaveConfigFixtures.IssueUvTokenAsync(simulator, pool, DefaultProtocol, permissions, rpId, TestContext.CancellationToken);
 
 
     /// <summary>Sends a 0x06 request under <see cref="DefaultProtocol"/> expecting it to fail, returning the exact CTAP2 status code.</summary>
-    private async Task<byte> SendUvTokenRequestExpectingErrorAsync(CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, int? permissions, string? rpId = null)
+    private async Task<byte> SendUvTokenRequestExpectingErrorAsync(CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, int? permissions, string? rpId = null)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
             simulator.TransceiveAsync, DefaultProtocol, pool, TestContext.CancellationToken);
@@ -563,7 +563,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
 
 
     /// <summary>Reports the live <c>uvRetries</c> counter via <c>getUVRetries</c> (already-shipped, 0x07).</summary>
-    private async Task<int> GetUvRetriesAsync(CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool)
+    private async Task<int> GetUvRetriesAsync(CtapAuthenticatorSimulator simulator, BaseMemoryPool pool)
     {
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.GetUvRetries);
         CtapClientPinResponse response = await CtapAuthenticatorClientPinClient.ClientPinAsync(
@@ -579,7 +579,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     /// whenever the latch fires so the drain can continue — the PIN stays SET throughout (only
     /// <c>pinRetries</c> reaches zero, never <see cref="CtapAuthenticatorState.CurrentStoredPin"/>).
     /// </summary>
-    private async Task DrainPinRetriesToZeroAsync(CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool)
+    private async Task DrainPinRetriesToZeroAsync(CtapAuthenticatorSimulator simulator, BaseMemoryPool pool)
     {
         while(true)
         {

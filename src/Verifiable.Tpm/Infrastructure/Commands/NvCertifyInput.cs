@@ -104,7 +104,7 @@ public sealed class NvCertifyInput: ITpmCommandInput, IDisposable
         TpmAlgIdConstants schemeHashAlg,
         ushort size,
         ushort offset,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return Create(signHandle, authHandle, nvIndex, qualifyingData, TpmAlgIdConstants.TPM_ALG_ECDSA, schemeHashAlg, size, offset, pool);
     }
@@ -129,7 +129,7 @@ public sealed class NvCertifyInput: ITpmCommandInput, IDisposable
         TpmAlgIdConstants schemeHashAlg,
         ushort size,
         ushort offset,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return Create(signHandle, authHandle, nvIndex, qualifyingData, TpmAlgIdConstants.TPM_ALG_RSASSA, schemeHashAlg, size, offset, pool);
     }
@@ -154,7 +154,7 @@ public sealed class NvCertifyInput: ITpmCommandInput, IDisposable
         TpmAlgIdConstants schemeHashAlg,
         ushort size,
         ushort offset,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return Create(signHandle, authHandle, nvIndex, qualifyingData, TpmAlgIdConstants.TPM_ALG_RSAPSS, schemeHashAlg, size, offset, pool);
     }
@@ -181,7 +181,7 @@ public sealed class NvCertifyInput: ITpmCommandInput, IDisposable
         TpmAlgIdConstants schemeHashAlg,
         ushort size,
         ushort offset,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         IMemoryOwner<byte> owner = pool.Rent(qualifyingData.Length);

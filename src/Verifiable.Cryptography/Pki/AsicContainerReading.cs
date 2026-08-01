@@ -216,7 +216,7 @@ public static class AsicContainerReading
     /// <param name="pool">The memory pool every allocation this call performs is rented from.</param>
     /// <returns>The facts, or the reason the octets were refused. The caller owns and disposes the result.</returns>
     /// <exception cref="ArgumentNullException">When an argument is <see langword="null"/>.</exception>
-    public static AsicContainerReadResult Read(ReadOnlyMemory<byte> containerBytes, AsicZipReadLimits limits, MemoryPool<byte> pool)
+    public static AsicContainerReadResult Read(ReadOnlyMemory<byte> containerBytes, AsicZipReadLimits limits, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(limits);
         ArgumentNullException.ThrowIfNull(pool);

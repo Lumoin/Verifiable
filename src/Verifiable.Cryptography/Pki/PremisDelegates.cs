@@ -189,7 +189,7 @@ public sealed record PremisParseContext
 /// <returns>The parse result.</returns>
 public delegate ValueTask<PremisParseResult> ParsePremisDelegate(
     PremisParseContext context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 
@@ -318,5 +318,5 @@ public sealed record PremisEncodeContext
 /// <returns>The encoding result.</returns>
 public delegate ValueTask<PremisEncodeResult> EncodePremisDelegate(
     PremisEncodeContext context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);

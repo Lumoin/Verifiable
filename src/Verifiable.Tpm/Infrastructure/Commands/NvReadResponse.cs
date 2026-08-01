@@ -46,7 +46,7 @@ public sealed class NvReadResponse: ITpmWireType, IDisposable
     /// <returns>The parsed response.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The rented buffer is owned by the returned NvReadResponse and disposed by the caller under test.")]
-    public static NvReadResponse Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static NvReadResponse Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

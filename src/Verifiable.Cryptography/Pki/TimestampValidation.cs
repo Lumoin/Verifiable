@@ -97,7 +97,7 @@ public static class TimestampValidation
         SignatureValidationSeams seams,
         DateTimeOffset validationTime,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(token);
@@ -186,7 +186,7 @@ public static class TimestampValidation
     /// </remarks>
     public static async ValueTask<DateTimeOffset?> ReadGenerationTimeAsync(
         PkiCertificateMemory token,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(token);
@@ -220,7 +220,7 @@ public static class TimestampValidation
     public static async ValueTask<bool> VerifyMessageImprintAsync(
         PkiCertificateMemory token,
         ReadOnlyMemory<byte> timestampedOctets,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(token);

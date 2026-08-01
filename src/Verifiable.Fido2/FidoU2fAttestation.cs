@@ -230,7 +230,7 @@ public static class FidoU2fAttestation
         CredentialId credentialId,
         ReadOnlySpan<byte> x,
         ReadOnlySpan<byte> y,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         out int length)
     {
         length = 1 + rpIdHash.Length + clientDataHash.Length + credentialId.Length + 1 + x.Length + y.Length;

@@ -193,7 +193,7 @@ public sealed class Fido2RegistrationOptionsBuilder: Builder<PublicKeyCredential
         UserHandle userId,
         string userName,
         string? userDisplayName,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         IReadOnlyList<Fido2CredentialRecord>? existingCredentials = null,
         string? challenge = null,
         uint? timeout = null,

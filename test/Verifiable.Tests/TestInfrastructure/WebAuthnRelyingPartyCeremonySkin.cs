@@ -72,7 +72,7 @@ internal sealed class WebAuthnRelyingPartyCeremonySkin
     private readonly string userDisplayName;
 
     /// <summary>The memory pool every ceremony's working buffers rent from.</summary>
-    private readonly MemoryPool<byte> pool;
+    private readonly BaseMemoryPool pool;
 
     /// <summary>The user verification requirement every ceremony's options and verification input carry.</summary>
     private readonly UserVerificationRequirement userVerification;
@@ -126,7 +126,7 @@ internal sealed class WebAuthnRelyingPartyCeremonySkin
     /// discoverable credential passes <see cref="ResidentKeyRequirement.Required"/> here.
     /// </param>
     public WebAuthnRelyingPartyCeremonySkin(
-        string rpId, string origin, byte[] userIdSeed, string userName, string userDisplayName, MemoryPool<byte> pool,
+        string rpId, string origin, byte[] userIdSeed, string userName, string userDisplayName, BaseMemoryPool pool,
         UserVerificationRequirement userVerification = UserVerificationRequirement.Discouraged,
         ResidentKeyRequirement? residentKey = null)
     {

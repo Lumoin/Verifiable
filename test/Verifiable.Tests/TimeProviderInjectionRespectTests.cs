@@ -55,7 +55,7 @@ internal sealed class TimeProviderInjectionRespectTests
 
 
     /// <summary>
-    /// The <see cref="TimeProvider"/>-taking <see cref="Fido2RegistrationVerifier.VerifyAsync(string, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, RegistrationCeremonyInput, SelectAttestationVerifierDelegate, IsCredentialIdUniqueDelegate, IReadOnlyList{PkiCertificateMemory}, TimeProvider, string, MemoryPool{byte}, IReadOnlyList{string}?, string?, bool, CancellationToken)"/>
+    /// The <see cref="TimeProvider"/>-taking <see cref="Fido2RegistrationVerifier.VerifyAsync(string, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, RegistrationCeremonyInput, SelectAttestationVerifierDelegate, IsCredentialIdUniqueDelegate, IReadOnlyList{PkiCertificateMemory}, TimeProvider, string, BaseMemoryPool, IReadOnlyList{string}?, string?, bool, CancellationToken)"/>
     /// overload reads its injected provider once and threads that single instant to BOTH
     /// <c>validationTime</c> and the internally-built <see cref="ClaimIssuer{TInput}"/>: a minimal
     /// none-attestation registration run through this overload succeeds identically — same

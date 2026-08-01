@@ -84,7 +84,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
     [TestMethod]
     public async Task ChallengerBuiltCredentialActivatesThroughTheProductionExecutor()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -143,7 +143,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
     [TestMethod]
     public async Task ChallengerBuiltCredentialWithATamperedOuterHmacIsRejectedWithIntegrityError()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -213,7 +213,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
         ReadOnlyMemory<byte> objectName,
         ReadOnlyMemory<byte> credentialKeyX,
         ReadOnlyMemory<byte> credentialKeyY,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         //Independent oracle: framework ECDiffieHellman performs the P-256 agreement, a different provider from
@@ -279,7 +279,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
     /// <param name="cancellationToken">A token observed across the KDF/HMAC computations.</param>
     /// <returns>The credential blob owner and its written length; the caller disposes the owner.</returns>
     private static async Task<(IMemoryOwner<byte> Owner, int Length)> BuildCredentialBlobAsync(
-        ReadOnlyMemory<byte> seed, ReadOnlyMemory<byte> credential, ReadOnlyMemory<byte> objectName, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> seed, ReadOnlyMemory<byte> credential, ReadOnlyMemory<byte> objectName, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         int innerLength = sizeof(ushort) + credential.Length;
 
@@ -375,7 +375,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
     /// <param name="y">The ephemeral public point's Y coordinate.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The secret owner and its written length; the caller disposes the owner.</returns>
-    private static (IMemoryOwner<byte> Owner, int Length) FrameEccPointSecret(ReadOnlySpan<byte> x, ReadOnlySpan<byte> y, MemoryPool<byte> pool)
+    private static (IMemoryOwner<byte> Owner, int Length) FrameEccPointSecret(ReadOnlySpan<byte> x, ReadOnlySpan<byte> y, BaseMemoryPool pool)
     {
         int length = 2 * (sizeof(ushort) + x.Length);
         IMemoryOwner<byte> owner = pool.Rent(length);
@@ -403,7 +403,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
     /// <param name="hierarchy">The hierarchy under which to create the key.</param>
     /// <returns>The CreatePrimary response (the caller owns it and flushes the handle).</returns>
     private async Task<CreatePrimaryResponse> CreateStoragePrimaryAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmRh hierarchy)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForEccStorageParent(
             hierarchy, null, TpmEccCurveConstants.TPM_ECC_NIST_P256, pool, noDa: true);
@@ -425,7 +425,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
     /// <param name="hierarchy">The hierarchy under which to create the key.</param>
     /// <returns>The CreatePrimary response (the caller owns it and flushes the handle).</returns>
     private async Task<CreatePrimaryResponse> CreateSigningPrimaryAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmRh hierarchy)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForEccSigningKey(
             hierarchy,
@@ -449,7 +449,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator("tpm-in-house-credoracle", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -464,7 +464,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
     /// </summary>
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
@@ -507,7 +507,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
     /// <param name="registry">The response codec registry.</param>
     /// <param name="handle">The handle to flush.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task FlushAsync(TpmDevice tpm, TpmResponseRegistry registry, uint handle, MemoryPool<byte> pool)
+    private async Task FlushAsync(TpmDevice tpm, TpmResponseRegistry registry, uint handle, BaseMemoryPool pool)
     {
         var flush = FlushContextInput.ForHandle(handle);
         _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(

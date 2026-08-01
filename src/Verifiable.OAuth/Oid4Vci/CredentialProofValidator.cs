@@ -103,7 +103,7 @@ public static class CredentialProofValidator
         EncodeDelegate base64UrlEncoder,
         DecodeDelegate base64UrlDecoder,
         TimeProvider timeProvider,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeSpan iatSkew,
         CancellationToken cancellationToken)
     {
@@ -147,7 +147,7 @@ public static class CredentialProofValidator
         EncodeDelegate base64UrlEncoder,
         DecodeDelegate base64UrlDecoder,
         TimeProvider timeProvider,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeSpan iatSkew,
         CancellationToken cancellationToken)
     {
@@ -194,7 +194,7 @@ public static class CredentialProofValidator
         EncodeDelegate base64UrlEncoder,
         DecodeDelegate base64UrlDecoder,
         TimeProvider timeProvider,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeSpan iatSkew,
         CancellationToken cancellationToken)
     {
@@ -393,7 +393,7 @@ public static class CredentialProofValidator
         EncodeDelegate base64UrlEncoder,
         DecodeDelegate base64UrlDecoder,
         TimeProvider timeProvider,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeSpan iatSkew,
         CancellationToken cancellationToken)
     {

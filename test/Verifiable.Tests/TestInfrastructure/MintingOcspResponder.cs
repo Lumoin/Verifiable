@@ -120,7 +120,7 @@ internal sealed class MintingOcspResponder
     /// <param name="cancellationToken">A cancellation token; unused, as this double performs no input or output.</param>
     /// <returns>The response, or <see langword="null"/> when the request names no configured subject.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the response carrier transfers to the caller via the returned ValueTask.")]
-    internal ValueTask<PkiCertificateMemory?> FetchAsync(OcspFetchContext context, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    internal ValueTask<PkiCertificateMemory?> FetchAsync(OcspFetchContext context, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(pool);
@@ -163,7 +163,7 @@ internal sealed class MintingOcspResponder
     /// <param name="request">The DER-encoded <c>OCSPRequest</c>.</param>
     /// <param name="pool">The memory pool the nonce's bytes are rented from.</param>
     /// <returns>The requested serial number's content octets, and the nonce this request carried (or <see langword="null"/> when it carried none).</returns>
-    private static (byte[] SerialNumber, Nonce? Nonce) ReadRequest(ReadOnlyMemory<byte> request, MemoryPool<byte> pool)
+    private static (byte[] SerialNumber, Nonce? Nonce) ReadRequest(ReadOnlyMemory<byte> request, BaseMemoryPool pool)
     {
         var outer = new AsnReader(request, AsnEncodingRules.DER);
         AsnReader ocspRequest = outer.ReadSequence();

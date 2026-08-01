@@ -68,7 +68,7 @@ public static class FormatChecking
         SignatureFactsExtractionContext context,
         SignatureFormatIdentifier format,
         ExtractSignatureFactsAsyncDelegate extractFacts,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);

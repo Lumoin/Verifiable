@@ -113,7 +113,7 @@ public delegate TResult VerificationFunctionWithBytes<TPublicKeyBytes, TDataToVe
 public delegate TResult SigningFunction<TPrivateKeyBytes, TDataToSign, out TResult>(
     ReadOnlyMemory<TPrivateKeyBytes> privateKeyBytes,
     ReadOnlyMemory<TDataToSign> dataToSign,
-    MemoryPool<byte> signaturePool);
+    BaseMemoryPool signaturePool);
 
 
 /// <summary>

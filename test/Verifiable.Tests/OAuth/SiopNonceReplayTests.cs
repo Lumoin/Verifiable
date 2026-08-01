@@ -31,7 +31,7 @@ internal sealed class SiopNonceReplayTests
 
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string RelyingPartyClientId = "https://rp.example.com";
     private const string SiopNonce = "n-siop-replay-01";

@@ -569,7 +569,7 @@ internal sealed class AsicMultiServerWireFlowTests
         /// <param name="pool">The memory pool the returned response is rented from.</param>
         /// <param name="cancellationToken">A cancellation token.</param>
         /// <returns>The response, or <see langword="null"/> on a transport failure.</returns>
-        internal async ValueTask<PkiCertificateMemory?> FetchAsync(TimestampFetchContext context, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        internal async ValueTask<PkiCertificateMemory?> FetchAsync(TimestampFetchContext context, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             using var content = new ByteArrayContent(context.Request.AsReadOnlySpan().ToArray());
             content.Headers.ContentType = new MediaTypeHeaderValue(TimestampQueryContentType);
@@ -624,7 +624,7 @@ internal sealed class AsicMultiServerWireFlowTests
         /// <param name="pool">The memory pool the returned response is rented from.</param>
         /// <param name="cancellationToken">A cancellation token.</param>
         /// <returns>The response, or <see langword="null"/> on a transport failure.</returns>
-        internal async ValueTask<PkiCertificateMemory?> FetchAsync(OcspFetchContext context, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        internal async ValueTask<PkiCertificateMemory?> FetchAsync(OcspFetchContext context, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             using var content = new ByteArrayContent(context.Request.AsReadOnlySpan().ToArray());
             content.Headers.ContentType = new MediaTypeHeaderValue(OcspRequestContentType);

@@ -300,7 +300,7 @@ public static class CAdESSignatureFacts
     /// </remarks>
     public static async ValueTask<SignedContentMemory?> StateTimestampCoverageAsync(
         TimestampCoverageContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -332,7 +332,7 @@ public static class CAdESSignatureFacts
     /// <returns>The copy, which the caller disposes, or <see langword="null"/>.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the returned carrier transfers to the caller, which disposes it once it has verified the message imprint against it.")]
-    private static SignedContentMemory? CopyStatedOctets(SignedContentMemory? stated, MemoryPool<byte> pool) =>
+    private static SignedContentMemory? CopyStatedOctets(SignedContentMemory? stated, BaseMemoryPool pool) =>
         stated is null ? null : SignedContentMemory.FromBytes(stated.AsReadOnlyMemory().Span, pool);
 
 
@@ -386,7 +386,7 @@ public static class CAdESSignatureFacts
         Justification = "Ownership of the returned carrier transfers to the caller, which disposes it once it has verified the message imprint against it.")]
     private static async ValueTask<SignedContentMemory?> StateArchiveTimestampCoverageAsync(
         TimestampCoverageContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(context.Signature.SignedDataObject is not CmsSignedData signedData)
@@ -422,7 +422,7 @@ public static class CAdESSignatureFacts
         Justification = "Ownership of the returned carrier transfers to the caller, which disposes it once it has verified the message imprint against it.")]
     private static SignedContentMemory? StateValidationDataTimestampCoverage(
         TimestampCoverageContext context,
-        MemoryPool<byte> pool) =>
+        BaseMemoryPool pool) =>
         context.Signature.SignedDataObject is CmsSignedData signedData
             ? ValidationDataTimestampCoverage.StateCoverage(signedData, signerIndex: 0, context.Timestamp.Identifier, pool)
             : null;
@@ -464,7 +464,7 @@ public static class CAdESSignatureFacts
     /// </remarks>
     public static async ValueTask<bool> StateTimestampProtectsObjectAsync(
         TimestampProtectedObjectContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -543,7 +543,7 @@ public static class CAdESSignatureFacts
     /// </remarks>
     private static async ValueTask<bool> StateArchiveTimestampProtectsObjectAsync(
         TimestampProtectedObjectContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(context.Signature.SignedDataObject is not CmsSignedData signedData)
@@ -721,7 +721,7 @@ public static class CAdESSignatureFacts
         static async ValueTask<DigestValue> ComputeIndexedDigestAsync(
             IndexedObjectEncoding indexed,
             PkiDigestAlgorithm algorithm,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             if(indexed.AttributeType is not string attributeType)
@@ -789,7 +789,7 @@ public static class CAdESSignatureFacts
         Justification = "Ownership of the extracted facts transfers to the caller, which disposes them once the validation run is complete; every failure path inside the extraction releases what it built before returning.")]
     public static ValueTask<SignatureFacts> ExtractAsync(
         SignatureFactsExtractionContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -820,7 +820,7 @@ public static class CAdESSignatureFacts
     /// </remarks>
     public static async ValueTask<SignatureCryptographicVerification> VerifyCryptographyAsync(
         SignatureCryptographicVerificationContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -927,7 +927,7 @@ public static class CAdESSignatureFacts
     private static async ValueTask<SignatureCryptographicVerification?> CheckMessageDigestAsync(
         CmsStructure structure,
         SignatureFacts facts,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ReadOnlyMemory<byte> declaredDigest = default;
@@ -997,7 +997,7 @@ public static class CAdESSignatureFacts
     /// <param name="context">The extraction context.</param>
     /// <param name="pool">The memory pool the owned carriers are rented from.</param>
     /// <returns>The facts, or a format failure.</returns>
-    private static SignatureFacts Extract(SignatureFactsExtractionContext context, MemoryPool<byte> pool)
+    private static SignatureFacts Extract(SignatureFactsExtractionContext context, BaseMemoryPool pool)
     {
         if(context.SignedDataObject is not CmsSignedData signedData)
         {
@@ -1168,7 +1168,7 @@ public static class CAdESSignatureFacts
         List<PkiCertificateMemory> certificates,
         List<PkiCertificateMemory> revocationLists,
         List<PkiCertificateMemory> ocspResponses,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         ref DateTimeOffset? claimedSigningTime,
         ref string? signaturePolicyIdentifier)
     {
@@ -1353,7 +1353,7 @@ public static class CAdESSignatureFacts
         ReadOnlyMemory<byte> value,
         bool version2,
         List<SigningCertificateReference> references,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         var reader = new AsnReader(value, AsnEncodingRules.DER);
         AsnReader signingCertificate = reader.ReadSequence();
@@ -1428,7 +1428,7 @@ public static class CAdESSignatureFacts
     /// <param name="certificates">The list the certificates are appended to.</param>
     /// <param name="pool">The memory pool each certificate carrier is rented from.</param>
     /// <exception cref="AsnContentException">Thrown when the value is not a well-formed <c>CertificateValues</c>.</exception>
-    private static void ReadCertificateValues(ReadOnlyMemory<byte> value, List<PkiCertificateMemory> certificates, MemoryPool<byte> pool)
+    private static void ReadCertificateValues(ReadOnlyMemory<byte> value, List<PkiCertificateMemory> certificates, BaseMemoryPool pool)
     {
         var reader = new AsnReader(value, AsnEncodingRules.DER);
         AsnReader values = reader.ReadSequence();
@@ -1472,7 +1472,7 @@ public static class CAdESSignatureFacts
         ReadOnlyMemory<byte> value,
         List<PkiCertificateMemory> revocationLists,
         List<PkiCertificateMemory> ocspResponses,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         var reader = new AsnReader(value, AsnEncodingRules.DER);
         AsnReader revocationValues = reader.ReadSequence();
@@ -1670,7 +1670,7 @@ public static class CAdESSignatureFacts
     /// <param name="tag">The tag the carrier declares its kind with.</param>
     /// <param name="pool">The memory pool the buffer is rented from.</param>
     /// <returns>The carrier.</returns>
-    private static PkiCertificateMemory Copy(ReadOnlyMemory<byte> der, Tag tag, MemoryPool<byte> pool)
+    private static PkiCertificateMemory Copy(ReadOnlyMemory<byte> der, Tag tag, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(der.Length);
         try
@@ -1695,7 +1695,7 @@ public static class CAdESSignatureFacts
     /// <param name="tag">The digest tag naming the algorithm.</param>
     /// <param name="pool">The memory pool the buffer is rented from.</param>
     /// <returns>The carrier.</returns>
-    private static DigestValue CopyDigest(ReadOnlySpan<byte> digest, Tag tag, MemoryPool<byte> pool)
+    private static DigestValue CopyDigest(ReadOnlySpan<byte> digest, Tag tag, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(digest.Length);
         try

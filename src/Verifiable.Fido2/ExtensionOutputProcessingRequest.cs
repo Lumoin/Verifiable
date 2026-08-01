@@ -35,7 +35,7 @@ public sealed class ExtensionOutputProcessingRequest
         string identifier,
         ReadOnlyMemory<byte>? clientOutputJson,
         ReadOnlyMemory<byte>? authenticatorOutputCbor,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentException.ThrowIfNullOrEmpty(identifier);
         ArgumentNullException.ThrowIfNull(pool);
@@ -72,7 +72,7 @@ public sealed class ExtensionOutputProcessingRequest
     /// <see cref="AuthenticatorOutputCbor"/> or performing key-agreement computations the
     /// extension's own semantics require.
     /// </summary>
-    public MemoryPool<byte> Pool { get; }
+    public BaseMemoryPool Pool { get; }
 
 
     /// <summary>

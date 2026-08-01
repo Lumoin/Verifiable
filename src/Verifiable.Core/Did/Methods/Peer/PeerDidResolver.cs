@@ -86,7 +86,7 @@ public static class PeerDidResolver
     /// and forwards to the explicit-delegate overload; supply a digest there to control the implementation.
     /// </remarks>
     public static DidMethodResolverDelegate Build(
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         PeerDidDocumentDeserializer didDocumentDeserializer)
         => Build(pool, didDocumentDeserializer, ResolveRegisteredDigest());
 
@@ -100,7 +100,7 @@ public static class PeerDidResolver
     /// <param name="computeDigest">The SHA-256 digest implementation (telemetry/CBOM-bearing) for the numalgo-4 hash.</param>
     /// <returns>A <see cref="DidMethodResolverDelegate"/> for registration with <see cref="DidMethodSelectors.FromResolvers"/>.</returns>
     public static DidMethodResolverDelegate Build(
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         PeerDidDocumentDeserializer didDocumentDeserializer,
         ComputeDigestDelegate computeDigest)
     {
@@ -132,7 +132,7 @@ public static class PeerDidResolver
 
     /// <summary>
     /// Registry-backed convenience for
-    /// <see cref="ResolveShortForm(string, MemoryPool{byte}, PeerDidDocumentDeserializer, ComputeDigestDelegate, System.Threading.CancellationToken)"/>:
+    /// <see cref="ResolveShortForm(string, BaseMemoryPool, PeerDidDocumentDeserializer, ComputeDigestDelegate, System.Threading.CancellationToken)"/>:
     /// resolves the registered <see cref="ComputeDigestDelegate"/> and forwards.
     /// </summary>
     /// <param name="longFormDid">The stored long-form <c>did:peer:4</c> identifier.</param>
@@ -141,7 +141,7 @@ public static class PeerDidResolver
     /// <returns>The resolution result, contextualized with the short-form DID.</returns>
     public static ValueTask<DidResolutionResult> ResolveShortForm(
         string longFormDid,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         PeerDidDocumentDeserializer didDocumentDeserializer,
         CancellationToken cancellationToken = default)
         => ResolveShortForm(longFormDid, pool, didDocumentDeserializer, ResolveRegisteredDigest(), cancellationToken);
@@ -160,7 +160,7 @@ public static class PeerDidResolver
     /// <returns>The resolution result, contextualized with the short-form DID.</returns>
     public static async ValueTask<DidResolutionResult> ResolveShortForm(
         string longFormDid,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         PeerDidDocumentDeserializer didDocumentDeserializer,
         ComputeDigestDelegate computeDigest,
         CancellationToken cancellationToken = default)
@@ -187,7 +187,7 @@ public static class PeerDidResolver
 
     private static async ValueTask<DidResolutionResult> Resolve(
         string did,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         PeerDidDocumentDeserializer didDocumentDeserializer,
         ComputeDigestDelegate computeDigest,
         CancellationToken cancellationToken)
@@ -292,7 +292,7 @@ public static class PeerDidResolver
         string encodedKey,
         string did,
         int keyIndex,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterial) decoded;
         try
@@ -338,7 +338,7 @@ public static class PeerDidResolver
     private static bool TryAppendService(
         DidDocument document,
         string encodedService,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         ref int idlessServiceCount)
     {
         int maxDecodedLength = Base64Url.GetMaxDecodedLength(encodedService.Length);

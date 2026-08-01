@@ -73,7 +73,7 @@ internal sealed class CtapAuthenticatorEnterpriseAttestationFlowTests
     [TestMethod]
     public async Task LifecycleAcrossAllThreeContextsClosesThroughRpVerifierOverRealApduTransport()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         Guid aaguid = Guid.NewGuid();
         byte[] serialNumber = [0xDE, 0xAD, 0xBE, 0xEF, 0x11];
@@ -151,7 +151,7 @@ internal sealed class CtapAuthenticatorEnterpriseAttestationFlowTests
     [TestMethod]
     public async Task VendorFacilitatedGrantIsGatedByPreConfiguredRpIdListOverRealApduTransport()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         CtapEnterpriseAttestationProvisioning provisioning = CtapWaveEpFixtures.BuildProvisioning(pool, [VendorListedRpId]);
@@ -193,7 +193,7 @@ internal sealed class CtapAuthenticatorEnterpriseAttestationFlowTests
     [TestMethod]
     public async Task AuthenticatorResetDisablesEnterpriseAttestationOverRealApduTransport()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         CtapEnterpriseAttestationProvisioning provisioning = CtapWaveEpFixtures.BuildProvisioning(pool, [VendorListedRpId]);
@@ -246,7 +246,7 @@ internal sealed class CtapAuthenticatorEnterpriseAttestationFlowTests
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The raw verification result.</returns>
     private static async Task<AttestationResult> VerifyThroughRpAsync(
-        CtapMakeCredentialResponse decoded, PkiCertificateMemory rootPki, bool acceptsEnterpriseAttestation, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapMakeCredentialResponse decoded, PkiCertificateMemory rootPki, bool acceptsEnterpriseAttestation, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(decoded.AuthData, CredentialPublicKeyCborReader.Read, pool);
         PackedAttestationStatement statement = PackedAttestationStatementCborReader.Parse(decoded.AttStmt!.Value, pool);
@@ -296,7 +296,7 @@ internal sealed class CtapAuthenticatorEnterpriseAttestationFlowTests
     /// <see cref="CtapAuthenticatorConfigFlowTests"/>'s own identically-shaped private helper.
     /// </summary>
     private static async Task SendAuthenticatorConfigAsync(
-        Ctap2TransceiveDelegate transceive, CtapAuthenticatorConfigRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        Ctap2TransceiveDelegate transceive, CtapAuthenticatorConfigRequest request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] envelope = CtapWaveConfigFixtures.BuildAuthenticatorConfigEnvelope(request);
         using PooledMemory response = await transceive(envelope, pool, cancellationToken).ConfigureAwait(false);

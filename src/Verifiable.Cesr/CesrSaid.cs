@@ -146,7 +146,7 @@ public static class CesrSaid
     /// <param name="cancellationToken">Cancels an in-flight digest on a hardware-async backend (TPM2_Hash, KMS).</param>
     /// <returns>The CESR-encoded SAID.</returns>
     /// <exception cref="CesrFormatException">The code is not a supported SAID digest code.</exception>
-    public static async ValueTask<string> ComputeAsync(ReadOnlyMemory<byte> serialization, string code, ComputeDigestDelegate computeDigest, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static async ValueTask<string> ComputeAsync(ReadOnlyMemory<byte> serialization, string code, ComputeDigestDelegate computeDigest, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(code);
         ArgumentNullException.ThrowIfNull(computeDigest);
@@ -172,7 +172,7 @@ public static class CesrSaid
     /// <param name="cancellationToken">Cancels an in-flight digest on a hardware-async backend (TPM2_Hash, KMS).</param>
     /// <returns><see langword="true"/> when the recomputed SAID equals the claimed SAID.</returns>
     /// <exception cref="CesrFormatException">The claimed SAID's leading code is not a supported SAID digest code.</exception>
-    public static async ValueTask<bool> VerifyAsync(ReadOnlyMemory<byte> serializationWithPlaceholder, string said, ComputeDigestDelegate computeDigest, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static async ValueTask<bool> VerifyAsync(ReadOnlyMemory<byte> serializationWithPlaceholder, string said, ComputeDigestDelegate computeDigest, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(said);
 
@@ -186,7 +186,7 @@ public static class CesrSaid
     /// <summary>
     /// Recomputes the SAID of a serialization that still embeds the claimed SAID: resets every occurrence of the
     /// SAID's bytes back to the placeholder, then digests, in one step. This is the convenience over
-    /// <see cref="ComputeAsync(ReadOnlyMemory{byte}, string, ComputeDigestDelegate, MemoryPool{byte}, CancellationToken)"/> for a caller that
+    /// <see cref="ComputeAsync(ReadOnlyMemory{byte}, string, ComputeDigestDelegate, BaseMemoryPool, CancellationToken)"/> for a caller that
     /// holds the serialization with the final SAID already substituted in (as received over the wire) rather than
     /// the placeholder-filled form.
     /// </summary>
@@ -205,7 +205,7 @@ public static class CesrSaid
     /// length and the reset is length-preserving, which means the same operation works on JSON, CBOR, MGPK, or
     /// CESR-native text bytes alike.
     /// </remarks>
-    public static async ValueTask<string> RecomputeEmbeddedAsync(ReadOnlyMemory<byte> serialization, string said, ComputeDigestDelegate computeDigest, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static async ValueTask<string> RecomputeEmbeddedAsync(ReadOnlyMemory<byte> serialization, string said, ComputeDigestDelegate computeDigest, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(said);
         ArgumentNullException.ThrowIfNull(computeDigest);
@@ -245,7 +245,7 @@ public static class CesrSaid
     /// <param name="cancellationToken">Cancels an in-flight digest on a hardware-async backend (TPM2_Hash, KMS).</param>
     /// <returns><see langword="true"/> when the recomputed SAID equals the claimed SAID.</returns>
     /// <exception cref="CesrFormatException">The claimed SAID's leading code is not a supported SAID digest code.</exception>
-    public static async ValueTask<bool> VerifyEmbeddedAsync(ReadOnlyMemory<byte> serialization, string said, ComputeDigestDelegate computeDigest, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static async ValueTask<bool> VerifyEmbeddedAsync(ReadOnlyMemory<byte> serialization, string said, ComputeDigestDelegate computeDigest, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         string recomputed = await RecomputeEmbeddedAsync(serialization, said, computeDigest, pool, cancellationToken).ConfigureAwait(false);
 

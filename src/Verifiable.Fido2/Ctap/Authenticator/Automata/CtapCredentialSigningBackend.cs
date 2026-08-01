@@ -20,7 +20,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// The simulator models key generation, not a real entropy source, so the actual minting is supplied
 /// through this seam rather than baked in — exactly as <c>Verifiable.Tpm.Automata.TpmEccKeyGenerationDelegate</c>
 /// keeps <see cref="Verifiable.Tpm"/> backend-agnostic. A caller composes a backend over the production
-/// key-creation registry (<see cref="CryptographicKeyEvents.CreateKeyPair(CryptoAlgorithm, Purpose, MemoryPool{byte}, string?)"/>),
+/// key-creation registry (<see cref="CryptographicKeyEvents.CreateKeyPair(CryptoAlgorithm, Purpose, BaseMemoryPool, string?)"/>),
 /// never a bespoke keygen routine.
 /// </remarks>
 /// <param name="coseAlgorithm">The chosen COSE algorithm identifier the new credential key must use.</param>
@@ -29,7 +29,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// <returns>The generated credential key pair. The caller owns and disposes it.</returns>
 public delegate ValueTask<CtapCredentialKeyPair> CtapCredentialKeyGenerationDelegate(
     int coseAlgorithm,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);
 
 /// <summary>
@@ -126,12 +126,12 @@ public sealed record CtapCredentialSigningBackend(
 
     /// <summary>
     /// Mints a fresh NIST P-256 (ES256) credential key pair through
-    /// <see cref="CryptographicKeyEvents.CreateKeyPair(CryptoAlgorithm, Purpose, MemoryPool{byte}, string?)"/>,
+    /// <see cref="CryptographicKeyEvents.CreateKeyPair(CryptoAlgorithm, Purpose, BaseMemoryPool, string?)"/>,
     /// mirroring the EC2 COSE_Key construction the observed FIDO2 CBOM workload already performs.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The PrivateKey's and the custody-export PooledMemory's ownership both transfer to the returned CtapCredentialKeyPair, which CtapAuthenticatorSimulator's GenerateCredentialAsync either disposes (on failure) or hands to the persisted CtapCredentialRecord (on success); CoseKey carries no pooled memory of its own.")]
-    private static async ValueTask<CtapCredentialKeyPair> GenerateEs256KeyPairAsync(int coseAlgorithm, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async ValueTask<CtapCredentialKeyPair> GenerateEs256KeyPairAsync(int coseAlgorithm, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -171,7 +171,7 @@ public sealed record CtapCredentialSigningBackend(
 
     /// <summary>
     /// Mints a fresh Ed25519 (EdDSA) credential key pair through
-    /// <see cref="CryptographicKeyEvents.CreateKeyPair(CryptoAlgorithm, Purpose, MemoryPool{byte}, string?)"/>.
+    /// <see cref="CryptographicKeyEvents.CreateKeyPair(CryptoAlgorithm, Purpose, BaseMemoryPool, string?)"/>.
     /// Unlike <see cref="GenerateEs256KeyPairAsync"/>'s EC2 point, an OKP public key needs no
     /// decompression — the minted public-key bytes are the COSE_Key's <c>x</c> parameter directly, per
     /// <see href="https://www.rfc-editor.org/rfc/rfc8032">RFC 8032</see>'s Ed25519 encoding and
@@ -180,7 +180,7 @@ public sealed record CtapCredentialSigningBackend(
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The PrivateKey's ownership transfers to the returned CtapCredentialKeyPair, which CtapAuthenticatorSimulator's GenerateCredentialAsync either disposes (on failure) or hands to the persisted CtapCredentialRecord (on success); CoseKey carries no pooled memory of its own.")]
-    private static ValueTask<CtapCredentialKeyPair> GenerateEdDsaKeyPairAsync(int coseAlgorithm, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static ValueTask<CtapCredentialKeyPair> GenerateEdDsaKeyPairAsync(int coseAlgorithm, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 

@@ -53,7 +53,7 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
     {
         const string RpA = "wavecm-capstone-a-rpa.example";
         const string RpB = "wavecm-capstone-a-rpb.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("wavecm-capstone-a");
@@ -188,7 +188,7 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
         const string RpA = "wavecm-capstone-b-rpa.example";
         const string RpB = "wavecm-capstone-b-rpb.example";
         const string RpC = "wavecm-capstone-b-rpc.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("wavecm-capstone-b");
@@ -297,7 +297,7 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
 
 
     /// <summary>Sends an <c>authenticatorGetInfo</c> request over <paramref name="harness"/>'s real transport and decodes the response.</summary>
-    private static async Task<CtapGetInfoResponse> GetInfoAsync(CtapWave2TransportHarness harness, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<CtapGetInfoResponse> GetInfoAsync(CtapWave2TransportHarness harness, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] request = [WellKnownCtapCommands.GetInfo];
         using PooledMemory response = await harness.Transceive(request, pool, cancellationToken).ConfigureAwait(false);
@@ -307,7 +307,7 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
 
 
     /// <summary>Establishes <see cref="Pin"/> as the authenticator's PIN over <paramref name="harness"/>'s real transport.</summary>
-    private static async Task EstablishPinAsync(CtapWave2TransportHarness harness, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task EstablishPinAsync(CtapWave2TransportHarness harness, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
             .ConfigureAwait(false);
@@ -329,7 +329,7 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
     /// it from wire bytes only, over <paramref name="harness"/>'s real transport.
     /// </summary>
     private static async Task<byte[]> IssueTokenAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, int permissions, string? rpId, CancellationToken cancellationToken)
+        CtapWave2TransportHarness harness, BaseMemoryPool pool, int permissions, string? rpId, CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
             .ConfigureAwait(false);
@@ -354,12 +354,12 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
     /// registration's worth per issuance, since a successful <c>mc</c> strips the token's other
     /// permissions.
     /// </summary>
-    private static Task<byte[]> IssueMcGaTokenAsync(CtapWave2TransportHarness harness, MemoryPool<byte> pool, string rpId, CancellationToken cancellationToken) =>
+    private static Task<byte[]> IssueMcGaTokenAsync(CtapWave2TransportHarness harness, BaseMemoryPool pool, string rpId, CancellationToken cancellationToken) =>
         IssueTokenAsync(harness, pool, WellKnownCtapPinUvAuthTokenPermissions.Mc | WellKnownCtapPinUvAuthTokenPermissions.Ga, rpId, cancellationToken);
 
 
     /// <summary>Issues a <c>cm</c>-permissioned token via <see cref="IssueTokenAsync"/>, bound to <paramref name="rpId"/> or unbound when <see langword="null"/>.</summary>
-    private static Task<byte[]> IssueCmTokenAsync(CtapWave2TransportHarness harness, MemoryPool<byte> pool, string? rpId, CancellationToken cancellationToken) =>
+    private static Task<byte[]> IssueCmTokenAsync(CtapWave2TransportHarness harness, BaseMemoryPool pool, string? rpId, CancellationToken cancellationToken) =>
         IssueTokenAsync(harness, pool, WellKnownCtapPinUvAuthTokenPermissions.Cm, rpId, cancellationToken);
 
 
@@ -370,7 +370,7 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
     /// never reused across registrations).
     /// </summary>
     private static async Task<CtapWaveCmRegisteredCredential> RegisterResidentCredentialAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, string rpId, byte[] userId, CancellationToken cancellationToken)
+        CtapWave2TransportHarness harness, BaseMemoryPool pool, string rpId, byte[] userId, CancellationToken cancellationToken)
     {
         byte[] token = await IssueMcGaTokenAsync(harness, pool, rpId, cancellationToken).ConfigureAwait(false);
         byte[] message = CtapWave2AuthenticatorFixtures.BuildFixedBytes(32, 0x10);
@@ -398,7 +398,7 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
     /// </summary>
     /// <returns>The decoded response, or <see langword="null"/> when <paramref name="expectedStatus"/> is not <see cref="WellKnownCtapStatusCodes.Ok"/>.</returns>
     private static async Task<CtapCredentialManagementResponse?> AssertGatedCmStatusAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, byte[] token, int subCommand,
+        CtapWave2TransportHarness harness, BaseMemoryPool pool, byte[] token, int subCommand,
         ReadOnlyMemory<byte>? rpIdHash, PublicKeyCredentialDescriptor? credentialId, CtapPublicKeyCredentialUserEntity? user,
         byte expectedStatus, CancellationToken cancellationToken)
     {
@@ -426,7 +426,7 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
     /// <see cref="WellKnownCtapStatusCodes.Ok"/> and the response carries a body) the decoded response.
     /// </summary>
     private static async Task<(byte StatusCode, CtapCredentialManagementResponse? Response)> SendCredentialManagementAsync(
-        Ctap2TransceiveDelegate transceive, CtapCredentialManagementRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        Ctap2TransceiveDelegate transceive, CtapCredentialManagementRequest request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] envelope = CtapWaveCmFixtures.BuildCredentialManagementEnvelope(request);
         using PooledMemory response = await transceive(envelope, pool, cancellationToken).ConfigureAwait(false);

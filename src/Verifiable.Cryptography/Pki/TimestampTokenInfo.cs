@@ -259,7 +259,7 @@ public sealed class TimestampTokenInfo: IDisposable
     /// The read facts. Check <see cref="Status"/>: only <see cref="TimestampTokenInfoStatus.Read"/> means the
     /// other members carry data. The caller disposes the returned instance in every case.
     /// </returns>
-    public static TimestampTokenInfo Read(ReadOnlyMemory<byte> tstInfo, MemoryPool<byte> pool)
+    public static TimestampTokenInfo Read(ReadOnlyMemory<byte> tstInfo, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -412,7 +412,7 @@ public sealed class TimestampTokenInfo: IDisposable
     /// </remarks>
     public static async ValueTask<TimestampTokenInfo> ReadFromTokenAsync(
         PkiCertificateMemory token,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(token);
@@ -468,11 +468,11 @@ public sealed class TimestampTokenInfo: IDisposable
     /// <returns><see langword="true"/> only when the imprint equals the digest of <paramref name="data"/>.</returns>
     /// <exception cref="InvalidOperationException">Thrown when no <see cref="ComputeDigestDelegate"/> has been registered.</exception>
     /// <remarks>
-    /// The digest is computed through <see cref="CryptographicKeyEvents.ComputeDigestAsync(ReadOnlyMemory{byte}, int, Tag, MemoryPool{byte}, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>,
+    /// The digest is computed through <see cref="CryptographicKeyEvents.ComputeDigestAsync(ReadOnlyMemory{byte}, int, Tag, BaseMemoryPool, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>,
     /// never a framework hash, so the check carries the same provenance and instrumentation as every other digest
     /// the library takes.
     /// </remarks>
-    public async ValueTask<bool> VerifyMessageImprintAsync(ReadOnlyMemory<byte> data, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public async ValueTask<bool> VerifyMessageImprintAsync(ReadOnlyMemory<byte> data, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

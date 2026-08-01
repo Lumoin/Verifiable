@@ -152,7 +152,7 @@ internal sealed class AcdcDi2iChainFlowTests
     /// <param name="pool">The pool the reconstructed buffers are rented from.</param>
     /// <param name="cancellationToken">A token to cancel the fetch.</param>
     /// <returns>The confirmed delegator AID, or <see langword="null"/> when the KEL's first event is not the delegate's delegated inception.</returns>
-    private static async Task<string?> ReadConfirmedDelegatorAsync(HttpClient httpClient, Uri delegateKelUri, string delegateAid, List<IDisposable> disposables, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<string?> ReadConfirmedDelegatorAsync(HttpClient httpClient, Uri delegateKelUri, string delegateAid, List<IDisposable> disposables, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         string delegateKelJson = await httpClient.GetStringAsync(delegateKelUri, cancellationToken).ConfigureAwait(false);
         using AcdcTestSupport.EncodedSerialization delegateKelBytes = AcdcTestSupport.Encode(delegateKelJson);

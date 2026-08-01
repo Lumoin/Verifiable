@@ -37,7 +37,7 @@ public sealed class EncodedCoseSign1(IMemoryOwner<byte> sensitiveMemory, Tag tag
     /// carrying <see cref="CryptoTags.CoseEncodedSign1"/>. Caller takes
     /// ownership of the returned carrier.
     /// </summary>
-    public static EncodedCoseSign1 FromBytes(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
+    public static EncodedCoseSign1 FromBytes(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

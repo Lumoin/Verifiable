@@ -112,7 +112,7 @@ public static class Fido2CredentialRecordJsonReader
     /// base64url, <c>version</c> is not the version this reader supports, or nesting exceeds the
     /// depth bound.
     /// </exception>
-    public static Fido2CredentialRecord Read(ReadOnlyMemory<byte> document, MemoryPool<byte> pool)
+    public static Fido2CredentialRecord Read(ReadOnlyMemory<byte> document, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -132,7 +132,7 @@ public static class Fido2CredentialRecordJsonReader
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the CredentialId created here transfers to the returned Fido2CredentialRecord, which the caller disposes once no longer needed — the CA2000 flag is a false positive.")]
-    private static Fido2CredentialRecord ReadObject(ReadOnlySpan<byte> document, MemoryPool<byte> pool)
+    private static Fido2CredentialRecord ReadObject(ReadOnlySpan<byte> document, BaseMemoryPool pool)
     {
         Utf8JsonReader reader = new(document, ReaderOptions);
         if(!reader.Read() || reader.TokenType != JsonTokenType.StartObject)

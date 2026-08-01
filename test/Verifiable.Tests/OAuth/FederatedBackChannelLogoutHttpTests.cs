@@ -57,7 +57,7 @@ internal sealed class FederatedBackChannelLogoutHttpTests
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     /// <summary>The memory pool used for all transient signing/verification buffers.</summary>
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     /// <summary>The OP issuer every RP is configured, out of band, to expect on a Logout Token's <c>iss</c>.</summary>
     private const string OpIssuer = "https://op.example/";

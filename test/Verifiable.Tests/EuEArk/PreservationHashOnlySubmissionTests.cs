@@ -334,13 +334,13 @@ internal sealed class PreservationHashOnlySubmissionTests
     [TestMethod]
     public async Task ASubmissionReturnsEveryCarrierItOwns()
     {
-        using var pool = new PreservationMessageSource.CountingMemoryPool();
+        using MeteredHousePool pool = new();
 
         PreservationHashOnlySubmission submission = await PreservationCapabilitySource.SubmissionAsync(
             PkiDigestAlgorithm.Sha256,
             SignedDataObjects,
             hashFunctionIdentifier: null,
-            pool,
+            pool.Pool,
             TestContext.CancellationToken);
 
         //Two hash values and the detached signature's payload are what the submission holds; whatever the digest

@@ -51,7 +51,7 @@ internal sealed class TpmSimulatorNvTests
     {
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
 
         using TpmPasswordSession ownerSession = TpmPasswordSession.CreateEmpty(pool);
@@ -67,7 +67,7 @@ internal sealed class TpmSimulatorNvTests
     {
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
 
         //The simulator's owner authValue is empty by default; supplying a non-empty owner authorization is
@@ -84,7 +84,7 @@ internal sealed class TpmSimulatorNvTests
     {
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineDaIndexAsync(device, pool, registry).ConfigureAwait(false);
@@ -101,7 +101,7 @@ internal sealed class TpmSimulatorNvTests
     {
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
 
         //A persistent-object handle (MSO 0x81) is not in the NV-Index range, so it cannot be defined as one.
@@ -118,7 +118,7 @@ internal sealed class TpmSimulatorNvTests
     {
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineDaIndexAsync(device, pool, registry).ConfigureAwait(false);
@@ -135,7 +135,7 @@ internal sealed class TpmSimulatorNvTests
     {
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineDaIndexAsync(device, pool, registry).ConfigureAwait(false);
@@ -152,7 +152,7 @@ internal sealed class TpmSimulatorNvTests
     {
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
 
         using(TpmPasswordSession ownerSession = TpmPasswordSession.CreateEmpty(pool))
@@ -174,7 +174,7 @@ internal sealed class TpmSimulatorNvTests
     {
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
 
         using(TpmPasswordSession ownerSession = TpmPasswordSession.CreateEmpty(pool))
@@ -196,7 +196,7 @@ internal sealed class TpmSimulatorNvTests
     {
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
 
         //No Index was defined, so the handle does not resolve.
@@ -210,7 +210,7 @@ internal sealed class TpmSimulatorNvTests
     {
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineDaIndexAsync(device, pool, registry).ConfigureAwait(false);
@@ -244,7 +244,7 @@ internal sealed class TpmSimulatorNvTests
     {
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
 
         await DefineDaIndexAsync(device, pool, registry).ConfigureAwait(false);
@@ -268,7 +268,7 @@ internal sealed class TpmSimulatorNvTests
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
 
         //Phase gating precedes the handle/authorization checks: a well-formed NV_Read before TPM2_Startup()
@@ -285,7 +285,7 @@ internal sealed class TpmSimulatorNvTests
 
     private async Task<TpmResult<NvDefineSpaceResponse>> DefineSpaceAsync(
         TpmDevice device,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TpmResponseRegistry registry,
         uint nvIndex,
         TpmaNv attributes,
@@ -302,7 +302,7 @@ internal sealed class TpmSimulatorNvTests
             device, input, [ownerSession], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
     }
 
-    private async Task DefineDaIndexAsync(TpmDevice device, MemoryPool<byte> pool, TpmResponseRegistry registry)
+    private async Task DefineDaIndexAsync(TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry)
     {
         using TpmPasswordSession ownerSession = TpmPasswordSession.CreateEmpty(pool);
         TpmResult<NvDefineSpaceResponse> result = await DefineSpaceAsync(
@@ -313,7 +313,7 @@ internal sealed class TpmSimulatorNvTests
 
     private async Task<TpmResult<NvReadResponse>> ReadIndexAsync(
         TpmDevice device,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TpmResponseRegistry registry,
         ReadOnlyMemory<byte> suppliedAuth)
     {
@@ -331,7 +331,7 @@ internal sealed class TpmSimulatorNvTests
         var simulator = new TpmSimulator("tpm-nv", selfTest);
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using IMemoryOwner<byte> owner = RentCommand(new StartupInput(TpmSuConstants.TPM_SU_CLEAR), pool, out int length);
         TpmResult<TpmResponse> result = await simulator.SubmitAsync(owner.Memory[..length], pool, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -347,7 +347,7 @@ internal sealed class TpmSimulatorNvTests
 
     //Frames a no-sessions command (header + handles + parameters) into a pool-rented buffer, mirroring how
     //the executor frames an unauthorized command on the wire. Used to bring the simulator operational.
-    private static IMemoryOwner<byte> RentCommand(StartupInput input, MemoryPool<byte> pool, out int length)
+    private static IMemoryOwner<byte> RentCommand(StartupInput input, BaseMemoryPool pool, out int length)
     {
         length = TpmHeader.HeaderSize + input.GetSerializedSize();
         IMemoryOwner<byte> owner = pool.Rent(length);

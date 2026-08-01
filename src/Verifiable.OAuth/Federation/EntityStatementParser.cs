@@ -12,7 +12,7 @@ namespace Verifiable.OAuth.Federation;
 /// <para>
 /// Layered above JCose's JWS parsing surface. The caller is expected to
 /// have already invoked
-/// <see cref="JwsParsing.ParseCompact(string, DecodeDelegate, Func{ReadOnlySpan{byte}, IReadOnlyDictionary{string, object}}, System.Buffers.MemoryPool{byte})"/>
+/// <see cref="JwsParsing.ParseCompact(string, DecodeDelegate, Func{ReadOnlySpan{byte}, IReadOnlyDictionary{string, object}}, System.Buffers.BaseMemoryPool)"/>
 /// (or the JSON-serialised variants) and deserialised the payload bytes
 /// into an <see cref="UnverifiedJwtPayload"/>. This parser inspects
 /// federation-specific structural prerequisites only: the <c>typ</c>

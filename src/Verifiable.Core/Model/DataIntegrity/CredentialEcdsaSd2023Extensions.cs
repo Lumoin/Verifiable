@@ -112,7 +112,7 @@ public static class CredentialEcdsaSd2023Extensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             SerializeBaseProofDelegate serializeBaseProof,
             EncodeDelegate encoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -228,7 +228,7 @@ public static class CredentialEcdsaSd2023Extensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             SerializeBaseProofDelegate serializeBaseProof,
             EncodeDelegate encoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -414,7 +414,7 @@ public static class CredentialEcdsaSd2023Extensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
             DecodeDelegate decoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -478,7 +478,7 @@ public static class CredentialEcdsaSd2023Extensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
             DecodeDelegate decoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -665,7 +665,7 @@ public static class CredentialEcdsaSd2023Extensions
             SerializeDerivedProofDelegate serializeDerivedProof,
             EncodeDelegate encoder,
             DecodeDelegate decoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -725,7 +725,7 @@ public static class CredentialEcdsaSd2023Extensions
             SerializeDerivedProofDelegate serializeDerivedProof,
             EncodeDelegate encoder,
             DecodeDelegate decoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -946,7 +946,7 @@ public static class CredentialEcdsaSd2023Extensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
             DecodeDelegate decoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -1001,7 +1001,7 @@ public static class CredentialEcdsaSd2023Extensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
             DecodeDelegate decoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -1158,7 +1158,7 @@ public static class CredentialEcdsaSd2023Extensions
         IReadOnlyList<string> statements,
         IReadOnlyList<int> statementIndexes,
         PrivateKeyMemory privateKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         var signedStatements = new List<NQuadSignedStatement>(statements.Count);

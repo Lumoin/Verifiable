@@ -111,7 +111,7 @@ public static class PresentationDataIntegrityExtensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
             ComputeDigestDelegate computeDigest,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext context,
             CancellationToken cancellationToken = default)
         {
@@ -258,7 +258,7 @@ public static class PresentationDataIntegrityExtensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             DecodeDelegate decoder,
             ComputeDigestDelegate computeDigest,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext context,
             CancellationToken cancellationToken = default)
         {
@@ -354,7 +354,7 @@ public static class PresentationDataIntegrityExtensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             DecodeDelegate decoder,
             ComputeDigestDelegate computeDigest,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext context,
             CancellationToken cancellationToken = default)
         {
@@ -424,7 +424,7 @@ public static class PresentationDataIntegrityExtensions
         ProofOptionsSerializeDelegate serializeProofOptions,
         DecodeDelegate decoder,
         ComputeDigestDelegate computeDigest,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {

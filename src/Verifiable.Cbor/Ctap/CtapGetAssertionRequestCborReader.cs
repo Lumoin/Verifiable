@@ -54,7 +54,7 @@ public static class CtapGetAssertionRequestCborReader
     /// </exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "clientDataHash's ownership transfers to the returned CtapGetAssertionRequest on success and is explicitly disposed in the surrounding catch block on failure — the CA2000 flag is a false positive; the analyzer cannot see across the local ReadDigest function boundary.")]
-    public static CtapGetAssertionRequest Read(ReadOnlyMemory<byte> parametersCbor, MemoryPool<byte> pool)
+    public static CtapGetAssertionRequest Read(ReadOnlyMemory<byte> parametersCbor, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -160,7 +160,7 @@ public static class CtapGetAssertionRequestCborReader
         }
 
         //Decodes the required clientDataHash byte string into a pooled, SHA-256-tagged carrier.
-        static DigestValue ReadDigest(ReadOnlyMemory<byte> encodedValue, MemoryPool<byte> pool)
+        static DigestValue ReadDigest(ReadOnlyMemory<byte> encodedValue, BaseMemoryPool pool)
         {
             var nestedReader = new CborReader(encodedValue, CborConformanceMode.Ctap2Canonical);
             byte[] bytes = nestedReader.ReadByteString();

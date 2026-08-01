@@ -70,7 +70,7 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
     [TestMethod]
     public async Task EndorsementKeyCertificateValidatesToManufacturerCa()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -111,7 +111,7 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
     [TestMethod]
     public async Task EndorsementKeyCertificateFromUntrustedCaIsRejected()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -155,7 +155,7 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
     [TestMethod]
     public async Task EndorsementKeyCertificateRoundTripsThroughNvAndValidates()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -204,7 +204,7 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="nvIndex">The NV Index handle.</param>
     /// <param name="data">The data to write.</param>
-    private async Task ProvisionNvAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, uint nvIndex, byte[] data)
+    private async Task ProvisionNvAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, uint nvIndex, byte[] data)
     {
         //Define the index with AUTHWRITE | AUTHREAD (its own auth value authorizes both) and NO_DA. The redundant
         //using locals satisfy CA2000; the input takes ownership and disposal is idempotent.
@@ -239,7 +239,7 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
     /// <param name="nvIndex">The NV Index handle.</param>
     /// <param name="length">The number of octets to read.</param>
     /// <returns>The data read from the index.</returns>
-    private async Task<byte[]> ReadNvAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, uint nvIndex, int length)
+    private async Task<byte[]> ReadNvAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, uint nvIndex, int length)
     {
         using TpmPasswordSession readAuth = TpmPasswordSession.CreateEmpty(pool);
         var readInput = new NvReadInput(AuthHandle: nvIndex, NvIndex: nvIndex, Size: (ushort)length, Offset: 0);
@@ -323,7 +323,7 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
     /// <param name="pool">The memory pool.</param>
     /// <returns>The pooled certificate (the caller owns it).</returns>
     [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned PkiCertificateMemory transfers to the caller.")]
-    private static PkiCertificateMemory ToPkiCertificate(byte[] der, MemoryPool<byte> pool)
+    private static PkiCertificateMemory ToPkiCertificate(byte[] der, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(der.Length);
         der.CopyTo(owner.Memory.Span);
@@ -361,7 +361,7 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
     /// <param name="hierarchy">The hierarchy under which to create the key.</param>
     /// <returns>The CreatePrimary response (the caller owns it and flushes the handle).</returns>
     private async Task<CreatePrimaryResponse> CreateStoragePrimaryAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmRh hierarchy)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForEccStorageParent(
             hierarchy, null, TpmEccCurveConstants.TPM_ECC_NIST_P256, pool, noDa: true);
@@ -381,7 +381,7 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator("tpm-in-house-endorsement", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -396,7 +396,7 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
     /// </summary>
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
@@ -440,7 +440,7 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
     /// <param name="registry">The response codec registry.</param>
     /// <param name="handle">The handle to flush.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task FlushAsync(TpmDevice tpm, TpmResponseRegistry registry, uint handle, MemoryPool<byte> pool)
+    private async Task FlushAsync(TpmDevice tpm, TpmResponseRegistry registry, uint handle, BaseMemoryPool pool)
     {
         var flush = FlushContextInput.ForHandle(handle);
         _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(

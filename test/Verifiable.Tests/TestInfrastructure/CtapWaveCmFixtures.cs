@@ -30,7 +30,7 @@ internal static class CtapWaveCmFixtures
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The raw response envelope. The caller owns it and must dispose it.</returns>
     public static async Task<PooledMemory> SendCredentialManagementAsync(
-        CtapAuthenticatorSimulator simulator, CtapCredentialManagementRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapAuthenticatorSimulator simulator, CtapCredentialManagementRequest request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] envelope = BuildCredentialManagementEnvelope(request);
 

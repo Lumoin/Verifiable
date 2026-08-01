@@ -140,7 +140,7 @@ public sealed class SdDisclosure: IEquatable<SdDisclosure>, IDisposable
     /// <exception cref="ObjectDisposedException">
     /// Thrown when this disclosure has been disposed.
     /// </exception>
-    public SdDisclosure CopyWithFreshSalt(MemoryPool<byte> pool)
+    public SdDisclosure CopyWithFreshSalt(BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ObjectDisposedException.ThrowIf(disposed, this);

@@ -26,7 +26,7 @@ internal sealed class JarmResponseTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string Issuer = "https://accounts.example.com";
     private const string ClientId = "s6BhdRkqt3";

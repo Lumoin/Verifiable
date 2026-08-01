@@ -76,7 +76,7 @@ public static class MetsXmlBinding
     /// <returns>The parse result.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of every fixity carrier built here transfers to the successful MetsParseResult, which the caller disposes; the failure paths dispose everything the reader has built so far.")]
-    public static ValueTask<MetsParseResult> ParseAsync(MetsParseContext context, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static ValueTask<MetsParseResult> ParseAsync(MetsParseContext context, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(pool);
@@ -151,7 +151,7 @@ public static class MetsXmlBinding
     /// <param name="pool">The memory pool the produced document's carrier is rented from.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The encoding result.</returns>
-    public static ValueTask<MetsEncodeResult> EncodeAsync(MetsEncodeContext context, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static ValueTask<MetsEncodeResult> EncodeAsync(MetsEncodeContext context, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(pool);
@@ -336,7 +336,7 @@ public static class MetsXmlBinding
     /// <returns>The parse result.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the administrative-metadata element and of the document built around it transfers to the returned MetsParseResult, which the caller disposes; every failure path returns before either is built and the fixities the caller collected are disposed by ParseAsync.")]
-    private static MetsParseResult ReadDocument(XElement root, MetsParseLimits limits, MemoryPool<byte> pool, List<EArkFixity> fixities)
+    private static MetsParseResult ReadDocument(XElement root, MetsParseLimits limits, BaseMemoryPool pool, List<EArkFixity> fixities)
     {
         string? objectIdentifier = (string?)root.Attribute("OBJID");
         string? contentCategory = (string?)root.Attribute("TYPE");
@@ -579,7 +579,7 @@ public static class MetsXmlBinding
     private static (MetsParseStatus Status, MetsMetadataReference? Reference, string Reason) ReadMetadataReference(
         XElement sectionElement,
         MetsParseLimits limits,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         List<EArkFixity> fixities)
     {
         XElement? element = sectionElement.Element(MetsNamespace + "mdRef");
@@ -643,7 +643,7 @@ public static class MetsXmlBinding
     private static (MetsParseStatus Status, MetsFileSection? Section, string Reason) ReadFileSection(
         XElement element,
         MetsParseLimits limits,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         List<EArkFixity> fixities)
     {
         string? id = ReadIdentifier(element, out MetsParseStatus idStatus);
@@ -718,7 +718,7 @@ public static class MetsXmlBinding
     private static (MetsParseStatus Status, MetsFile? File, string Reason) ReadFile(
         XElement element,
         MetsParseLimits limits,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         List<EArkFixity> fixities)
     {
         string? id = ReadIdentifier(element, out MetsParseStatus idStatus);
@@ -1097,7 +1097,7 @@ public static class MetsXmlBinding
     /// <param name="root">The <c>mets</c> element to write.</param>
     /// <param name="pool">The memory pool the carrier is rented from.</param>
     /// <returns>The produced octets. The caller owns and disposes them.</returns>
-    private static PooledMemory Serialize(XElement root, MemoryPool<byte> pool)
+    private static PooledMemory Serialize(XElement root, BaseMemoryPool pool)
     {
         var writerSettings = new XmlWriterSettings
         {

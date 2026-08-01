@@ -146,7 +146,7 @@ public static class WebPlusDidResolver
         EncodeDelegate base64UrlEncoder,
         DecodeDelegate base64UrlDecoder,
         DecodeDelegate base58Decoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TimeProvider timeProvider)
         => Build(transport, documentParser, updateRulesParser, proofExtractor, canonicalizer, documentDeserializer,
             ResolveRegisteredDigest(), CryptoTags.Blake3Digest, MultihashHeaders.Blake3.ToArray(), Blake3DigestLength,
@@ -195,7 +195,7 @@ public static class WebPlusDidResolver
         EncodeDelegate base64UrlEncoder,
         DecodeDelegate base64UrlDecoder,
         DecodeDelegate base58Decoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(transport);

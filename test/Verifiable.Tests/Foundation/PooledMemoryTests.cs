@@ -18,7 +18,7 @@ internal sealed class PooledMemoryTests
     [TestMethod]
     public void ConstructorTransfersOwnershipAndTracksLength()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] source = [0x01, 0x02, 0x03, 0x04, 0x05];
 
         IMemoryOwner<byte> storage = pool.Rent(source.Length);
@@ -40,7 +40,7 @@ internal sealed class PooledMemoryTests
     [TestMethod]
     public void AccessorsSliceToTrackedLengthNotRentedCapacity()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         const int requestedLength = 3;
         byte[] source = [0xAA, 0xBB, 0xCC];
 
@@ -57,7 +57,7 @@ internal sealed class PooledMemoryTests
     [TestMethod]
     public void FromBytesCopiesRatherThanAliasesSource()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] source = [0x10, 0x20, 0x30];
 
         using PooledMemory pooledMemory = PooledMemory.FromBytes(source, pool, TestTag);
@@ -74,7 +74,7 @@ internal sealed class PooledMemoryTests
     [TestMethod]
     public void FromBytesAcceptsEmptySource()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using PooledMemory pooledMemory = PooledMemory.FromBytes(ReadOnlySpan<byte>.Empty, pool, TestTag);
 
@@ -96,7 +96,7 @@ internal sealed class PooledMemoryTests
     [TestMethod]
     public void DisposeIsIdempotent()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         PooledMemory pooledMemory = PooledMemory.FromBytes([0x01, 0x02], pool, TestTag);
 
         pooledMemory.Dispose();
@@ -105,78 +105,20 @@ internal sealed class PooledMemoryTests
 
 
     /// <summary>
-    /// When copying into the rented buffer fails, <see cref="PooledMemory.FromBytes"/> disposes the
-    /// rented storage before rethrowing rather than leaking it — the same buffer-protection
-    /// <c>Verifiable.Apdu.ApduResponse.FromResponseBytes</c> establishes.
+    /// The undersized-rental negative that used to live here — a misbehaving <see cref="MemoryPool{T}"/>
+    /// whose rentals came up one byte short, driving <see cref="PooledMemory.FromBytes"/>'s
+    /// catch-dispose-rethrow path — is unrepresentable since the surface takes
+    /// <see cref="BaseMemoryPool"/>: the type is sealed and its rentals are exact-length by its own
+    /// contract, so the overrun cannot be assembled through any pool a caller can supply. The production
+    /// path remains as defense in depth.
     /// </summary>
     [TestMethod]
-    public void FromBytesDisposesRentedStorageWhenCopyFails()
+    public void FromBytesRequiresTheHousePoolByType()
     {
-        using var pool = new UndersizedRentalMemoryPool();
+        //The compile-time shape is the assertion: the parameter is the house pool, not the abstract
+        //MemoryPool<byte> seam, so the exact-length and zero-on-return guarantees ride along by type.
+        using PooledMemory pooledMemory = PooledMemory.FromBytes([0x01], BaseMemoryPool.Shared, TestTag);
 
-        _ = Assert.ThrowsExactly<ArgumentException>(
-            () => PooledMemory.FromBytes([0x01, 0x02, 0x03], pool, TestTag));
-
-        Assert.IsTrue(pool.LastRentedOwner!.WasDisposed,
-            "The rented owner must be disposed when the copy into it fails, so no buffer leaks back to the caller undisposed.");
-    }
-
-
-    /// <summary>
-    /// A test-only <see cref="MemoryPool{T}"/> whose rented owner's <see cref="IMemoryOwner{T}.Memory"/>
-    /// is deliberately smaller than requested, forcing <see cref="Span{T}.CopyTo(Span{T})"/> to throw
-    /// inside <see cref="PooledMemory.FromBytes"/> so its catch-dispose-rethrow path is exercised.
-    /// </summary>
-    private sealed class UndersizedRentalMemoryPool: MemoryPool<byte>
-    {
-        /// <summary>The most recently rented owner, exposed so the test can assert it was disposed.</summary>
-        public TrackedMemoryOwner? LastRentedOwner { get; private set; }
-
-        /// <inheritdoc />
-        public override int MaxBufferSize => int.MaxValue;
-
-        /// <inheritdoc />
-        public override IMemoryOwner<byte> Rent(int minBufferSize = -1)
-        {
-            //One byte short of what the caller asked for, so the copy inside FromBytes overruns.
-            int undersized = Math.Max(0, minBufferSize - 1);
-            var owner = new TrackedMemoryOwner(undersized);
-            LastRentedOwner = owner;
-
-            return owner;
-        }
-
-        /// <inheritdoc />
-        protected override void Dispose(bool disposing)
-        {
-        }
-    }
-
-
-    /// <summary>A minimal <see cref="IMemoryOwner{T}"/> over a plain array that records whether it was disposed.</summary>
-    private sealed class TrackedMemoryOwner: IMemoryOwner<byte>
-    {
-        private readonly byte[] buffer;
-
-        /// <summary>Gets a value indicating whether <see cref="Dispose"/> has been called.</summary>
-        public bool WasDisposed { get; private set; }
-
-        /// <summary>
-        /// Initializes a new tracked owner over a fresh array of the given size.
-        /// </summary>
-        /// <param name="size">The backing array's size.</param>
-        public TrackedMemoryOwner(int size)
-        {
-            buffer = new byte[size];
-        }
-
-        /// <inheritdoc />
-        public Memory<byte> Memory => buffer;
-
-        /// <inheritdoc />
-        public void Dispose()
-        {
-            WasDisposed = true;
-        }
+        Assert.AreEqual(1, pooledMemory.Length);
     }
 }

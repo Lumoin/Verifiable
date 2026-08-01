@@ -40,7 +40,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionTests
     public async Task MultiAccountGetAssertionReturnsMostRecentCredentialWithNumberOfCredentials()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("gna-multi-account-initial");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] olderUserId = BuildFixedBytes(16, 0xC0);
         byte[] newerUserId = BuildFixedBytes(16, 0xC1);
 
@@ -79,7 +79,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionTests
     public async Task GetNextAssertionReturnsOlderCredentialWithoutNumberOfCredentials()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("gna-multi-account-next");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] olderUserId = BuildFixedBytes(16, 0xC2);
         byte[] newerUserId = BuildFixedBytes(16, 0xC3);
 
@@ -123,7 +123,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionTests
     public async Task ThreeAccountSequenceWalksInCreationOrderNewestFirst()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("gna-three-account", residentCredentialCapacity: 3);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] firstUserId = BuildFixedBytes(16, 0xD0);
         byte[] secondUserId = BuildFixedBytes(16, 0xD1);
         byte[] thirdUserId = BuildFixedBytes(16, 0xD2);
@@ -156,7 +156,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionTests
     public async Task EachCredentialsSignCountAdvancesIndependently()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("gna-signcount-independent");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] olderUserId = BuildFixedBytes(16, 0xC4);
         byte[] newerUserId = BuildFixedBytes(16, 0xC5);
 
@@ -189,7 +189,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionTests
     public async Task GetNextAssertionSignatureReusesOriginalClientDataHashAndVerifiesIndependently()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("gna-clientdatahash-reuse");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] olderUserId = BuildFixedBytes(16, 0xC6);
         byte[] newerUserId = BuildFixedBytes(16, 0xC7);
 
@@ -232,7 +232,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionTests
     public async Task NoRememberedStateReturnsNotAllowed()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("gna-no-state");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using PooledMemory response = await SendGetNextAssertionAsync(simulator, pool, TestContext.CancellationToken);
 
@@ -250,7 +250,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionTests
     public async Task GetNextAssertionAfterSingleCredentialGetAssertionReturnsNotAllowed()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("gna-single-credential");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xC8), TestContext.CancellationToken);
 
@@ -275,7 +275,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionTests
     public async Task GetNextAssertionAfterCounterExhaustedReturnsNotAllowed()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("gna-counter-exhausted");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xC9), TestContext.CancellationToken);
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xCA), TestContext.CancellationToken);
@@ -304,7 +304,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionTests
     public async Task InterveningGetInfoDiscardsRememberedStateReturningNotAllowed()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("gna-intervening-getinfo");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xCB), TestContext.CancellationToken);
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xCC), TestContext.CancellationToken);
@@ -335,7 +335,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionTests
     public async Task InterveningFailedMakeCredentialStillDiscardsRememberedState()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("gna-intervening-makecredential");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xCD), TestContext.CancellationToken);
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xCE), TestContext.CancellationToken);
@@ -362,7 +362,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionTests
     public async Task InterveningUnsupportedCommandDiscardsRememberedState()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("gna-intervening-unsupported");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xCF), TestContext.CancellationToken);
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xD9), TestContext.CancellationToken);
@@ -395,7 +395,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionTests
         const string firstRpId = "gna-replace-a.example";
         const string secondRpId = "gna-replace-b.example";
         using CtapAuthenticatorSimulator simulator = CreateSimulator("gna-replace");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xE0), TestContext.CancellationToken, rpId: firstRpId);
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xE1), TestContext.CancellationToken, rpId: firstRpId);
@@ -430,7 +430,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionTests
     {
         var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         using CtapAuthenticatorSimulator simulator = CreateSimulator("gna-timer-ok", timeProvider: timeProvider);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xF0), TestContext.CancellationToken);
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xF1), TestContext.CancellationToken);
@@ -459,7 +459,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionTests
     {
         var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         using CtapAuthenticatorSimulator simulator = CreateSimulator("gna-timer-expired", timeProvider: timeProvider);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xF2), TestContext.CancellationToken);
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xF3), TestContext.CancellationToken);
@@ -493,7 +493,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionTests
     {
         var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         using CtapAuthenticatorSimulator simulator = CreateSimulator("gna-timer-reset", timeProvider: timeProvider, residentCredentialCapacity: 3);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xF4), TestContext.CancellationToken);
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xF5), TestContext.CancellationToken);
@@ -518,7 +518,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionTests
 
 
     /// <summary>Decodes a response envelope's <c>user.id</c> bytes, disposing every carrier the decode produced.</summary>
-    private static byte[] ReadAndDisposeUserId(PooledMemory response, MemoryPool<byte> pool)
+    private static byte[] ReadAndDisposeUserId(PooledMemory response, BaseMemoryPool pool)
     {
         using(response)
         {

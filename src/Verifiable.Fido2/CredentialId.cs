@@ -85,7 +85,7 @@ public sealed class CredentialId: SensitiveMemory, IEquatable<CredentialId>
     /// allocator concern — a wire-level empty credential ID must construct so the rule can fail it
     /// closed.
     /// </remarks>
-    public static CredentialId Create(ReadOnlySpan<byte> value, MemoryPool<byte> pool)
+    public static CredentialId Create(ReadOnlySpan<byte> value, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

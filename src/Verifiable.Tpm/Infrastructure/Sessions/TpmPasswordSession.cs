@@ -63,7 +63,7 @@ public sealed class TpmPasswordSession: TpmSessionBase, IDisposable
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>A password session with empty password.</returns>
-    public static TpmPasswordSession CreateEmpty(MemoryPool<byte> pool)
+    public static TpmPasswordSession CreateEmpty(BaseMemoryPool pool)
     {
         return new TpmPasswordSession(Tpm2bAuth.CreateEmpty(pool));
     }
@@ -74,7 +74,7 @@ public sealed class TpmPasswordSession: TpmSessionBase, IDisposable
     /// <param name="password">The password string (UTF-8 encoded).</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>A password session with the specified password.</returns>
-    public static TpmPasswordSession Create(string password, MemoryPool<byte> pool)
+    public static TpmPasswordSession Create(string password, BaseMemoryPool pool)
     {
         if(string.IsNullOrEmpty(password))
         {
@@ -91,7 +91,7 @@ public sealed class TpmPasswordSession: TpmSessionBase, IDisposable
     /// <param name="password">The password bytes.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>A password session with the specified password.</returns>
-    public static TpmPasswordSession Create(ReadOnlySpan<byte> password, MemoryPool<byte> pool)
+    public static TpmPasswordSession Create(ReadOnlySpan<byte> password, BaseMemoryPool pool)
     {
         if(password.IsEmpty)
         {
@@ -119,7 +119,7 @@ public sealed class TpmPasswordSession: TpmSessionBase, IDisposable
     /// </remarks>
     public override ValueTask<Tpm2bAuth?> PrepareAuthHmacAsync(
         ReadOnlyMemory<byte> cpHash,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken,
         ReadOnlyMemory<byte> foldedSessionNonces = default)
     {
@@ -151,7 +151,7 @@ public sealed class TpmPasswordSession: TpmSessionBase, IDisposable
     public override ValueTask<bool> VerifyAndUpdateAsync(
         TpmsAuthResponse response,
         ReadOnlyMemory<byte> rpHash,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         //Password sessions don't verify response HMAC.

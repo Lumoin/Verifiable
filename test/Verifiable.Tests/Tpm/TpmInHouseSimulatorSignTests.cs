@@ -52,7 +52,7 @@ internal sealed class TpmInHouseSimulatorSignTests
     [TestMethod]
     public async Task EcdsaP256CreateSignVerifiesAgainstInHouseSimulator()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -113,7 +113,7 @@ internal sealed class TpmInHouseSimulatorSignTests
     [TestMethod]
     public async Task RsaCreateSignVerifiesAgainstInHouseSimulator()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -149,7 +149,7 @@ internal sealed class TpmInHouseSimulatorSignTests
     [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "The PrivateKey takes ownership of the handle memory and is disposed by its using declaration.")]
     public async Task TpmBackedPrivateKeySignsAndVerifiesThroughTheVerifiableAbstraction()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -189,7 +189,7 @@ internal sealed class TpmInHouseSimulatorSignTests
     [TestMethod]
     public async Task CreatePrimaryReturnsFaithfulNameCreationDataAndTicket()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -234,7 +234,7 @@ internal sealed class TpmInHouseSimulatorSignTests
     [TestMethod]
     public async Task CreationTicketIsAVerifiableHmacOfTheInjectedSeed()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //A fixed seed stands in for the hierarchy's persistent random proof secret; injecting it makes the
         //creation ticket reproducible and lets this test recompute it.
@@ -271,7 +271,7 @@ internal sealed class TpmInHouseSimulatorSignTests
     [TestMethod]
     public async Task SignWithUnknownKeyHandleReturnsHandle()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -291,7 +291,7 @@ internal sealed class TpmInHouseSimulatorSignTests
     [TestMethod]
     public async Task CreatePrimaryWithoutSigningBackendReturnsCommandCode()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //A simulator with no signing backend does not implement key creation: it answers TPM_RC_COMMAND_CODE.
         var simulator = new TpmSimulator("tpm-in-house-no-backend");
@@ -324,7 +324,7 @@ internal sealed class TpmInHouseSimulatorSignTests
     /// <param name="rsaParameters">The public key reconstructed from the exported modulus.</param>
     /// <param name="usePss">When <see langword="true"/>, signs and verifies RSAPSS; otherwise RSASSA (PKCS#1 v1.5).</param>
     private async Task SignAndVerifyRsaAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmiDhObject keyHandle, byte[] digest, RSAParameters rsaParameters, bool usePss)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmiDhObject keyHandle, byte[] digest, RSAParameters rsaParameters, bool usePss)
     {
         using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
         using SignInput signInput = usePss
@@ -358,7 +358,7 @@ internal sealed class TpmInHouseSimulatorSignTests
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator(
             "tpm-in-house-sign",
@@ -376,7 +376,7 @@ internal sealed class TpmInHouseSimulatorSignTests
     /// </summary>
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
@@ -415,7 +415,7 @@ internal sealed class TpmInHouseSimulatorSignTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The 32-byte digest.</returns>
-    private static async Task<byte[]> ComputeSha256Async(ReadOnlyMemory<byte> message, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<byte[]> ComputeSha256Async(ReadOnlyMemory<byte> message, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         Tag tag = Tag.Create(HashAlgorithmName.SHA256)
             .With(Purpose.Digest)
@@ -439,7 +439,7 @@ internal sealed class TpmInHouseSimulatorSignTests
     /// <param name="outPublic">The exported public area.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The marshaled TPMT_PUBLIC bytes.</returns>
-    private static byte[] MarshalPublicArea(Tpm2bPublic outPublic, MemoryPool<byte> pool)
+    private static byte[] MarshalPublicArea(Tpm2bPublic outPublic, BaseMemoryPool pool)
     {
         int size = outPublic.PublicArea.GetSerializedSize();
         using IMemoryOwner<byte> owner = pool.Rent(size);
@@ -455,7 +455,7 @@ internal sealed class TpmInHouseSimulatorSignTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The 32-byte HMAC.</returns>
-    private static async Task<byte[]> ComputeHmacSha256Async(ReadOnlyMemory<byte> message, ReadOnlyMemory<byte> key, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<byte[]> ComputeHmacSha256Async(ReadOnlyMemory<byte> message, ReadOnlyMemory<byte> key, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using HmacValue hmac = await CryptographicKeyEvents.ComputeHmacAsync(
             message, key, P256ComponentSize, CryptoTags.HmacSha256Value, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -468,7 +468,7 @@ internal sealed class TpmInHouseSimulatorSignTests
     /// <param name="hierarchy">The hierarchy handle.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The proof-derivation input bytes.</returns>
-    private static byte[] BuildProofInput(byte[] seed, uint hierarchy, MemoryPool<byte> pool)
+    private static byte[] BuildProofInput(byte[] seed, uint hierarchy, BaseMemoryPool pool)
     {
         int length = seed.Length + sizeof(uint);
         using IMemoryOwner<byte> owner = pool.Rent(length);
@@ -484,7 +484,7 @@ internal sealed class TpmInHouseSimulatorSignTests
     /// <param name="creationHash">The creation hash bytes.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The ticket message bytes.</returns>
-    private static byte[] BuildTicketMessage(ReadOnlySpan<byte> name, ReadOnlySpan<byte> creationHash, MemoryPool<byte> pool)
+    private static byte[] BuildTicketMessage(ReadOnlySpan<byte> name, ReadOnlySpan<byte> creationHash, BaseMemoryPool pool)
     {
         int length = sizeof(ushort) + name.Length + creationHash.Length;
         using IMemoryOwner<byte> owner = pool.Rent(length);

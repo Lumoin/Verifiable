@@ -39,7 +39,7 @@ namespace Verifiable.Cryptography;
 /// </para>
 /// <para>
 /// The inner hash routes through the registered <see cref="ComputeDigestDelegate"/> via
-/// <see cref="CryptographicKeyEvents.ComputeDigestAsync(ReadOnlyMemory{byte}, int, Tag, MemoryPool{byte}, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>,
+/// <see cref="CryptographicKeyEvents.ComputeDigestAsync(ReadOnlyMemory{byte}, int, Tag, BaseMemoryPool, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>,
 /// so KDFe inherits the same observability and provenance stamping as every other digest. The hash family is
 /// carried inline on the <see cref="Tag"/> via <see cref="HashAlgorithmName"/> because TPM sessions may use
 /// SHA-1 (which the convenience <see cref="CryptoTags"/> deliberately omit).
@@ -78,7 +78,7 @@ public static class Kdfe
         ReadOnlyMemory<byte> partyUInfo,
         ReadOnlyMemory<byte> partyVInfo,
         int outputBits,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(label);

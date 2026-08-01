@@ -49,7 +49,7 @@ public static class SignatureValidationReportBuilder
     public static async ValueTask<ValidationReport> BuildAsync(
         SignatureValidationOutcome outcome,
         SignatureValidationInputs inputs,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         SignatureValidatorInformation? validator = null,
         CancellationToken cancellationToken = default)
     {
@@ -75,7 +75,7 @@ public static class SignatureValidationReportBuilder
     private static async ValueTask<SignatureValidationReportElement> BuildSignatureReportAsync(
         SignatureValidationOutcome outcome,
         SignatureValidationInputs inputs,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         SignatureFacts facts = outcome.BasicValidation.Signature;
@@ -199,7 +199,7 @@ public static class SignatureValidationReportBuilder
     private static async ValueTask<ValidationTimeInfo> BuildValidationTimeInfoAsync(
         SignatureValidationOutcome outcome,
         SignatureValidationInputs inputs,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         SignatureValidationConclusion conclusion = outcome.Conclusion;
@@ -250,7 +250,7 @@ public static class SignatureValidationReportBuilder
     private static async ValueTask<ValidationObjectIdentity> SignatureValueIdentityAsync(
         SignatureFacts signature,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(signature.SignatureValue is SignedContentMemory signatureValue)
@@ -370,7 +370,7 @@ public static class SignatureValidationReportBuilder
     /// </remarks>
     private static async ValueTask<IReadOnlyList<ValidationObject>> BuildValidationObjectsAsync(
         SignatureValidationOutcome outcome,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         SignatureValidationConclusion conclusion = outcome.Conclusion;
@@ -522,7 +522,7 @@ public static class SignatureValidationReportBuilder
         string? reference,
         LongTermValidationResult? longTerm,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ValidationObjectIdentity? identity = longTerm is null

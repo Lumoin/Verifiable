@@ -117,7 +117,7 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed selection list.</returns>
-    public static TpmlPcrSelection Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static TpmlPcrSelection Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         uint count = reader.ReadUInt32();
@@ -174,7 +174,7 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
     /// <param name="pcrIndices">The PCR indices to select (0-23).</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The PCR selection list.</returns>
-    public static TpmlPcrSelection Create(TpmAlgIdConstants hashAlg, ReadOnlySpan<int> pcrIndices, MemoryPool<byte> pool)
+    public static TpmlPcrSelection Create(TpmAlgIdConstants hashAlg, ReadOnlySpan<int> pcrIndices, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         if(pcrIndices.IsEmpty)

@@ -112,7 +112,7 @@ public sealed record PrivateKeyJwtClientAuthenticationResult
 /// it: they parse the compact <c>client_assertion</c>, resolve the verification key from the
 /// registration's <see cref="ClientRecord.ClientJwks"/> via <see cref="JwkJsonReader"/> and
 /// <see cref="CryptoFormatConversions.DefaultJwkToAlgorithmConverter"/> (through
-/// <see cref="DpopJwkUtilities.PublicKeyFromJwk"/>), verify with <see cref="Jws.VerifyAsync(string,DecodeDelegate,MemoryPool{byte},PublicKeyMemory,CancellationToken)"/>,
+/// <see cref="DpopJwkUtilities.PublicKeyFromJwk"/>), verify with <see cref="Jws.VerifyAsync(string,DecodeDelegate,BaseMemoryPool,PublicKeyMemory,CancellationToken)"/>,
 /// and only then apply <see cref="Validate"/>.
 /// </para>
 /// <para>
@@ -275,7 +275,7 @@ public static class PrivateKeyJwtClientAuthentication
     /// Builds a <see cref="ValidateClientCredentialsDelegate"/> that parses the compact
     /// <c>client_assertion</c>, resolves the verification key from the registration's
     /// <see cref="ClientRecord.ClientJwks"/>, verifies the signature via
-    /// <see cref="Jws.VerifyAsync(string,DecodeDelegate,MemoryPool{byte},PublicKeyMemory,CancellationToken)"/>'s
+    /// <see cref="Jws.VerifyAsync(string,DecodeDelegate,BaseMemoryPool,PublicKeyMemory,CancellationToken)"/>'s
     /// registry-resolving overload, and applies <see cref="Validate"/>. Delegates the signature step
     /// to <see cref="BuildValidator(VerificationDelegate,System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?)"/>'s
     /// shared core once the key is resolved per request, so the verification logic is written once.
@@ -302,7 +302,7 @@ public static class PrivateKeyJwtClientAuthentication
     /// <see cref="CryptoFunctionRegistry{TDiscriminator1,TDiscriminator2}"/>. The registry-resolving
     /// overload above shares this method's validation core, supplying a
     /// <see langword="null"/> function so the per-request signature step falls back to
-    /// <see cref="Jws.VerifyAsync(string,DecodeDelegate,MemoryPool{byte},PublicKeyMemory,CancellationToken)"/>'s
+    /// <see cref="Jws.VerifyAsync(string,DecodeDelegate,BaseMemoryPool,PublicKeyMemory,CancellationToken)"/>'s
     /// own registry resolution.
     /// </summary>
     /// <param name="verificationDelegate">The verification function to use.</param>

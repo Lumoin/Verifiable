@@ -154,7 +154,7 @@ internal sealed class TpmBackedTerminalAuthenticationTests
     /// <param name="tpmId">The simulated TPM's identifier.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalTpmAsync(string tpmId, MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalTpmAsync(string tpmId, BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator(tpmId, signingBackend: BouncyCastleTpmEccSigningBackend.Create());
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -185,7 +185,7 @@ internal sealed class TpmBackedTerminalAuthenticationTests
     /// <param name="point">The TPM-exported public point.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The uncompressed point carrier.</returns>
-    private static EncodedEcPoint BuildUncompressedPoint(TpmsEccPoint point, MemoryPool<byte> pool)
+    private static EncodedEcPoint BuildUncompressedPoint(TpmsEccPoint point, BaseMemoryPool pool)
     {
         Span<byte> uncompressed = stackalloc byte[1 + (2 * P256ComponentSize)];
         uncompressed[0] = 0x04;

@@ -56,7 +56,7 @@ public static class BouncyCastleCmsFunctions
     /// <exception cref="CryptographicException">Thrown when the signature is invalid or the signer certificate is absent.</exception>
     public static ValueTask<CmsVerifiedContent> VerifyCmsSignedDataAsync(
         Verifiable.Cryptography.Pki.CmsSignedData signedData,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signedData);
@@ -89,7 +89,7 @@ public static class BouncyCastleCmsFunctions
     public static ValueTask<CmsVerifiedContent> VerifyDetachedCmsSignedDataAsync(
         Verifiable.Cryptography.Pki.CmsSignedData signedData,
         SignedContentMemory detachedContent,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signedData);
@@ -119,7 +119,7 @@ public static class BouncyCastleCmsFunctions
     /// <exception cref="CryptographicException">Thrown when the signature is invalid or the signer certificate is absent.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the content buffer, certificate memories, and signed-attribute carriers transfers to the returned CmsVerifiedContent, which the caller disposes; the catch disposes them on a partial failure.")]
-    private static ValueTask<CmsVerifiedContent> Verify(BcCmsSignedData cms, MemoryPool<byte> pool)
+    private static ValueTask<CmsVerifiedContent> Verify(BcCmsSignedData cms, BaseMemoryPool pool)
     {
         SignerInformation signer = cms.GetSignerInfos().GetSigners().FirstOrDefault()
             ?? throw new CryptographicException("The CMS SignedData carries no signer information.");
@@ -212,7 +212,7 @@ public static class BouncyCastleCmsFunctions
     /// <summary>
     /// Copies DER certificate bytes into a pooled <see cref="PkiCertificateMemory"/>.
     /// </summary>
-    private static PkiCertificateMemory ToPkiCertificate(byte[] der, MemoryPool<byte> pool)
+    private static PkiCertificateMemory ToPkiCertificate(byte[] der, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(der.Length);
         der.CopyTo(owner.Memory.Span);
@@ -224,7 +224,7 @@ public static class BouncyCastleCmsFunctions
     /// <summary>
     /// Copies a signed attribute's DER value into a pooled <see cref="CmsSignedAttribute"/>.
     /// </summary>
-    private static CmsSignedAttribute ToSignedAttribute(string oid, byte[] der, MemoryPool<byte> pool)
+    private static CmsSignedAttribute ToSignedAttribute(string oid, byte[] der, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(der.Length);
         der.CopyTo(owner.Memory.Span);

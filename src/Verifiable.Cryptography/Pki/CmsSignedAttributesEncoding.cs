@@ -103,7 +103,7 @@ public sealed class CmsSignedAttributesEncoding: IDisposable
     /// <exception cref="ArgumentNullException">When <paramref name="attributes"/>, one of its entries, or <paramref name="pool"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">When the set is empty, exceeds the supported count, or repeats an attribute type.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of both carriers transfers to the returned instance, which the caller disposes; the catch disposes the first when the second fails.")]
-    public static CmsSignedAttributesEncoding Create(IReadOnlyList<CmsAttribute> attributes, MemoryPool<byte> pool)
+    public static CmsSignedAttributesEncoding Create(IReadOnlyList<CmsAttribute> attributes, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(attributes);
         ArgumentNullException.ThrowIfNull(pool);
@@ -164,7 +164,7 @@ public sealed class CmsSignedAttributesEncoding: IDisposable
     /// <exception cref="CryptographicException">When the input does not carry the single-octet <c>[0] IMPLICIT</c> constructed tag a <c>SignerInfo.signedAttrs</c> field has.</exception>
     /// <exception cref="AsnContentException">When the input is malformed or carries trailing octets.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned carrier, which the caller disposes; the catch disposes it on a partial failure.")]
-    public static PooledMemory ToSigningInput(ReadOnlySpan<byte> embeddedSignedAttributes, MemoryPool<byte> pool)
+    public static PooledMemory ToSigningInput(ReadOnlySpan<byte> embeddedSignedAttributes, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         if(embeddedSignedAttributes.IsEmpty || embeddedSignedAttributes[0] != SignedAttributesTagOctet)
@@ -202,7 +202,7 @@ public sealed class CmsSignedAttributesEncoding: IDisposable
     /// <param name="pool">The memory pool the buffer is rented from.</param>
     /// <returns>The encoded set carrier.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned carrier, which the caller disposes; the catch disposes it on a partial failure.")]
-    private static PooledMemory Materialise(AsnWriter writer, MemoryPool<byte> pool)
+    private static PooledMemory Materialise(AsnWriter writer, BaseMemoryPool pool)
     {
         int encodedLength = writer.GetEncodedLength();
         IMemoryOwner<byte> owner = pool.Rent(encodedLength);

@@ -77,7 +77,7 @@ public sealed class TpmsNvCertifyInfo: ITpmWireType, IDisposable
     /// <param name="nvContents">The attested NV Index contents.</param>
     /// <param name="pool">The memory pool for the contents buffer.</param>
     /// <returns>The created NV-certify info.</returns>
-    public static TpmsNvCertifyInfo Create(Tpm2bName indexName, ushort offset, ReadOnlySpan<byte> nvContents, MemoryPool<byte> pool)
+    public static TpmsNvCertifyInfo Create(Tpm2bName indexName, ushort offset, ReadOnlySpan<byte> nvContents, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(indexName);
         ArgumentNullException.ThrowIfNull(pool);
@@ -125,7 +125,7 @@ public sealed class TpmsNvCertifyInfo: ITpmWireType, IDisposable
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed NV-certify info.</returns>
-    public static TpmsNvCertifyInfo Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static TpmsNvCertifyInfo Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         Tpm2bName indexName = Tpm2bName.Parse(ref reader, pool);

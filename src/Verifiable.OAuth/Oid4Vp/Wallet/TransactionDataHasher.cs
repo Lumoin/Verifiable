@@ -51,7 +51,7 @@ public static class TransactionDataHasher
     public static async ValueTask<IReadOnlyList<string>> ComputeSha256Async(
         IReadOnlyList<string> transactionData,
         EncodeDelegate encoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(transactionData);

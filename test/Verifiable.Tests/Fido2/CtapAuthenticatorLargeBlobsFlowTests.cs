@@ -60,7 +60,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
     [TestMethod]
     public async Task FreshStateGetAndTokenlessMultiFragmentWriteWithDiscardDisciplinesOverRealApduTransport()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("wavelb-capstone-a");
@@ -129,7 +129,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
     public async Task SetPinArmsGateAndLbwCarveOutSurvivesMakeCredentialOverRealApduTransport()
     {
         const string RpId = "wavelb-capstone-b.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("wavelb-capstone-b");
@@ -191,7 +191,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
     public async Task LargeBlobKeyExtensionEndToEndWithRealDeflateAndGcmOverRealApduTransport()
     {
         const string RpId = "wavelb-capstone-c.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("wavelb-capstone-c");
@@ -264,7 +264,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
     [TestMethod]
     public async Task FactoryResetRestoresConstantAndPowerCycleDiscardsPendingWriteOverRealApduTransport()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("wavelb-capstone-d");
@@ -318,7 +318,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
     [TestMethod]
     public async Task IntegrityFailureOnTheWireLeavesPreviousArrayReadableOverRealApduTransport()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("wavelb-capstone-e");
@@ -345,7 +345,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
     /// <summary>Sends an <c>authenticatorLargeBlobs</c> <c>get</c> request over <paramref name="transceive"/>'s real transport, decoding a successful response.</summary>
     /// <returns>The raw status byte and, when it is <see cref="WellKnownCtapStatusCodes.Ok"/>, the decoded response.</returns>
     private static async Task<(byte Status, CtapLargeBlobsResponse? Response)> SendGetAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, int get, int offset, CancellationToken cancellationToken)
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, int get, int offset, CancellationToken cancellationToken)
     {
         var request = new CtapLargeBlobsRequest(Get: get, Offset: offset);
         byte[] envelope = CtapWaveLargeBlobsFixtures.BuildEnvelope(request);
@@ -361,7 +361,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
 
 
     /// <summary>Sends an <c>authenticatorGetInfo</c> request over <paramref name="transceive"/>'s real transport and decodes the response.</summary>
-    private static async Task<CtapGetInfoResponse> GetInfoAsync(Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<CtapGetInfoResponse> GetInfoAsync(Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] request = [WellKnownCtapCommands.GetInfo];
         using PooledMemory response = await transceive(request, pool, cancellationToken).ConfigureAwait(false);
@@ -372,7 +372,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
 
     /// <summary>Establishes <paramref name="pin"/> as the authenticator's PIN over <paramref name="transceive"/>'s real transport.</summary>
     private static async Task EstablishPinAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string pin, CancellationToken cancellationToken)
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string pin, CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(transceive, protocolId, pool, cancellationToken)
             .ConfigureAwait(false);
@@ -392,7 +392,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
     /// (<c>0x09</c>) over <paramref name="transceive"/>'s real transport, decrypting it from wire bytes only.
     /// </summary>
     private static async Task<byte[]> IssueTokenAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string pin, int permissions, string? rpId,
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string pin, int permissions, string? rpId,
         CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(transceive, protocolId, pool, cancellationToken)
@@ -416,7 +416,7 @@ internal sealed class CtapAuthenticatorLargeBlobsFlowTests
     /// <paramref name="rpIdHash"/>, returning its reported <c>largeBlobKey</c> (<c>0x0B</c>) member.
     /// </summary>
     private static async Task<ReadOnlyMemory<byte>?> EnumerateSingleCredentialLargeBlobKeyAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, byte[] token, byte[] rpIdHash, CancellationToken cancellationToken)
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, byte[] token, byte[] rpIdHash, CancellationToken cancellationToken)
     {
         byte[] subCommandParams = CtapWaveCmFixtures.BuildSubCommandParams(rpIdHash: rpIdHash);
         byte[] message = CtapWaveCmFixtures.BuildMessage(WellKnownCtapCredentialManagementSubCommands.EnumerateCredentialsBegin, subCommandParams);

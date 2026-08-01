@@ -29,4 +29,4 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// shape have already parsed successfully (R-2b, R-5: both are fail-closed, but personalization mismatch
 /// is a caller-side decision since the composed identity to compare against is not known to the codec).
 /// </exception>
-public delegate CtapAuthenticatorSnapshot DecodeCtapAuthenticatorSnapshotDelegate(ReadOnlyMemory<byte> snapshotCbor, MemoryPool<byte> pool);
+public delegate CtapAuthenticatorSnapshot DecodeCtapAuthenticatorSnapshotDelegate(ReadOnlyMemory<byte> snapshotCbor, BaseMemoryPool pool);

@@ -96,7 +96,7 @@ public static class AttachmentDataResolutionExtensions
         OutboundTransportDelegate? transport,
         HashFunctionSelector? hashFunctionSelector,
         JsonValueSerializer jsonValueSerializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(attachmentData);
@@ -164,7 +164,7 @@ public static class AttachmentDataResolutionExtensions
         DecodeDelegate hashBase58Decoder,
         HashFunctionSelector? hashFunctionSelector,
         JsonValueSerializer jsonValueSerializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(attachmentData);
@@ -244,7 +244,7 @@ public static class AttachmentDataResolutionExtensions
         DecodeDelegate hashBase58Decoder,
         HashFunctionSelector? hashFunctionSelector,
         JsonValueSerializer jsonValueSerializer,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         //Bound the inline length BEFORE decoding so a hostile value cannot drive an unbounded allocation.
         //For base64 the bound is over the encoded char count (the decoder rents proportional to input).
@@ -312,7 +312,7 @@ public static class AttachmentDataResolutionExtensions
         DecodeDelegate base64UrlDecoder,
         DecodeDelegate hashBase58Decoder,
         HashFunctionSelector? hashFunctionSelector,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         string hash = attachmentData.Hash!;
@@ -446,7 +446,7 @@ public static class AttachmentDataResolutionExtensions
         DecodeDelegate base64UrlDecoder,
         DecodeDelegate base58Decoder,
         HashFunctionSelector? hashFunctionSelector,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         //Bound the hash string length BEFORE any decode (bound-before-decode doctrine): a sha2-256 multihash
         //is 34 bytes, under ~70 chars across base58/base64/hex, so a string this long is not a conforming
@@ -512,7 +512,7 @@ public static class AttachmentDataResolutionExtensions
         string hash,
         DecodeDelegate base64UrlDecoder,
         DecodeDelegate base58Decoder,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         if(hash.Length == 0)
         {
@@ -534,7 +534,7 @@ public static class AttachmentDataResolutionExtensions
 
     //Copies a decoded byte array into an owned, exact-length pooled buffer, then the source array is no
     //longer referenced. Used for the multibase forms whose framework decoders return arrays.
-    private static IMemoryOwner<byte> DecodeBytes(byte[] bytes, MemoryPool<byte> memoryPool)
+    private static IMemoryOwner<byte> DecodeBytes(byte[] bytes, BaseMemoryPool memoryPool)
     {
         IMemoryOwner<byte> owner = memoryPool.Rent(bytes.Length);
         bytes.AsSpan().CopyTo(owner.Memory.Span);

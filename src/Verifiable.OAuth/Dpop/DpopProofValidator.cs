@@ -34,7 +34,7 @@ public static class DpopProofValidator
         EncodeDelegate base64UrlEncoder,
         DecodeDelegate base64UrlDecoder,
         TimeProvider timeProvider,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeSpan iatSkew,
         CancellationToken cancellationToken)
     {
@@ -213,7 +213,7 @@ public static class DpopProofValidator
     public static async ValueTask<string> ComputeAthAsync(
         string accessToken,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(accessToken);

@@ -384,9 +384,9 @@ namespace Verifiable.Tests.Cryptography
 
 
         private static void AssertMlKemRoundTrip(
-            Func<MemoryPool<byte>, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
-            Func<ReadOnlyMemory<byte>, MemoryPool<byte>, (IMemoryOwner<byte> Ciphertext, IMemoryOwner<byte> SharedSecret)> encapsulate,
-            Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, MemoryPool<byte>, IMemoryOwner<byte>> decapsulate)
+            Func<BaseMemoryPool, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
+            Func<ReadOnlyMemory<byte>, BaseMemoryPool, (IMemoryOwner<byte> Ciphertext, IMemoryOwner<byte> SharedSecret)> encapsulate,
+            Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, BaseMemoryPool, IMemoryOwner<byte>> decapsulate)
         {
             var keys = createKeys(BaseMemoryPool.Shared);
             using var publicKey = keys.PublicKey;

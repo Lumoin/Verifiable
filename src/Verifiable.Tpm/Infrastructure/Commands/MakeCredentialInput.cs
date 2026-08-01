@@ -68,7 +68,7 @@ public sealed class MakeCredentialInput: ITpmCommandInput, IDisposable
         TpmiDhObject handle,
         ReadOnlySpan<byte> credential,
         ReadOnlySpan<byte> objectName,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         Tpm2bDigest credentialBuffer = Tpm2bDigest.Create(credential, pool);

@@ -51,7 +51,7 @@ public sealed class SignResponse: IDisposable, ITpmWireType
     /// <param name="reader">The reader positioned at the response parameters.</param>
     /// <param name="pool">The memory pool for parameter buffer allocation.</param>
     /// <returns>The parsed sign response.</returns>
-    public static SignResponse Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static SignResponse Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         var sigAlg = (TpmAlgIdConstants)reader.ReadUInt16();

@@ -189,7 +189,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     /// <returns>The response. The caller owns the returned response and must dispose it.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "TpmResponse takes ownership of the rented buffer and is owned by the returned TpmResult, which the caller disposes.")]
-    public async ValueTask<TpmResult<TpmResponse>> SubmitAsync(ReadOnlyMemory<byte> command, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public async ValueTask<TpmResult<TpmResponse>> SubmitAsync(ReadOnlyMemory<byte> command, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pool);
         cancellationToken.ThrowIfCancellationRequested();
@@ -207,7 +207,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         return SerializeResponse(intent, pool);
     }
 
-    private async ValueTask RunWithEffectsAsync(TpmSimulatorInput input, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private async ValueTask RunWithEffectsAsync(TpmSimulatorInput input, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         _ = await PdaRunner.StepWithEffectsAsync<TpmSimulatorState, TpmSimulatorInput, TpmActionContext>(
             Automaton.CurrentState,
@@ -333,7 +333,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //scalar into durable model memory. Synchronous so the point spans never cross an await.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the built public area transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
-    private static (Tpm2bPublic OutPublic, TransientKeyState KeyState) BuildKeyArtifacts(TpmCreateEccKeyAction action, TpmGeneratedEccKey key, MemoryPool<byte> pool)
+    private static (Tpm2bPublic OutPublic, TransientKeyState KeyState) BuildKeyArtifacts(TpmCreateEccKeyAction action, TpmGeneratedEccKey key, BaseMemoryPool pool)
     {
         //The exported point is SEC1 uncompressed (0x04 || X || Y), so X and Y are each the field-width halves
         //after the leading tag octet.
@@ -393,7 +393,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //model memory. Synchronous so the key spans never cross an await.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the built public area transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
-    private static (Tpm2bPublic OutPublic, TransientKeyState KeyState) BuildRsaKeyArtifacts(TpmCreateRsaKeyAction action, TpmGeneratedRsaKey key, MemoryPool<byte> pool)
+    private static (Tpm2bPublic OutPublic, TransientKeyState KeyState) BuildRsaKeyArtifacts(TpmCreateRsaKeyAction action, TpmGeneratedRsaKey key, BaseMemoryPool pool)
     {
         ReadOnlySpan<byte> modulus = key.Modulus.AsReadOnlySpan();
         ReadOnlySpan<byte> privateKey = key.PrivateKey.AsReadOnlySpan();
@@ -421,7 +421,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the framed by-products buffer transfers to the caller; the intermediate buffers are released by their using declarations.")]
     private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> BuildCreationByProductsAsync(
-        ReadOnlyMemory<byte> name, uint hierarchy, ReadOnlyMemory<byte> proofSeed, bool includeName, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> name, uint hierarchy, ReadOnlyMemory<byte> proofSeed, bool includeName, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         //creationData (marshaled TPMS_CREATION_DATA); creationHash = H_nameAlg(creationData).
         using IMemoryOwner<byte> creationData = await BuildCreationDataAsync(hierarchy, pool, cancellationToken).ConfigureAwait(false);
@@ -441,7 +441,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the framed buffer transfers to the caller; the input buffers are released by their callers' using declarations.")]
     private static (IMemoryOwner<byte> Owner, int Length) FrameCreationByProducts(
-        uint hierarchy, ReadOnlyMemory<byte> name, IMemoryOwner<byte> creationData, DigestValue creationHash, IMemoryOwner<byte> ticketDigest, bool includeName, MemoryPool<byte> pool)
+        uint hierarchy, ReadOnlyMemory<byte> name, IMemoryOwner<byte> creationData, DigestValue creationHash, IMemoryOwner<byte> ticketDigest, bool includeName, BaseMemoryPool pool)
     {
         int total =
             (sizeof(ushort) + CreationDataSize)                                       //creationData (TPM2B_CREATION_DATA).
@@ -491,7 +491,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //area and delegates the nameAlg-agile digest+framing to the shared TpmObjectName helper.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the Name buffer transfers to the caller, which releases it via a using declaration.")]
-    private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> ComputeObjectNameAsync(Tpm2bPublic outPublic, TpmAlgIdConstants nameAlg, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> ComputeObjectNameAsync(Tpm2bPublic outPublic, TpmAlgIdConstants nameAlg, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         int publicSize = outPublic.PublicArea.GetSerializedSize();
         using IMemoryOwner<byte> marshaled = pool.Rent(publicSize);
@@ -503,7 +503,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //name = nameAlg || H_nameAlg(TPMT_PUBLIC) computed over already-marshaled public-area bytes — the form
     //TPM2_Load() has (it receives the marshaled TPMT_PUBLIC in inPublic) and the digest step ComputeObjectNameAsync
     //shares. Delegates to the shared nameAlg-agile TpmObjectName helper (TPM 2.0 Library Part 1, clause 16).
-    private static ValueTask<(IMemoryOwner<byte> Owner, int Length)> ComputeObjectNameFromBytesAsync(ReadOnlyMemory<byte> publicAreaBytes, TpmAlgIdConstants nameAlg, MemoryPool<byte> pool, CancellationToken cancellationToken) =>
+    private static ValueTask<(IMemoryOwner<byte> Owner, int Length)> ComputeObjectNameFromBytesAsync(ReadOnlyMemory<byte> publicAreaBytes, TpmAlgIdConstants nameAlg, BaseMemoryPool pool, CancellationToken cancellationToken) =>
         TpmObjectName.ComputeNameAsync(publicAreaBytes, (ushort)nameAlg, pool, cancellationToken);
 
     //Marshals the TPMT_PUBLIC into its canonical wire form (no TPM2B size prefix) — the hash input for the Name.
@@ -518,7 +518,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //PCR selection, and the locality is the command locality (0 for this software model).
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the creation-data buffer transfers to the caller, which releases it via a using declaration.")]
-    private static async ValueTask<IMemoryOwner<byte>> BuildCreationDataAsync(uint hierarchy, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async ValueTask<IMemoryOwner<byte>> BuildCreationDataAsync(uint hierarchy, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         //pcrDigest of the empty PCR selection is the hash of no PCR data (an empty hash input).
         using DigestValue pcrDigest = await CryptographicKeyEvents.ComputeDigestAsync(
@@ -556,7 +556,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //into the derivation.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the proof buffer transfers to the caller, which releases it via a using declaration.")]
-    private static async ValueTask<IMemoryOwner<byte>> DeriveHierarchyProofAsync(ReadOnlyMemory<byte> seed, uint hierarchy, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async ValueTask<IMemoryOwner<byte>> DeriveHierarchyProofAsync(ReadOnlyMemory<byte> seed, uint hierarchy, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         int inputSize = seed.Length + sizeof(uint);
         using IMemoryOwner<byte> input = pool.Rent(inputSize);
@@ -592,7 +592,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the ticket-digest buffer transfers to the caller, which releases it via a using declaration.")]
     private static async ValueTask<IMemoryOwner<byte>> ComputeCreationTicketDigestAsync(
-        ReadOnlyMemory<byte> proof, ReadOnlyMemory<byte> name, ReadOnlyMemory<byte> creationHash, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> proof, ReadOnlyMemory<byte> name, ReadOnlyMemory<byte> creationHash, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         int messageSize = sizeof(ushort) + name.Length + creationHash.Length;
         using IMemoryOwner<byte> message = pool.Rent(messageSize);
@@ -697,7 +697,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //synchronous so the point spans never cross an await.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the built public area transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
-    private static (Tpm2bPublic OutPublic, TransientKeyState KeyState) BuildStorageParentArtifacts(TpmCreateStorageParentAction action, TpmGeneratedEccKey key, MemoryPool<byte> pool)
+    private static (Tpm2bPublic OutPublic, TransientKeyState KeyState) BuildStorageParentArtifacts(TpmCreateStorageParentAction action, TpmGeneratedEccKey key, BaseMemoryPool pool)
     {
         //The exported point is SEC1 uncompressed (0x04 || X || Y), so X and Y are each the field-width halves
         //after the leading tag octet.
@@ -757,7 +757,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //key spans never cross an await.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the built public area transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
-    private static (Tpm2bPublic OutPublic, TransientKeyState KeyState) BuildRsaStorageParentArtifacts(TpmCreateRsaStorageParentAction action, TpmGeneratedRsaKey key, MemoryPool<byte> pool)
+    private static (Tpm2bPublic OutPublic, TransientKeyState KeyState) BuildRsaStorageParentArtifacts(TpmCreateRsaStorageParentAction action, TpmGeneratedRsaKey key, BaseMemoryPool pool)
     {
         ReadOnlySpan<byte> modulus = key.Modulus.AsReadOnlySpan();
         ReadOnlySpan<byte> privateKey = key.PrivateKey.AsReadOnlySpan();
@@ -1060,7 +1060,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //userAuth length, the userAuth octets, then the secret data octets — the length prefix lets TPM2_Load()
     //recover both the authorization value and the sealed data from the one opaque blob the caller persists and
     //reloads (TPM 2.0 Library Part 1, clause 19.6.4; Part 3, clauses 12.1 and 12.2).
-    private static IMemoryOwner<byte> PackSealedPrivateBlob(ReadOnlyMemory<byte> userAuth, ReadOnlyMemory<byte> secretData, MemoryPool<byte> pool, out int length)
+    private static IMemoryOwner<byte> PackSealedPrivateBlob(ReadOnlyMemory<byte> userAuth, ReadOnlyMemory<byte> secretData, BaseMemoryPool pool, out int length)
     {
         length = sizeof(ushort) + userAuth.Length + secretData.Length;
         IMemoryOwner<byte> owner = pool.Rent(Math.Max(length, 1));
@@ -1175,7 +1175,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         Justification = "Ownership of the marshaled-attest buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
     private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> BuildSignedCertifyAttestAsync(
         ReadOnlyMemory<byte> subjectName, uint subjectHierarchy, ReadOnlyMemory<byte> signerName, uint signerHierarchy,
-        ReadOnlyMemory<byte> qualifyingData, TpmsClockInfo clockInfo, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> qualifyingData, TpmsClockInfo clockInfo, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         (IMemoryOwner<byte> subjectQualifiedName, int subjectQualifiedNameLength) =
             await ComputeHierarchyQualifiedNameAsync(subjectHierarchy, subjectName, pool, cancellationToken).ConfigureAwait(false);
@@ -1208,7 +1208,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the marshaled-attest buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
     private static (IMemoryOwner<byte> Owner, int Length) BuildCertifyAttest(
-        ReadOnlySpan<byte> subjectName, ReadOnlySpan<byte> subjectQualifiedName, ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, TpmsClockInfo clockInfo, MemoryPool<byte> pool)
+        ReadOnlySpan<byte> subjectName, ReadOnlySpan<byte> subjectQualifiedName, ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, TpmsClockInfo clockInfo, BaseMemoryPool pool)
     {
         int total =
             sizeof(uint) + sizeof(ushort)                            //magic (TPM_GENERATED) + type (TPMI_ST_ATTEST).
@@ -1254,7 +1254,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the Qualified Name buffer transfers to the caller, which releases it via a using declaration.")]
     private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> ComputeHierarchyQualifiedNameAsync(
-        uint hierarchy, ReadOnlyMemory<byte> name, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        uint hierarchy, ReadOnlyMemory<byte> name, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ushort nameAlg = BinaryPrimitives.ReadUInt16BigEndian(name.Span[..sizeof(ushort)]);
 
@@ -1390,7 +1390,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //transfers to the caller, which disposes it after the composite digest is taken.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the rented buffer transfers to the caller, which releases it via a using declaration after the digest is computed.")]
-    private static IMemoryOwner<byte> ConcatenatePcrValues(ImmutableArray<ReadOnlyMemory<byte>> values, MemoryPool<byte> pool, out int length)
+    private static IMemoryOwner<byte> ConcatenatePcrValues(ImmutableArray<ReadOnlyMemory<byte>> values, BaseMemoryPool pool, out int length)
     {
         int total = 0;
         for(int i = 0; i < values.Length; i++)
@@ -1433,7 +1433,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the marshaled-attest buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
     private static (IMemoryOwner<byte> Owner, int Length) BuildQuoteAttest(
-        ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, ReadOnlySpan<byte> pcrSelection, ReadOnlySpan<byte> pcrDigest, TpmsClockInfo clockInfo, MemoryPool<byte> pool)
+        ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, ReadOnlySpan<byte> pcrSelection, ReadOnlySpan<byte> pcrDigest, TpmsClockInfo clockInfo, BaseMemoryPool pool)
     {
         int total =
             sizeof(uint) + sizeof(ushort)                            //magic (TPM_GENERATED) + type (TPMI_ST_ATTEST).
@@ -1574,7 +1574,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         Justification = "Ownership of the marshaled-attest buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
     private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> BuildSignedCreationAttestAsync(
         ReadOnlyMemory<byte> subjectName, ReadOnlyMemory<byte> creationHash, uint signerHierarchy, ReadOnlyMemory<byte> signerName,
-        ReadOnlyMemory<byte> qualifyingData, TpmsClockInfo clockInfo, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> qualifyingData, TpmsClockInfo clockInfo, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         (IMemoryOwner<byte> signerQualifiedName, int signerQualifiedNameLength) =
             await ComputeHierarchyQualifiedNameAsync(signerHierarchy, signerName, pool, cancellationToken).ConfigureAwait(false);
@@ -1600,7 +1600,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the marshaled-attest buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
     private static (IMemoryOwner<byte> Owner, int Length) BuildCreationAttest(
-        ReadOnlySpan<byte> subjectName, ReadOnlySpan<byte> creationHash, ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, TpmsClockInfo clockInfo, MemoryPool<byte> pool)
+        ReadOnlySpan<byte> subjectName, ReadOnlySpan<byte> creationHash, ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, TpmsClockInfo clockInfo, BaseMemoryPool pool)
     {
         int total =
             sizeof(uint) + sizeof(ushort)                            //magic (TPM_GENERATED) + type (TPMI_ST_ATTEST).
@@ -1710,7 +1710,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the marshaled-attest buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
     private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> BuildSignedTimeAttestAsync(
-        uint signerHierarchy, ReadOnlyMemory<byte> signerName, ReadOnlyMemory<byte> qualifyingData, ulong time, TpmsClockInfo clockInfo, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        uint signerHierarchy, ReadOnlyMemory<byte> signerName, ReadOnlyMemory<byte> qualifyingData, ulong time, TpmsClockInfo clockInfo, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         (IMemoryOwner<byte> signerQualifiedName, int signerQualifiedNameLength) =
             await ComputeHierarchyQualifiedNameAsync(signerHierarchy, signerName, pool, cancellationToken).ConfigureAwait(false);
@@ -1727,7 +1727,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //firmwareVersion is likewise the same simulator-fixed constant in both places.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the marshaled-attest buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
-    private static (IMemoryOwner<byte> Owner, int Length) BuildTimeAttest(ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, ulong time, TpmsClockInfo clockInfo, MemoryPool<byte> pool)
+    private static (IMemoryOwner<byte> Owner, int Length) BuildTimeAttest(ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, ulong time, TpmsClockInfo clockInfo, BaseMemoryPool pool)
     {
         int total =
             sizeof(uint) + sizeof(ushort)                            //magic (TPM_GENERATED) + type (TPMI_ST_ATTEST).
@@ -1841,7 +1841,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         Justification = "Ownership of the marshaled-attest buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
     private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> BuildSignedNvCertifyAttestAsync(
         uint nvIndex, TpmaNv nvIndexAttributes, ushort nvIndexDataSize, ushort offset, ReadOnlyMemory<byte> nvContents,
-        uint signerHierarchy, ReadOnlyMemory<byte> signerName, ReadOnlyMemory<byte> qualifyingData, TpmsClockInfo clockInfo, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        uint signerHierarchy, ReadOnlyMemory<byte> signerName, ReadOnlyMemory<byte> qualifyingData, TpmsClockInfo clockInfo, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         (IMemoryOwner<byte> indexName, int indexNameLength) =
             await ComputeNvIndexNameAsync(nvIndex, nvIndexAttributes, nvIndexDataSize, pool, cancellationToken).ConfigureAwait(false);
@@ -1869,7 +1869,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the Name buffer transfers to the caller, which releases it via a using declaration.")]
     private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> ComputeNvIndexNameAsync(
-        uint nvIndex, TpmaNv attributes, ushort dataSize, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        uint nvIndex, TpmaNv attributes, ushort dataSize, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using var nvPublic = new TpmsNvPublic(nvIndex, TpmAlgIdConstants.TPM_ALG_SHA256, attributes, Tpm2bDigest.Empty, dataSize);
         int publicSize = nvPublic.SerializedSize;
@@ -1890,7 +1890,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the marshaled-attest buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
     private static (IMemoryOwner<byte> Owner, int Length) BuildNvCertifyAttest(
-        ReadOnlySpan<byte> indexName, ushort offset, ReadOnlySpan<byte> nvContents, ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, TpmsClockInfo clockInfo, MemoryPool<byte> pool)
+        ReadOnlySpan<byte> indexName, ushort offset, ReadOnlySpan<byte> nvContents, ReadOnlySpan<byte> signerQualifiedName, ReadOnlySpan<byte> nonce, TpmsClockInfo clockInfo, BaseMemoryPool pool)
     {
         int total =
             sizeof(uint) + sizeof(ushort)                            //magic (TPM_GENERATED) + type (TPMI_ST_ATTEST).
@@ -1989,7 +1989,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the ticket-digest buffer transfers to the caller, which releases it via a using declaration.")]
     private static async ValueTask<IMemoryOwner<byte>> ComputeVerifiedTicketDigestAsync(
-        ReadOnlyMemory<byte> proof, ReadOnlyMemory<byte> digest, ReadOnlyMemory<byte> keyName, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> proof, ReadOnlyMemory<byte> digest, ReadOnlyMemory<byte> keyName, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         int messageSize = sizeof(ushort) + digest.Length + keyName.Length;
         using IMemoryOwner<byte> message = pool.Rent(messageSize);
@@ -2078,7 +2078,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         Justification = "Ownership of the digest buffer transfers to the caller, which releases it via a using declaration.")]
     private static async ValueTask<IMemoryOwner<byte>> ComputePolicySignedAHashAsync(
         ReadOnlyMemory<byte> nonceTpm, int expiration, ReadOnlyMemory<byte> cpHashA, ReadOnlyMemory<byte> policyRef,
-        TpmAlgIdConstants schemeHashAlg, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        TpmAlgIdConstants schemeHashAlg, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         int messageSize = nonceTpm.Length + sizeof(int) + cpHashA.Length + policyRef.Length;
         using IMemoryOwner<byte> message = pool.Rent(messageSize);
@@ -2145,7 +2145,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //valid buffer). Ownership transfers to the caller; the caller disposes it after the octets are framed out.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the rented buffer transfers to the caller, which releases it after framing.")]
-    private static IMemoryOwner<byte> CopyToPooled(ReadOnlySpan<byte> source, MemoryPool<byte> pool, out int length)
+    private static IMemoryOwner<byte> CopyToPooled(ReadOnlySpan<byte> source, BaseMemoryPool pool, out int length)
     {
         length = source.Length;
         IMemoryOwner<byte> owner = pool.Rent(Math.Max(length, 1));
@@ -2193,7 +2193,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     {
         TpmRsaSigningBackend backend = context.RsaSigningBackend
             ?? throw new InvalidOperationException("A salted TPM2_StartAuthSession() over an RSA tpmKey requires an RSA signing backend, but none was supplied.");
-        MemoryPool<byte> pool = context.Pool;
+        BaseMemoryPool pool = context.Pool;
 
         int saltCap = SessionDigestSize(action.NameAlg);
         IMemoryOwner<byte>? decoded;
@@ -2244,7 +2244,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     {
         TpmEccSigningBackend backend = context.SigningBackend
             ?? throw new InvalidOperationException("A salted TPM2_StartAuthSession() over an ECC tpmKey requires a signing backend, but none was supplied.");
-        MemoryPool<byte> pool = context.Pool;
+        BaseMemoryPool pool = context.Pool;
 
         byte[] ephemeralPoint;
         byte[] ephemeralX;
@@ -2321,7 +2321,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         ReadOnlyMemory<byte> salt,
         ReadOnlyMemory<byte> nonceTpm,
         ReadOnlyMemory<byte> nonceCaller,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         int digestSize = SessionDigestSize(sessionAlg);
@@ -2548,7 +2548,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility",
         Justification = "The AES-CFB branch is selected only when the session negotiated an AES TPMT_SYM_DEF, which this simulator agrees only with a caller that requested it; the XOR branch uses no browser-unsupported API. This mirrors the host TpmSession's own suppression for the same primitive.")]
     private static async ValueTask ApplyResponseEncryptionAsync(
-        TpmtSymDef symmetric, TpmAlgIdConstants sessionAlg, ReadOnlyMemory<byte> sessionValue, ReadOnlyMemory<byte> nonceNewer, ReadOnlyMemory<byte> nonceOlder, Memory<byte> data, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        TpmtSymDef symmetric, TpmAlgIdConstants sessionAlg, ReadOnlyMemory<byte> sessionValue, ReadOnlyMemory<byte> nonceNewer, ReadOnlyMemory<byte> nonceOlder, Memory<byte> data, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         HashAlgorithmName hashName = SessionHashName(sessionAlg);
 
@@ -2576,7 +2576,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //<see cref="ComputeRpHashPerSessionAsync"/>).
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the rpHash buffer transfers to the caller, which releases it via a using declaration.")]
-    private static async ValueTask<IMemoryOwner<byte>> ComputeSessionRpHashAsync(TpmAlgIdConstants sessionAlg, TpmCcConstants commandCode, ReadOnlyMemory<byte> parameterArea, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async ValueTask<IMemoryOwner<byte>> ComputeSessionRpHashAsync(TpmAlgIdConstants sessionAlg, TpmCcConstants commandCode, ReadOnlyMemory<byte> parameterArea, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         int digestSize = SessionDigestSize(sessionAlg);
         int inputLength = sizeof(uint) + sizeof(uint) + parameterArea.Length;
@@ -2616,7 +2616,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //(by index), each pointing into a cached distinct-algorithm buffer; the caller disposes every entry in the
     //returned owner list exactly once.
     private static async ValueTask<(Memory<byte>[] PerSession, List<(TpmAlgIdConstants Alg, IMemoryOwner<byte> Owner)> DistinctOwners)> ComputeRpHashPerSessionAsync(
-        TpmAlgIdConstants[] sessionAlgs, TpmCcConstants commandCode, ReadOnlyMemory<byte> parameterArea, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        TpmAlgIdConstants[] sessionAlgs, TpmCcConstants commandCode, ReadOnlyMemory<byte> parameterArea, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         var perSession = new Memory<byte>[sessionAlgs.Length];
         var distinctOwners = new List<(TpmAlgIdConstants Alg, IMemoryOwner<byte> Owner)>(Math.Min(sessionAlgs.Length, 3));
@@ -2654,7 +2654,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the HMAC buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
     private static async ValueTask<IMemoryOwner<byte>> ComputeResponseHmacAsync(
-        TpmAlgIdConstants sessionAlg, ReadOnlyMemory<byte> sessionValue, ReadOnlyMemory<byte> rpHash, ReadOnlyMemory<byte> nonceTpm, ReadOnlyMemory<byte> nonceCaller, byte sessionAttributes, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        TpmAlgIdConstants sessionAlg, ReadOnlyMemory<byte> sessionValue, ReadOnlyMemory<byte> rpHash, ReadOnlyMemory<byte> nonceTpm, ReadOnlyMemory<byte> nonceCaller, byte sessionAttributes, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         int digestSize = SessionDigestSize(sessionAlg);
         int messageLength = rpHash.Length + nonceTpm.Length + nonceCaller.Length + sizeof(byte);
@@ -2720,7 +2720,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the cpHash buffer transfers to the caller, which releases it via a using declaration.")]
     private static async ValueTask<IMemoryOwner<byte>> ComputeSessionCpHashAsync(
-        TpmAlgIdConstants sessionAlg, TpmCcConstants commandCode, ReadOnlyMemory<byte> handleNames, ReadOnlyMemory<byte> parameterArea, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        TpmAlgIdConstants sessionAlg, TpmCcConstants commandCode, ReadOnlyMemory<byte> handleNames, ReadOnlyMemory<byte> parameterArea, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         int digestSize = SessionDigestSize(sessionAlg);
         int inputLength = sizeof(uint) + handleNames.Length + parameterArea.Length;
@@ -2760,7 +2760,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     private static async ValueTask<bool> VerifySessionHmacAsync(
         TpmAlgIdConstants sessionAlg, ReadOnlyMemory<byte> sessionKey, ReadOnlyMemory<byte> authValue, ReadOnlyMemory<byte> cpHash,
         ReadOnlyMemory<byte> nonceCaller, ReadOnlyMemory<byte> nonceTpm, ReadOnlyMemory<byte> foldedNonces, byte sessionAttributes,
-        ReadOnlyMemory<byte> suppliedHmac, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> suppliedHmac, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(sessionKey.IsEmpty && authValue.IsEmpty)
         {
@@ -2871,7 +2871,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     {
         TpmEccSigningBackend backend = context.SigningBackend
             ?? throw new InvalidOperationException("TPM2_MakeCredential() requires a signing backend, but none was supplied.");
-        MemoryPool<byte> pool = context.Pool;
+        BaseMemoryPool pool = context.Pool;
 
         int fieldWidth = (action.CredentialKeyPublicPoint.Length - 1) / 2;
         int seedSize = SessionDigestSize(action.NameAlg);
@@ -2931,7 +2931,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     [SuppressMessage("Interoperability", "CA1416:Validate platform compatibility",
         Justification = "The credential-protection outer wrap uses AES-CFB, the symmetric algorithm of the credential key's (endorsement key's) storage template (TPM 2.0 Library Part 1, clause 24); this in-process behavioural simulator is a test/server-side model, not a browser target. This mirrors the host's own suppression for the same primitive.")]
     private static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> BuildCredentialBlobAsync(
-        ReadOnlyMemory<byte> seed, ReadOnlyMemory<byte> credential, ReadOnlyMemory<byte> objectName, TpmAlgIdConstants nameAlg, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> seed, ReadOnlyMemory<byte> credential, ReadOnlyMemory<byte> objectName, TpmAlgIdConstants nameAlg, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         int digestSize = SessionDigestSize(nameAlg);
         HashAlgorithmName hashName = SessionHashName(nameAlg);
@@ -2985,7 +2985,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //11.4.33). The point is SEC1 uncompressed (0x04 || X || Y), so X and Y are the field-width halves after the tag.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the secret buffer transfers to the caller, which carries it to the response intent disposed by SerializeResponse.")]
-    private static (IMemoryOwner<byte> Owner, int Length) FrameEccPointSecret(byte[] sec1Point, int fieldWidth, MemoryPool<byte> pool)
+    private static (IMemoryOwner<byte> Owner, int Length) FrameEccPointSecret(byte[] sec1Point, int fieldWidth, BaseMemoryPool pool)
     {
         int secretLen = 2 * (sizeof(ushort) + fieldWidth);
         IMemoryOwner<byte> owner = pool.Rent(secretLen);
@@ -3025,7 +3025,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     {
         TpmRsaSigningBackend backend = context.RsaSigningBackend
             ?? throw new InvalidOperationException("TPM2_MakeCredential() for an RSA credential key requires an RSA signing backend, but none was supplied.");
-        MemoryPool<byte> pool = context.Pool;
+        BaseMemoryPool pool = context.Pool;
 
         int seedSize = SessionDigestSize(action.NameAlg);
 
@@ -3064,7 +3064,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the HMAC buffer transfers to the caller, which releases it via a using declaration.")]
     private static async ValueTask<IMemoryOwner<byte>> ComputeCredentialHmacAsync(
-        ReadOnlyMemory<byte> hmacKey, ReadOnlyMemory<byte> encIdentity, ReadOnlyMemory<byte> objectName, TpmAlgIdConstants nameAlg, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> hmacKey, ReadOnlyMemory<byte> encIdentity, ReadOnlyMemory<byte> objectName, TpmAlgIdConstants nameAlg, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         int digestSize = SessionDigestSize(nameAlg);
         int messageLen = encIdentity.Length + objectName.Length;
@@ -3110,7 +3110,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     {
         TpmEccSigningBackend backend = context.SigningBackend
             ?? throw new InvalidOperationException("TPM2_ActivateCredential() requires a signing backend, but none was supplied.");
-        MemoryPool<byte> pool = context.Pool;
+        BaseMemoryPool pool = context.Pool;
 
         int fieldWidth = (action.CredentialKeyPublicPoint.Length - 1) / 2;
         int seedSize = SessionDigestSize(action.NameAlg);
@@ -3240,7 +3240,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     {
         TpmRsaSigningBackend backend = context.RsaSigningBackend
             ?? throw new InvalidOperationException("TPM2_ActivateCredential() for an RSA credential key requires an RSA signing backend, but none was supplied.");
-        MemoryPool<byte> pool = context.Pool;
+        BaseMemoryPool pool = context.Pool;
 
         int seedSize = SessionDigestSize(action.NameAlg);
         HashAlgorithmName hashName = SessionHashName(action.NameAlg);
@@ -3411,11 +3411,11 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //Caller-supplied context threaded to the action executor without closure capture: the injected RNG
     //backend, the per-call memory pool, the injected ECC and RSA signing backends (null when none was
     //supplied), and the per-TPM creation-ticket proof seed.
-    private readonly struct TpmActionContext(FillEntropyDelegate rng, MemoryPool<byte> pool, TpmEccSigningBackend? signingBackend, TpmRsaSigningBackend? rsaSigningBackend, ReadOnlyMemory<byte> proofSeed)
+    private readonly struct TpmActionContext(FillEntropyDelegate rng, BaseMemoryPool pool, TpmEccSigningBackend? signingBackend, TpmRsaSigningBackend? rsaSigningBackend, ReadOnlyMemory<byte> proofSeed)
     {
         public FillEntropyDelegate Rng { get; } = rng;
 
-        public MemoryPool<byte> Pool { get; } = pool;
+        public BaseMemoryPool Pool { get; } = pool;
 
         public TpmEccSigningBackend? SigningBackend { get; } = signingBackend;
 
@@ -3468,7 +3468,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         return (Automaton.CurrentState, Automaton.StepCount);
     }
 
-    private bool TryParseCommand(ReadOnlySpan<byte> command, MemoryPool<byte> pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    private bool TryParseCommand(ReadOnlySpan<byte> command, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
     {
         input = null;
         malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
@@ -4219,7 +4219,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //the ECC or RSA signing template; the sensitive area, outsideInfo, and PCR selection are consumed for framing
     //but not modelled. eccSupported/rsaSupported say which backends are wired, so a template whose algorithm has
     //no backend is answered TPM_RC_COMMAND_CODE rather than entering an effect the TPM cannot run.
-    private static bool TryParseCreatePrimary(ref TpmReader reader, ushort tag, MemoryPool<byte> pool, bool eccSupported, bool rsaSupported, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    private static bool TryParseCreatePrimary(ref TpmReader reader, ushort tag, BaseMemoryPool pool, bool eccSupported, bool rsaSupported, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
     {
         input = null;
         malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
@@ -4461,7 +4461,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //(no decrypt companion) is the plain form (TpmCreateSealedObjectRequested), decoded immediately exactly as
     //before this wave. The parent's storage attributes are checked in the transition (which holds the loaded-object
     //state).
-    private static bool TryParseCreate(ref TpmReader reader, ushort tag, MemoryPool<byte> pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    private static bool TryParseCreate(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
     {
         input = null;
         malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
@@ -4609,7 +4609,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //session), then parameters (inPrivate as TPM2B_PRIVATE, inPublic as TPM2B_PUBLIC). The wrapped blob carries
     //the sealed data (the simulator's own encoding); the marshaled TPMT_PUBLIC is retained so the effect can
     //compute the object Name (TPM 2.0 Library Part 3, clause 12.2).
-    private static bool TryParseLoad(ref TpmReader reader, ushort tag, MemoryPool<byte> pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
+    private static bool TryParseLoad(ref TpmReader reader, ushort tag, BaseMemoryPool pool, [NotNullWhen(true)] out TpmSimulatorInput? input, out TpmRcConstants malformedResponseCode)
     {
         input = null;
         malformedResponseCode = TpmRcConstants.TPM_RC_SUCCESS;
@@ -6596,7 +6596,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "TpmResponse takes ownership of the rented buffer and is owned by the returned TpmResult, which the caller disposes.")]
-    private static TpmResult<TpmResponse> SerializeResponse(TpmResponseIntent intent, MemoryPool<byte> pool)
+    private static TpmResult<TpmResponse> SerializeResponse(TpmResponseIntent intent, BaseMemoryPool pool)
     {
         //An encrypt-attributed GetRandom response is framed with the TPM_ST_SESSIONS tag and a trailing response
         //session area, structurally distinct from every no-sessions response below, so it is framed by its own
@@ -7231,7 +7231,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //the recovered value the encryption protects, so it is zeroed before disposal.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "TpmResponse takes ownership of the rented buffer and is owned by the returned TpmResult, which the caller disposes.")]
-    private static TpmResult<TpmResponse> SerializeEncryptedRandomResponse(TpmEncryptedRandomResponse intent, MemoryPool<byte> pool)
+    private static TpmResult<TpmResponse> SerializeEncryptedRandomResponse(TpmEncryptedRandomResponse intent, BaseMemoryPool pool)
     {
         try
         {
@@ -7294,7 +7294,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //secret, encrypted when a session carries the encrypt attribute, so it is zeroed before disposal regardless.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "TpmResponse takes ownership of the rented buffer and is owned by the returned TpmResult, which the caller disposes.")]
-    private static TpmResult<TpmResponse> SerializeUnsealOverSessionsResponse(TpmUnsealOverSessionsResponse intent, MemoryPool<byte> pool)
+    private static TpmResult<TpmResponse> SerializeUnsealOverSessionsResponse(TpmUnsealOverSessionsResponse intent, BaseMemoryPool pool)
     {
         try
         {
@@ -7387,7 +7387,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     //released here.
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "TpmResponse takes ownership of the rented buffer and is owned by the returned TpmResult, which the caller disposes.")]
-    private static TpmResult<TpmResponse> SerializeCreateOverSessionsResponse(TpmCreateOverSessionsResponse intent, MemoryPool<byte> pool)
+    private static TpmResult<TpmResponse> SerializeCreateOverSessionsResponse(TpmCreateOverSessionsResponse intent, BaseMemoryPool pool)
     {
         try
         {

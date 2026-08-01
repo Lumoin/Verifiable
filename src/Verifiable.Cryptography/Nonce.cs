@@ -139,7 +139,7 @@ public sealed class Nonce: SensitiveMemory, IEquatable<Nonce>
         Tag tag,
         FillEntropyDelegate fillEntropy,
         EntropyHealthObservation health,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         Activity? lifetime = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(byteLength, 0);

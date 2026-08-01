@@ -286,4 +286,4 @@ public sealed record UnverifiedMetadataBlob(
 /// Metadata Service v3.1, section 3.1.7</see>, including an unsupported <c>x5u</c> header (out of
 /// this library's fetcher-free scope).
 /// </exception>
-public delegate UnverifiedMetadataBlob ParseMetadataBlobDelegate(ReadOnlyMemory<byte> blobBytes, MemoryPool<byte> pool);
+public delegate UnverifiedMetadataBlob ParseMetadataBlobDelegate(ReadOnlyMemory<byte> blobBytes, BaseMemoryPool pool);

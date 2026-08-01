@@ -71,7 +71,7 @@ internal sealed class CtapAuthenticatorCapstoneFlowTests
     [TestMethod]
     public async Task RegistrationThenAssertionRoundTripSucceedsOverRealApduTransport()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("capstone-authenticator");
@@ -236,7 +236,7 @@ internal sealed class CtapAuthenticatorCapstoneFlowTests
     {
         const string RpId = "wave3-packed.example";
         const string Origin = "https://wave3-packed.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("capstone-packed-authenticator");
@@ -343,7 +343,7 @@ internal sealed class CtapAuthenticatorCapstoneFlowTests
     {
         const string RpId = "wave3-multi-account.example";
         const string Origin = "https://wave3-multi-account.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("capstone-multi-account-authenticator");
@@ -409,7 +409,7 @@ internal sealed class CtapAuthenticatorCapstoneFlowTests
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the credential ID carrier transfers to the returned CtapWave2RegisteredCredential, which the caller disposes.")]
     private static async Task<CtapWave2RegisteredCredential> RegisterResidentCredentialOverRealTransportAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, string rpId, byte[] userId, CancellationToken cancellationToken)
+        CtapWave2TransportHarness harness, BaseMemoryPool pool, string rpId, byte[] userId, CancellationToken cancellationToken)
     {
         CtapMakeCredentialRequest request = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(
             pool, rpId: rpId, userId: userId, options: new CtapCommandOptions(ResidentKey: true));
@@ -439,7 +439,7 @@ internal sealed class CtapAuthenticatorCapstoneFlowTests
         string rpId,
         string origin,
         byte[] expectedUserId,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(response.AuthData, CredentialPublicKeyCborReader.Read, pool);
@@ -488,7 +488,7 @@ internal sealed class CtapAuthenticatorCapstoneFlowTests
     /// oracle serves both.
     /// </summary>
     private static bool VerifyAssertionSignatureIndependently(
-        CoseKey credentialPublicKey, ReadOnlyMemory<byte> authenticatorData, byte[] clientDataJson, ReadOnlyMemory<byte> signature, MemoryPool<byte> pool)
+        CoseKey credentialPublicKey, ReadOnlyMemory<byte> authenticatorData, byte[] clientDataJson, ReadOnlyMemory<byte> signature, BaseMemoryPool pool)
     {
         using DigestValue clientDataHash = Fido2ClientDataHash.Compute(clientDataJson, pool);
         byte[] toBeSigned = new byte[authenticatorData.Length + clientDataHash.Length];

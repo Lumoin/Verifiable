@@ -175,7 +175,7 @@ public sealed class TpmsCapabilityData: IDisposable
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The parsed capability data.</returns>
-    public static TpmsCapabilityData Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static TpmsCapabilityData Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         uint capabilityValue = reader.ReadUInt32();
         var capability = (TpmCapConstants)capabilityValue;
@@ -248,7 +248,7 @@ public sealed class TpmsCapabilityData: IDisposable
         return new TpmsCapabilityData(capability, commands, isHandles: false);
     }
 
-    private static TpmsCapabilityData ParsePcrSelection(ref TpmReader reader, TpmCapConstants capability, MemoryPool<byte> pool)
+    private static TpmsCapabilityData ParsePcrSelection(ref TpmReader reader, TpmCapConstants capability, BaseMemoryPool pool)
     {
         TpmlPcrSelection pcrSelection = TpmlPcrSelection.Parse(ref reader, pool);
         return new TpmsCapabilityData(capability, pcrSelection);

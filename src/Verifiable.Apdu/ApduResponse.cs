@@ -64,7 +64,7 @@ public sealed class ApduResponse : SensitiveMemory
     /// <param name="pool">The memory pool the response buffer is rented from.</param>
     /// <returns>An <see cref="ApduResponse"/> wrapping a pooled copy of <paramref name="responseBytes"/>.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="pool"/> is <see langword="null"/>.</exception>
-    public static ApduResponse FromResponseBytes(ReadOnlySpan<byte> responseBytes, MemoryPool<byte> pool)
+    public static ApduResponse FromResponseBytes(ReadOnlySpan<byte> responseBytes, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

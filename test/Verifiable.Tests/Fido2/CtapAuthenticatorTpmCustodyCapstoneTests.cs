@@ -98,7 +98,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
         const string Pin = "1234";
         const string RaisedPin = "654321";
         const string RunId = "tpm-custody-capstone-a";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
@@ -216,7 +216,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
         const string RpId = "tpm-custody-capstone-b.example";
         const string Pin = "1234";
         const string RunId = "tpm-custody-capstone-b";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
@@ -304,7 +304,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
     public async Task FirstBootWithNoStoredSnapshotIsFactoryFreshAndObservesZeroFetchHits()
     {
         const string RunId = "tpm-custody-capstone-c";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         Guid aaguid = Guid.NewGuid();
         byte[] sealAuth = "tpm-custody-capstone-c-seal-auth"u8.ToArray();
@@ -363,7 +363,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
     public async Task TamperedSealedBlobBytesFailCloseWithNoPartialState()
     {
         const string RunId = "tpm-custody-capstone-d1";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
@@ -434,7 +434,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
     public async Task WrongSealAuthFailsClosedWithNoPartialState()
     {
         const string RunId = "tpm-custody-capstone-d2";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
@@ -517,7 +517,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
     /// <returns>The TPM device and the loaded storage parent's handle.</returns>
     private static async Task<(TpmDevice Tpm, uint ParentHandle)> CreateChipWithLoadedStorageParentAsync(string chipRunId, CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var chip = new TpmSimulator(chipRunId, signingBackend: BouncyCastleTpmEccSigningBackend.Create());
         await chip.PowerOnAsync(cancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(chip, pool, cancellationToken).ConfigureAwait(false);
@@ -552,7 +552,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
-    private static async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
@@ -575,7 +575,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
 
 
     /// <summary>Sends a bare <c>authenticatorReset</c> request over <paramref name="transceive"/>, returning the raw response envelope.</summary>
-    private static ValueTask<PooledMemory> SendResetAsync(Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static ValueTask<PooledMemory> SendResetAsync(Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] request = [WellKnownCtapCommands.Reset];
 
@@ -584,7 +584,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
 
 
     /// <summary>Sends a bare <c>authenticatorGetNextAssertion</c> request over <paramref name="transceive"/>, returning the raw response envelope.</summary>
-    private static ValueTask<PooledMemory> SendGetNextAssertionAsync(Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static ValueTask<PooledMemory> SendGetNextAssertionAsync(Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] request = [WellKnownCtapCommands.GetNextAssertion];
 
@@ -593,7 +593,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
 
 
     /// <summary>Sends a bare <c>authenticatorGetInfo</c> request over <paramref name="transceive"/> and returns the raw response bytes.</summary>
-    private static async Task<byte[]> GetInfoBytesAsync(Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<byte[]> GetInfoBytesAsync(Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] request = [WellKnownCtapCommands.GetInfo];
         using PooledMemory response = await transceive(request, pool, cancellationToken).ConfigureAwait(false);
@@ -603,7 +603,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
 
 
     /// <summary>Sends a bare <c>authenticatorGetInfo</c> request over <paramref name="transceive"/> and decodes the response.</summary>
-    private static async Task<CtapGetInfoResponse> GetInfoAsync(Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<CtapGetInfoResponse> GetInfoAsync(Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] request = [WellKnownCtapCommands.GetInfo];
         using PooledMemory response = await transceive(request, pool, cancellationToken).ConfigureAwait(false);
@@ -614,7 +614,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
 
     /// <summary>Establishes <paramref name="pin"/> as the authenticator's PIN over <paramref name="transceive"/>'s real transport.</summary>
     private static async Task EstablishPinAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string pin, CancellationToken cancellationToken)
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string pin, CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(transceive, protocolId, pool, cancellationToken)
             .ConfigureAwait(false);
@@ -634,7 +634,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
     /// <c>changePIN</c> over <paramref name="transceive"/>'s real transport.
     /// </summary>
     private static async Task ChangePinAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string oldPin, string newPin,
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string oldPin, string newPin,
         CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(transceive, protocolId, pool, cancellationToken)
@@ -656,7 +656,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
     /// (<c>0x09</c>) over <paramref name="transceive"/>'s real transport, decrypting it from wire bytes only.
     /// </summary>
     private static async Task<byte[]> IssueTokenAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string pin, int permissions, string? rpId,
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string pin, int permissions, string? rpId,
         CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(transceive, protocolId, pool, cancellationToken)
@@ -681,7 +681,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
     /// over the SAME <c>subCommandParams</c> bytes the request will carry.
     /// </summary>
     private static async Task SendSetMinPinLengthAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, byte[] token, int newMinPinLength, bool forceChangePin,
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, byte[] token, int newMinPinLength, bool forceChangePin,
         CancellationToken cancellationToken)
     {
         byte[] subCommandParams = CtapWaveConfigFixtures.BuildSubCommandParams(newMinPinLength: newMinPinLength, forceChangePin: forceChangePin);
@@ -704,7 +704,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
 
 
     /// <summary>Reads the current <c>pinRetries</c> value via <c>getPINRetries</c> over <paramref name="transceive"/>'s real transport.</summary>
-    private static async Task<int> GetPinRetriesAsync(Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<int> GetPinRetriesAsync(Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.GetPinRetries);
         CtapClientPinResponse response = await CtapAuthenticatorClientPinClient.ClientPinAsync(
@@ -716,7 +716,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
 
     /// <summary>Reads a protocol's current key-agreement public key via <c>getKeyAgreement</c> over <paramref name="transceive"/>'s real transport.</summary>
     private static async Task<CoseKey> GetKeyAgreementAsync(
-        Ctap2TransceiveDelegate transceive, CtapPinUvAuthProtocolId protocolId, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        Ctap2TransceiveDelegate transceive, CtapPinUvAuthProtocolId protocolId, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.GetKeyAgreement, PinUvAuthProtocol: (int)protocolId);
         CtapClientPinResponse response = await CtapAuthenticatorClientPinClient.ClientPinAsync(
@@ -732,7 +732,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
     /// <c>pinRetries</c> by one regardless of the outcome status.
     /// </summary>
     private static async Task AttemptWrongPinAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, CancellationToken cancellationToken)
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(transceive, protocolId, pool, cancellationToken)
             .ConfigureAwait(false);
@@ -753,7 +753,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
     /// <paramref name="transceive"/>'s real transport.
     /// </summary>
     private static async Task<byte[]> RegisterDiscoverableCredentialAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string pin, string rpId, byte[] userId,
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string pin, string rpId, byte[] userId,
         CancellationToken cancellationToken)
     {
         byte[] token = await IssueTokenAsync(
@@ -782,7 +782,7 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
     /// <paramref name="transceive"/>'s real transport and returns the decoded assertion's <c>signCount</c>.
     /// </summary>
     private static async Task<uint> PerformAssertionAndGetSignCountAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string pin, string rpId, byte[] credentialIdBytes,
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string pin, string rpId, byte[] credentialIdBytes,
         CancellationToken cancellationToken)
     {
         byte[] token = await IssueTokenAsync(

@@ -72,7 +72,7 @@ public static class PreservationAsicExtensionXmlBinding
     /// <returns>The encoding result.</returns>
     public static ValueTask<PreservationAsicExtensionEncodeResult> EncodeAsync(
         PreservationAsicExtensionEncodeContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -131,7 +131,7 @@ public static class PreservationAsicExtensionXmlBinding
     /// <returns>The parse result.</returns>
     public static ValueTask<PreservationAsicExtensionParseResult> ParseAsync(
         PreservationAsicExtensionParseContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -319,7 +319,7 @@ public static class PreservationAsicExtensionXmlBinding
         XElement content,
         XElement extension,
         PreservationAsicExtensionLimits limits,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         bool critical = string.Equals(extension.Attribute(CriticalAttributeName)?.Value, "true", StringComparison.Ordinal);
         PreservationAsicExtensionCriticality criticality = PreservationAsicExtensionWellKnown.StateCriticality(kind, critical);
@@ -483,7 +483,7 @@ public static class PreservationAsicExtensionXmlBinding
         XElement content,
         PreservationAsicExtensionCriticality criticality,
         PreservationAsicExtensionLimits limits,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         XElement? binaryData = content.Element(PreservationNamespace + PreservationObjectParameterNames.BinaryData.XmlElementName);
         if(binaryData is null)

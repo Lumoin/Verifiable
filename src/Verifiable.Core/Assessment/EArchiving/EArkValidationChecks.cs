@@ -2392,7 +2392,7 @@ public static class EArkValidationChecks
 
         MetsDocument? manifest = context.PackageManifest;
         EArkPackageFacts? facts = context.PackageFacts;
-        MemoryPool<byte>? pool = context.MemoryPool;
+        BaseMemoryPool? pool = context.MemoryPool;
         if(manifest is null || facts is null || pool is null)
         {
             return NotSuppliedFor(PackageFixityClaimIds, "the package manifest, the classified package facts and a memory pool");

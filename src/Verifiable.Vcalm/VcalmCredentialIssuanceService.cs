@@ -139,7 +139,7 @@ public static class VcalmCredentialIssuanceService
     private static async ValueTask<DataIntegritySecuredCredential> SignWithDescriptorAsync(
         VerifiableCredential credential,
         VcalmProofDescriptor descriptor,
-        System.Buffers.MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         DateTime proofCreated,
         ExchangeContext context,
         CancellationToken cancellationToken) =>

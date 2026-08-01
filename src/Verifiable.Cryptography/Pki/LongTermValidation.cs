@@ -105,7 +105,7 @@ public static class LongTermValidation
         SignatureValidationSeams seams,
         DateTimeOffset currentTime,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(inputs);
@@ -438,7 +438,7 @@ public static class LongTermValidation
         IReadOnlyList<PkiCertificateMemory> callerSuppliedValidationData,
         DateTimeOffset currentTime,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken) => ContainedObjectProofsAsync(
             signature,
             callerSuppliedValidationData,
@@ -487,7 +487,7 @@ public static class LongTermValidation
         ValidationObjectIdentity? establishedBy,
         bool provesContentSuppliedBeside,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         List<ProofOfExistence> proofs = [];
@@ -581,7 +581,7 @@ public static class LongTermValidation
         CryptographicConstraints cryptographicConstraints,
         DateTimeOffset currentTime,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(inputs.EvidenceRecords.Count == 0)
@@ -774,7 +774,7 @@ public static class LongTermValidation
         SignatureValidationSeams seams,
         DateTimeOffset currentTime,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         IReadOnlyList<EvidenceRecordArchiveTimeStampChain> chains = evidenceRecord.ArchiveTimeStampSequence.Chains;
@@ -804,7 +804,7 @@ public static class LongTermValidation
     /// <param name="source">The octets to copy.</param>
     /// <param name="pool">The pool the memory is rented from.</param>
     /// <returns>The rented memory, holding a copy of the octets.</returns>
-    private static IMemoryOwner<byte> CopyToPooled(ReadOnlySpan<byte> source, MemoryPool<byte> pool)
+    private static IMemoryOwner<byte> CopyToPooled(ReadOnlySpan<byte> source, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(Math.Max(source.Length, 1));
         try
@@ -852,7 +852,7 @@ public static class LongTermValidation
         ProofOfExistenceOrigin origin,
         ValidationObjectIdentity? establishedBy,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         for(int i = 0; i < carriers.Count; ++i)
@@ -878,7 +878,7 @@ public static class LongTermValidation
     private static async ValueTask<ValidationObjectIdentity> SignatureValueIdentityAsync(
         SignatureFacts signature,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(signature.SignatureValue is SignedContentMemory signatureValue)
@@ -917,7 +917,7 @@ public static class LongTermValidation
         CryptographicConstraints cryptographicConstraints,
         DateTimeOffset currentTime,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(tokenValidation.MessageImprintAlgorithm is not AlgorithmIdentifier imprintAlgorithm)
@@ -947,7 +947,7 @@ public static class LongTermValidation
     /// </remarks>
     private static async ValueTask<IReadOnlyList<EmbeddedTimestamp>> OrderNewestFirstAsync(
         SignatureFacts signature,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         List<TimestampOrdinalPosition> positions = [];

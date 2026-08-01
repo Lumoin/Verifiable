@@ -46,7 +46,7 @@ public sealed class ExternalAuthenticateResponse : SensitiveMemory, IApduWireTyp
     /// <param name="reader">The reader positioned at the response data.</param>
     /// <param name="pool">The memory pool for the data buffer.</param>
     /// <returns>The parsed response. The caller owns it and must dispose it.</returns>
-    public static ExternalAuthenticateResponse Parse(ref ApduReader reader, MemoryPool<byte> pool)
+    public static ExternalAuthenticateResponse Parse(ref ApduReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

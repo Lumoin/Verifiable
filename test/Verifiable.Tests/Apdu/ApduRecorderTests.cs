@@ -22,7 +22,7 @@ internal sealed class ApduRecorderTests
 
         using var device = ApduDevice.Create(virtualCard.TransceiveAsync);
         using var recorder = new ApduRecorder();
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using(device.Subscribe(recorder))
         {
@@ -48,7 +48,7 @@ internal sealed class ApduRecorderTests
 
         using var device = ApduDevice.Create(virtualCard.TransceiveAsync);
         using var recorder = new ApduRecorder();
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         IDisposable subscription = device.Subscribe(recorder);
 
@@ -82,7 +82,7 @@ internal sealed class ApduRecorderTests
 
         using var captureDevice = ApduDevice.Create(originalCard.TransceiveAsync);
         using var recorder = new ApduRecorder();
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using(captureDevice.Subscribe(recorder))
         {
@@ -157,7 +157,7 @@ internal sealed class ApduRecorderTests
 
         using var device = ApduDevice.Create(virtualCard.TransceiveAsync);
         using var recorder = new ApduRecorder();
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using(device.Subscribe(recorder))
         {

@@ -220,7 +220,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     public static DecodeDelegate Base64UrlDecoder => TestSetup.Base64UrlDecoder;
 
     /// <summary>The memory pool used by the host for sensitive allocations.</summary>
-    public static MemoryPool<byte> MemoryPool => BaseMemoryPool.Shared;
+    public static BaseMemoryPool MemoryPool => BaseMemoryPool.Shared;
 
     /// <summary>
     /// Constant tenant segment used by dynamic-registration tests. The

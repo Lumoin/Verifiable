@@ -20,7 +20,7 @@ namespace Verifiable.Tests.DidComm;
 /// <summary>
 /// Round-trips the DIDComm v2.1 nested sign-then-encrypt combinations
 /// (<c>anoncrypt(sign(plaintext))</c> and <c>authcrypt(sign(plaintext))</c>): the message is signed with
-/// <see cref="DidCommSignedExtensions.PackSignedAsync(DidCommMessage, PrivateKeyMemory, string, DidCommMessageSerializer, JwtPartEncoder{JwtHeader}, JwsMessageSerializer, EncodeDelegate, MemoryPool{byte}, JoseSerializationFormat, System.Threading.CancellationToken)"/>
+/// <see cref="DidCommSignedExtensions.PackSignedAsync(DidCommMessage, PrivateKeyMemory, string, DidCommMessageSerializer, JwtPartEncoder{JwtHeader}, JwsMessageSerializer, EncodeDelegate, BaseMemoryPool, JoseSerializationFormat, System.Threading.CancellationToken)"/>
 /// and the signed JWM bytes are then encrypted through the <see cref="DidCommSignedMessage"/> pack
 /// overloads (sign-before-encrypt, DIDComm v2.1 §Message Signing). Unpack detects the signed inner JWM,
 /// verifies the inner signature against the signer's resolved DID document, enforces the inner <c>to</c>
@@ -31,7 +31,7 @@ internal sealed class DidCommEncryptedNestedRoundTripTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly MemoryPool<byte> Pool = BaseMemoryPool.Shared;
+    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
     private static readonly ExchangeContext Context = new();

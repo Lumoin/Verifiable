@@ -69,7 +69,7 @@ public static class JarmResponseIssuance
         EncodeDelegate base64UrlEncoder,
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(signingKey);

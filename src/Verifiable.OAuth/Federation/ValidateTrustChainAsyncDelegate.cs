@@ -48,5 +48,5 @@ public delegate ValueTask<TrustChainValidationOutcome> ValidateTrustChainAsyncDe
     IReadOnlyCollection<EntityIdentifier> trustAnchors,
     DateTimeOffset validationTime,
     TimeSpan clockSkew,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);

@@ -90,4 +90,4 @@ public sealed record PackedAttestationStatement(int Alg, ReadOnlyMemory<byte> Si
 /// packed attestation statement syntax defined in
 /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-packed-attestation">W3C Web Authentication Level 3, section 8.2</see>.
 /// </exception>
-public delegate PackedAttestationStatement ParsePackedAttestationStatementDelegate(ReadOnlyMemory<byte> attestationStatement, MemoryPool<byte> pool);
+public delegate PackedAttestationStatement ParsePackedAttestationStatementDelegate(ReadOnlyMemory<byte> attestationStatement, BaseMemoryPool pool);

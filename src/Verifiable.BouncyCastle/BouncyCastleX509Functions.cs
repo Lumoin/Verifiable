@@ -56,7 +56,7 @@ public static class BouncyCastleX509Functions
     /// </summary>
     public static IReadOnlyList<PkiCertificateMemory> ParseX5c(
         IReadOnlyList<string> x5cValues,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(x5cValues);
         ArgumentNullException.ThrowIfNull(pool);
@@ -126,7 +126,7 @@ public static class BouncyCastleX509Functions
         IReadOnlyList<PkiCertificateMemory> chain,
         IReadOnlyList<PkiCertificateMemory> trustAnchors,
         DateTimeOffset validationTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CheckCertificateRevocationStatusAsyncDelegate? checkRevocation = null,
         CancellationToken cancellationToken = default)
     {
@@ -454,7 +454,7 @@ public static class BouncyCastleX509Functions
     /// </exception>
     private static PublicKeyMemory ExtractPublicKey(
         BouncyCastleX509 certificate,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         var publicKey = certificate.GetPublicKey();
 
@@ -476,7 +476,7 @@ public static class BouncyCastleX509Functions
 
     private static PublicKeyMemory ExtractEcPublicKey(
         Org.BouncyCastle.Crypto.Parameters.ECPublicKeyParameters ecKey,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         //Encode as compressed point: 0x02 (even Y) or 0x03 (odd Y) || X.
         //BouncyCastle ECPoint.GetEncoded(compressed: true) produces this format directly.
@@ -516,7 +516,7 @@ public static class BouncyCastleX509Functions
     /// <exception cref="NotSupportedException">Thrown when the key's size names an RSA key size neither backend supports.</exception>
     private static PublicKeyMemory ExtractRsaPublicKey(
         Org.BouncyCastle.Crypto.Parameters.RsaKeyParameters rsaKey,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         //WriteIntegerUnsigned interprets its argument as an unsigned big-endian magnitude and
         //itself prepends the 0x00 sign-guard byte a DER INTEGER needs when the magnitude's most

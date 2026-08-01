@@ -127,7 +127,7 @@ internal sealed class MinPinLengthExtensionProcessorTests
     private static async Task<byte[]> AuthorizeRpAndMintMinPinLengthAuthenticatorOutputBytesAsync(CancellationToken cancellationToken)
     {
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("minpinlength-processor");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, cancellationToken);

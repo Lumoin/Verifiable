@@ -43,7 +43,7 @@ internal sealed class BitstringStatusListRevocationDualChannelHttpTests
 
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string Issuer = "https://issuer.example/";
     private const string ReceiverAudience = "https://receiver.example/ssf";

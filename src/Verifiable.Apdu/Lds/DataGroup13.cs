@@ -44,7 +44,7 @@ public sealed class DataGroup13: SensitiveMemory
     /// <returns>The parsed <see cref="DataGroup13"/>. The caller disposes it.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the structure is not a well-formed DG13 template.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented content buffer transfers to the returned DataGroup13, which the caller disposes; the catch disposes it on failure.")]
-    public static DataGroup13 Parse(ReadOnlySpan<byte> dataGroup13, MemoryPool<byte> pool)
+    public static DataGroup13 Parse(ReadOnlySpan<byte> dataGroup13, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -78,7 +78,7 @@ public sealed class DataGroup13: SensitiveMemory
     /// <param name="pool">The memory pool for the file carrier.</param>
     /// <returns>The EF.DG13 <see cref="ElementaryFile"/>. The caller disposes it.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned ElementaryFile, which the caller disposes; the catch disposes it on failure.")]
-    public static ElementaryFile Write(ReadOnlySpan<byte> content, MemoryPool<byte> pool)
+    public static ElementaryFile Write(ReadOnlySpan<byte> content, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

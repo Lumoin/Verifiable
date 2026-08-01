@@ -217,7 +217,7 @@ public sealed record RegistrationCeremonyInput: IDisposable
     /// <see cref="BaseMemoryPool.Shared"/>, the library-wide default pool, so a relying party
     /// only supplies one to route processor allocations through its own pool.
     /// </summary>
-    public MemoryPool<byte> ExtensionProcessingPool { get; init; } = BaseMemoryPool.Shared;
+    public BaseMemoryPool ExtensionProcessingPool { get; init; } = BaseMemoryPool.Shared;
 
 
     /// <summary>

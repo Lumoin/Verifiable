@@ -58,7 +58,7 @@ public sealed class OAuthClientInfrastructure
     /// JAR payload buffers). Defaults to
     /// <see cref="BaseMemoryPool.Shared"/>.
     /// </summary>
-    public MemoryPool<byte> MemoryPool { get; private init; } = null!;
+    public BaseMemoryPool MemoryPool { get; private init; } = null!;
 
     /// <summary>
     /// Base64url encoder without padding. Required for PKCE verifier and
@@ -271,7 +271,7 @@ public sealed class OAuthClientInfrastructure
         ResolveCallbackValidatorDelegate resolveCallbackValidator,
         EncodeDelegate base64UrlEncoder,
         TimeProvider? timeProvider = null,
-        MemoryPool<byte>? memoryPool = null,
+        BaseMemoryPool? memoryPool = null,
         Oid4VpWalletConfiguration? defaultOid4VpWalletConfiguration = null,
         SendJsonPostDelegate? sendJsonPostAsync = null,
         SendJsonGetDelegate? sendJsonGetAsync = null,

@@ -109,7 +109,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     [TestMethod]
     public async Task NvIncrementOfUndefinedIndexReturnsHandle()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -129,7 +129,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     [TestMethod]
     public async Task NvIncrementBruteForceLocksOutAtMaxTries()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -168,7 +168,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     [TestMethod]
     public async Task NvIncrementOwnerArmSucceedsDuringLockout()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -211,7 +211,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     [TestMethod]
     public async Task NvIncrementOwnerArmWithoutOwnerWriteReturnsAuthorization()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -231,7 +231,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     [TestMethod]
     public async Task NvIncrementWithMismatchedAuthHandleReturnsAuthorization()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -252,7 +252,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     [TestMethod]
     public async Task NvIncrementIndexArmWithoutAuthWriteReturnsAuthorization()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -274,7 +274,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     [TestMethod]
     public async Task NvIncrementWithWrongAuthOnDaProtectedIndexReturnsAuthFail()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -295,7 +295,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     [TestMethod]
     public async Task NvIncrementWithWrongAuthOnNonDaIndexReturnsBadAuth()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -315,7 +315,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     [TestMethod]
     public async Task NvIncrementOfOrdinaryIndexReturnsAttributes()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -338,7 +338,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     [TestMethod]
     public async Task NvWriteOfCounterIndexReturnsAttributes()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -361,7 +361,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     [TestMethod]
     public async Task NvDefineSpaceOfCounterWithWrongDataSizeReturnsSize()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -384,7 +384,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         const int IncrementsBeforeDelete = 4;
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -428,7 +428,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     [DataRow((uint)TpmaNv.TPMA_NV_WRITELOCKED, DisplayName = "TPMA_NV_WRITELOCKED")]
     public async Task NvDefineSpaceWithCallerSuppliedStatusAttributeReturnsAttributes(uint forgedStatusAttribute)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -454,7 +454,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         const int IncrementsBeforeDelete = 3;
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -503,7 +503,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     [TestMethod]
     public async Task NvDefineSpaceOfCounterWithClearStClearReturnsAttributes()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -522,7 +522,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     [TestMethod]
     public async Task NvDefineSpaceOfBitsIndexReturnsAttributes()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -541,7 +541,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     [TestMethod]
     public async Task NvDefineSpaceOfExtendIndexReturnsAttributes()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -561,7 +561,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     [TestMethod]
     public async Task NvReadOfCounterBeforeFirstIncrementReturnsUninitialized()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -582,7 +582,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     [TestMethod]
     public async Task NvIncrementOfUnwrittenCounterSucceedsAndReadBackIsOneBigEndian()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -613,7 +613,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         const int IncrementCount = 5;
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -648,7 +648,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     {
         const int IncrementsBeforeDelete = 3;
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -708,7 +708,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// <param name="dataSize">The declared data area size; defaults to <see cref="CounterDataSize"/>.</param>
     /// <returns>The define-space result.</returns>
     private async Task<TpmResult<NvDefineSpaceResponse>> DefineIndexAsync(
-        TpmDevice device, MemoryPool<byte> pool, TpmResponseRegistry registry, uint nvIndex, TpmaNv attributes, ushort dataSize = CounterDataSize)
+        TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry, uint nvIndex, TpmaNv attributes, ushort dataSize = CounterDataSize)
     {
         using TpmPasswordSession ownerSession = TpmPasswordSession.CreateEmpty(pool);
 
@@ -731,7 +731,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// <param name="suppliedAuth">The authorization value supplied for <paramref name="authHandle"/>.</param>
     /// <returns>The increment result.</returns>
     private async Task<TpmResult<NvIncrementResponse>> IncrementAsync(
-        TpmDevice device, MemoryPool<byte> pool, TpmResponseRegistry registry, uint authHandle, uint nvIndex, ReadOnlyMemory<byte> suppliedAuth)
+        TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry, uint authHandle, uint nvIndex, ReadOnlyMemory<byte> suppliedAuth)
     {
         using TpmPasswordSession session = TpmPasswordSession.Create(suppliedAuth.Span, pool);
         var incrementInput = new NvIncrementInput(authHandle, nvIndex);
@@ -748,7 +748,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// <param name="suppliedAuth">The authValue supplied for the Index.</param>
     /// <returns>The read result; on success, the caller owns and must dispose <see cref="TpmResult{T}.Value"/>.</returns>
     private async Task<TpmResult<NvReadResponse>> ReadCounterAsync(
-        TpmDevice device, MemoryPool<byte> pool, TpmResponseRegistry registry, uint nvIndex, ReadOnlyMemory<byte> suppliedAuth)
+        TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry, uint nvIndex, ReadOnlyMemory<byte> suppliedAuth)
     {
         using TpmPasswordSession session = TpmPasswordSession.Create(suppliedAuth.Span, pool);
         var readInput = new NvReadInput(AuthHandle: nvIndex, NvIndex: nvIndex, Size: CounterDataSize, Offset: 0);
@@ -769,7 +769,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// <param name="data">The octets to attempt to write.</param>
     /// <returns>The write result.</returns>
     private async Task<TpmResult<NvWriteResponse>> WriteIndexAuthValueAsync(
-        TpmDevice device, MemoryPool<byte> pool, TpmResponseRegistry registry, uint nvIndex, ReadOnlyMemory<byte> suppliedAuth, byte[] data)
+        TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry, uint nvIndex, ReadOnlyMemory<byte> suppliedAuth, byte[] data)
     {
         using TpmPasswordSession session = TpmPasswordSession.Create(suppliedAuth.Span, pool);
         var writeInput = new NvWriteInput(nvIndex, nvIndex, new Tpm2bMaxBuffer(data), Offset: 0);
@@ -785,7 +785,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
     /// <param name="nvIndex">The Index to undefine.</param>
     /// <returns>The undefine result.</returns>
     private async Task<TpmResult<NvUndefineSpaceResponse>> UndefineIndexAsync(
-        TpmDevice device, MemoryPool<byte> pool, TpmResponseRegistry registry, uint nvIndex)
+        TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry, uint nvIndex)
     {
         using TpmPasswordSession ownerSession = TpmPasswordSession.CreateEmpty(pool);
         var undefineInput = new NvUndefineSpaceInput(TpmRh.TPM_RH_OWNER, nvIndex);
@@ -804,7 +804,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         var simulator = new TpmSimulator("tpm-in-house-nv-counter");
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
         using IMemoryOwner<byte> owner = pool.Rent(length);

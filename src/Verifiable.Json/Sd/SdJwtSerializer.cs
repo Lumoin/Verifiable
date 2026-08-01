@@ -79,7 +79,7 @@ public static class SdJwtSerializer
             "construction failure. The remaining failure cases (claim-name validation) " +
             "explicitly dispose `salt` before throwing. The analyzer cannot see this " +
             "ownership transfer through factory methods.")]
-    public static SdDisclosure ParseDisclosure(string encoded, DecodeDelegate decoder, MemoryPool<byte> pool, Tag saltTag)
+    public static SdDisclosure ParseDisclosure(string encoded, DecodeDelegate decoder, BaseMemoryPool pool, Tag saltTag)
     {
         ArgumentException.ThrowIfNullOrEmpty(encoded);
         ArgumentNullException.ThrowIfNull(decoder);
@@ -214,7 +214,7 @@ public static class SdJwtSerializer
     /// <returns>The parsed token. Caller owns the returned token; disposing it disposes
     /// all contained disclosures and their salts.</returns>
     /// <exception cref="FormatException">Thrown when the format is invalid.</exception>
-    public static SdToken<string> ParseToken(string sdJwt, DecodeDelegate decoder, MemoryPool<byte> pool, Tag saltTag)
+    public static SdToken<string> ParseToken(string sdJwt, DecodeDelegate decoder, BaseMemoryPool pool, Tag saltTag)
     {
         ArgumentException.ThrowIfNullOrEmpty(sdJwt);
         ArgumentNullException.ThrowIfNull(decoder);
@@ -286,7 +286,7 @@ public static class SdJwtSerializer
     /// </param>
     /// <param name="token">The parsed token if successful. Caller owns and disposes.</param>
     /// <returns><c>true</c> if parsing succeeded; otherwise, <c>false</c>.</returns>
-    public static bool TryParseToken(string? sdJwt, DecodeDelegate decoder, MemoryPool<byte> pool, Tag saltTag, out SdToken<string>? token)
+    public static bool TryParseToken(string? sdJwt, DecodeDelegate decoder, BaseMemoryPool pool, Tag saltTag, out SdToken<string>? token)
     {
         token = null;
 

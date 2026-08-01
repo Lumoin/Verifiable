@@ -200,17 +200,17 @@ internal sealed class PreservationMessageTests
     [TestMethod]
     public void DisposingAMessageReturnsEveryCarrierItOwns()
     {
-        using PreservationMessageSource.CountingMemoryPool pool = new();
+        using MeteredHousePool pool = new();
 
         PreservePreservationObjectRequest request = new()
         {
             ProfileIdentifier = "https://example.invalid/preservation/profile/1",
             PreservationObjects =
             [
-                PreservationMessageSource.Object("first", pool),
-                PreservationMessageSource.Object("second", pool)
+                PreservationMessageSource.Object("first", pool.Pool),
+                PreservationMessageSource.Object("second", pool.Pool)
             ],
-            OptionalInputs = [PreservationMessageSource.OpaqueElement("<optional/>", pool)]
+            OptionalInputs = [PreservationMessageSource.OpaqueElement("<optional/>", pool.Pool)]
         };
 
         Assert.AreEqual(3, pool.RentedCount);
@@ -222,8 +222,8 @@ internal sealed class PreservationMessageTests
         RetrieveInfoResponse response = new()
         {
             Result = PreservationMessageSource.SuccessfulResult(),
-            Profiles = [PreservationMessageSource.Profile(extensions: [PreservationMessageSource.OpaqueElement("<extension/>", pool)])],
-            OptionalOutputs = [PreservationMessageSource.OpaqueElement("<optional/>", pool)]
+            Profiles = [PreservationMessageSource.Profile(extensions: [PreservationMessageSource.OpaqueElement("<extension/>", pool.Pool)])],
+            OptionalOutputs = [PreservationMessageSource.OpaqueElement("<optional/>", pool.Pool)]
         };
 
         Assert.AreEqual(5, pool.RentedCount);
@@ -232,11 +232,11 @@ internal sealed class PreservationMessageTests
         response.Dispose();
         Assert.AreEqual(0, pool.OutstandingCount, "A response reaches the extensions of every profile it carries.");
 
-        using PreservationMessageSource.CountingMemoryPool validationPool = new();
+        using MeteredHousePool validationPool = new();
         ValidateEvidenceRequest validation = new()
         {
-            Evidence = PreservationMessageSource.Evidence("evidence", validationPool),
-            PreservationObjects = [PreservationMessageSource.Object("covered", validationPool)]
+            Evidence = PreservationMessageSource.Evidence("evidence", validationPool.Pool),
+            PreservationObjects = [PreservationMessageSource.Object("covered", validationPool.Pool)]
         };
 
         Assert.AreEqual(2, validationPool.OutstandingCount);

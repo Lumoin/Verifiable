@@ -1,3 +1,4 @@
+using Lumoin.Base;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Globalization;
@@ -52,7 +53,7 @@ public static class KeriEventCesr
     /// <returns>The decoded message field map, preserving the fields' serialization order: scalar fields as strings, key-state list fields as string lists, keyed by the message field label.</returns>
     /// <exception cref="CesrFormatException">The bytes are not a well-formed native fixed-field KERI message.</exception>
     /// <exception cref="KeriException">The message type is not a modeled key event with a fixed field order.</exception>
-    public static MessageFieldMap DecodeFieldMap(ReadOnlyMemory<byte> nativeText, MemoryPool<byte> pool)
+    public static MessageFieldMap DecodeFieldMap(ReadOnlyMemory<byte> nativeText, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -73,7 +74,7 @@ public static class KeriEventCesr
     //Walks the fixed-field message: the leading -F frame fixes the total size, the body opens with the universal
     //v and t prefix, and the remaining values follow positionally in the message type's fixed field order. The
     //resulting map preserves that field order (a native body is inherently ordered, so the canonical order is met).
-    private static MessageFieldMap Decode(ReadOnlySpan<char> message, MemoryPool<byte> pool)
+    private static MessageFieldMap Decode(ReadOnlySpan<char> message, BaseMemoryPool pool)
     {
         CesrParsedCountCode frame = CesrCountCodeCodec.DecodeText(message);
         if(frame.Code is not ("-F" or "--F"))
@@ -123,7 +124,7 @@ public static class KeriEventCesr
     //Decodes the body's leading version primitive (0O) and reconstructs the in-memory placeholder version string
     //the specification prescribes: the primitive's protocol and version, the CESR serialization marker, and the
     //total serialization length (the count code, not an embedded version string, carries the size natively).
-    private static int DecodeVersion(ReadOnlySpan<char> span, int totalLength, MemoryPool<byte> pool, out string version)
+    private static int DecodeVersion(ReadOnlySpan<char> span, int totalLength, BaseMemoryPool pool, out string version)
     {
         using CesrParsedPrimitive primitive = CesrPrimitiveCodec.DecodeText(span, pool, out int consumed);
         if(primitive.Code != VersionPrimitiveCode)
@@ -139,7 +140,7 @@ public static class KeriEventCesr
 
     //Decodes a tag primitive (the message type t, or a configuration trait c), whose neutral value is the tag's
     //soft value (the special-value characters the tag conveys, for example "icp" or "DID").
-    private static int DecodeTag(ReadOnlySpan<char> span, MemoryPool<byte> pool, out string tag)
+    private static int DecodeTag(ReadOnlySpan<char> span, BaseMemoryPool pool, out string tag)
     {
         using CesrParsedPrimitive primitive = CesrPrimitiveCodec.DecodeText(span, pool, out int consumed);
         if(primitive.Soft.Length == 0)
@@ -155,7 +156,7 @@ public static class KeriEventCesr
 
     //Dispatches a field to its native decode by the field's kind, which the field label determines: the fixed-field
     //native schema fixes each label's value type, exactly as it fixes the field order.
-    private static int DecodeField(string label, ReadOnlySpan<char> span, MemoryPool<byte> pool, out object? value)
+    private static int DecodeField(string label, ReadOnlySpan<char> span, BaseMemoryPool pool, out object? value)
     {
         if(label == KeriMessageFields.Said || label == KeriMessageFields.Prefix || label == KeriMessageFields.PriorSaid || label == KeriMessageFields.DelegatorPrefix)
         {
@@ -202,7 +203,7 @@ public static class KeriEventCesr
 
     //Decodes a field whose value is a single fully qualified primitive carried through verbatim (a digest or
     //prefix): the neutral value is the primitive's own qb64 text, the same string the other serializations carry.
-    private static int DecodePassthrough(ReadOnlySpan<char> span, MemoryPool<byte> pool, out object? value)
+    private static int DecodePassthrough(ReadOnlySpan<char> span, BaseMemoryPool pool, out object? value)
     {
         using CesrParsedPrimitive primitive = CesrPrimitiveCodec.DecodeText(span, pool, out int consumed);
         value = new string(span[..consumed]);
@@ -213,7 +214,7 @@ public static class KeriEventCesr
 
     //Decodes a number primitive (a sequence number or unweighted threshold/count) to its lowercase hexadecimal
     //string, the neutral form the reader parses, with no insignificant leading zeros.
-    private static int DecodeNumber(ReadOnlySpan<char> span, MemoryPool<byte> pool, out string hex)
+    private static int DecodeNumber(ReadOnlySpan<char> span, BaseMemoryPool pool, out string hex)
     {
         using CesrParsedPrimitive primitive = CesrPrimitiveCodec.DecodeText(span, pool, out int consumed);
         hex = BigEndianToHex(primitive.Raw);
@@ -226,7 +227,7 @@ public static class KeriEventCesr
     //parses; a weighted (fractional) threshold is a variable-length Base64 string carrying the threshold as an infix
     //expression. The two are distinguished by the leading selector — a variable-length code (selector 4 to 9) is the
     //weighted form, a number code the unweighted.
-    private static int DecodeThreshold(ReadOnlySpan<char> span, MemoryPool<byte> pool, out object? value)
+    private static int DecodeThreshold(ReadOnlySpan<char> span, BaseMemoryPool pool, out object? value)
     {
         if(span.Length > 0 && span[0] is >= '4' and <= '9')
         {
@@ -244,7 +245,7 @@ public static class KeriEventCesr
     //quadlet-aligned Base64 of the infix threshold expression, left-padded with the Base64URL zero character to
     //align on a 24-bit boundary. The infix expression begins with a weight digit, never with the zero pad, so
     //stripping the leading zero characters recovers it.
-    private static int DecodeWeightedThreshold(ReadOnlySpan<char> span, MemoryPool<byte> pool, out object? value)
+    private static int DecodeWeightedThreshold(ReadOnlySpan<char> span, BaseMemoryPool pool, out object? value)
     {
         using CesrParsedPrimitive primitive = CesrPrimitiveCodec.DecodeText(span, pool, out int consumed);
         int codeSize = CesrCodeTables.Sizes[primitive.Code].CodeSize;
@@ -286,7 +287,7 @@ public static class KeriEventCesr
 
     //Walks a -J generic list group, returning either each element's qb64 text (a key or digest list) or each
     //element's tag soft value (a configuration-trait list); the empty group yields an empty list.
-    private static int DecodeList(ReadOnlySpan<char> span, MemoryPool<byte> pool, bool tags, out List<string> list)
+    private static int DecodeList(ReadOnlySpan<char> span, BaseMemoryPool pool, bool tags, out List<string> list)
     {
         (int codeLength, long bodyChars) = OpenListGroup(span);
         long declaredEnd = codeLength + bodyChars;
@@ -313,7 +314,7 @@ public static class KeriEventCesr
     //Decodes the anchored seals (a) -J list group: each element is a seal count group (-Q..-W) whose body holds
     //one or more flat seal tuples of that type. The result is a list of seal field maps, the neutral shape the
     //serialization-agnostic seal reader consumes.
-    private static int DecodeSealList(ReadOnlySpan<char> span, MemoryPool<byte> pool, out object? value)
+    private static int DecodeSealList(ReadOnlySpan<char> span, BaseMemoryPool pool, out object? value)
     {
         (int codeLength, long bodyChars) = OpenListGroup(span);
         long declaredEnd = codeLength + bodyChars;
@@ -338,7 +339,7 @@ public static class KeriEventCesr
 
 
     //Decodes one seal count group (a clan of same-typed seals) into one field map per seal tuple in its body.
-    private static int DecodeSealGroup(ReadOnlySpan<char> span, MemoryPool<byte> pool, List<object?> seals)
+    private static int DecodeSealGroup(ReadOnlySpan<char> span, BaseMemoryPool pool, List<object?> seals)
     {
         CesrParsedCountCode group = CesrCountCodeCodec.DecodeText(span);
         (string Label, bool IsNumber)[] schema = SealFieldSchema(group.Code);

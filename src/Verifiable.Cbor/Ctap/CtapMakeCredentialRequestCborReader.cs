@@ -55,7 +55,7 @@ public static class CtapMakeCredentialRequestCborReader
     /// </exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The clientDataHash digest's ownership transfers to the returned CtapMakeCredentialRequest on success and is explicitly disposed (alongside user/excludeList) in the surrounding catch blocks on failure — the CA2000 flag is a false positive.")]
-    public static CtapMakeCredentialRequest Read(ReadOnlyMemory<byte> parametersCbor, MemoryPool<byte> pool)
+    public static CtapMakeCredentialRequest Read(ReadOnlyMemory<byte> parametersCbor, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

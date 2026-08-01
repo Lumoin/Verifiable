@@ -165,7 +165,7 @@ public static class StartAuthSessionInputExtensions
             TpmAlgIdConstants tpmKeyNameAlg,
             TpmAlgIdConstants authHash,
             TpmRsaOaepEncryptDelegate encryptSalt,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken,
             TpmtSymDef? symmetric = null) =>
             CreateRsaSaltedHmacSessionCore(tpmKey, (uint)TpmRh.TPM_RH_NULL, modulus, exponent, tpmKeyNameAlg, authHash, encryptSalt, pool, symmetric, cancellationToken);
@@ -196,7 +196,7 @@ public static class StartAuthSessionInputExtensions
             TpmAlgIdConstants tpmKeyNameAlg,
             TpmAlgIdConstants authHash,
             TpmRsaOaepEncryptDelegate encryptSalt,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken,
             TpmtSymDef? symmetric = null) =>
             CreateRsaSaltedHmacSessionCore(tpmKey, bind, modulus, exponent, tpmKeyNameAlg, authHash, encryptSalt, pool, symmetric, cancellationToken);
@@ -243,7 +243,7 @@ public static class StartAuthSessionInputExtensions
             TpmAlgIdConstants authHash,
             TpmEccKeyGenerationDelegate generateEphemeralKey,
             TpmEccSharedSecretDelegate computeSharedSecret,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken,
             TpmtSymDef? symmetric = null) =>
             CreateEccSaltedHmacSessionCore(tpmKey, (uint)TpmRh.TPM_RH_NULL, tpmKeyPublicPoint, curve, tpmKeyNameAlg, authHash, generateEphemeralKey, computeSharedSecret, pool, symmetric, cancellationToken);
@@ -276,7 +276,7 @@ public static class StartAuthSessionInputExtensions
             TpmAlgIdConstants authHash,
             TpmEccKeyGenerationDelegate generateEphemeralKey,
             TpmEccSharedSecretDelegate computeSharedSecret,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken,
             TpmtSymDef? symmetric = null) =>
             CreateEccSaltedHmacSessionCore(tpmKey, bind, tpmKeyPublicPoint, curve, tpmKeyNameAlg, authHash, generateEphemeralKey, computeSharedSecret, pool, symmetric, cancellationToken);
@@ -305,7 +305,7 @@ public static class StartAuthSessionInputExtensions
             TpmAlgIdConstants tpmKeyNameAlg,
             TpmAlgIdConstants authHash,
             TpmRsaOaepEncryptDelegate encryptSalt,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             TpmtSymDef? symmetric,
             CancellationToken cancellationToken)
         {
@@ -375,7 +375,7 @@ public static class StartAuthSessionInputExtensions
             TpmAlgIdConstants authHash,
             TpmEccKeyGenerationDelegate generateEphemeralKey,
             TpmEccSharedSecretDelegate computeSharedSecret,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             TpmtSymDef? symmetric,
             CancellationToken cancellationToken)
         {

@@ -134,7 +134,7 @@ public sealed record EArkEvidenceSelfDescription
     /// </exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the rented buffer transfers to the returned carrier, which the caller disposes; the catch disposes it on a partial failure.")]
-    public PooledMemory EncodeValue(MemoryPool<byte> pool)
+    public PooledMemory EncodeValue(BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -201,7 +201,7 @@ public sealed record EArkEvidenceSelfDescription
     /// <returns>The attribute. The caller owns and disposes it.</returns>
     /// <exception cref="ArgumentNullException">When <paramref name="pool"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">When the instance states nothing, or an identifier is over the bound.</exception>
-    public CmsAttribute ToAttribute(MemoryPool<byte> pool)
+    public CmsAttribute ToAttribute(BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -224,7 +224,7 @@ public sealed record EArkEvidenceSelfDescription
     /// through a text node, which is what an <c>Extension</c>'s <c>AnyType</c> content admits without this
     /// project acquiring an XML dependency.
     /// </remarks>
-    public string ToExtensionText(MemoryPool<byte> pool)
+    public string ToExtensionText(BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -450,7 +450,7 @@ public sealed record EArkEvidenceSelfDescription
     /// </remarks>
     public static bool TryReadExtensionText(
         string? text,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         [NotNullWhen(true)] out EArkEvidenceSelfDescription? selfDescription)
     {
         ArgumentNullException.ThrowIfNull(pool);

@@ -11,7 +11,7 @@ namespace Verifiable.Tests.SelectiveDisclosure;
 
 /// <summary>
 /// Example-based tests for the SD-JWT structural verifier
-/// (<see cref="SdJwtVerificationExtensions.VerifyAsync(SdToken{string}, PublicKeyMemory, MemoryPool{byte}, ExtractSdJwtPathsDelegate, string, System.Threading.CancellationToken)"/>):
+/// (<see cref="SdJwtVerificationExtensions.VerifyAsync(SdToken{string}, PublicKeyMemory, BaseMemoryPool, ExtractSdJwtPathsDelegate, string, System.Threading.CancellationToken)"/>):
 /// issuer JWS signature plus per-disclosure digest binding against the holder-selected set.
 /// All tests use real key material and cryptographic operations.
 /// </summary>
@@ -20,7 +20,7 @@ internal sealed class SdJwtVerificationTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string IssuerKeyId = "did:web:issuer.example.com#key-1";
 

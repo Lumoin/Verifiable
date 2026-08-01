@@ -40,5 +40,5 @@ namespace Verifiable.Apdu;
 /// </remarks>
 public delegate ValueTask<ApduResult<ApduResponse>> TransceiveDelegate(
     ReadOnlyMemory<byte> commandApdu,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);

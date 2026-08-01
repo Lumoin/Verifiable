@@ -39,7 +39,7 @@ internal sealed class CtapAuthenticatorCredentialManagementLiveTests
     public async Task DeleteCredentialCausesSubsequentGetAssertionAllowListToReturnNoCredentials()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("cm-live-delete-then-ga");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] credentialIdBytes = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xE0), TestContext.CancellationToken);
 
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
@@ -83,7 +83,7 @@ internal sealed class CtapAuthenticatorCredentialManagementLiveTests
     {
         const string rpId = "live-cross-family.example";
         using CtapAuthenticatorSimulator simulator = CreateSimulator("cm-live-cross-family", residentCredentialCapacity: 3);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xE1), TestContext.CancellationToken, rpId: rpId);
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xE2), TestContext.CancellationToken, rpId: "second-cross-family.example");
 

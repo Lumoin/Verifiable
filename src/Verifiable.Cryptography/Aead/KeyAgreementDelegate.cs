@@ -58,5 +58,5 @@ public delegate ValueTask<DecryptedContent> KeyAgreementDelegate(
     PublicKeyMemory epkX,
     PublicKeyMemory epkY,
     string encryptionAlgorithm,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);

@@ -41,7 +41,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     [TestMethod]
     public async Task EvictControlPersistsAndEvictsAKey()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -68,7 +68,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     [TestMethod]
     public async Task NvUndefineSpaceFreesTheIndex()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -96,7 +96,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     /// <param name="persistentHandle">The persistent handle to assign or evict.</param>
     /// <returns>The EvictControl result.</returns>
     private async Task<TpmResult<EvictControlResponse>> EvictControlAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, uint objectHandle, uint persistentHandle)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, uint objectHandle, uint persistentHandle)
     {
         using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
         var input = new EvictControlInput(TpmRh.TPM_RH_OWNER, objectHandle, persistentHandle);
@@ -111,7 +111,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="nvIndex">The NV Index handle to define.</param>
     /// <returns>The NV_DefineSpace result.</returns>
-    private async Task<TpmResult<NvDefineSpaceResponse>> DefineIndexAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, uint nvIndex)
+    private async Task<TpmResult<NvDefineSpaceResponse>> DefineIndexAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, uint nvIndex)
     {
         using Tpm2bAuth indexAuth = Tpm2bAuth.CreateEmpty(pool);
         using var publicInfo = new TpmsNvPublic(
@@ -133,7 +133,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="nvIndex">The NV Index handle to undefine.</param>
     /// <returns>The NV_UndefineSpace result.</returns>
-    private async Task<TpmResult<NvUndefineSpaceResponse>> UndefineAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, uint nvIndex)
+    private async Task<TpmResult<NvUndefineSpaceResponse>> UndefineAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, uint nvIndex)
     {
         using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
         var input = new NvUndefineSpaceInput(TpmRh.TPM_RH_OWNER, nvIndex);
@@ -147,7 +147,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     /// <param name="registry">The response codec registry.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The CreatePrimary response (the caller owns it).</returns>
-    private async Task<CreatePrimaryResponse> CreateSigningPrimaryAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool)
+    private async Task<CreatePrimaryResponse> CreateSigningPrimaryAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForEccSigningKey(
             TpmRh.TPM_RH_OWNER, password: null, TpmEccCurveConstants.TPM_ECC_NIST_P256,
@@ -164,7 +164,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     /// <summary>Creates a simulator with an ECC signing backend, powers it on, and brings it operational.</summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator("tpm-in-house-persistence", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -179,7 +179,7 @@ internal sealed class TpmInHouseSimulatorPersistenceTests
     /// </summary>
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();

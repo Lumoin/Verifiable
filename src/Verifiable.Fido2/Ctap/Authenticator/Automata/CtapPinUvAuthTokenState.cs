@@ -101,7 +101,7 @@ public sealed record CtapPinUvAuthTokenState(
     /// <returns>A freshly minted, not-in-use token state.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the freshly minted SymmetricKeyMemory transfers to the returned CtapPinUvAuthTokenState's Token, which the record's Dispose releases.")]
-    public static CtapPinUvAuthTokenState Initial(MemoryPool<byte>? pool = null) =>
+    public static CtapPinUvAuthTokenState Initial(BaseMemoryPool? pool = null) =>
         new(MintToken(pool ?? BaseMemoryPool.Shared), null, 0, false, false, false, null, null);
 
 
@@ -114,7 +114,7 @@ public sealed record CtapPinUvAuthTokenState(
     /// <returns>The reset state, holding a brand-new token value.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the freshly minted SymmetricKeyMemory transfers to the returned CtapPinUvAuthTokenState's Token, which the record's Dispose releases.")]
-    public CtapPinUvAuthTokenState ResetToken(MemoryPool<byte>? pool = null)
+    public CtapPinUvAuthTokenState ResetToken(BaseMemoryPool? pool = null)
     {
         SymmetricKeyMemory freshToken = MintToken(pool ?? BaseMemoryPool.Shared);
         Token.Dispose();
@@ -274,7 +274,7 @@ public sealed record CtapPinUvAuthTokenState(
     /// <see cref="Token"/> parameter remark) — never a bare
     /// <see cref="System.Security.Cryptography.RandomNumberGenerator"/> call.
     /// </summary>
-    private static SymmetricKeyMemory MintToken(MemoryPool<byte> pool)
+    private static SymmetricKeyMemory MintToken(BaseMemoryPool pool)
     {
         using Nonce entropy = CryptographicKeyEvents.GenerateNonce(TokenLength, CryptoTags.HmacSha256Key, pool);
 

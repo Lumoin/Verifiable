@@ -193,7 +193,7 @@ public sealed record PreservationAsicExtensionEncodeContext
 /// <returns>The encoding result.</returns>
 public delegate ValueTask<PreservationAsicExtensionEncodeResult> EncodePreservationAsicExtensionDelegate(
     PreservationAsicExtensionEncodeContext context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 
@@ -343,5 +343,5 @@ public sealed record PreservationAsicExtensionParseContext
 /// <returns>The parse result.</returns>
 public delegate ValueTask<PreservationAsicExtensionParseResult> ParsePreservationAsicExtensionDelegate(
     PreservationAsicExtensionParseContext context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);

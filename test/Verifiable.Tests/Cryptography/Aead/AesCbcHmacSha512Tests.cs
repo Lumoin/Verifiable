@@ -18,7 +18,7 @@ internal sealed class AesCbcHmacSha512Tests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     //RFC 7518 Appendix B.3 vector: composite key K (MAC half first), plaintext P,
     //fixed IV, AAD A, expected ciphertext E and truncated HMAC tag T.

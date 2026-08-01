@@ -72,7 +72,7 @@ public static class TpmResponseCodecExtensions
         /// </para>
         /// </remarks>
         public static TpmResponseCodec StartAuthSession => TpmResponseCodec.CreateWithHandle(
-            static (ref TpmReader reader, uint handle, System.Buffers.MemoryPool<byte> pool) =>
+            static (ref TpmReader reader, uint handle, BaseMemoryPool pool) =>
                 StartAuthSessionResponse.Parse(ref reader, TpmiShAuthSession.FromValue(handle), pool));
 
         /// <summary>
@@ -266,7 +266,7 @@ public static class TpmResponseCodecExtensions
         /// </para>
         /// </remarks>
         public static TpmResponseCodec CreatePrimary => TpmResponseCodec.CreateWithHandle(
-            static (ref TpmReader reader, uint handle, System.Buffers.MemoryPool<byte> pool) =>
+            static (ref TpmReader reader, uint handle, BaseMemoryPool pool) =>
                 CreatePrimaryResponse.Parse(ref reader, TpmiDhObject.FromValue(handle), pool));
 
         /// <summary>
@@ -300,7 +300,7 @@ public static class TpmResponseCodecExtensions
         /// </para>
         /// </remarks>
         public static TpmResponseCodec Load => TpmResponseCodec.CreateWithHandle(
-            static (ref TpmReader reader, uint handle, System.Buffers.MemoryPool<byte> pool) =>
+            static (ref TpmReader reader, uint handle, BaseMemoryPool pool) =>
                 LoadResponse.Parse(ref reader, TpmiDhObject.FromValue(handle), pool));
 
         /// <summary>

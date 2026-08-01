@@ -201,7 +201,7 @@ public sealed record AsicManifestParseContext
 /// <returns>The parse result.</returns>
 public delegate ValueTask<AsicManifestParseResult> ParseAsicManifestDelegate(
     AsicManifestParseContext context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 
@@ -327,5 +327,5 @@ public sealed record AsicManifestEncodeContext
 /// <returns>The encoding result.</returns>
 public delegate ValueTask<AsicManifestEncodeResult> EncodeAsicManifestDelegate(
     AsicManifestEncodeContext context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);

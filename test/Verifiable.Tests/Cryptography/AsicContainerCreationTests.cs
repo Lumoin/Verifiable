@@ -1020,7 +1020,7 @@ internal sealed class AsicContainerCreationTests
     /// <param name="cancellationToken">A cancellation token, unused.</param>
     /// <returns>A failed encode result.</returns>
     private static ValueTask<AsicManifestEncodeResult> RefusingEncoder(
-        AsicManifestEncodeContext context, MemoryPool<byte> pool, System.Threading.CancellationToken cancellationToken = default) =>
+        AsicManifestEncodeContext context, BaseMemoryPool pool, System.Threading.CancellationToken cancellationToken = default) =>
         ValueTask.FromResult(AsicManifestEncodeResult.Failed(AsicManifestEncodeStatus.ExtensionMalformed, "this seam writes nothing"));
 
 

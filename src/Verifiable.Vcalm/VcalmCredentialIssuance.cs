@@ -67,7 +67,7 @@ public sealed record VcalmCredentialIssuance
     public bool SupportsMandatoryPointers { get; init; }
 
     /// <summary>The memory pool backing the transient signing buffers.</summary>
-    public required MemoryPool<byte> MemoryPool { get; init; }
+    public required BaseMemoryPool MemoryPool { get; init; }
 }
 
 

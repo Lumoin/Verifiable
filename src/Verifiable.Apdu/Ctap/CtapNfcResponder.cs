@@ -137,7 +137,7 @@ public sealed class CtapNfcResponder: IDisposable
     /// </summary>
     /// <param name="pool">The memory pool for <see cref="DeferredCancel"/>'s discarded envelope.</param>
     /// <param name="cancellationToken">Cancellation token forwarded to <see cref="DeferredCancel"/>.</param>
-    private async ValueTask ClearPendingDeferralAsync(MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private async ValueTask ClearPendingDeferralAsync(BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(!DeferredResponsePending)
         {
@@ -244,7 +244,7 @@ public sealed class CtapNfcResponder: IDisposable
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="pool"/> is <see langword="null"/>.</exception>
     public async ValueTask<ApduResult<ApduResponse>> TransceiveAsync(
         ReadOnlyMemory<byte> commandApdu,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -283,7 +283,7 @@ public sealed class CtapNfcResponder: IDisposable
     /// <param name="cancellationToken">Cancellation token forwarded to <see cref="DeferredCancel"/> when superseding a parked request.</param>
     /// <returns>The SELECT response.</returns>
     private async ValueTask<ApduResult<ApduResponse>> HandleSelectAsync(
-        ReadOnlyMemory<byte> commandApdu, byte p1, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> commandApdu, byte p1, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         AppletSelected = false;
         await ClearPendingDeferralAsync(pool, cancellationToken).ConfigureAwait(false);
@@ -318,7 +318,7 @@ public sealed class CtapNfcResponder: IDisposable
     /// <param name="pool">The memory pool for the response buffer.</param>
     /// <param name="cancellationToken">Cancellation token forwarded to <see cref="DeferredCancel"/> when superseding a parked request.</param>
     /// <returns>The deselection response.</returns>
-    private async ValueTask<ApduResult<ApduResponse>> HandleControlAsync(byte p1, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private async ValueTask<ApduResult<ApduResponse>> HandleControlAsync(byte p1, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(p1 != WellKnownCtapCommandParameters.DeselectControlP1)
         {
@@ -344,7 +344,7 @@ public sealed class CtapNfcResponder: IDisposable
     /// <param name="cancellationToken">Cancellation token forwarded to <see cref="PayloadTransceive"/>/<see cref="DeferredTransceive"/>.</param>
     /// <returns>The framed response.</returns>
     private async ValueTask<ApduResult<ApduResponse>> HandleNfcCtapMsgAsync(
-        ReadOnlyMemory<byte> commandApdu, byte p1, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> commandApdu, byte p1, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(!AppletSelected)
         {
@@ -398,7 +398,7 @@ public sealed class CtapNfcResponder: IDisposable
     /// <param name="isExtended">Whether the originating NFCCTAP_MSG request used extended-length encoding.</param>
     /// <param name="pool">The memory pool for the response buffer.</param>
     /// <returns>The framed response.</returns>
-    private ApduResult<ApduResponse> EmitMsgResponse(PooledMemory response, int requestedLe, bool isExtended, MemoryPool<byte> pool)
+    private ApduResult<ApduResponse> EmitMsgResponse(PooledMemory response, int requestedLe, bool isExtended, BaseMemoryPool pool)
     {
         if(isExtended)
         {
@@ -427,7 +427,7 @@ public sealed class CtapNfcResponder: IDisposable
     /// <param name="commandApdu">The GET RESPONSE command APDU.</param>
     /// <param name="pool">The memory pool for the response buffer.</param>
     /// <returns>The next fragment, or an error if no chain is outstanding.</returns>
-    private ValueTask<ApduResult<ApduResponse>> HandleGetResponseAsync(ReadOnlyMemory<byte> commandApdu, MemoryPool<byte> pool)
+    private ValueTask<ApduResult<ApduResponse>> HandleGetResponseAsync(ReadOnlyMemory<byte> commandApdu, BaseMemoryPool pool)
     {
         if(PendingChain.Length == 0)
         {
@@ -460,7 +460,7 @@ public sealed class CtapNfcResponder: IDisposable
     /// completed response once resolved).
     /// </returns>
     private async ValueTask<ApduResult<ApduResponse>> HandleNfcCtapGetResponseAsync(
-        ReadOnlyMemory<byte> commandApdu, byte p1, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> commandApdu, byte p1, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(!DeferredResponsePending)
         {
@@ -504,7 +504,7 @@ public sealed class CtapNfcResponder: IDisposable
     /// <param name="requestedLe">The Le the terminal requested on this exchange.</param>
     /// <param name="pool">The memory pool for the response buffer.</param>
     /// <returns>The framed chunk.</returns>
-    private ApduResult<ApduResponse> EmitChunk(ReadOnlyMemory<byte> data, int requestedLe, MemoryPool<byte> pool)
+    private ApduResult<ApduResponse> EmitChunk(ReadOnlyMemory<byte> data, int requestedLe, BaseMemoryPool pool)
     {
         int wanted = requestedLe <= 0 ? ApduConstants.MaxShortResponseData : requestedLe;
         int chunkSize = Math.Min(wanted, data.Length);
@@ -539,7 +539,7 @@ public sealed class CtapNfcResponder: IDisposable
     /// <param name="statusWord">The status word.</param>
     /// <param name="pool">The memory pool for the response buffer.</param>
     /// <returns>The response, wrapped as a successful transceive.</returns>
-    private static ApduResult<ApduResponse> Reply(StatusWord statusWord, MemoryPool<byte> pool) =>
+    private static ApduResult<ApduResponse> Reply(StatusWord statusWord, BaseMemoryPool pool) =>
         Reply(ReadOnlySpan<byte>.Empty, statusWord, pool);
 
 
@@ -551,7 +551,7 @@ public sealed class CtapNfcResponder: IDisposable
     /// <param name="pool">The memory pool for the response buffer.</param>
     /// <returns>The response, wrapped as a successful transceive per the established <c>VirtualCard</c> convention: any status word, including an error, is a successful transceive at the transport level.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned ApduResponse, which the caller disposes.")]
-    private static ApduResult<ApduResponse> Reply(ReadOnlySpan<byte> data, StatusWord statusWord, MemoryPool<byte> pool)
+    private static ApduResult<ApduResponse> Reply(ReadOnlySpan<byte> data, StatusWord statusWord, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(data.Length + ApduConstants.StatusWordSize);
         Span<byte> span = owner.Memory.Span;
@@ -568,7 +568,7 @@ public sealed class CtapNfcResponder: IDisposable
     /// <summary>
     /// Parses the data field and, if present, the Le field of a Case 3/4-shaped command (header, an
     /// optional <c>0x00</c> extended-length marker, Lc, data, and an optional Le) — the inverse of
-    /// <see cref="CommandApdu.BuildCase4(byte, byte, byte, byte, ReadOnlySpan{byte}, int, bool, MemoryPool{byte})"/>.
+    /// <see cref="CommandApdu.BuildCase4(byte, byte, byte, byte, ReadOnlySpan{byte}, int, bool, BaseMemoryPool)"/>.
     /// </summary>
     /// <param name="commandApdu">The complete command APDU.</param>
     /// <param name="data">The data field, if parsing succeeded.</param>

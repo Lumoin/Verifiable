@@ -74,7 +74,7 @@ public static class ApduExecutor
     public static async ValueTask<ApduResult<ApduResponse>> ExecuteAsync(
         ApduDevice device,
         ReadOnlyMemory<byte> commandApdu,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(device);
@@ -171,7 +171,7 @@ public static class ApduExecutor
         ApduResponse initialResponse,
         byte getResponseCla,
         int originalRequestedLe,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         //When the originating command asked for fewer bytes than the card reports available,
@@ -269,7 +269,7 @@ public static class ApduExecutor
     private static IMemoryOwner<byte> BuildLeCorrectedCommand(
         ReadOnlySpan<byte> originalCommand,
         byte correctLe,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         //The original command ends with Le (1 byte for short encoding).
         //Replace the last byte with the corrected value.

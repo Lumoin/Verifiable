@@ -38,9 +38,10 @@ namespace Verifiable.Fido2.Ctap;
 /// </para>
 /// <para>
 /// <strong>Method-group conversion, not a shared type.</strong> This delegate deliberately uses only
-/// BCL types (<see cref="ReadOnlyMemory{T}"/>, <see cref="MemoryPool{T}"/>,
-/// <see cref="CancellationToken"/>) and the transport-neutral <see cref="PooledMemory"/> carrier from
-/// <c>Verifiable.Foundation</c> — a project both <c>Verifiable.Fido2</c> and <c>Verifiable.Apdu</c>
+/// BCL types (<see cref="ReadOnlyMemory{T}"/>, <see cref="CancellationToken"/>), the
+/// <see cref="BaseMemoryPool"/> bedrock and the transport-neutral <see cref="PooledMemory"/> carrier
+/// from <c>Lumoin.Base</c> and <c>Verifiable.Foundation</c> — dependencies both
+/// <c>Verifiable.Fido2</c> and <c>Verifiable.Apdu</c>
 /// already reference, so neither project gains a new reference to the other because of this shape. A
 /// transport binding built on <c>Verifiable.Apdu</c> (for example an NFC transceive method composed
 /// over <c>ApduDevice</c>/<c>ApduExecutor</c>) never needs to reference this delegate's declaring type
@@ -55,5 +56,5 @@ namespace Verifiable.Fido2.Ctap;
 /// </remarks>
 public delegate ValueTask<PooledMemory> Ctap2TransceiveDelegate(
     ReadOnlyMemory<byte> request,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);

@@ -463,7 +463,7 @@ public static class AsicZipReading
     /// retained: every entry's octets are copied into memory rented from <paramref name="pool"/>, so the caller
     /// may reuse the buffer it passed as soon as this method returns.
     /// </remarks>
-    public static AsicZipReadResult Read(ReadOnlyMemory<byte> containerBytes, AsicZipReadLimits limits, MemoryPool<byte> pool)
+    public static AsicZipReadResult Read(ReadOnlyMemory<byte> containerBytes, AsicZipReadLimits limits, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(limits);
         ArgumentNullException.ThrowIfNull(pool);
@@ -970,7 +970,7 @@ public static class AsicZipReading
         ReadOnlyMemory<byte> containerBytes,
         List<CentralDirectoryEntry> directory,
         ContainerFacts facts,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         var entries = new List<AsicZipEntry>(directory.Count);
         try
@@ -1064,7 +1064,7 @@ public static class AsicZipReading
     /// bound from the central directory real: an entry whose stream produces more octets than its headers
     /// declare would otherwise decompress past every size check performed before it was opened.
     /// </remarks>
-    private static PooledMemory ReadEntryContent(ZipArchiveEntry entry, CentralDirectoryEntry declared, MemoryPool<byte> pool, out AsicZipReadStatus status)
+    private static PooledMemory ReadEntryContent(ZipArchiveEntry entry, CentralDirectoryEntry declared, BaseMemoryPool pool, out AsicZipReadStatus status)
     {
         int uncompressedByteLength = (int)declared.UncompressedByteLength;
         IMemoryOwner<byte> owner = pool.Rent(Math.Max(uncompressedByteLength, 1));

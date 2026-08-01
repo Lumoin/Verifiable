@@ -175,7 +175,7 @@ public static class Jws
     /// </para>
     /// <para>
     /// Outside that narrow profile case, prefer
-    /// <see cref="SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, Cryptography.PrivateKeyMemory, MemoryPool{byte}, CancellationToken)"/>.
+    /// <see cref="SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, Cryptography.PrivateKeyMemory, BaseMemoryPool, CancellationToken)"/>.
     /// RFC 8725 §3.1 reminds implementations that <c>alg=none</c> tokens are
     /// a classic attack vector when accepted indiscriminately — consumers
     /// must opt into accepting them and only in the contexts the profile
@@ -219,7 +219,7 @@ public static class Jws
         JwtPartEncoder<TJwtPart> partEncoder,
         EncodeDelegate base64UrlEncoder,
         PrivateKeyMemory privateKey,
-        MemoryPool<byte> signaturePool,
+        BaseMemoryPool signaturePool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(privateKey);
@@ -262,7 +262,7 @@ public static class Jws
         EncodeDelegate base64UrlEncoder,
         PrivateKeyMemory privateKey,
         SigningDelegate signingDelegate,
-        MemoryPool<byte> signaturePool,
+        BaseMemoryPool signaturePool,
         CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {
@@ -271,7 +271,6 @@ public static class Jws
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(signingDelegate);
         ArgumentNullException.ThrowIfNull(signaturePool);
-        AssertHousePool(signaturePool);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -312,7 +311,7 @@ public static class Jws
     /// <paramref name="unprotectedHeader"/>. This is the building block for serializations that must sign opaque
     /// bytes (for example a media-typed message body) and place a <c>kid</c> in the unprotected header — the two
     /// capabilities the typed-payload
-    /// <see cref="SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, SigningDelegate, MemoryPool{byte}, CancellationToken)"/>
+    /// <see cref="SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, SigningDelegate, BaseMemoryPool, CancellationToken)"/>
     /// overload cannot express. The returned <see cref="JwsMessage"/> is serialized by the caller (compact or JSON).
     /// </summary>
     /// <typeparam name="TJwtPart">The protected-header type.</typeparam>
@@ -339,7 +338,7 @@ public static class Jws
         EncodeDelegate base64UrlEncoder,
         PrivateKeyMemory privateKey,
         SigningDelegate signingDelegate,
-        MemoryPool<byte> signaturePool,
+        BaseMemoryPool signaturePool,
         IReadOnlyDictionary<string, object>? unprotectedHeader,
         CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
@@ -349,7 +348,6 @@ public static class Jws
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(signingDelegate);
         ArgumentNullException.ThrowIfNull(signaturePool);
-        AssertHousePool(signaturePool);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -421,7 +419,7 @@ public static class Jws
         JwsMessage message,
         EncodeDelegate base64UrlEncoder,
         PublicKeyMemory publicKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(publicKey);
@@ -465,7 +463,7 @@ public static class Jws
         EncodeDelegate base64UrlEncoder,
         PublicKeyMemory publicKey,
         VerificationDelegate verificationDelegate,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {
@@ -474,7 +472,6 @@ public static class Jws
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(verificationDelegate);
         ArgumentNullException.ThrowIfNull(pool);
-        AssertHousePool(pool);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -554,7 +551,7 @@ public static class Jws
         EncodeDelegate base64UrlEncoder,
         VerificationDelegate verificationDelegate,
         ReadOnlyMemory<byte> publicKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         return VerifySignatureAsync(
@@ -599,7 +596,7 @@ public static class Jws
         EncodeDelegate base64UrlEncoder,
         VerificationDelegate verificationDelegate,
         ReadOnlyMemory<byte> publicKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {
@@ -607,7 +604,6 @@ public static class Jws
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
         ArgumentNullException.ThrowIfNull(verificationDelegate);
         ArgumentNullException.ThrowIfNull(pool);
-        AssertHousePool(pool);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -667,7 +663,7 @@ public static class Jws
     public static ValueTask<bool> VerifyAsync(
         string jws,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         PublicKeyMemory publicKey,
         CancellationToken cancellationToken)
         => VerifyAsync(jws, base64UrlDecoder, pool, publicKey, DefaultMaxJwsLength, cancellationToken);
@@ -689,7 +685,7 @@ public static class Jws
     public static ValueTask<bool> VerifyAsync(
         string jws,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         PublicKeyMemory publicKey,
         int maxJwsLength,
         CancellationToken cancellationToken = default)
@@ -723,7 +719,7 @@ public static class Jws
     public static ValueTask<bool> VerifyAsync(
         string jws,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         PublicKeyMemory publicKey,
         VerificationDelegate verificationDelegate,
         CancellationToken cancellationToken)
@@ -751,7 +747,7 @@ public static class Jws
     public static async ValueTask<bool> VerifyAsync(
         string jws,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         PublicKeyMemory publicKey,
         VerificationDelegate verificationDelegate,
         int maxJwsLength,
@@ -763,7 +759,6 @@ public static class Jws
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(verificationDelegate);
-        AssertHousePool(pool);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxJwsLength);
         EnsureJwsLengthAccepted(jws, maxJwsLength);
 
@@ -851,7 +846,7 @@ public static class Jws
         string jws,
         DecodeDelegate base64UrlDecoder,
         JwtPartDecoder partDecoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         PublicKeyMemory publicKey,
         CancellationToken cancellationToken)
         => VerifyAndDecodeAsync(jws, base64UrlDecoder, partDecoder, pool, publicKey, DefaultMaxJwsLength, cancellationToken);
@@ -875,7 +870,7 @@ public static class Jws
         string jws,
         DecodeDelegate base64UrlDecoder,
         JwtPartDecoder partDecoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         PublicKeyMemory publicKey,
         int maxJwsLength,
         CancellationToken cancellationToken = default)
@@ -920,7 +915,7 @@ public static class Jws
         string jws,
         DecodeDelegate base64UrlDecoder,
         JwtPartDecoder partDecoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         PublicKeyMemory publicKey,
         VerificationDelegate verificationDelegate,
         int maxJwsLength,
@@ -933,7 +928,6 @@ public static class Jws
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(verificationDelegate);
-        AssertHousePool(pool);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxJwsLength);
         EnsureJwsLengthAccepted(jws, maxJwsLength);
 
@@ -1036,7 +1030,7 @@ public static class Jws
         JwtPayload payload,
         JwtPartEncoder<JoseDictionary> partEncoder,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TResolverState resolverState,
         KeyMaterialResolver<PrivateKeyMemory, JoseKeyContext, TResolverState> resolver,
         TBinderState binderState,
@@ -1048,7 +1042,6 @@ public static class Jws
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(resolver);
         ArgumentNullException.ThrowIfNull(binder);
-        AssertHousePool(pool);
 
         TaggedMemory<byte> headerBytes = partEncoder(header);
         TaggedMemory<byte> payloadBytes = partEncoder(payload);
@@ -1096,7 +1089,7 @@ public static class Jws
         string jws,
         DecodeDelegate base64UrlDecoder,
         JwtPartDecoder partDecoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TResolverState resolverState,
         KeyMaterialResolver<PublicKeyMemory, JoseKeyContext, TResolverState> resolver,
         TBinderState binderState,
@@ -1125,7 +1118,7 @@ public static class Jws
         string jws,
         DecodeDelegate base64UrlDecoder,
         JwtPartDecoder partDecoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TResolverState resolverState,
         KeyMaterialResolver<PublicKeyMemory, JoseKeyContext, TResolverState> resolver,
         TBinderState binderState,
@@ -1139,7 +1132,6 @@ public static class Jws
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(resolver);
         ArgumentNullException.ThrowIfNull(binder);
-        AssertHousePool(pool);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxJwsLength);
         EnsureJwsLengthAccepted(jws, maxJwsLength);
 
@@ -1209,7 +1201,7 @@ public static class Jws
         string jws,
         DecodeDelegate base64UrlDecoder,
         JwtPartDecoder partDecoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TResolverState resolverState,
         KeyMaterialResolver<PublicKeyMemory, JoseKeyContext, TResolverState> resolver,
         TBinderState binderState,
@@ -1238,7 +1230,7 @@ public static class Jws
         string jws,
         DecodeDelegate base64UrlDecoder,
         JwtPartDecoder partDecoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TResolverState resolverState,
         KeyMaterialResolver<PublicKeyMemory, JoseKeyContext, TResolverState> resolver,
         TBinderState binderState,
@@ -1252,7 +1244,6 @@ public static class Jws
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(resolver);
         ArgumentNullException.ThrowIfNull(binder);
-        AssertHousePool(pool);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxJwsLength);
         EnsureJwsLengthAccepted(jws, maxJwsLength);
 
@@ -1366,7 +1357,7 @@ public static class Jws
     //Decodes a base64url segment of an untrusted compact JWS. A segment the injected decoder rejects
     //returns DecodedSegment.Malformed rather than letting the decoder's exception escape; cancellation
     //is propagated.
-    private static DecodedSegment TryDecodeSegment(DecodeDelegate base64UrlDecoder, string segment, MemoryPool<byte> pool)
+    private static DecodedSegment TryDecodeSegment(DecodeDelegate base64UrlDecoder, string segment, BaseMemoryPool pool)
     {
         try
         {
@@ -1411,7 +1402,7 @@ public static class Jws
     private static IMemoryOwner<byte> RentSigningInput(
         string segment1,
         string segment2,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         out int signingInputLength)
     {
         signingInputLength = checked(segment1.Length + 1 + segment2.Length);
@@ -1433,7 +1424,7 @@ public static class Jws
         ReadOnlySpan<byte> payload,
         bool base64UrlPayload,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         out int signingInputLength)
     {
         if(base64UrlPayload)
@@ -1475,29 +1466,4 @@ public static class Jws
         return new Dictionary<string, object>();
     }
 
-
-    /// <summary>
-    /// Asserts, in DEBUG builds only, that <paramref name="candidate"/> returns exact-length rentals.
-    /// <see cref="Signature"/> derives its <c>Length</c> from the rented owner's <c>Memory.Length</c> without
-    /// slicing, so a pool whose rentals are not exact-length (e.g. <see cref="MemoryPool{T}.Shared"/>, which
-    /// rounds up to a power-of-two bucket) silently produces an over-long wire signature — the exact failure
-    /// mode a P-384 or P-521 JWS hits under the framework pool. Probing a rental checks that invariant
-    /// directly rather than the pool's concrete type, so an exact-length delegating pool (for example a test
-    /// pool observing dispose-time zeroing over <see cref="BaseMemoryPool.Shared"/>) remains usable while a
-    /// bucketing pool arriving as a caller-supplied parameter — the one case the <c>BannedSymbols.txt</c>
-    /// compile-time ban cannot see — still fails at debug time instead of producing a wire-visible defect.
-    /// Compiled out in Release builds.
-    /// </summary>
-    /// <param name="candidate">The pool passed by the caller at one of this class's public entry points.</param>
-    [Conditional("DEBUG")]
-    private static void AssertHousePool(MemoryPool<byte> candidate)
-    {
-        //An odd, non-bucket probe length: any power-of-two-bucketing pool must round it up and fail.
-        const int ProbeLength = 3;
-        using IMemoryOwner<byte> probe = candidate.Rent(ProbeLength);
-        Debug.Assert(probe.Memory.Length == ProbeLength,
-            "The memory pool must return exact-length rentals (BaseMemoryPool.Shared, a custom " +
-            "house-configured instance, or a pool delegating to one), which Signature depends on for " +
-            "its length.");
-    }
 }

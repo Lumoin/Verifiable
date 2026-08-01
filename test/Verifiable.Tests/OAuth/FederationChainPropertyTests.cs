@@ -55,7 +55,7 @@ internal sealed class FederationChainPropertyTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     //Class-level fixture. Set up once, shared across all samples in all
     //tests. ClassCleanup tears it down.

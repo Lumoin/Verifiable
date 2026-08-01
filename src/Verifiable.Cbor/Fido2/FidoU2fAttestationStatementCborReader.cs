@@ -50,7 +50,7 @@ public static class FidoU2fAttestationStatementCborReader
     /// <paramref name="attestationStatement"/> is not a CTAP2 canonical CBOR map conforming to the
     /// fido-u2f <c>attStmt</c> syntax, including when <c>x5c</c> does not carry exactly one element.
     /// </exception>
-    public static FidoU2fAttestationStatement Parse(ReadOnlyMemory<byte> attestationStatement, MemoryPool<byte> pool)
+    public static FidoU2fAttestationStatement Parse(ReadOnlyMemory<byte> attestationStatement, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -119,7 +119,7 @@ public static class FidoU2fAttestationStatementCborReader
 
         //Reads the CBOR array of DER-encoded certificate byte strings at the reader's current position
         //into pooled PkiCertificateMemory carriers, per the fido-u2f x5c CDDL.
-        static List<PkiCertificateMemory> ReadCertificateChain(CborReader reader, MemoryPool<byte> pool)
+        static List<PkiCertificateMemory> ReadCertificateChain(CborReader reader, BaseMemoryPool pool)
         {
             var certificates = new List<PkiCertificateMemory>();
             int? elementCount = reader.ReadStartArray();

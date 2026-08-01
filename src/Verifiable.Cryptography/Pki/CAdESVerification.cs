@@ -59,7 +59,7 @@ public static class CAdESVerification
         Justification = "Ownership of the verified content transfers to a successful result, which the caller disposes; every failure path disposes it before returning.")]
     public static async ValueTask<CAdESVerificationResult> VerifyAsync(
         CmsSignedData signedData,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signedData);
@@ -138,7 +138,7 @@ public static class CAdESVerification
     /// </summary>
     /// <returns>The level reached (Baseline when no timestamp is present, Timestamp when a valid one is), the timestamp time, and the status (a non-<see cref="CAdESVerificationStatus.Valid"/> status when a present timestamp fails).</returns>
     private static async ValueTask<(CAdESLevel Level, DateTimeOffset? Time, CAdESVerificationStatus Status)> VerifyTimestampAsync(
-        CmsSignedData signedData, VerifyCmsSignedDataDelegate verifyCms, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CmsSignedData signedData, VerifyCmsSignedDataDelegate verifyCms, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         (ReadOnlyMemory<byte> signatureValue, IReadOnlyList<(string Oid, ReadOnlyMemory<byte> Value)> unsignedAttributes) =
             ManagedCmsVerification.ParseSignerExtras(signedData.AsReadOnlySpan());
@@ -201,7 +201,7 @@ public static class CAdESVerification
     /// certificate under the hash algorithm it declares (SHA-256 by default).
     /// </summary>
     private static async ValueTask<CAdESVerificationStatus> VerifySigningCertificateBindingAsync(
-        CmsSignedAttribute signingCertificate, ReadOnlyMemory<byte> signerCertificate, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CmsSignedAttribute signingCertificate, ReadOnlyMemory<byte> signerCertificate, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         (string hashOid, byte[] certificateHash) = ParseFirstEssCertId(signingCertificate.AsReadOnlyMemory());
 

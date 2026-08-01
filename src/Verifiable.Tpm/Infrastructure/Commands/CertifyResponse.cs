@@ -56,7 +56,7 @@ public sealed class CertifyResponse: IDisposable, ITpmWireType
     /// <param name="reader">The reader positioned at the response parameters.</param>
     /// <param name="pool">The memory pool for parameter buffer allocation.</param>
     /// <returns>The parsed certify response.</returns>
-    public static CertifyResponse Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static CertifyResponse Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         Tpm2bAttest certifyInfo = Tpm2bAttest.Parse(ref reader, pool);

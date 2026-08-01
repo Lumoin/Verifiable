@@ -55,7 +55,7 @@ public sealed class PolicySignedResponse: IDisposable, ITpmWireType
     /// <returns>The parsed response.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The rented buffers are owned by the returned PolicySignedResponse and disposed by the caller.")]
-    public static PolicySignedResponse Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static PolicySignedResponse Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

@@ -99,7 +99,7 @@ public sealed class TpmsCreationInfo: ITpmWireType, IDisposable
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed creation info.</returns>
-    public static TpmsCreationInfo Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static TpmsCreationInfo Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         Tpm2bName objectName = Tpm2bName.Parse(ref reader, pool);

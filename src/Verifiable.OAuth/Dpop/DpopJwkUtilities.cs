@@ -18,7 +18,7 @@ namespace Verifiable.OAuth.Dpop;
 /// the outbound direction,
 /// <see cref="CryptoFormatConversions.DefaultJwkToAlgorithmConverter"/>
 /// for the inbound direction, and
-/// <see cref="JwkThumbprintUtilities.ComputeECThumbprint(MemoryPool{byte}, string, string, string, string)"/>
+/// <see cref="JwkThumbprintUtilities.ComputeECThumbprint(BaseMemoryPool, string, string, string, string)"/>
 /// for the canonical RFC 7638 hash.
 /// </remarks>
 [DebuggerDisplay("DpopJwkUtilities")]
@@ -123,7 +123,7 @@ public static class DpopJwkUtilities
         PublicKeyMemory publicKey,
         string alg,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentException.ThrowIfNullOrEmpty(alg);
@@ -138,7 +138,7 @@ public static class DpopJwkUtilities
     /// <summary>
     /// Computes the RFC 7638 thumbprint of an already-projected JWK as a
     /// base64url-encoded string. Composes
-    /// <see cref="JwkThumbprintUtilities.ComputeGenericThumbprint(MemoryPool{byte}, IDictionary{string, string})"/>
+    /// <see cref="JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool, IDictionary{string, string})"/>
     /// which sorts the JWK members lexicographically per RFC 7638 §3.1,
     /// writes the canonical JSON, and hashes with SHA-256. No kty dispatch
     /// is required here — RFC 7638 §3.2's "required members differ per
@@ -149,7 +149,7 @@ public static class DpopJwkUtilities
     public static string ComputeThumbprintFromJwk(
         IReadOnlyDictionary<string, string> jwk,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(jwk);
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
@@ -194,7 +194,7 @@ public static class DpopJwkUtilities
         IReadOnlyDictionary<string, string> jwk,
         string alg,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(jwk);
         ArgumentException.ThrowIfNullOrEmpty(alg);

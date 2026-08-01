@@ -59,7 +59,7 @@ public static class EArkPackageSnapshotReading
     public static EArkPackageSnapshotResult Create(
         IReadOnlyList<EArkPackageEntrySource> entries,
         EArkPackageLimits limits,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         string? rootFolderName = null)
     {
         ArgumentNullException.ThrowIfNull(entries);
@@ -95,7 +95,7 @@ public static class EArkPackageSnapshotReading
     /// archive it came from, which every caller of this method needs.
     /// </para>
     /// </remarks>
-    public static EArkPackageSnapshotResult ReadArchive(ReadOnlyMemory<byte> archiveBytes, EArkPackageLimits limits, MemoryPool<byte> pool)
+    public static EArkPackageSnapshotResult ReadArchive(ReadOnlyMemory<byte> archiveBytes, EArkPackageLimits limits, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(limits);
         ArgumentNullException.ThrowIfNull(pool);
@@ -206,7 +206,7 @@ public static class EArkPackageSnapshotReading
     private static EArkPackageSnapshotResult Build(
         IReadOnlyList<EArkPackageEntrySource> entries,
         EArkPackageLimits limits,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         string? rootFolderName,
         bool hasSingleRootFolder)
     {

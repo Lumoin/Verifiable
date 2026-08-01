@@ -42,7 +42,7 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
     public async Task RpClientDrivesSimulatorOverRealApduTransportAndDerivesSharedSecret()
     {
         using CtapAuthenticatorSimulator simulator = CtapWave5AuthenticatorFixtures.CreateSimulator("clientpin-flow-authenticator");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, TestContext.CancellationToken);
 
@@ -96,7 +96,7 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
     public async Task RpClientDrivesFullPinEstablishmentAndTokenIssuanceJourneyOverRealApduTransport()
     {
         using CtapAuthenticatorSimulator simulator = CtapWave5AuthenticatorFixtures.CreateSimulator("clientpin-flow-capstone");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, TestContext.CancellationToken);
 
         //getKeyAgreement + setPIN.
@@ -193,7 +193,7 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
     public async Task RpClientDrivesMakeCredentialAndGetAssertionWithPinUvAuthTokenOverRealApduTransport()
     {
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("pinuv-mcga-capstone");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, TestContext.CancellationToken);
 
         const string boundRpId = "pinuv-mcga-capstone.example";
@@ -282,7 +282,7 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
     /// wire bytes only.
     /// </summary>
     private static async Task<byte[]> IssueTokenBoundToRpIdAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, string rpId, CancellationToken cancellationToken)
+        CtapWave2TransportHarness harness, BaseMemoryPool pool, string rpId, CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.Two, pool, cancellationToken).ConfigureAwait(false);
@@ -299,7 +299,7 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
 
 
     /// <summary>Computes <c>authenticate(token, message)</c> under PIN/UV auth protocol TWO's own truncation rule — the platform-side computation <c>verify</c> checks a presented <c>pinUvAuthParam</c> against.</summary>
-    private static async Task<byte[]> SignWithTokenAsync(byte[] token, byte[] message, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<byte[]> SignWithTokenAsync(byte[] token, byte[] message, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         CtapPinUvAuthProtocol protocol = CtapPinUvAuthProtocol.CreateDefault(CtapPinUvAuthProtocolId.Two);
         using IMemoryOwner<byte> signature = await protocol.AuthenticateAsync(token, message, pool, cancellationToken).ConfigureAwait(false);
@@ -309,13 +309,13 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
 
 
     /// <summary>Sends an <c>authenticatorClientPIN</c> request over <paramref name="transceive"/> and decodes the response.</summary>
-    private static Task<CtapClientPinResponse> SendClientPinAsync(Ctap2TransceiveDelegate transceive, CtapClientPinRequest request, MemoryPool<byte> pool) =>
+    private static Task<CtapClientPinResponse> SendClientPinAsync(Ctap2TransceiveDelegate transceive, CtapClientPinRequest request, BaseMemoryPool pool) =>
         CtapAuthenticatorClientPinClient.ClientPinAsync(
             transceive, CtapClientPinRequestCborWriter.Write, request, CtapClientPinResponseCborReader.Read, pool, CancellationToken.None).AsTask();
 
 
     /// <summary>Sends an <c>authenticatorGetInfo</c> request over <paramref name="transceive"/> and decodes the response.</summary>
-    private static async Task<CtapGetInfoResponse> GetInfoAsync(Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool)
+    private static async Task<CtapGetInfoResponse> GetInfoAsync(Ctap2TransceiveDelegate transceive, BaseMemoryPool pool)
     {
         byte[] request = [WellKnownCtapCommands.GetInfo];
         using PooledMemory response = await transceive(request, pool, CancellationToken.None).ConfigureAwait(false);

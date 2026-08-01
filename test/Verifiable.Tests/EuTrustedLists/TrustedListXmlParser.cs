@@ -69,7 +69,7 @@ public static class TrustedListXmlParser
     /// <returns>The parse result.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the assembled TrustedList (and every certificate its tree carries) transfers to the successful TrustedListParseResult, which the caller disposes.")]
-    public static ValueTask<TrustedListParseResult> ParseAsync(PooledMemory document, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static ValueTask<TrustedListParseResult> ParseAsync(PooledMemory document, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(pool);
@@ -132,7 +132,7 @@ public static class TrustedListXmlParser
 
 
     /// <summary>Reads the <c>SchemeInformation</c> block (clause 5.3).</summary>
-    private static TrustedListSchemeInformation ReadSchemeInformation(XElement schemeInformationElement, MemoryPool<byte> pool)
+    private static TrustedListSchemeInformation ReadSchemeInformation(XElement schemeInformationElement, BaseMemoryPool pool)
     {
         //Carries whatever value the document declares — see TrustedListKind's own remarks for why this is a
         //wire-value wrapper rather than a gate that rejects an unrecognized TSLType outright: real documents
@@ -172,7 +172,7 @@ public static class TrustedListXmlParser
 
 
     /// <summary>Reads one <c>OtherTSLPointer</c> (clause 5.3.13).</summary>
-    private static OtherTrustedListPointer ReadOtherTslPointer(XElement pointerElement, MemoryPool<byte> pool)
+    private static OtherTrustedListPointer ReadOtherTslPointer(XElement pointerElement, BaseMemoryPool pool)
     {
         ServiceDigitalIdentity identities = ReadServiceDigitalIdentitiesList(pointerElement.Element(Tsl + "ServiceDigitalIdentities"), pool);
         XElement? additionalInformationElement = pointerElement.Element(Tsl + "AdditionalInformation");
@@ -245,7 +245,7 @@ public static class TrustedListXmlParser
 
 
     /// <summary>Reads a <c>TrustServiceProvider</c> (clause 5.4).</summary>
-    private static TrustServiceProvider ReadTrustServiceProvider(XElement providerElement, MemoryPool<byte> pool)
+    private static TrustServiceProvider ReadTrustServiceProvider(XElement providerElement, BaseMemoryPool pool)
     {
         XElement informationElement = RequireElement(providerElement, Tsl + "TSPInformation");
         XElement? addressElement = informationElement.Element(Tsl + "TSPAddress");
@@ -264,7 +264,7 @@ public static class TrustedListXmlParser
 
 
     /// <summary>Reads a <c>TSPService</c>'s current <c>ServiceInformation</c> and its <c>ServiceHistory</c> (clause 5.5).</summary>
-    private static TrustService ReadTrustService(XElement serviceElement, MemoryPool<byte> pool)
+    private static TrustService ReadTrustService(XElement serviceElement, BaseMemoryPool pool)
     {
         XElement informationElement = RequireElement(serviceElement, Tsl + "ServiceInformation");
         (List<TrustServiceAdditionalInformationType> additionalInformation, List<QualificationElement> qualifications) =
@@ -295,7 +295,7 @@ public static class TrustedListXmlParser
 
 
     /// <summary>Reads one <c>ServiceHistoryInstance</c> (clause 5.6).</summary>
-    private static TrustServiceHistoryEntry ReadServiceHistoryEntry(XElement historyInstanceElement, MemoryPool<byte> pool)
+    private static TrustServiceHistoryEntry ReadServiceHistoryEntry(XElement historyInstanceElement, BaseMemoryPool pool)
     {
         (List<TrustServiceAdditionalInformationType> additionalInformation, List<QualificationElement> qualifications) =
             ReadServiceInformationExtensions(historyInstanceElement.Element(Tsl + "ServiceInformationExtensions"));
@@ -542,7 +542,7 @@ public static class TrustedListXmlParser
 
 
     /// <summary>Reads a <c>ServiceDigitalIdentity</c>/<c>ServiceDigitalIdentities</c> container's <c>DigitalId</c> entries (clause 5.5.3).</summary>
-    private static ServiceDigitalIdentity ReadServiceDigitalIdentitiesList(XElement? container, MemoryPool<byte> pool)
+    private static ServiceDigitalIdentity ReadServiceDigitalIdentitiesList(XElement? container, BaseMemoryPool pool)
     {
         if(container is null)
         {
@@ -562,7 +562,7 @@ public static class TrustedListXmlParser
     /// <summary>Reads one <c>DigitalId</c> choice element into a <see cref="ServiceDigitalIdentityEntry"/>.</summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the rented certificate bytes transfers to the returned X509CertificateIdentity, which the caller (through the owning TrustedList) disposes.")]
-    private static ServiceDigitalIdentityEntry ReadDigitalIdentityEntry(XElement digitalIdElement, MemoryPool<byte> pool)
+    private static ServiceDigitalIdentityEntry ReadDigitalIdentityEntry(XElement digitalIdElement, BaseMemoryPool pool)
     {
         XElement? certificateElement = digitalIdElement.Element(Tsl + "X509Certificate");
         if(certificateElement is not null)

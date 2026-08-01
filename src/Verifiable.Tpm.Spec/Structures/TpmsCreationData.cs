@@ -128,7 +128,7 @@ public sealed class TpmsCreationData: IDisposable
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed creation data.</returns>
-    public static TpmsCreationData Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static TpmsCreationData Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         var pcrSelect = TpmlPcrSelection.Parse(ref reader, pool);

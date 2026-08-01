@@ -66,7 +66,7 @@ public static class DidCommSignedExtensions
         JwtPartEncoder<JwtHeader> protectedHeaderEncoder,
         JwsMessageSerializer signedSerializer,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         JoseSerializationFormat format = JoseSerializationFormat.GeneralJson,
         CancellationToken cancellationToken = default)
     {
@@ -119,7 +119,7 @@ public static class DidCommSignedExtensions
         JwsMessageSerializer signedSerializer,
         EncodeDelegate base64UrlEncoder,
         SigningDelegate signingDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         JoseSerializationFormat format = JoseSerializationFormat.GeneralJson,
         CancellationToken cancellationToken = default)
     {
@@ -237,7 +237,7 @@ public static class DidCommSignedExtensions
         JwsMessageParser signedParser,
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer = null,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null,
         CancellationToken cancellationToken = default)
@@ -453,7 +453,7 @@ public static class DidCommSignedExtensions
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer,
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         if(fromPriorPayloadDeserializer is null || fromPriorHeaderDeserializer is null)

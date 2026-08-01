@@ -47,7 +47,7 @@ public static class EcdsaSignatureEncoding
     /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="p1363Signature"/>'s length is zero or odd.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the caller, which disposes it via a using declaration.")]
-    public static IMemoryOwner<byte> ConvertP1363ToDer(ReadOnlySpan<byte> p1363Signature, MemoryPool<byte> pool, out int length)
+    public static IMemoryOwner<byte> ConvertP1363ToDer(ReadOnlySpan<byte> p1363Signature, BaseMemoryPool pool, out int length)
     {
         ArgumentNullException.ThrowIfNull(pool);
         if(p1363Signature.Length == 0 || p1363Signature.Length % 2 != 0)
@@ -102,7 +102,7 @@ public static class EcdsaSignatureEncoding
     /// <exception cref="CryptographicException">A decoded coordinate exceeds <paramref name="fieldWidth"/>.</exception>
     /// <exception cref="AsnContentException"><paramref name="derSignature"/> is not a well-formed DER <c>Ecdsa-Sig-Value</c>.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the caller, which disposes it via a using declaration.")]
-    public static IMemoryOwner<byte> ConvertDerToP1363(ReadOnlySpan<byte> derSignature, int fieldWidth, MemoryPool<byte> pool, out int length)
+    public static IMemoryOwner<byte> ConvertDerToP1363(ReadOnlySpan<byte> derSignature, int fieldWidth, BaseMemoryPool pool, out int length)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

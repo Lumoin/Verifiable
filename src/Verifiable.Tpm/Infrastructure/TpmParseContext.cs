@@ -55,7 +55,7 @@ public sealed class TpmParseContext
     /// <summary>
     /// Gets the memory pool for allocations during parsing.
     /// </summary>
-    public required MemoryPool<byte> Pool { get; init; }
+    public required BaseMemoryPool Pool { get; init; }
 
     /// <summary>
     /// Gets or sets the parsed response header.

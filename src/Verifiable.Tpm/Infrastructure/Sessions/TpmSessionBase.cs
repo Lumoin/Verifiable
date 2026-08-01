@@ -118,7 +118,7 @@ public abstract class TpmSessionBase
     /// do not override it.
     /// </para>
     /// </remarks>
-    public virtual void RollNonceCaller(MemoryPool<byte> pool)
+    public virtual void RollNonceCaller(BaseMemoryPool pool)
     {
     }
 
@@ -137,7 +137,7 @@ public abstract class TpmSessionBase
     /// </remarks>
     public virtual ValueTask EncryptFirstParameterAsync(
         Memory<byte> firstParameterData,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         return ValueTask.CompletedTask;
@@ -160,7 +160,7 @@ public abstract class TpmSessionBase
     /// </remarks>
     public virtual ValueTask DecryptFirstParameterAsync(
         Memory<byte> firstParameterData,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         return ValueTask.CompletedTask;
@@ -207,7 +207,7 @@ public abstract class TpmSessionBase
     /// </returns>
     public abstract ValueTask<Tpm2bAuth?> PrepareAuthHmacAsync(
         ReadOnlyMemory<byte> cpHash,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken,
         ReadOnlyMemory<byte> foldedSessionNonces = default);
 
@@ -255,6 +255,6 @@ public abstract class TpmSessionBase
     public abstract ValueTask<bool> VerifyAndUpdateAsync(
         TpmsAuthResponse response,
         ReadOnlyMemory<byte> rpHash,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken);
 }

@@ -29,7 +29,7 @@ public delegate ValueTask<(HmacValue Result, CryptoEvent? Event)> ComputeHmacDel
     ReadOnlyMemory<byte> keyBytes,
     int outputByteLength,
     Tag tag,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     FrozenDictionary<string, object>? context = null,
     CancellationToken cancellationToken = default);
 
@@ -43,6 +43,6 @@ public delegate ValueTask<(bool IsValid, CryptoEvent? Event)> VerifyHmacDelegate
     ReadOnlyMemory<byte> keyBytes,
     ReadOnlyMemory<byte> expectedMac,
     Tag tag,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     FrozenDictionary<string, object>? context = null,
     CancellationToken cancellationToken = default);

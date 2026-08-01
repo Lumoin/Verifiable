@@ -16,7 +16,7 @@ namespace Verifiable.DidComm.Routing;
 /// DIDCommMessaging endpoints, with any mediator-DID <c>uri</c> resolved to the mediator's transport URI and the
 /// mediator DID prepended to the routing keys (DIDComm v2.1 §Service Endpoint §Using a DID as an endpoint). The sender
 /// wraps the packed message for <see cref="RoutingKeys"/> via
-/// <see cref="RoutingForwardExtensions.WrapInForwardAsync(DidCommEncryptedMessage, string, System.Collections.Generic.IReadOnlyList{string}, Verifiable.Core.Resolvers.DidResolver, Verifiable.Cryptography.Context.ExchangeContext, Verifiable.Cryptography.EphemeralKeyPairFactory, string, Verifiable.DidComm.DidCommMessageSerializer, Verifiable.JCose.JwtHeaderSerializer, Verifiable.Cryptography.EncodeDelegate, Verifiable.Cryptography.TagToEpkCrvDelegate, Verifiable.Cryptography.GenerateNonceDelegate, System.Buffers.MemoryPool{byte}, System.Threading.CancellationToken)"/>
+/// <see cref="RoutingForwardExtensions.WrapInForwardAsync(DidCommEncryptedMessage, string, System.Collections.Generic.IReadOnlyList{string}, Verifiable.Core.Resolvers.DidResolver, Verifiable.Cryptography.Context.ExchangeContext, Verifiable.Cryptography.EphemeralKeyPairFactory, string, Verifiable.DidComm.DidCommMessageSerializer, Verifiable.JCose.JwtHeaderSerializer, Verifiable.Cryptography.EncodeDelegate, Verifiable.Cryptography.TagToEpkCrvDelegate, Verifiable.Cryptography.GenerateNonceDelegate, System.Buffers.BaseMemoryPool, System.Threading.CancellationToken)"/>
 /// and transmits the result to <see cref="TransportUri"/>; the transmission itself is the application's transport
 /// concern (this project carries no <c>System.Net</c>).
 /// </para>

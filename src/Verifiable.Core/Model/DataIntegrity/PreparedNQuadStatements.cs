@@ -98,7 +98,7 @@ public static class NQuadStatementPreparation
         ReadOnlyMemory<byte> hmacKey,
         ComputeHmacDelegate hmac,
         EncodeDelegate encoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(allStatements);

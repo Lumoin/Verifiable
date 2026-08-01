@@ -81,7 +81,7 @@ public static class ConcatKdf
         ReadOnlySpan<byte> partyUInfo,
         ReadOnlySpan<byte> partyVInfo,
         int keydataLenBits,
-        MemoryPool<byte> pool) =>
+        BaseMemoryPool pool) =>
         Derive(sharedSecret, algorithmId, partyUInfo, partyVInfo, keydataLenBits,
             committedTag: [], CryptoTags.AesGcmCek, pool);
 
@@ -135,7 +135,7 @@ public static class ConcatKdf
         int keydataLenBits,
         ReadOnlySpan<byte> committedTag,
         Tag outputTag,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(algorithmId);
         ArgumentNullException.ThrowIfNull(outputTag);
@@ -252,7 +252,7 @@ public static class ConcatKdf
 
     /// <summary>
     /// A <see cref="Verifiable.Cryptography.Aead.KeyDerivationDelegate"/> that wraps
-    /// <see cref="Derive(ReadOnlySpan{byte}, string, ReadOnlySpan{byte}, ReadOnlySpan{byte}, int, MemoryPool{byte})"/>
+    /// <see cref="Derive(ReadOnlySpan{byte}, string, ReadOnlySpan{byte}, ReadOnlySpan{byte}, int, BaseMemoryPool)"/>
     /// using SHA-256 Concat KDF.
     /// </summary>
     /// <remarks>
@@ -266,14 +266,14 @@ public static class ConcatKdf
 
     /// <summary>
     /// A <see cref="Verifiable.Cryptography.Aead.AuthenticatedKeyDerivationDelegate"/>
-    /// that wraps <see cref="Derive(ReadOnlySpan{byte}, string, ReadOnlySpan{byte}, ReadOnlySpan{byte}, int, ReadOnlySpan{byte}, Tag, MemoryPool{byte})"/>
+    /// that wraps <see cref="Derive(ReadOnlySpan{byte}, string, ReadOnlySpan{byte}, ReadOnlySpan{byte}, int, ReadOnlySpan{byte}, Tag, BaseMemoryPool)"/>
     /// using SHA-256 Concat KDF with the ECDH-1PU authentication tag commitment.
     /// </summary>
     /// <remarks>
     /// The derived key is tagged <see cref="CryptoTags.AesKwKeyEncryptionKey"/> — the
     /// Key Agreement with Key Wrapping shape used by <c>ECDH-1PU+A256KW</c>. Direct
     /// Key Agreement callers derive their content encryption key through
-    /// <see cref="Derive(ReadOnlySpan{byte}, string, ReadOnlySpan{byte}, ReadOnlySpan{byte}, int, ReadOnlySpan{byte}, Tag, MemoryPool{byte})"/>
+    /// <see cref="Derive(ReadOnlySpan{byte}, string, ReadOnlySpan{byte}, ReadOnlySpan{byte}, int, ReadOnlySpan{byte}, Tag, BaseMemoryPool)"/>
     /// with an empty tag and their own output tag.
     /// </remarks>
     public static Verifiable.Cryptography.Aead.AuthenticatedKeyDerivationDelegate DefaultAuthenticatedKeyDerivationDelegate =>

@@ -82,7 +82,7 @@ public static class SdCwtVpParsing
     public static SdToken<ReadOnlyMemory<byte>> ParseEmbeddedSdCwt(
         ReadOnlyMemory<byte> sdCwt,
         Tag saltTag,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(saltTag);
         ArgumentNullException.ThrowIfNull(pool);
@@ -152,7 +152,7 @@ public static class SdCwtVpParsing
     /// </returns>
     public static PublicKeyMemory? ExtractHolderKey(
         SdToken<ReadOnlyMemory<byte>> sdCwt,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(sdCwt);
         ArgumentNullException.ThrowIfNull(pool);

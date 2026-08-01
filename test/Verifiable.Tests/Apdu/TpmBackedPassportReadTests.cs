@@ -155,7 +155,7 @@ internal sealed class TpmBackedPassportReadTests
     /// Frames a sessionless TPM command (header, handles, parameters) into a rented buffer.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented command buffer transfers to the caller, which disposes it.")]
-    private static IMemoryOwner<byte> FrameSessionlessCommand<TInput>(TInput input, MemoryPool<byte> pool, out int length)
+    private static IMemoryOwner<byte> FrameSessionlessCommand<TInput>(TInput input, BaseMemoryPool pool, out int length)
         where TInput: ITpmCommandInput
     {
         length = TpmHeader.HeaderSize + input.GetSerializedSize();

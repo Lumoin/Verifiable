@@ -39,7 +39,7 @@ public static class CtapAuthenticatorGetInfoClient
     public static async ValueTask<CtapGetInfoResponse> GetInfoAsync(
         Ctap2TransceiveDelegate transceive,
         DecodeCtapGetInfoResponseDelegate decodeResponse,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(transceive);

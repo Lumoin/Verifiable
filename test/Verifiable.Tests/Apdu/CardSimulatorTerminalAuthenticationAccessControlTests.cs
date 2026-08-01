@@ -114,7 +114,7 @@ internal sealed class CardSimulatorTerminalAuthenticationAccessControlTests
         using PublicKeyMemory unusedCompressedPublicKey = terminalKeys.PublicKey;
         using EncodedEcPoint terminalPublicPoint = await terminalKeys.PrivateKey.WithKeyBytesAsync(
             static (scalar, state) => state.Generator(scalar, state.Curve, state.Pool, state.Token),
-            (Generator: multiplyGenerator, Curve: CryptoTags.P256ExchangePublicKey, Pool: (MemoryPool<byte>)BaseMemoryPool.Shared, Token: TestContext.CancellationToken));
+            (Generator: multiplyGenerator, Curve: CryptoTags.P256ExchangePublicKey, Pool: (BaseMemoryPool)BaseMemoryPool.Shared, Token: TestContext.CancellationToken));
         using PrivateKey terminalKey = CryptographicKeyFactory.CreatePrivateKey(terminalKeys.PrivateKey, "terminal-p256", terminalKeys.PrivateKey.Tag);
         using CardVerifiableCertificate terminal = CardVerifiableCertificateMinter.Mint(
             documentVerifierKey, terminalPublicPoint.AsReadOnlyMemory(), DocumentVerifierReference, TerminalReference, (byte)(TerminalRole | ReadDataGroup3 | ReadDataGroup4), Effective, Expiration, certificateCurve, BaseMemoryPool.Shared, TerminalType.InspectionSystem);

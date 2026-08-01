@@ -214,7 +214,7 @@ public sealed record CAdESSignaturePolicyIdentifier
 /// <para>
 /// Each claimed attribute is a whole DER <c>Attribute</c> (clause 5.2.6.1: "These signer attributes are expressed
 /// using <c>Attribute</c> types"), which is exactly what a <see cref="CmsAttribute"/> carries — so a caller builds
-/// a claimed role with <see cref="CmsAttribute.Create(string, ReadOnlySpan{byte}, System.Buffers.MemoryPool{byte})"/>
+/// a claimed role with <see cref="CmsAttribute.Create(string, ReadOnlySpan{byte}, System.Buffers.BaseMemoryPool)"/>
 /// and hands the carrier over, rather than passing naked octets. The attribute types themselves are open: clause
 /// 5.2.6.1 NOTE 1 suggests <c>RoleAttribute</c> and clause 5.2.6.2 defines <c>claimed-SAML-assertion</c> for a
 /// SAML assertion, neither of which this surface models — it places whatever <c>Attribute</c> the caller built.

@@ -50,7 +50,7 @@ internal sealed class TpmResponseHardeningTests
     {
         //TPML_DIGEST: count (UINT32) then that many TPM2B_DIGEST. A count of ~1 billion with no digest bytes
         //following must be rejected before 'new List<Tpm2bDigest>((int)count)' pre-allocates gigabytes.
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] data = [0x40, 0x00, 0x00, 0x00]; //count = 0x40000000.
 
         Assert.ThrowsExactly<InvalidOperationException>(() => ParseTpmlDigest(data, pool));
@@ -63,7 +63,7 @@ internal sealed class TpmResponseHardeningTests
         //the remaining buffer cannot possibly hold must be rejected before the array is sized (TPM2_GetCapability
         //is answered by an untrusted TPM). The buffer carries only capability + count, so any non-zero count
         //overruns and must throw.
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmCapConstants[] arms =
         [
             TpmCapConstants.TPM_CAP_ALGS,
@@ -90,7 +90,7 @@ internal sealed class TpmResponseHardeningTests
         //A TPM2_Quote response whose attestation is a (replayed) TPM_ST_ATTEST_CERTIFY structure must be rejected:
         //its type does not match the command, and surfacing it as success leaves Attested.Quote null for the first
         //consumer that dereferences it (Part 3, §18.4 fixes the type to TPM_ST_ATTEST_QUOTE).
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] certifyAttest = BuildTpm2bAttestImage(TpmStConstants.TPM_ST_ATTEST_CERTIFY, pool);
 
         Assert.ThrowsExactly<InvalidOperationException>(() => ParseQuoteResponse(certifyAttest, pool));
@@ -101,7 +101,7 @@ internal sealed class TpmResponseHardeningTests
     {
         //Symmetric to the quote case: a TPM2_Certify response whose attestation is a TPM_ST_ATTEST_QUOTE structure
         //must be rejected rather than surfaced with a null Attested.Certify (Part 3, §18.2).
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] quoteAttest = BuildTpm2bAttestImage(TpmStConstants.TPM_ST_ATTEST_QUOTE, pool);
 
         Assert.ThrowsExactly<InvalidOperationException>(() => ParseCertifyResponse(quoteAttest, pool));
@@ -115,7 +115,7 @@ internal sealed class TpmResponseHardeningTests
         //past the fail-closed TpmResult contract (Part 1, §16.10 parameter/auth split).
         ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             //Header + a single 4-byte parameterSize field = 14 bytes, but parameterSize claims 0xFFFFFFFF.
@@ -127,7 +127,7 @@ internal sealed class TpmResponseHardeningTests
         }
 
         using var device = TpmDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
 
@@ -148,7 +148,7 @@ internal sealed class TpmResponseHardeningTests
         //out-of-range exception past the fail-closed contract.
         ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             //A header-only success response: too short to hold the promised output handle.
@@ -159,7 +159,7 @@ internal sealed class TpmResponseHardeningTests
         }
 
         using var device = TpmDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
 
@@ -185,7 +185,7 @@ internal sealed class TpmResponseHardeningTests
     /// <summary>
     /// Parses a TPML_DIGEST from <paramref name="data"/>; isolates the ref-struct reader from the assertion lambda.
     /// </summary>
-    private static void ParseTpmlDigest(byte[] data, MemoryPool<byte> pool)
+    private static void ParseTpmlDigest(byte[] data, BaseMemoryPool pool)
     {
         var reader = new TpmReader(data);
         using TpmlDigest _ = TpmlDigest.Parse(ref reader, pool);
@@ -194,7 +194,7 @@ internal sealed class TpmResponseHardeningTests
     /// <summary>
     /// Parses a TPMS_CAPABILITY_DATA from <paramref name="data"/>; isolates the ref-struct reader from the lambda.
     /// </summary>
-    private static void ParseCapabilityData(byte[] data, MemoryPool<byte> pool)
+    private static void ParseCapabilityData(byte[] data, BaseMemoryPool pool)
     {
         var reader = new TpmReader(data);
         using TpmsCapabilityData _ = TpmsCapabilityData.Parse(ref reader, pool);
@@ -203,7 +203,7 @@ internal sealed class TpmResponseHardeningTests
     /// <summary>
     /// Parses a TPM2_Quote response from <paramref name="data"/>; isolates the ref-struct reader from the lambda.
     /// </summary>
-    private static void ParseQuoteResponse(byte[] data, MemoryPool<byte> pool)
+    private static void ParseQuoteResponse(byte[] data, BaseMemoryPool pool)
     {
         var reader = new TpmReader(data);
         using QuoteResponse _ = QuoteResponse.Parse(ref reader, pool);
@@ -212,7 +212,7 @@ internal sealed class TpmResponseHardeningTests
     /// <summary>
     /// Parses a TPM2_Certify response from <paramref name="data"/>; isolates the ref-struct reader from the lambda.
     /// </summary>
-    private static void ParseCertifyResponse(byte[] data, MemoryPool<byte> pool)
+    private static void ParseCertifyResponse(byte[] data, BaseMemoryPool pool)
     {
         var reader = new TpmReader(data);
         using CertifyResponse _ = CertifyResponse.Parse(ref reader, pool);
@@ -225,7 +225,7 @@ internal sealed class TpmResponseHardeningTests
     /// <param name="type">The attestation type to stamp into the TPMS_ATTEST.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The TPM2B_ATTEST wire bytes.</returns>
-    private static byte[] BuildTpm2bAttestImage(TpmStConstants type, MemoryPool<byte> pool)
+    private static byte[] BuildTpm2bAttestImage(TpmStConstants type, BaseMemoryPool pool)
     {
         byte[] attestImage;
         using(TpmsAttest attest = BuildSampleAttest(type, pool))
@@ -253,7 +253,7 @@ internal sealed class TpmResponseHardeningTests
     /// <returns>The attestation structure (the caller owns it).</returns>
     [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the created structures transfers to the returned TpmsAttest, which the caller disposes.")]
-    private static TpmsAttest BuildSampleAttest(TpmStConstants type, MemoryPool<byte> pool)
+    private static TpmsAttest BuildSampleAttest(TpmStConstants type, BaseMemoryPool pool)
     {
         byte[] name = new byte[sizeof(ushort) + 32];
         name[1] = 0x0B; //TPM_ALG_SHA256 nameAlg prefix.
@@ -289,7 +289,7 @@ internal sealed class TpmResponseHardeningTests
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The TpmResponse is owned by the returned TpmResult and disposed by the executor under test.")]
-    private static TpmResult<TpmResponse> SuccessFrame(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
+    private static TpmResult<TpmResponse> SuccessFrame(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(bytes.Length);
         bytes.CopyTo(owner.Memory.Span);

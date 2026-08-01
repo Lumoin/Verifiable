@@ -29,7 +29,7 @@ public static class DpopProofConstruction
         EncodeDelegate base64UrlEncoder,
         DpopJwsPartSerializer serializer,
         SigningDelegate signingDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(claims);

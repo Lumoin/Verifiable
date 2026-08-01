@@ -59,7 +59,7 @@ public static class ProofValueCodecs
     public static string EncodeBase58Btc(
         ReadOnlySpan<byte> signatureBytes,
         EncodeDelegate encoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return MultibaseSerializer.Encode(
             signatureBytes,
@@ -87,7 +87,7 @@ public static class ProofValueCodecs
     public static IMemoryOwner<byte> DecodeBase58Btc(
         string proofValue,
         DecodeDelegate decoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return MultibaseSerializer.Decode(
             proofValue,
@@ -114,7 +114,7 @@ public static class ProofValueCodecs
     public static string EncodeBase64Url(
         ReadOnlySpan<byte> signatureBytes,
         EncodeDelegate encoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return MultibaseSerializer.Encode(
             signatureBytes,
@@ -136,7 +136,7 @@ public static class ProofValueCodecs
     public static IMemoryOwner<byte> DecodeBase64Url(
         string proofValue,
         DecodeDelegate decoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(proofValue);
         ArgumentNullException.ThrowIfNull(decoder);

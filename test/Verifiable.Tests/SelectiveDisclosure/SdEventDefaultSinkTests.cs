@@ -30,11 +30,11 @@ internal sealed class SdEventDefaultSinkTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
     /// <summary>
-    /// <see cref="SdJwtPipeline.Sign"/>, reached through <see cref="SdJwtIssuance.IssueVerboseAsync(ReadOnlyMemory{byte}, IReadOnlySet{CredentialPath}, GenerateDisclosureSaltDelegate, PrivateKeyMemory, string, MemoryPool{byte}, string?, string?, DecoyDigestOptions, CancellationToken)"/>,
+    /// <see cref="SdJwtPipeline.Sign"/>, reached through <see cref="SdJwtIssuance.IssueVerboseAsync(ReadOnlyMemory{byte}, IReadOnlySet{CredentialPath}, GenerateDisclosureSaltDelegate, PrivateKeyMemory, string, BaseMemoryPool, string?, string?, DecoyDigestOptions, CancellationToken)"/>,
     /// publishes a <see cref="SignatureProducedEvent"/> to the global stream by default.
     /// </summary>
     [TestMethod]
@@ -63,7 +63,7 @@ internal sealed class SdEventDefaultSinkTests
 
 
     /// <summary>
-    /// <see cref="SdCwtPipeline.Sign"/>, reached through <see cref="SdCwtIssuance.IssueVerboseAsync(ReadOnlyMemory{byte}, IReadOnlySet{CredentialPath}, GenerateDisclosureSaltDelegate, PrivateKeyMemory, string, MemoryPool{byte}, string?, string?, DecoyDigestOptions, CancellationToken)"/>,
+    /// <see cref="SdCwtPipeline.Sign"/>, reached through <see cref="SdCwtIssuance.IssueVerboseAsync(ReadOnlyMemory{byte}, IReadOnlySet{CredentialPath}, GenerateDisclosureSaltDelegate, PrivateKeyMemory, string, BaseMemoryPool, string?, string?, DecoyDigestOptions, CancellationToken)"/>,
     /// publishes a <see cref="SignatureProducedEvent"/> to the global stream by default.
     /// </summary>
     [TestMethod]

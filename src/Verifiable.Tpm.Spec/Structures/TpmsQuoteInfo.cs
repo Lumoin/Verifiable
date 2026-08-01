@@ -98,7 +98,7 @@ public sealed class TpmsQuoteInfo: ITpmWireType, IDisposable
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed quote info.</returns>
-    public static TpmsQuoteInfo Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static TpmsQuoteInfo Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         TpmlPcrSelection pcrSelect = TpmlPcrSelection.Parse(ref reader, pool);

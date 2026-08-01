@@ -56,7 +56,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
     {
         const string RunId = "wavepin-flagship";
         const uint PinIndexHandle = 0x0100_0800;
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
@@ -136,7 +136,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
     {
         const string RunId = "wavepin-resurrection";
         const uint PinIndexHandle = 0x0100_0810;
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
@@ -207,7 +207,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
     {
         const string RunId = "wavepin-exhaustion";
         const uint PinIndexHandle = 0x0100_0820;
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
@@ -291,7 +291,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
     {
         const string RunId = "wavepin-boot-latch";
         const uint PinIndexHandle = 0x0100_0830;
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
@@ -364,7 +364,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
     [TestMethod]
     public async Task CustodyAbsentPinRetriesBehaveByteIdenticallyToPreWaveOverRealApduTransport()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
@@ -413,7 +413,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
     {
         const string RunId = "wavepin-decrypt-failure";
         const uint PinIndexHandle = 0x0100_0840;
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
@@ -464,7 +464,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
     {
         const string RunId = "wavepin-f1-discarded-snapshot";
         const uint PinIndexHandle = 0x0100_0850;
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
@@ -525,7 +525,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
     {
         const string RunId = "wavepin-f2-undefine-behind-back";
         const uint PinIndexHandle = 0x0100_0860;
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
@@ -593,7 +593,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
     {
         const string RunId = "wavepin-f2-first-attach";
         const uint PinIndexHandle = 0x0100_0870;
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
@@ -784,7 +784,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
     /// <returns>The TPM device and the loaded storage parent's handle.</returns>
     private static async Task<(TpmDevice Tpm, uint ParentHandle)> CreateChipWithLoadedStorageParentAsync(string chipRunId, CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var chip = new TpmSimulator(chipRunId, signingBackend: BouncyCastleTpmEccSigningBackend.Create());
         await chip.PowerOnAsync(cancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(chip, pool, cancellationToken).ConfigureAwait(false);
@@ -820,7 +820,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
-    private static async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
@@ -843,7 +843,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
 
 
     /// <summary>Sends a bare <c>authenticatorReset</c> request over <paramref name="transceive"/>, returning the raw response envelope.</summary>
-    private static ValueTask<PooledMemory> SendResetAsync(Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static ValueTask<PooledMemory> SendResetAsync(Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] request = [WellKnownCtapCommands.Reset];
 
@@ -853,7 +853,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
 
     /// <summary>Establishes <paramref name="pin"/> as the authenticator's PIN over <paramref name="transceive"/>'s real transport.</summary>
     private static async Task EstablishPinAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string pin, CancellationToken cancellationToken)
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string pin, CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(transceive, protocolId, pool, cancellationToken)
             .ConfigureAwait(false);
@@ -873,7 +873,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
     /// returning the exact status code.
     /// </summary>
     private static async Task<byte> SetPinExpectingErrorAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string pin, CancellationToken cancellationToken)
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string pin, CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(transceive, protocolId, pool, cancellationToken)
             .ConfigureAwait(false);
@@ -894,7 +894,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
     /// Attempts a <c>changePIN</c> over <paramref name="transceive"/>'s real transport expected to SUCCEED.
     /// </summary>
     private static async Task ChangePinExpectingSuccessAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string currentPin, string newPin,
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string currentPin, string newPin,
         CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(transceive, protocolId, pool, cancellationToken)
@@ -913,7 +913,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
     /// transport, returning the exact status code.
     /// </summary>
     private static async Task<byte> ChangePinExpectingErrorAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string currentPin, string newPin,
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string currentPin, string newPin,
         CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(transceive, protocolId, pool, cancellationToken)
@@ -934,7 +934,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
     /// real transport, returning the exact status code.
     /// </summary>
     private static async Task<byte> AttemptMalformedCurrentPinHashExpectingErrorAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string newPin, CancellationToken cancellationToken)
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string newPin, CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(transceive, protocolId, pool, cancellationToken)
             .ConfigureAwait(false);
@@ -955,7 +955,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
     /// proving <paramref name="pin"/> is currently the authenticator's stored PIN.
     /// </summary>
     private static async Task GetPinTokenExpectingSuccessAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string pin, CancellationToken cancellationToken)
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string pin, CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(transceive, protocolId, pool, cancellationToken)
             .ConfigureAwait(false);
@@ -975,7 +975,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
     /// returning the exact status code.
     /// </summary>
     private static async Task<byte> GetPinTokenExpectingErrorAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string pin, CancellationToken cancellationToken)
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string pin, CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(transceive, protocolId, pool, cancellationToken)
             .ConfigureAwait(false);
@@ -1005,7 +1005,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
 
 
     /// <summary>Reads the current <c>pinRetries</c> counter via <c>getPINRetries</c> over <paramref name="transceive"/>'s real transport.</summary>
-    private static async Task<int> GetPinRetriesAsync(Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<int> GetPinRetriesAsync(Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.GetPinRetries);
         CtapClientPinResponse response = await CtapAuthenticatorClientPinClient.ClientPinAsync(
@@ -1016,7 +1016,7 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
 
 
     /// <summary>Reads the current <c>powerCycleState</c> via <c>getPINRetries</c> over <paramref name="transceive"/>'s real transport.</summary>
-    private static async Task<bool> GetPowerCycleStateAsync(Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<bool> GetPowerCycleStateAsync(Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.GetPinRetries);
         CtapClientPinResponse response = await CtapAuthenticatorClientPinClient.ClientPinAsync(

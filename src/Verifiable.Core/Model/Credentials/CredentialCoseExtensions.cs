@@ -76,7 +76,7 @@ public static class CredentialCoseExtensions
         CredentialToCborBytesDelegate credentialSerializer,
         CoseProtectedHeaderSerializer headerSerializer,
         BuildSigStructureDelegate buildSigStructure,
-        MemoryPool<byte> signaturePool,
+        BaseMemoryPool signaturePool,
         string? contentType = null,
         string? mediaType = null,
         CancellationToken cancellationToken = default)
@@ -141,7 +141,7 @@ public static class CredentialCoseExtensions
         CoseProtectedHeaderSerializer headerSerializer,
         BuildSigStructureDelegate buildSigStructure,
         SigningDelegate signingDelegate,
-        MemoryPool<byte> signaturePool,
+        BaseMemoryPool signaturePool,
         string? contentType = null,
         string? mediaType = null,
         CancellationToken cancellationToken = default)
@@ -299,7 +299,7 @@ public static class CredentialCoseExtensions
         BuildSigStructureDelegate buildSigStructure,
         PublicKeyMemory publicKey,
         VerificationFunction<byte, byte, Signature, ValueTask<bool>> verificationFunction,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CredentialFromJsonBytesDelegate credentialDeserializer,
         ParseProtectedHeaderDelegate headerParser,
         CancellationToken cancellationToken = default)

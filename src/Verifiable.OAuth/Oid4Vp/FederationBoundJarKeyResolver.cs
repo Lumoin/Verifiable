@@ -102,7 +102,7 @@ public static class FederationBoundJarKeyResolver
         UnverifiedJwtHeader jarHeader,
         ValidateTrustChainAsyncDelegate validateChain,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(trustChainValues);
@@ -161,7 +161,7 @@ public static class FederationBoundJarKeyResolver
         TrustChain validatedChain,
         UnverifiedJwtHeader jarHeader,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(validatedChain);
         ArgumentNullException.ThrowIfNull(jarHeader);

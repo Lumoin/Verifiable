@@ -27,4 +27,4 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// missing/never-written entry as the ordinary "first boot" case above rather than throwing; a genuine
 /// I/O failure should still propagate as an exception, distinct from "nothing was ever persisted."
 /// </remarks>
-public delegate ValueTask<PooledMemory?> TryLoadSnapshotAsyncDelegate(string runId, MemoryPool<byte> pool, CancellationToken cancellationToken);
+public delegate ValueTask<PooledMemory?> TryLoadSnapshotAsyncDelegate(string runId, BaseMemoryPool pool, CancellationToken cancellationToken);

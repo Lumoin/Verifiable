@@ -50,7 +50,7 @@ internal sealed class TpmInHouseSimulatorEndorsementKeyTemplateTests
     [TestMethod]
     public async Task EndorsementKeyTemplateMatchesTheStandardProfile()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -108,7 +108,7 @@ internal sealed class TpmInHouseSimulatorEndorsementKeyTemplateTests
     [TestMethod]
     public async Task RsaEndorsementKeyTemplateMatchesTheStandardProfile()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalWithRsaAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -173,7 +173,7 @@ internal sealed class TpmInHouseSimulatorEndorsementKeyTemplateTests
     [TestMethod]
     public void RsaEndorsementKeyTemplateMarshalsToTheStandardProfileKat()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using Tpm2bPublic template = Tpm2bPublic.CreateRsaEndorsementKeyTemplate(TpmAlgIdConstants.TPM_ALG_SHA256, Rsa2048KeyBits, pool, PolicyA);
 
         byte[] marshaled = MarshalPublicArea(template, pool);
@@ -194,7 +194,7 @@ internal sealed class TpmInHouseSimulatorEndorsementKeyTemplateTests
     [TestMethod]
     public async Task EndorsementKeyPolicyADigestIsByteIdenticalAcrossRsaAndEccTemplates()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalWithBothBackendsAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -267,7 +267,7 @@ internal sealed class TpmInHouseSimulatorEndorsementKeyTemplateTests
     /// <param name="outPublic">The exported public area.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The marshaled TPMT_PUBLIC bytes.</returns>
-    private static byte[] MarshalPublicArea(Tpm2bPublic outPublic, MemoryPool<byte> pool)
+    private static byte[] MarshalPublicArea(Tpm2bPublic outPublic, BaseMemoryPool pool)
     {
         int size = outPublic.PublicArea.GetSerializedSize();
         using IMemoryOwner<byte> owner = pool.Rent(size);
@@ -285,7 +285,7 @@ internal sealed class TpmInHouseSimulatorEndorsementKeyTemplateTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The 32-octet digest.</returns>
-    private static async Task<byte[]> ComputeDigestAsync(ReadOnlyMemory<byte> message, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<byte[]> ComputeDigestAsync(ReadOnlyMemory<byte> message, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         Tag tag = Tag.Create(HashAlgorithmName.SHA256).With(Purpose.Digest).With(EncodingScheme.Raw).With(MaterialSemantics.Direct);
 
@@ -302,7 +302,7 @@ internal sealed class TpmInHouseSimulatorEndorsementKeyTemplateTests
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator("tpm-in-house-ek-template", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -319,7 +319,7 @@ internal sealed class TpmInHouseSimulatorEndorsementKeyTemplateTests
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalWithRsaAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalWithRsaAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator("tpm-in-house-ek-template-rsa", rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -335,7 +335,7 @@ internal sealed class TpmInHouseSimulatorEndorsementKeyTemplateTests
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalWithBothBackendsAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalWithBothBackendsAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator(
             "tpm-in-house-ek-template-both",
@@ -353,7 +353,7 @@ internal sealed class TpmInHouseSimulatorEndorsementKeyTemplateTests
     /// </summary>
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
@@ -392,7 +392,7 @@ internal sealed class TpmInHouseSimulatorEndorsementKeyTemplateTests
     /// <param name="registry">The response codec registry.</param>
     /// <param name="handle">The handle to flush.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task FlushAsync(TpmDevice tpm, TpmResponseRegistry registry, uint handle, MemoryPool<byte> pool)
+    private async Task FlushAsync(TpmDevice tpm, TpmResponseRegistry registry, uint handle, BaseMemoryPool pool)
     {
         var flush = FlushContextInput.ForHandle(handle);
         _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(

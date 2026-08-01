@@ -28,7 +28,7 @@ internal sealed class TpmDictionaryAttackExtensionsTests
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The TpmResponse is owned by the returned TpmResult and disposed by the executor under test.")]
-    private static TpmResult<TpmResponse> SuccessFrame(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
+    private static TpmResult<TpmResponse> SuccessFrame(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(bytes.Length);
         bytes.CopyTo(owner.Memory.Span);
@@ -80,7 +80,7 @@ internal sealed class TpmDictionaryAttackExtensionsTests
 
         ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             byte[] frame = BuildTpmPropertiesFrame(moreData: false, lockout);
@@ -89,7 +89,7 @@ internal sealed class TpmDictionaryAttackExtensionsTests
         }
 
         using var device = TpmDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         TpmResult<TpmDictionaryAttackParameters> result = await device.GetDictionaryAttackParametersAsync(
             pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -116,7 +116,7 @@ internal sealed class TpmDictionaryAttackExtensionsTests
 
         ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             byte[] frame = BuildTpmPropertiesFrame(moreData: false, lockout);
@@ -125,7 +125,7 @@ internal sealed class TpmDictionaryAttackExtensionsTests
         }
 
         using var device = TpmDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         TpmResult<TpmDictionaryAttackParameters> result = await device.GetDictionaryAttackParametersAsync(
             pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -139,14 +139,14 @@ internal sealed class TpmDictionaryAttackExtensionsTests
     {
         ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             return ValueTask.FromResult(TpmResult<TpmResponse>.TransportError(0x1234u));
         }
 
         using var device = TpmDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         TpmResult<TpmDictionaryAttackParameters> result = await device.GetDictionaryAttackParametersAsync(
             pool, TestContext.CancellationToken).ConfigureAwait(false);

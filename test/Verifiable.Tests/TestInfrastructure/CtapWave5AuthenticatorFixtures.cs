@@ -31,7 +31,7 @@ internal static class CtapWave5AuthenticatorFixtures
     /// <param name="credentialIdBytes">The credential identifier bytes.</param>
     /// <param name="pool">The pool the wrapped <see cref="CredentialId"/> carrier rents from.</param>
     /// <returns>The single-entry allow list.</returns>
-    internal static IReadOnlyList<PublicKeyCredentialDescriptor> BuildAllowList(byte[] credentialIdBytes, MemoryPool<byte> pool) =>
+    internal static IReadOnlyList<PublicKeyCredentialDescriptor> BuildAllowList(byte[] credentialIdBytes, BaseMemoryPool pool) =>
         [new PublicKeyCredentialDescriptor { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Id = CredentialId.Create(credentialIdBytes, pool) }];
 
 

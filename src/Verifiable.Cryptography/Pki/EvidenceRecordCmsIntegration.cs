@@ -392,7 +392,7 @@ public static class EvidenceRecordCmsIntegration
         EvidenceRecord evidenceRecord,
         EvidenceRecordCmsSelectionMethod selectionMethod,
         EvidenceRecordCmsAttachmentPolicy policy,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(signedData);
         ArgumentNullException.ThrowIfNull(evidenceRecord);
@@ -481,7 +481,7 @@ public static class EvidenceRecordCmsIntegration
         CmsSignedData signedData,
         int signerIndex,
         IReadOnlyList<EvidenceRecordCmsPlacement> retainedEvidenceRecords,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(signedData);
         ArgumentNullException.ThrowIfNull(retainedEvidenceRecords);
@@ -565,7 +565,7 @@ public static class EvidenceRecordCmsIntegration
     /// </remarks>
     public static async ValueTask<EvidenceRecordCmsVerification> VerifyEmbeddedAsync(
         EvidenceRecordCmsVerificationContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -613,7 +613,7 @@ public static class EvidenceRecordCmsIntegration
             }
         }
 
-        static EvidenceRecord? ReadRecord(EvidenceRecordCmsVerificationContext context, EvidenceRecordCmsPlacement placement, MemoryPool<byte> pool)
+        static EvidenceRecord? ReadRecord(EvidenceRecordCmsVerificationContext context, EvidenceRecordCmsPlacement placement, BaseMemoryPool pool)
         {
             ReadOnlyMemory<byte> encoded = CmsSignedDataAugmentation.ReadUnsignedAttributeValue(
                 context.SignedData, context.SignerIndex, placement.Location.AttributeIndex, placement.Location.ValueIndex);
@@ -650,7 +650,7 @@ public static class EvidenceRecordCmsIntegration
         EvidenceRecordCmsVerificationContext context,
         IReadOnlyList<EvidenceRecordCmsPlacement> placements,
         List<EvidenceRecord?> records,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         int[] positions = new int[placements.Count];

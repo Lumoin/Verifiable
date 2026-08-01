@@ -17,7 +17,7 @@ namespace Verifiable.Apdu;
 /// <code>
 /// public sealed class SelectResponse : IApduWireType
 /// {
-///     public static SelectResponse Parse(ref ApduReader reader, MemoryPool&lt;byte&gt; pool)
+///     public static SelectResponse Parse(ref ApduReader reader, BaseMemoryPool pool)
 ///     {
 ///         //Parse FCI template from response data.
 ///     }

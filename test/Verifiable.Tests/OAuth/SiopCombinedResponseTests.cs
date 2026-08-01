@@ -43,7 +43,7 @@ internal sealed class SiopCombinedResponseTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string VerifierClientId = "https://verifier.example.com";
     private const string RequestNonce = "n-combined-0S6_WzA2Mj";

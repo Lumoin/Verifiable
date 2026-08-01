@@ -63,7 +63,7 @@ public static class CryptographicVerification
         IReadOnlyList<PkiCertificateMemory> validatedCertificateChain,
         IReadOnlyList<SignerDocumentReference> signerDocuments,
         VerifySignatureCryptographyAsyncDelegate verifySignatureCryptography,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signature);

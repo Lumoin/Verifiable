@@ -46,7 +46,7 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
     private const string SubjectId = "urn:uuid:end-user-42";
     private const string DegreeConfigurationId = "UniversityDegree_dc_sd_jwt";
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private static readonly ImmutableHashSet<CapabilityIdentifier> AuthCodeCapabilities =
         ImmutableHashSet.Create(

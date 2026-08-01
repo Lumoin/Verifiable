@@ -60,7 +60,7 @@ public static class TpmParameterEncryption
         ReadOnlyMemory<byte> contextU,
         ReadOnlyMemory<byte> contextV,
         Memory<byte> data,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -134,7 +134,7 @@ public static class TpmParameterEncryption
         ReadOnlyMemory<byte> contextV,
         Memory<byte> data,
         bool encrypting,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(pool);

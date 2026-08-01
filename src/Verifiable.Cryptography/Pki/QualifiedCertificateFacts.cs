@@ -106,5 +106,5 @@ public delegate ValueTask<bool> MatchCertificateToTrustServiceAsyncDelegate(
     PkiCertificateMemory certificate,
     ServiceDigitalIdentity serviceDigitalIdentity,
     DateTimeOffset validationTime,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);

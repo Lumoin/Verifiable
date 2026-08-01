@@ -71,7 +71,7 @@ public readonly struct TpmsSignatureHashMlDsa: IDisposable, IEquatable<TpmsSigna
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool to allocate from.</param>
     /// <returns>The parsed Pre-Hash ML-DSA signature.</returns>
-    public static TpmsSignatureHashMlDsa Parse(ref TpmReader reader, MemoryPool<byte>? pool = null)
+    public static TpmsSignatureHashMlDsa Parse(ref TpmReader reader, BaseMemoryPool? pool = null)
     {
         var hashAlg = (TpmAlgIdConstants)reader.ReadUInt16();
         var signature = Tpm2bSignatureMlDsa.Parse(ref reader, pool);

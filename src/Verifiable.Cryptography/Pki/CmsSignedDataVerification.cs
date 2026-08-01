@@ -32,7 +32,7 @@ namespace Verifiable.Cryptography.Pki;
 /// <returns>The verified content and the embedded certificates. The caller disposes it.</returns>
 public delegate ValueTask<CmsVerifiedContent> VerifyCmsSignedDataDelegate(
     CmsSignedData signedData,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 
@@ -72,7 +72,7 @@ public delegate ValueTask<CmsVerifiedContent> VerifyCmsSignedDataDelegate(
 public delegate ValueTask<CmsVerifiedContent> VerifyDetachedCmsSignedDataDelegate(
     CmsSignedData signedData,
     SignedContentMemory detachedContent,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 

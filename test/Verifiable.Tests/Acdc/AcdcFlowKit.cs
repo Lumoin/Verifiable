@@ -158,7 +158,7 @@ internal static class AcdcFlowKit
     /// <param name="pool">The pool the minted serializations are rented from.</param>
     /// <param name="cancellationToken">A token to cancel the signing.</param>
     /// <returns>The Issuer AID, the minted ACDC, and the two signed KEL events (inception, anchoring interaction).</returns>
-    public static async Task<(string IssuerAid, MintedAcdc Acdc, IReadOnlyList<SignedEvent> Kel)> MintIssuerAsync(List<IDisposable> disposables, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public static async Task<(string IssuerAid, MintedAcdc Acdc, IReadOnlyList<SignedEvent> Kel)> MintIssuerAsync(List<IDisposable> disposables, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> current = Fresh(disposables);
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> next = Fresh(disposables);
@@ -198,7 +198,7 @@ internal static class AcdcFlowKit
     /// <param name="pool">The pool the minted serializations are rented from.</param>
     /// <param name="cancellationToken">A token to cancel the signing.</param>
     /// <returns>The Issuer AID, the graduated credential (both variants and their shared SAID), and the signed KEL.</returns>
-    public static async Task<(string IssuerAid, GraduatedAcdc Acdc, IReadOnlyList<SignedEvent> Kel)> MintGraduatedIssuerAsync(List<IDisposable> disposables, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public static async Task<(string IssuerAid, GraduatedAcdc Acdc, IReadOnlyList<SignedEvent> Kel)> MintGraduatedIssuerAsync(List<IDisposable> disposables, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> current = Fresh(disposables);
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> next = Fresh(disposables);
@@ -237,7 +237,7 @@ internal static class AcdcFlowKit
     /// <param name="pool">The pool the minted serializations are rented from.</param>
     /// <param name="cancellationToken">A token to cancel the signing.</param>
     /// <returns>The Issuer AID, the selectively disclosed aggregate credential, and the signed KEL.</returns>
-    public static async Task<(string IssuerAid, AggregateAcdc Acdc, IReadOnlyList<SignedEvent> Kel)> MintAggregateIssuerAsync(List<IDisposable> disposables, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public static async Task<(string IssuerAid, AggregateAcdc Acdc, IReadOnlyList<SignedEvent> Kel)> MintAggregateIssuerAsync(List<IDisposable> disposables, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> current = Fresh(disposables);
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> next = Fresh(disposables);
@@ -276,7 +276,7 @@ internal static class AcdcFlowKit
     /// <param name="pool">The pool the minted serializations are rented from.</param>
     /// <param name="cancellationToken">A token to cancel the signing.</param>
     /// <returns>The Issuer AID, the grant exchange message, the embedded credential's SAID, and the Issuer's signed KEL.</returns>
-    public static async Task<(string IssuerAid, ExchangeMessage Grant, string CredentialSaid, IReadOnlyList<SignedEvent> Kel)> MintIpexGrantAsync(List<IDisposable> disposables, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public static async Task<(string IssuerAid, ExchangeMessage Grant, string CredentialSaid, IReadOnlyList<SignedEvent> Kel)> MintIpexGrantAsync(List<IDisposable> disposables, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         (string issuerAid, MintedAcdc acdc, IReadOnlyList<SignedEvent> kel) = await MintIssuerAsync(disposables, pool, cancellationToken).ConfigureAwait(false);
 
@@ -297,7 +297,7 @@ internal static class AcdcFlowKit
     /// <param name="disposables">The list the admit message is tracked on for disposal.</param>
     /// <param name="pool">The pool the serialization is rented from.</param>
     /// <returns>The admit exchange message.</returns>
-    public static async Task<ExchangeMessage> BuildIpexAdmit(string sender, string grantSaid, List<IDisposable> disposables, MemoryPool<byte> pool)
+    public static async Task<ExchangeMessage> BuildIpexAdmit(string sender, string grantSaid, List<IDisposable> disposables, BaseMemoryPool pool)
     {
         ExchangeMessage admit = await MintExchange(AcdcFlowWellKnown.IpexAdmitRoute, sender, grantSaid, embeddedCredentialJson: null, pool).ConfigureAwait(false);
         disposables.Add(admit);
@@ -317,7 +317,7 @@ internal static class AcdcFlowKit
     /// <param name="pool">The pool the minted serializations are rented from.</param>
     /// <param name="cancellationToken">A token to cancel the signing.</param>
     /// <returns>The Issuer AID, the credential (carrying its registry SAID), the registry events in order, and the signed KEL.</returns>
-    public static async Task<(string IssuerAid, MintedAcdc Acdc, IReadOnlyList<RegistryEvent> Registry, IReadOnlyList<SignedEvent> Kel)> MintRegistryIssuerAsync(bool includeRevocation, List<IDisposable> disposables, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public static async Task<(string IssuerAid, MintedAcdc Acdc, IReadOnlyList<RegistryEvent> Registry, IReadOnlyList<SignedEvent> Kel)> MintRegistryIssuerAsync(bool includeRevocation, List<IDisposable> disposables, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> current = Fresh(disposables);
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> next = Fresh(disposables);
@@ -419,7 +419,7 @@ internal static class AcdcFlowKit
     /// <param name="disposables">The list the reconstructed keys, signatures, and pooled buffers are tracked on for disposal.</param>
     /// <param name="pool">The pool the reconstructed buffers are rented from.</param>
     /// <returns>The log entries to replay through the KERI key event log.</returns>
-    public static List<LogEntry<KeriKeyEvent, CryptoProof>> ReconstructKel(ReadOnlyMemory<byte> kelBytes, List<IDisposable> disposables, MemoryPool<byte> pool)
+    public static List<LogEntry<KeriKeyEvent, CryptoProof>> ReconstructKel(ReadOnlyMemory<byte> kelBytes, List<IDisposable> disposables, BaseMemoryPool pool)
     {
         List<KelWireEntry>? entries = JsonSerializer.Deserialize<List<KelWireEntry>>(kelBytes.Span);
         if(entries is null)
@@ -464,7 +464,7 @@ internal static class AcdcFlowKit
     /// <param name="pool">The pool the replay's digest buffers are rented from.</param>
     /// <param name="cancellationToken">A token to cancel the replay.</param>
     /// <returns>The replay result for each event in order.</returns>
-    public static Task<List<LogReplayResult<KeriKeyState, KeriKeyEvent, CryptoProof>>> ReplayKelAsync(List<LogEntry<KeriKeyEvent, CryptoProof>> entries, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public static Task<List<LogReplayResult<KeriKeyState, KeriKeyEvent, CryptoProof>>> ReplayKelAsync(List<LogEntry<KeriKeyEvent, CryptoProof>> entries, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         return ReplayKelAsync(entries, pool, resolveDelegationSeal: null, cancellationToken);
     }
@@ -481,7 +481,7 @@ internal static class AcdcFlowKit
     /// <param name="resolveDelegationSeal">The resolver for a delegated event's delegating seal, or <see langword="null"/> when the KEL carries no delegated events.</param>
     /// <param name="cancellationToken">A token to cancel the replay.</param>
     /// <returns>The replay result for each event in order.</returns>
-    public static async Task<List<LogReplayResult<KeriKeyState, KeriKeyEvent, CryptoProof>>> ReplayKelAsync(List<LogEntry<KeriKeyEvent, CryptoProof>> entries, MemoryPool<byte> pool, DelegationSealResolver? resolveDelegationSeal, CancellationToken cancellationToken)
+    public static async Task<List<LogReplayResult<KeriKeyState, KeriKeyEvent, CryptoProof>>> ReplayKelAsync(List<LogEntry<KeriKeyEvent, CryptoProof>> entries, BaseMemoryPool pool, DelegationSealResolver? resolveDelegationSeal, CancellationToken cancellationToken)
     {
         LogReplayContext<KeriKeyState, KeriKeyEvent, CryptoProof, KeriReplayValidationContext> context =
             KeriKeyEventLog.CreateReplayContext(AcdcTestSupport.AgileDigest, pool, new FakeTimeProvider(TestClock.CanonicalEpoch), resolveDelegationSeal);
@@ -520,7 +520,7 @@ internal static class AcdcFlowKit
     /// <param name="pool">The pool the reconstructed buffers are rented from.</param>
     /// <param name="cancellationToken">A token to cancel the replay.</param>
     /// <returns>The anchored seals, or <see langword="null"/> when the KEL does not verify or is not the expected Issuer's.</returns>
-    public static Task<IReadOnlyList<KeriSeal>?> VerifyKelAndReadAnchorsAsync(ReadOnlyMemory<byte> kelBytes, string expectedAid, List<IDisposable> disposables, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public static Task<IReadOnlyList<KeriSeal>?> VerifyKelAndReadAnchorsAsync(ReadOnlyMemory<byte> kelBytes, string expectedAid, List<IDisposable> disposables, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         return VerifyKelAndReadAnchorsAsync(kelBytes, expectedAid, resolveDelegationSeal: null, disposables, pool, cancellationToken);
     }
@@ -528,7 +528,7 @@ internal static class AcdcFlowKit
 
     /// <summary>
     /// Verifies a fetched Issuer KEL that may carry a delegated event and returns its anchored seals: as
-    /// <see cref="VerifyKelAndReadAnchorsAsync(ReadOnlyMemory{byte}, string, List{IDisposable}, MemoryPool{byte}, CancellationToken)"/>,
+    /// <see cref="VerifyKelAndReadAnchorsAsync(ReadOnlyMemory{byte}, string, List{IDisposable}, BaseMemoryPool, CancellationToken)"/>,
     /// but supplying the resolver a delegated inception or rotation needs to find its delegating seal in the
     /// delegator's already-verified KEL. Returns <see langword="null"/> when the KEL does not verify (including when a
     /// delegated event's delegating seal is not found), is not the expected Issuer's, or a proof fails.
@@ -540,7 +540,7 @@ internal static class AcdcFlowKit
     /// <param name="pool">The pool the reconstructed buffers are rented from.</param>
     /// <param name="cancellationToken">A token to cancel the replay.</param>
     /// <returns>The anchored seals, or <see langword="null"/> when the KEL does not verify or is not the expected Issuer's.</returns>
-    public static async Task<IReadOnlyList<KeriSeal>?> VerifyKelAndReadAnchorsAsync(ReadOnlyMemory<byte> kelBytes, string expectedAid, DelegationSealResolver? resolveDelegationSeal, List<IDisposable> disposables, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public static async Task<IReadOnlyList<KeriSeal>?> VerifyKelAndReadAnchorsAsync(ReadOnlyMemory<byte> kelBytes, string expectedAid, DelegationSealResolver? resolveDelegationSeal, List<IDisposable> disposables, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         List<LogEntry<KeriKeyEvent, CryptoProof>> log = ReconstructKel(kelBytes, disposables, pool);
         List<LogReplayResult<KeriKeyState, KeriKeyEvent, CryptoProof>> results = await ReplayKelAsync(log, pool, resolveDelegationSeal, cancellationToken).ConfigureAwait(false);
@@ -594,7 +594,7 @@ internal static class AcdcFlowKit
     /// <param name="registryDigest">The registry SAID (<c>rd</c>), or <see langword="null"/> for a directly anchored credential.</param>
     /// <param name="pool">The pool the serialization is rented from.</param>
     /// <returns>The minted ACDC.</returns>
-    private static async Task<MintedAcdc> MintAcdc(string issuerAid, string? registryDigest, MemoryPool<byte> pool)
+    private static async Task<MintedAcdc> MintAcdc(string issuerAid, string? registryDigest, BaseMemoryPool pool)
     {
         var expanded = new MessageFieldMap(StringComparer.Ordinal)
         {
@@ -632,7 +632,7 @@ internal static class AcdcFlowKit
     /// <param name="build">The event-body builder.</param>
     /// <param name="pool">The pool the serialization is rented from.</param>
     /// <returns>The minted registry event.</returns>
-    private static async Task<RegistryEvent> MintRegistryEvent(FixedIdentifierEventBuilder build, MemoryPool<byte> pool)
+    private static async Task<RegistryEvent> MintRegistryEvent(FixedIdentifierEventBuilder build, BaseMemoryPool pool)
     {
         string placeholder = CesrSaid.Placeholder(Code);
         int byteCount = Encoding.UTF8.GetByteCount(build(AcdcFlowWellKnown.AcdcProbeVersion, placeholder));
@@ -658,7 +658,7 @@ internal static class AcdcFlowKit
     /// <param name="embeddedCredentialJson">The disclosed credential's canonical JSON to embed, or <see langword="null"/> for a message that embeds nothing.</param>
     /// <param name="pool">The pool the serialization is rented from.</param>
     /// <returns>The minted exchange message.</returns>
-    private static async Task<ExchangeMessage> MintExchange(string route, string sender, string prior, string? embeddedCredentialJson, MemoryPool<byte> pool)
+    private static async Task<ExchangeMessage> MintExchange(string route, string sender, string prior, string? embeddedCredentialJson, BaseMemoryPool pool)
     {
         string Build(string version, string said) =>
             $$"""{"v":"{{version}}","t":"exn","d":"{{said}}","i":"{{sender}}","p":"{{prior}}","dt":"2025-07-04T20:00:00.000000+00:00","r":"{{route}}","a":{},"e":{{Embed(embeddedCredentialJson)}}}""";
@@ -675,7 +675,7 @@ internal static class AcdcFlowKit
     /// <param name="keyQb64">The qualified public key.</param>
     /// <param name="pool">The pool the key buffer is rented from.</param>
     /// <returns>The reconstructed public key.</returns>
-    private static PublicKeyMemory DeserializeKey(string keyQb64, MemoryPool<byte> pool)
+    private static PublicKeyMemory DeserializeKey(string keyQb64, BaseMemoryPool pool)
     {
         using CesrParsedPrimitive parsed = CesrPrimitiveCodec.DecodeText(keyQb64, pool);
         IMemoryOwner<byte> owner = pool.Rent(parsed.RawLength);
@@ -689,7 +689,7 @@ internal static class AcdcFlowKit
     /// <param name="signatureBase64">The Base64 signature.</param>
     /// <param name="pool">The pool the signature buffers are rented from.</param>
     /// <returns>The reconstructed signature.</returns>
-    private static Signature DeserializeSignature(string signatureBase64, MemoryPool<byte> pool)
+    private static Signature DeserializeSignature(string signatureBase64, BaseMemoryPool pool)
     {
         int maxLength = (signatureBase64.Length / 4) * 3;
         using IMemoryOwner<byte> decoded = pool.Rent(maxLength);
@@ -723,7 +723,7 @@ internal static class AcdcFlowKit
     /// <param name="nextKeyDigest">The pre-rotation commitment to the next key.</param>
     /// <param name="pool">The pool the serialization is rented from.</param>
     /// <returns>The pooled serialization, its length, and the AID.</returns>
-    private static async Task<(IMemoryOwner<byte> Owner, int Length, string Said)> MintInception(string currentKey, string nextKeyDigest, MemoryPool<byte> pool)
+    private static async Task<(IMemoryOwner<byte> Owner, int Length, string Said)> MintInception(string currentKey, string nextKeyDigest, BaseMemoryPool pool)
     {
         string Build(string version, string said, string identifier) =>
             $$"""{"v":"{{version}}","t":"icp","d":"{{said}}","i":"{{identifier}}","s":"0","kt":"1","k":["{{currentKey}}"],"nt":"1","n":["{{nextKeyDigest}}"],"bt":"0","b":[],"c":[],"a":[]}""";
@@ -738,7 +738,7 @@ internal static class AcdcFlowKit
     /// <param name="delegatorPrefix">The delegator AID the delegated inception is bound to (its <c>di</c> field).</param>
     /// <param name="pool">The pool the serialization is rented from.</param>
     /// <returns>The pooled serialization, its length, and the delegated AID.</returns>
-    private static async Task<(IMemoryOwner<byte> Owner, int Length, string Said)> MintDelegatedInception(string currentKey, string nextKeyDigest, string delegatorPrefix, MemoryPool<byte> pool)
+    private static async Task<(IMemoryOwner<byte> Owner, int Length, string Said)> MintDelegatedInception(string currentKey, string nextKeyDigest, string delegatorPrefix, BaseMemoryPool pool)
     {
         string Build(string version, string said, string identifier) =>
             $$"""{"v":"{{version}}","t":"dip","d":"{{said}}","i":"{{identifier}}","s":"0","kt":"1","k":["{{currentKey}}"],"nt":"1","n":["{{nextKeyDigest}}"],"bt":"0","b":[],"c":[],"a":[],"di":"{{delegatorPrefix}}"}""";
@@ -753,7 +753,7 @@ internal static class AcdcFlowKit
     /// <param name="seals">The anchor list body (comma-separated seal objects, without the brackets).</param>
     /// <param name="pool">The pool the serialization is rented from.</param>
     /// <returns>The pooled serialization, its length, and the event SAID.</returns>
-    private static async Task<(IMemoryOwner<byte> Owner, int Length, string Said)> MintAnchoringInteraction(string identifier, string priorSaid, string seals, MemoryPool<byte> pool)
+    private static async Task<(IMemoryOwner<byte> Owner, int Length, string Said)> MintAnchoringInteraction(string identifier, string priorSaid, string seals, BaseMemoryPool pool)
     {
         string Build(string version, string said) =>
             $$"""{"v":"{{version}}","t":"ixn","d":"{{said}}","i":"{{identifier}}","s":"1","p":"{{priorSaid}}","a":[{{seals}}]}""";
@@ -766,7 +766,7 @@ internal static class AcdcFlowKit
     /// <param name="build">The event-body builder.</param>
     /// <param name="pool">The pool the serialization is rented from.</param>
     /// <returns>The pooled serialization, its length, and the SAID.</returns>
-    private static async Task<(IMemoryOwner<byte> Owner, int Length, string Said)> MintSelfAddressing(SelfAddressingEventBuilder build, MemoryPool<byte> pool)
+    private static async Task<(IMemoryOwner<byte> Owner, int Length, string Said)> MintSelfAddressing(SelfAddressingEventBuilder build, BaseMemoryPool pool)
     {
         string placeholder = CesrSaid.Placeholder(Code);
         string version = KeriVersionFor(build(AcdcFlowWellKnown.KeriProbeVersion, placeholder, placeholder));
@@ -782,7 +782,7 @@ internal static class AcdcFlowKit
     /// <param name="build">The event-body builder.</param>
     /// <param name="pool">The pool the serialization is rented from.</param>
     /// <returns>The pooled serialization, its length, and the SAID.</returns>
-    private static async Task<(IMemoryOwner<byte> Owner, int Length, string Said)> MintWithFixedIdentifier(FixedIdentifierEventBuilder build, MemoryPool<byte> pool)
+    private static async Task<(IMemoryOwner<byte> Owner, int Length, string Said)> MintWithFixedIdentifier(FixedIdentifierEventBuilder build, BaseMemoryPool pool)
     {
         string placeholder = CesrSaid.Placeholder(Code);
         string version = KeriVersionFor(build(AcdcFlowWellKnown.KeriProbeVersion, placeholder));
@@ -799,7 +799,7 @@ internal static class AcdcFlowKit
     /// <param name="said">The serialization's SAID.</param>
     /// <param name="pool">The pool the buffer is rented from.</param>
     /// <returns>The pooled buffer, its length, and the SAID.</returns>
-    private static (IMemoryOwner<byte> Owner, int Length, string Said) Rent(string serialization, string said, MemoryPool<byte> pool)
+    private static (IMemoryOwner<byte> Owner, int Length, string Said) Rent(string serialization, string said, BaseMemoryPool pool)
     {
         int length = Encoding.UTF8.GetByteCount(serialization);
         IMemoryOwner<byte> owner = pool.Rent(length);
@@ -822,7 +822,7 @@ internal static class AcdcFlowKit
     /// <param name="qualifiedKey">The qualified next key.</param>
     /// <param name="pool">The pool the digest buffers are rented from.</param>
     /// <returns>The next-key digest.</returns>
-    private static async Task<string> NextKeyDigest(string qualifiedKey, MemoryPool<byte> pool)
+    private static async Task<string> NextKeyDigest(string qualifiedKey, BaseMemoryPool pool)
     {
         return await SaidOf(qualifiedKey, pool).ConfigureAwait(false);
     }
@@ -832,7 +832,7 @@ internal static class AcdcFlowKit
     /// <param name="serialization">The serialization to digest.</param>
     /// <param name="pool">The pool the digest input buffer is rented from.</param>
     /// <returns>The CESR-encoded SAID.</returns>
-    private static async Task<string> SaidOf(string serialization, MemoryPool<byte> pool)
+    private static async Task<string> SaidOf(string serialization, BaseMemoryPool pool)
     {
         int length = Encoding.UTF8.GetByteCount(serialization);
         using IMemoryOwner<byte> owner = pool.Rent(length);
@@ -862,7 +862,7 @@ internal static class AcdcFlowKit
     /// <param name="disposables">The list the buffer owner is tracked on for disposal.</param>
     /// <param name="pool">The pool the buffer is rented from.</param>
     /// <returns>A view over the encoded bytes.</returns>
-    private static ReadOnlyMemory<byte> Utf8(string text, List<IDisposable> disposables, MemoryPool<byte> pool)
+    private static ReadOnlyMemory<byte> Utf8(string text, List<IDisposable> disposables, BaseMemoryPool pool)
     {
         int length = Encoding.UTF8.GetByteCount(text);
         IMemoryOwner<byte> owner = pool.Rent(length);
@@ -908,7 +908,7 @@ internal static class AcdcFlowKit
     /// <param name="pool">The pool the minted serializations are rented from.</param>
     /// <param name="cancellationToken">A token to cancel the signing.</param>
     /// <returns>The near party (B and its edge credential) and the far party (A and its targeted credential).</returns>
-    public static async Task<(EdgeChainParty Near, EdgeChainParty Far)> MintEdgeChainAsync(bool brokenChain, List<IDisposable> disposables, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public static async Task<(EdgeChainParty Near, EdgeChainParty Far)> MintEdgeChainAsync(bool brokenChain, List<IDisposable> disposables, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> farCurrent = Fresh(disposables);
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> farNext = Fresh(disposables);
@@ -972,7 +972,7 @@ internal static class AcdcFlowKit
     /// <param name="pool">The pool the minted serializations are rented from.</param>
     /// <param name="cancellationToken">A token to cancel the signing.</param>
     /// <returns>The delegate party (B and its DI2I-edge credential) and the delegator party (X and its far credential).</returns>
-    public static async Task<(EdgeChainParty Delegate, EdgeChainParty Delegator)> MintDi2iChainAsync(bool brokenDelegation, List<IDisposable> disposables, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public static async Task<(EdgeChainParty Delegate, EdgeChainParty Delegator)> MintDi2iChainAsync(bool brokenDelegation, List<IDisposable> disposables, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> delegatorCurrent = Fresh(disposables);
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> delegatorNext = Fresh(disposables);
@@ -1038,7 +1038,7 @@ internal static class AcdcFlowKit
     /// <param name="disposables">The list both minted variant serializations are tracked on for disposal.</param>
     /// <param name="pool">The pool the serializations are rented from.</param>
     /// <returns>The minted credential at both graduation levels.</returns>
-    private static async Task<GraduatedAcdc> MintGraduatedAcdc(string issuerAid, List<IDisposable> disposables, MemoryPool<byte> pool)
+    private static async Task<GraduatedAcdc> MintGraduatedAcdc(string issuerAid, List<IDisposable> disposables, BaseMemoryPool pool)
     {
         var attribute = new MessageFieldMap(StringComparer.Ordinal)
         {
@@ -1074,7 +1074,7 @@ internal static class AcdcFlowKit
     /// <param name="disposables">The list the minted disclosed serialization is tracked on for disposal as it is rented.</param>
     /// <param name="pool">The pool the serializations are rented from.</param>
     /// <returns>The minted, selectively disclosed aggregate credential.</returns>
-    private static async Task<AggregateAcdc> MintAggregateAcdc(string issuerAid, List<IDisposable> disposables, MemoryPool<byte> pool)
+    private static async Task<AggregateAcdc> MintAggregateAcdc(string issuerAid, List<IDisposable> disposables, BaseMemoryPool pool)
     {
         var issuee = new MessageFieldMap(StringComparer.Ordinal)
         {
@@ -1127,7 +1127,7 @@ internal static class AcdcFlowKit
 
         return new AggregateAcdc(disclosed, topSaid, agid);
 
-        static async Task<string> SealBlock(MessageFieldMap block, MemoryPool<byte> pool) =>
+        static async Task<string> SealBlock(MessageFieldMap block, BaseMemoryPool pool) =>
             await AcdcCompaction.DeriveSectionSaidAsync(block, AcdcJson.Encode, AcdcTestSupport.AgileDigest, pool).ConfigureAwait(false);
     }
 
@@ -1140,7 +1140,7 @@ internal static class AcdcFlowKit
     /// <param name="issueeAid">The credential's Issuee AID (the attribute block's <c>i</c>).</param>
     /// <param name="pool">The pool the serialization is rented from.</param>
     /// <returns>The minted, expanded credential.</returns>
-    private static async Task<MintedAcdc> MintTargetedAcdc(string issuerAid, string issueeAid, MemoryPool<byte> pool)
+    private static async Task<MintedAcdc> MintTargetedAcdc(string issuerAid, string issueeAid, BaseMemoryPool pool)
     {
         var attribute = new MessageFieldMap(StringComparer.Ordinal)
         {
@@ -1175,7 +1175,7 @@ internal static class AcdcFlowKit
     /// <param name="edgeOperator">The edge's unary operator (<c>o</c>), for example <c>DI2I</c>; <see langword="null"/> for a default-operator edge carrying a far-node schema constraint (<c>s</c>).</param>
     /// <param name="pool">The pool the serialization is rented from.</param>
     /// <returns>The minted, expanded credential.</returns>
-    private static async Task<MintedAcdc> MintEdgeAcdc(string issuerAid, string farNodeSaid, string? edgeOperator, MemoryPool<byte> pool)
+    private static async Task<MintedAcdc> MintEdgeAcdc(string issuerAid, string farNodeSaid, string? edgeOperator, BaseMemoryPool pool)
     {
         var edge = new MessageFieldMap(StringComparer.Ordinal)
         {
@@ -1229,7 +1229,7 @@ internal static class AcdcFlowKit
     /// <param name="issuerAid">The credential's Issuer AID.</param>
     /// <param name="pool">The pool the serialization is rented from.</param>
     /// <returns>The minted, expanded credential.</returns>
-    private static async Task<MintedAcdc> SealExpandedAcdc(MessageFieldMap top, string issuerAid, MemoryPool<byte> pool)
+    private static async Task<MintedAcdc> SealExpandedAcdc(MessageFieldMap top, string issuerAid, BaseMemoryPool pool)
     {
         return SerializeExpanded(top, await DeriveTopSaid(top, pool).ConfigureAwait(false), issuerAid, pool);
     }
@@ -1247,7 +1247,7 @@ internal static class AcdcFlowKit
     /// <param name="disposables">The list both minted variant serializations are tracked on for disposal as they are rented.</param>
     /// <param name="pool">The pool the serializations are rented from.</param>
     /// <returns>The minted credential at both graduation levels, sharing the one committed SAID.</returns>
-    private static async Task<GraduatedAcdc> SealGraduatedAcdc(MessageFieldMap top, string issuerAid, List<IDisposable> disposables, MemoryPool<byte> pool)
+    private static async Task<GraduatedAcdc> SealGraduatedAcdc(MessageFieldMap top, string issuerAid, List<IDisposable> disposables, BaseMemoryPool pool)
     {
         MessageFieldMap compact = await AcdcCompaction.ToCompactFormAsync(top, AcdcJson.Encode, AcdcTestSupport.AgileDigest, pool).ConfigureAwait(false);
         string topSaid = (string)compact[AcdcMessageFields.Said]!;
@@ -1268,7 +1268,7 @@ internal static class AcdcFlowKit
     /// <param name="top">The expanded ACDC field map, its section blocks' SAIDs already filled.</param>
     /// <param name="pool">The pool the digest buffers are rented from.</param>
     /// <returns>The top-level SAID over the most-compact form.</returns>
-    private static async Task<string> DeriveTopSaid(MessageFieldMap top, MemoryPool<byte> pool)
+    private static async Task<string> DeriveTopSaid(MessageFieldMap top, BaseMemoryPool pool)
     {
         MessageFieldMap compact = await AcdcCompaction.ToCompactFormAsync(top, AcdcJson.Encode, AcdcTestSupport.AgileDigest, pool).ConfigureAwait(false);
 
@@ -1286,7 +1286,7 @@ internal static class AcdcFlowKit
     /// <param name="issuerAid">The credential's Issuer AID.</param>
     /// <param name="pool">The pool the serialization is rented from.</param>
     /// <returns>The minted, expanded credential.</returns>
-    private static MintedAcdc SerializeExpanded(MessageFieldMap top, string topSaid, string issuerAid, MemoryPool<byte> pool)
+    private static MintedAcdc SerializeExpanded(MessageFieldMap top, string topSaid, string issuerAid, BaseMemoryPool pool)
     {
         top[AcdcMessageFields.Said] = topSaid;
 
@@ -1307,7 +1307,7 @@ internal static class AcdcFlowKit
     /// <param name="issuerAid">The credential's Issuer AID.</param>
     /// <param name="pool">The pool the serialization is rented from.</param>
     /// <returns>The minted credential.</returns>
-    private static MintedAcdc SerializeMap(MessageFieldMap map, string said, string issuerAid, MemoryPool<byte> pool)
+    private static MintedAcdc SerializeMap(MessageFieldMap map, string said, string issuerAid, BaseMemoryPool pool)
     {
         var buffer = new ArrayBufferWriter<byte>();
         AcdcJson.Encode(map, buffer);

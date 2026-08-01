@@ -34,7 +34,7 @@ public static class SdCwtPathExtraction
     public static IReadOnlyDictionary<SdDisclosure, CredentialPath> ExtractPaths(
         SdCwtMessage message,
         EncodeDelegate encoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         string hashAlgorithm = "sha-256")
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -63,7 +63,7 @@ public static class SdCwtPathExtraction
         ReadOnlyMemory<byte> payload,
         IReadOnlyList<SdDisclosure> disclosures,
         EncodeDelegate encoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         string hashAlgorithm = "sha-256")
     {
         ArgumentNullException.ThrowIfNull(disclosures);
@@ -97,7 +97,7 @@ public static class SdCwtPathExtraction
     /// <returns>All paths present in the credential structure.</returns>
     public static IReadOnlySet<CredentialPath> ExtractAllPaths(
         SdCwtMessage message,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(message);
         ArgumentNullException.ThrowIfNull(pool);
@@ -117,7 +117,7 @@ public static class SdCwtPathExtraction
     /// <returns>Paths that are always disclosed (not redacted).</returns>
     public static IReadOnlySet<CredentialPath> ExtractMandatoryPaths(
         SdCwtMessage message,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(message);
         ArgumentNullException.ThrowIfNull(pool);
@@ -140,7 +140,7 @@ public static class SdCwtPathExtraction
     public static PathLattice CreateLattice(
         SdCwtMessage message,
         EncodeDelegate encoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         string hashAlgorithm = "sha-256")
     {
         ArgumentNullException.ThrowIfNull(message);

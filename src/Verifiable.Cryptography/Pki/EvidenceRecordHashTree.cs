@@ -371,7 +371,7 @@ public static class EvidenceRecordHashTree
     public static async ValueTask<DigestValue> CombineAsync(
         IReadOnlyList<ReadOnlyMemory<byte>> hashValues,
         PkiDigestAlgorithm algorithm,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(hashValues);
@@ -436,7 +436,7 @@ public static class EvidenceRecordHashTree
     /// </remarks>
     public static async ValueTask<EvidenceRecordHashTreeBuild> BuildAsync(
         EvidenceRecordHashTreeBuildContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -540,7 +540,7 @@ public static class EvidenceRecordHashTree
     /// </remarks>
     public static async ValueTask<EvidenceRecordHashTreeBuild> BuildFromHashValuesAsync(
         EvidenceRecordHashTreeHashValueBuildContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -612,7 +612,7 @@ public static class EvidenceRecordHashTree
         int nodeArity,
         bool firstListNamesTheGroupAlone,
         List<DigestValue> owned,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         try
@@ -742,7 +742,7 @@ public static class EvidenceRecordHashTree
     /// </remarks>
     public static async ValueTask<EvidenceRecordRootComputation> ComputeRootAsync(
         EvidenceRecordRootComputationContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -859,7 +859,7 @@ public static class EvidenceRecordHashTree
     /// <param name="tag">The tag naming the algorithm the value was computed under.</param>
     /// <param name="pool">The memory pool the copy is rented from.</param>
     /// <returns>The carrier. The caller owns and disposes it.</returns>
-    private static DigestValue CopyDigest(ReadOnlySpan<byte> hashValue, Tag tag, MemoryPool<byte> pool)
+    private static DigestValue CopyDigest(ReadOnlySpan<byte> hashValue, Tag tag, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(hashValue.Length);
         try

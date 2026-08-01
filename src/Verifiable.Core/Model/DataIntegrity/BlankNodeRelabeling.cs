@@ -74,7 +74,7 @@ public static class BlankNodeRelabeling
         ReadOnlyMemory<byte> hmacKey,
         ComputeHmacDelegate hmacCompute,
         EncodeDelegate base64UrlEncode,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         return RelabelNQuadWithMapAsync(nquad, hmacKey, hmacCompute, base64UrlEncode, pool, labelMap: null, cancellationToken);
@@ -104,7 +104,7 @@ public static class BlankNodeRelabeling
         ReadOnlyMemory<byte> hmacKey,
         ComputeHmacDelegate hmacCompute,
         EncodeDelegate base64UrlEncode,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         Dictionary<string, string>? labelMap,
         CancellationToken cancellationToken = default)
     {
@@ -194,7 +194,7 @@ public static class BlankNodeRelabeling
         ReadOnlyMemory<byte> hmacKey,
         ComputeHmacDelegate hmacCompute,
         EncodeDelegate base64UrlEncode,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         RelabelingResult relabeling = await RelabelNQuadsWithMapAsync(
@@ -234,7 +234,7 @@ public static class BlankNodeRelabeling
         ReadOnlyMemory<byte> hmacKey,
         ComputeHmacDelegate hmacCompute,
         EncodeDelegate base64UrlEncode,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(nquads);

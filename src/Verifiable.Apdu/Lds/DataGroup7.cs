@@ -47,7 +47,7 @@ public sealed class DataGroup7: SensitiveMemory
     /// <returns>The parsed <see cref="DataGroup7"/>. The caller disposes it.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the structure is not a well-formed DG7.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented image buffer transfers to the returned DataGroup7, which the caller disposes; the catch disposes it on failure.")]
-    public static DataGroup7 Parse(ReadOnlySpan<byte> dataGroup7, MemoryPool<byte> pool)
+    public static DataGroup7 Parse(ReadOnlySpan<byte> dataGroup7, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -100,7 +100,7 @@ public sealed class DataGroup7: SensitiveMemory
     /// <param name="pool">The memory pool for the file carrier.</param>
     /// <returns>The EF.DG7 <see cref="ElementaryFile"/>. The caller disposes it.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned ElementaryFile, which the caller disposes; the catch disposes it on failure.")]
-    public static ElementaryFile Write(ReadOnlySpan<byte> signatureImage, MemoryPool<byte> pool)
+    public static ElementaryFile Write(ReadOnlySpan<byte> signatureImage, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

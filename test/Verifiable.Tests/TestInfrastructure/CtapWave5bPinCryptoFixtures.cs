@@ -39,7 +39,7 @@ internal static class CtapWave5bPinCryptoFixtures
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The established session. The caller owns it and must dispose it.</returns>
     public static async Task<CtapWave5bPlatformPinSession> EstablishSessionAsync(
-        Ctap2TransceiveDelegate transceive, CtapPinUvAuthProtocolId protocolId, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        Ctap2TransceiveDelegate transceive, CtapPinUvAuthProtocolId protocolId, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         CtapPinUvAuthProtocol protocol = CtapPinUvAuthProtocol.CreateDefault(protocolId);
 
@@ -131,7 +131,7 @@ internal sealed class CtapWave5bPlatformPinSession: IDisposable
     private PublicKeyMemory PlatformPublicKey { get; }
 
     /// <summary>The memory pool every operation this session performs allocates from.</summary>
-    private MemoryPool<byte> Pool { get; }
+    private BaseMemoryPool Pool { get; }
 
     /// <summary>Guards against redundant disposal.</summary>
     private bool disposed;
@@ -147,7 +147,7 @@ internal sealed class CtapWave5bPlatformPinSession: IDisposable
         PrivateKeyMemory platformPrivateKey,
         PublicKeyMemory platformPublicKey,
         CoseKey platformPublicKeyCose,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         Protocol = protocol;
         SharedSecret = sharedSecret;

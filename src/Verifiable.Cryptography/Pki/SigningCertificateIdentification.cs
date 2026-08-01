@@ -69,7 +69,7 @@ public static class SigningCertificateIdentification
     public static async ValueTask<SigningCertificateIdentificationResult> IdentifyAsync(
         SignatureFacts signature,
         PkiCertificateMemory? signingCertificate,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signature);
@@ -160,7 +160,7 @@ public static class SigningCertificateIdentification
     private static async ValueTask<bool> MatchesAsync(
         SigningCertificateReference reference,
         PkiCertificateMemory candidate,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(reference.CertificateDigest is null)

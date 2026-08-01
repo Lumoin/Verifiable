@@ -128,7 +128,7 @@ public sealed class DigestValue: SensitiveMemory, IEquatable<DigestValue>
         HashFunctionDelegate hashFunction,
         int outputByteLength,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         System.Diagnostics.Activity? lifetime = null)
     {
         ArgumentNullException.ThrowIfNull(hashFunction);

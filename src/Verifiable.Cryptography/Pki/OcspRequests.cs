@@ -143,7 +143,7 @@ public static class OcspRequests
         PkiCertificateMemory certificate,
         PkiCertificateMemory issuerCertificate,
         OcspCertIdDigestAlgorithm certIdDigestAlgorithm,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         int nonceByteLength = 32,
         bool includeNonce = true,
         CancellationToken cancellationToken = default)

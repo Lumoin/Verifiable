@@ -71,7 +71,7 @@ public static class XmlEvidenceRecordXmlBinding
     /// <returns>The parse result.</returns>
     public static ValueTask<XmlEvidenceRecordParseResult> ParseAsync(
         XmlEvidenceRecordParseContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -128,7 +128,7 @@ public static class XmlEvidenceRecordXmlBinding
     /// <returns>The canonicalization result.</returns>
     public static ValueTask<XmlEvidenceRecordCanonicalizationResult> CanonicalizeAsync(
         XmlEvidenceRecordCanonicalizationContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -372,7 +372,7 @@ public static class XmlEvidenceRecordXmlBinding
     /// <returns>The parse result.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the record, and of every chain and supporting information element it holds, transfers to the returned result on success; the finally releases all of them on every other path. The rule's data flow does not follow ownership through the transfer flag.")]
-    private static XmlEvidenceRecordParseResult ReadEvidenceRecord(XElement root, XmlEvidenceRecordParseLimits limits, MemoryPool<byte> pool)
+    private static XmlEvidenceRecordParseResult ReadEvidenceRecord(XElement root, XmlEvidenceRecordParseLimits limits, BaseMemoryPool pool)
     {
         string? version = root.Attribute(XmlEvidenceRecordWellKnown.VersionAttributeName)?.Value;
         if(version is null)
@@ -490,7 +490,7 @@ public static class XmlEvidenceRecordXmlBinding
         XElement element,
         int order,
         XmlEvidenceRecordParseLimits limits,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         string? digestMethodUri = element
             .Element(EvidenceRecordNamespace + XmlEvidenceRecordWellKnown.DigestMethodElementName)
@@ -589,7 +589,7 @@ public static class XmlEvidenceRecordXmlBinding
         int order,
         PkiDigestAlgorithm digestAlgorithm,
         XmlEvidenceRecordParseLimits limits,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         XElement? timeStampElement = element.Element(EvidenceRecordNamespace + XmlEvidenceRecordWellKnown.TimeStampElementName);
         if(timeStampElement is null)
@@ -685,7 +685,7 @@ public static class XmlEvidenceRecordXmlBinding
         XElement element,
         PkiDigestAlgorithm digestAlgorithm,
         XmlEvidenceRecordParseLimits limits,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         var sequenceElements = new List<XElement>(element.Elements(EvidenceRecordNamespace + XmlEvidenceRecordWellKnown.SequenceElementName));
         if(sequenceElements.Count == 0)
@@ -779,7 +779,7 @@ public static class XmlEvidenceRecordXmlBinding
     private static (XmlEvidenceRecordParseStatus Status, XmlEvidenceRecordTimeStamp? TimeStamp, string? Reason) ReadTimeStamp(
         XElement element,
         XmlEvidenceRecordParseLimits limits,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         XElement? tokenElement = element.Element(EvidenceRecordNamespace + XmlEvidenceRecordWellKnown.TimeStampTokenElementName);
         if(tokenElement is null)
@@ -886,7 +886,7 @@ public static class XmlEvidenceRecordXmlBinding
     /// one algorithm govern every hash value of a chain, so a value of another length can never take part in the
     /// comparison the walk is going to make.
     /// </remarks>
-    private static DigestValue? ReadDigestValue(string value, PkiDigestAlgorithm algorithm, MemoryPool<byte> pool)
+    private static DigestValue? ReadDigestValue(string value, PkiDigestAlgorithm algorithm, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(algorithm.OutputByteLength);
         try
@@ -916,7 +916,7 @@ public static class XmlEvidenceRecordXmlBinding
     /// <param name="element">The element to serialise.</param>
     /// <param name="pool">The memory pool the carrier is rented from.</param>
     /// <returns>The carrier.</returns>
-    private static PooledMemory SerializeElement(XElement element, MemoryPool<byte> pool) =>
+    private static PooledMemory SerializeElement(XElement element, BaseMemoryPool pool) =>
         PooledMemory.FromBytes(
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetBytes(element.ToString(SaveOptions.DisableFormatting)),
             pool,
@@ -1072,7 +1072,7 @@ public static class XmlEvidenceRecordXmlBinding
     /// </remarks>
     public static ValueTask<XmlEvidenceRecordWriteResult> WriteAsync(
         XmlEvidenceRecordWriteContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);

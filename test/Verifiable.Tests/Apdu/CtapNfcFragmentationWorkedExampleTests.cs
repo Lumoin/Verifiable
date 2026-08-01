@@ -85,7 +85,7 @@ internal sealed class CtapNfcFragmentationWorkedExampleTests
         int callCount = 0;
 
         ValueTask<ApduResult<ApduResponse>> Handler(
-            ReadOnlyMemory<byte> commandApdu, MemoryPool<byte> pool, CancellationToken cancellationToken)
+            ReadOnlyMemory<byte> commandApdu, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             callCount++;
             byte[] response = callCount switch
@@ -108,7 +108,7 @@ internal sealed class CtapNfcFragmentationWorkedExampleTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ApduResult<ApduResponse> result = await ApduExecutor.ExecuteAsync(
             device, secondCommand, pool, TestContext.CancellationToken).ConfigureAwait(false);

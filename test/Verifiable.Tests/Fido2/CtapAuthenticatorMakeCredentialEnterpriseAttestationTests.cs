@@ -69,7 +69,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     public async Task EnterpriseAttestationOnNonCapableAuthenticatorReturnsInvalidParameterRegardlessOfValue(int enterpriseAttestationValue)
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator($"mc-ep-noncapable-{enterpriseAttestationValue}");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, enterpriseAttestation: enterpriseAttestationValue);
         using PooledMemory response = await SendMakeCredentialAsync(simulator, request, pool, TestContext.CancellationToken);
@@ -87,7 +87,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     [TestMethod]
     public async Task EnterpriseAttestationOnCapableButDisabledAuthenticatorReturnsInvalidParameter()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = CtapWaveEpFixtures.CreateCapableSimulator("mc-ep-capable-disabled", pool);
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, enterpriseAttestation: 1);
@@ -107,7 +107,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     [DataRow(3, DisplayName = "value 3")]
     public async Task EnterpriseAttestationInvalidValueOnCapableEnabledAuthenticatorReturnsInvalidOption(int enterpriseAttestationValue)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = await CtapWaveEpFixtures.CreateCapableEnabledSimulatorAsync(
             $"mc-ep-invalid-value-{enterpriseAttestationValue}", pool, preConfiguredRpIds: null, TestContext.CancellationToken);
 
@@ -130,7 +130,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     [TestMethod]
     public async Task EnterpriseAttestationValueOneWithListedRpIdGrantsCertifiedAttestationSignedByAttestationKey()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         (CtapEnterpriseAttestationProvisioning provisioning, PublicKeyMemory attestationPublicKey) =
             CtapWaveEpFixtures.BuildProvisioningWithAttestationPublicKey(pool);
         using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-ep-value1-listed", enterpriseAttestationProvisioning: provisioning);
@@ -204,7 +204,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     [TestMethod]
     public async Task EnterpriseAttestationGrantedTogetherWithLargeBlobKeyProducesAllThreeOptionalMembers()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = await CtapWaveEpFixtures.CreateCapableEnabledSimulatorAsync(
             "mc-ep-with-largeblobkey", pool, preConfiguredRpIds: null, TestContext.CancellationToken);
 
@@ -232,7 +232,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     [TestMethod]
     public async Task EnterpriseAttestationValueOneWithUnlistedRpIdFallsThroughToRegularSelfAttestation()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = await CtapWaveEpFixtures.CreateCapableEnabledSimulatorAsync(
             "mc-ep-value1-unlisted", pool, preConfiguredRpIds: null, TestContext.CancellationToken);
 
@@ -260,7 +260,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     [TestMethod]
     public async Task EnterpriseAttestationValueTwoWithUnlistedRpIdGrantsCertifiedAttestationWithoutListCheck()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = await CtapWaveEpFixtures.CreateCapableEnabledSimulatorAsync(
             "mc-ep-value2-unlisted", pool, preConfiguredRpIds: null, TestContext.CancellationToken);
 
@@ -300,7 +300,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     [TestMethod]
     public async Task EnterpriseAttestationValueTwoWithNonePreferenceDeclinesGrant()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = await CtapWaveEpFixtures.CreateCapableEnabledSimulatorAsync(
             "mc-ep-value2-none-preference", pool, preConfiguredRpIds: null, TestContext.CancellationToken);
 
@@ -327,7 +327,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     [TestMethod]
     public async Task EnterpriseAttestationAfterFactoryResetReturnsInvalidParameter()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = await CtapWaveEpFixtures.CreateCapableEnabledSimulatorAsync(
             "mc-ep-reset-then-mc", pool, preConfiguredRpIds: null, TestContext.CancellationToken);
 
@@ -355,7 +355,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     [TestMethod]
     public async Task ParameterAbsentOnCapableEnabledAuthenticatorProducesShapeIndistinguishableFromNonCapableAuthenticator()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator capableEnabledSimulator = await CtapWaveEpFixtures.CreateCapableEnabledSimulatorAsync(
             "mc-ep-r15a-capable", pool, preConfiguredRpIds: null, TestContext.CancellationToken);
         using CtapAuthenticatorSimulator nonCapableSimulator = CreateSimulator("mc-ep-r15a-noncapable");
@@ -369,7 +369,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
         Assert.AreEqual(nonCapableDecoded.Fmt, capableEnabledDecoded.Fmt, "the fmt member must match between the two authenticators.");
         Assert.AreEqual(nonCapableDecoded.EpAtt.HasValue, capableEnabledDecoded.EpAtt.HasValue, "epAtt presence must match (both absent).");
 
-        static async Task<CtapMakeCredentialResponse> SendPlainMakeCredentialAsync(CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool)
+        static async Task<CtapMakeCredentialResponse> SendPlainMakeCredentialAsync(CtapAuthenticatorSimulator simulator, BaseMemoryPool pool)
         {
             CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, rpId: CtapWaveEpFixtures.DefaultPreConfiguredRpId);
             using PooledMemory response = await SendMakeCredentialAsync(simulator, request, pool, default);
@@ -379,7 +379,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
             return CtapMakeCredentialResponseCborReader.Read(response.AsReadOnlyMemory()[1..]);
         }
 
-        static void AssertRegularSelfAttestationShape(CtapMakeCredentialResponse decoded, MemoryPool<byte> pool)
+        static void AssertRegularSelfAttestationShape(CtapMakeCredentialResponse decoded, BaseMemoryPool pool)
         {
             Assert.AreEqual(WellKnownWebAuthnAttestationFormats.Packed, decoded.Fmt);
             Assert.IsFalse(decoded.EpAtt.HasValue, "the personal (param-absent) path must never carry epAtt.");
@@ -402,7 +402,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     [TestMethod]
     public async Task PersonalAndEnterpriseResidentCredentialsCoexistAndBothAssertViaGetAssertionWithoutEnterpriseMaterialOnPersonalPath()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = await CtapWaveEpFixtures.CreateCapableEnabledSimulatorAsync(
             "mc-ep-r15b-coexist", pool, preConfiguredRpIds: null, TestContext.CancellationToken);
 

@@ -28,7 +28,7 @@ internal static class CtapWave2CapstoneFixtures
     /// same computation a real relying party performs on its own, through the same production digest
     /// seam the authenticator simulator uses internally, but never reading the simulator's own state.
     /// </summary>
-    public static DigestValue ComputeExpectedRpIdHash(string rpId, MemoryPool<byte> pool)
+    public static DigestValue ComputeExpectedRpIdHash(string rpId, BaseMemoryPool pool)
     {
         byte[] rpIdBytes = Encoding.UTF8.GetBytes(rpId);
 
@@ -57,7 +57,7 @@ internal static class CtapWave2CapstoneFixtures
     public static CtapMakeCredentialRequest BuildMakeCredentialRequest(
         PublicKeyCredentialCreationOptions options,
         DigestValue clientDataHash,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         IReadOnlyList<string>? attestationFormatsPreference = null,
         ReadOnlyMemory<byte>? pinUvAuthParam = null,
         int? pinUvAuthProtocol = null)

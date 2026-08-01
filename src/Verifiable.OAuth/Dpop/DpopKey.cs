@@ -54,7 +54,7 @@ public sealed class DpopKey
     /// </summary>
     public string GetThumbprint(
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
         ArgumentNullException.ThrowIfNull(memoryPool);

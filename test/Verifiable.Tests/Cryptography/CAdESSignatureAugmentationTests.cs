@@ -1287,7 +1287,7 @@ internal sealed class CAdESSignatureAugmentationTests
         /// <param name="pool">The memory pool; unused, as nothing is ever returned.</param>
         /// <param name="cancellationToken">A cancellation token; unused, as this double performs no input or output.</param>
         /// <returns>Always <see langword="null"/>, simulating an unreachable authority.</returns>
-        internal ValueTask<PkiCertificateMemory?> FetchAsync(TimestampFetchContext context, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        internal ValueTask<PkiCertificateMemory?> FetchAsync(TimestampFetchContext context, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             ++CallCount;
 

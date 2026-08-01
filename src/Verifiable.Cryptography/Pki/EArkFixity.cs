@@ -179,7 +179,7 @@ public abstract record EArkFixity: IDisposable
     /// and the caller — a validation rule, ultimately — is what decides what to do about it.
     /// </returns>
     /// <exception cref="ArgumentNullException">When <paramref name="pool"/> is <see langword="null"/>.</exception>
-    public static EArkFixity Read(string? algorithmName, string? checksum, MemoryPool<byte> pool)
+    public static EArkFixity Read(string? algorithmName, string? checksum, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

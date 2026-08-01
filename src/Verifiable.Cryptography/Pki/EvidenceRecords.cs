@@ -206,7 +206,7 @@ public static class EvidenceRecords
         IReadOnlyList<CmsAttribute>? attributes,
         IReadOnlyList<EvidenceRecordPartialHashtree>? reducedHashtree,
         ReadOnlyMemory<byte> timeStamp,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         if(timeStamp.IsEmpty)
@@ -271,7 +271,7 @@ public static class EvidenceRecords
     /// <returns>The encoded chain. The caller owns and disposes it.</returns>
     /// <exception cref="ArgumentNullException">When an argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">When no member is supplied.</exception>
-    public static PooledMemory EncodeArchiveTimeStampChain(IReadOnlyList<ReadOnlyMemory<byte>> archiveTimeStamps, MemoryPool<byte> pool)
+    public static PooledMemory EncodeArchiveTimeStampChain(IReadOnlyList<ReadOnlyMemory<byte>> archiveTimeStamps, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(archiveTimeStamps);
         ArgumentNullException.ThrowIfNull(pool);
@@ -301,7 +301,7 @@ public static class EvidenceRecords
     /// its own outer <c>SEQUENCE</c> tag and length octets on top of each chain's; concatenating the chains
     /// without that wrapper produces different, wrong octets.
     /// </remarks>
-    public static PooledMemory EncodeArchiveTimeStampSequence(IReadOnlyList<ReadOnlyMemory<byte>> archiveTimeStampChains, MemoryPool<byte> pool)
+    public static PooledMemory EncodeArchiveTimeStampSequence(IReadOnlyList<ReadOnlyMemory<byte>> archiveTimeStampChains, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(archiveTimeStampChains);
         ArgumentNullException.ThrowIfNull(pool);
@@ -333,7 +333,7 @@ public static class EvidenceRecords
     /// </remarks>
     public static async ValueTask<EvidenceRecordCreation> CreateInitialAsync(
         EvidenceRecordCreationContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -413,7 +413,7 @@ public static class EvidenceRecords
             IReadOnlyList<CmsAttribute>? cryptoInfos,
             IReadOnlyList<EvidenceRecordPartialHashtree> reducedHashtree,
             ReadOnlyMemory<byte> timeStamp,
-            MemoryPool<byte> pool)
+            BaseMemoryPool pool)
         {
             PooledMemory? archiveTimeStamp = null;
             PooledMemory? chain = null;
@@ -475,7 +475,7 @@ public static class EvidenceRecords
     /// </remarks>
     public static async ValueTask<EvidenceRecordRenewal> RenewTimestampAsync(
         EvidenceRecordTimestampRenewalContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -548,7 +548,7 @@ public static class EvidenceRecords
             IReadOnlyList<CmsAttribute>? cryptoInfos,
             IReadOnlyList<EvidenceRecordPartialHashtree> reducedHashtree,
             ReadOnlyMemory<byte> timeStamp,
-            MemoryPool<byte> pool)
+            BaseMemoryPool pool)
         {
             IReadOnlyList<EvidenceRecordArchiveTimeStampChain> chains = source.ArchiveTimeStampSequence.Chains;
             IReadOnlyList<EvidenceRecordArchiveTimeStamp> members = chains[^1].ArchiveTimeStamps;
@@ -624,7 +624,7 @@ public static class EvidenceRecords
     /// </remarks>
     public static async ValueTask<EvidenceRecordRenewal> RenewHashTreeAsync(
         EvidenceRecordHashTreeRenewalContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -733,7 +733,7 @@ public static class EvidenceRecords
             IReadOnlyList<CmsAttribute>? cryptoInfos,
             IReadOnlyList<EvidenceRecordPartialHashtree> reducedHashtree,
             ReadOnlyMemory<byte> timeStamp,
-            MemoryPool<byte> pool)
+            BaseMemoryPool pool)
         {
             IReadOnlyList<EvidenceRecordArchiveTimeStampChain> chains = source.ArchiveTimeStampSequence.Chains;
 
@@ -796,7 +796,7 @@ public static class EvidenceRecords
         ReadOnlyMemory<byte> dataObject,
         ReadOnlyMemory<byte> archiveTimeStampSequence,
         PkiDigestAlgorithm algorithm,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -822,7 +822,7 @@ public static class EvidenceRecords
     /// <exception cref="ArgumentNullException">When <paramref name="context"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
     public static async ValueTask<EvidenceRecordArchiveTimeStampVerification> VerifyArchiveTimeStampAsync(
         EvidenceRecordArchiveTimeStampVerificationContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -890,7 +890,7 @@ public static class EvidenceRecords
     /// </remarks>
     public static async ValueTask<EvidenceRecordVerification> VerifyAsync(
         EvidenceRecordVerificationContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -1012,7 +1012,7 @@ public static class EvidenceRecords
         int chainIndex,
         ReadOnlyMemory<byte> dataObject,
         IReadOnlyList<ReadOnlyMemory<byte>> dataObjectGroup,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         IReadOnlyList<EvidenceRecordArchiveTimeStamp> members = chains[chainIndex].ArchiveTimeStamps;
@@ -1156,7 +1156,7 @@ public static class EvidenceRecords
         TimestampTokenInfo info,
         PkiDigestAlgorithm algorithm,
         DigestValue provedHash,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         //Step 4 of clause 4.3: "digestAlgorithm must correspond to hashAlgorithm field ... in messageImprint
@@ -1223,7 +1223,7 @@ public static class EvidenceRecords
         int chainIndex,
         ReadOnlyMemory<byte> dataObject,
         PkiDigestAlgorithm algorithm,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         using DigestValue sequenceHash = await ComputeArchiveTimeStampSequenceHashAsync(
@@ -1256,7 +1256,7 @@ public static class EvidenceRecords
         IReadOnlyList<EvidenceRecordArchiveTimeStampChain> chains,
         int chainCount,
         PkiDigestAlgorithm algorithm,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         var olderChains = new List<ReadOnlyMemory<byte>>(chainCount);
@@ -1305,7 +1305,7 @@ public static class EvidenceRecords
         ReadOnlyMemory<byte> dataObjectHash,
         ReadOnlyMemory<byte> archiveTimeStampSequenceHash,
         PkiDigestAlgorithm algorithm,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         int total = algorithm.OutputByteLength * 2;
@@ -1329,7 +1329,7 @@ public static class EvidenceRecords
     /// <exception cref="EvidenceRecordCreationException">When the record carries no chain or an empty one, or its most recent time-stamp cannot be read or names an algorithm this library cannot compute.</exception>
     private static async ValueTask<EvidenceRecordRenewalSource> ReadRenewalSourceAsync(
         EvidenceRecord evidenceRecord,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(evidenceRecord);
@@ -1385,7 +1385,7 @@ public static class EvidenceRecords
         string tsaUri,
         FetchTimestampResponseAsyncDelegate fetchTimestampResponse,
         string? timestampPolicyOid,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         AcquiredTimestampToken token = await TimestampAcquisition.AcquireAsync(
@@ -1439,7 +1439,7 @@ public static class EvidenceRecords
     /// time-stamp, so a renewal neither validates nor rewrites it — it carries the octets across unchanged, and
     /// a caller that wants different content states it on the renewal context instead.
     /// </remarks>
-    private static List<CmsAttribute>? CopyCryptoInfos(EvidenceRecord evidenceRecord, MemoryPool<byte> pool)
+    private static List<CmsAttribute>? CopyCryptoInfos(EvidenceRecord evidenceRecord, BaseMemoryPool pool)
     {
         IReadOnlyList<ReadOnlyMemory<byte>> cryptoInfos = evidenceRecord.CryptoInfos;
         if(cryptoInfos.Count == 0)
@@ -1515,7 +1515,7 @@ public static class EvidenceRecords
         EvidenceRecordArchiveTimeStamp archiveTimeStamp,
         IReadOnlyList<ReadOnlyMemory<byte>> dataObjectGroup,
         PkiDigestAlgorithm algorithm,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(archiveTimeStamp.ReducedHashtree.Count == 0)
@@ -1575,7 +1575,7 @@ public static class EvidenceRecords
     /// </remarks>
     private static async ValueTask<TimestampTokenInfo> ReadTimeStampAsync(
         EvidenceRecordArchiveTimeStamp archiveTimeStamp,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         using PkiCertificateMemory token = CopyTimeStampToken(archiveTimeStamp.TimeStamp.Span, pool);
@@ -1603,7 +1603,7 @@ public static class EvidenceRecords
     /// <param name="token">The whole encoding of the field.</param>
     /// <param name="pool">The memory pool the copy is rented from.</param>
     /// <returns>The carrier. The caller owns and disposes it.</returns>
-    private static PkiCertificateMemory CopyTimeStampToken(ReadOnlySpan<byte> token, MemoryPool<byte> pool)
+    private static PkiCertificateMemory CopyTimeStampToken(ReadOnlySpan<byte> token, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(Math.Max(token.Length, 1));
         try
@@ -1628,7 +1628,7 @@ public static class EvidenceRecords
     /// <param name="tag">The tag naming the algorithm the value was computed under.</param>
     /// <param name="pool">The memory pool the copy is rented from.</param>
     /// <returns>The carrier. The caller owns and disposes it.</returns>
-    private static DigestValue CopyDigest(ReadOnlySpan<byte> hashValue, Tag tag, MemoryPool<byte> pool)
+    private static DigestValue CopyDigest(ReadOnlySpan<byte> hashValue, Tag tag, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(hashValue.Length);
         try
@@ -1652,7 +1652,7 @@ public static class EvidenceRecords
     /// <param name="members">The members' whole encodings.</param>
     /// <param name="pool">The memory pool the encoded value is rented from.</param>
     /// <returns>The encoded sequence. The caller owns and disposes it.</returns>
-    private static PooledMemory EncodeSequenceOf(IReadOnlyList<ReadOnlyMemory<byte>> members, MemoryPool<byte> pool)
+    private static PooledMemory EncodeSequenceOf(IReadOnlyList<ReadOnlyMemory<byte>> members, BaseMemoryPool pool)
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);
         using(writer.PushSequence())
@@ -1675,7 +1675,7 @@ public static class EvidenceRecords
     /// <returns>The encoded structure. The caller owns and disposes it.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the rented buffer transfers to the returned carrier, which the caller disposes; the catch disposes it on a partial failure.")]
-    private static PooledMemory Materialise(AsnWriter writer, MemoryPool<byte> pool)
+    private static PooledMemory Materialise(AsnWriter writer, BaseMemoryPool pool)
     {
         int encodedLength = writer.GetEncodedLength();
         IMemoryOwner<byte> owner = pool.Rent(encodedLength);

@@ -216,7 +216,7 @@ internal static class EArkPackageSource
     /// <param name="limits">The bounds to read within.</param>
     /// <param name="pool">The memory pool every entry's octets are rented from.</param>
     /// <returns>What the reader concluded. The caller owns and disposes it.</returns>
-    internal static EArkPackageSnapshotResult ReadFolder(string packageRoot, EArkPackageLimits limits, MemoryPool<byte> pool) =>
+    internal static EArkPackageSnapshotResult ReadFolder(string packageRoot, EArkPackageLimits limits, BaseMemoryPool pool) =>
         EArkPackageSnapshotReading.Create(StateEntries(packageRoot), limits, pool, RootFolderNameOf(packageRoot));
 
 
@@ -238,7 +238,7 @@ internal static class EArkPackageSource
         IReadOnlyList<EArkPackageEntrySource> entries,
         string rootFolderName,
         DateTimeOffset lastModified,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         var archived = new List<AsicZipEntrySource>(entries.Count + 1)
         {

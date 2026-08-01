@@ -86,7 +86,7 @@ public sealed record EArkValidationContext
     /// Only the fixity rules read it, and a fixity rule without a pool concludes
     /// <see cref="EArkClaimReason.SubjectNotSupplied"/> rather than renting from somewhere of its own.
     /// </remarks>
-    public MemoryPool<byte>? MemoryPool { get; init; }
+    public BaseMemoryPool? MemoryPool { get; init; }
 
     /// <summary>
     /// What the caller states about the evidential artifacts the package carries — where each sits, what it

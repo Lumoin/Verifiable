@@ -46,7 +46,7 @@ internal sealed class FullLifecycleTests
 
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string WalletClientId = "https://wallet.client.test";
     private static readonly Uri WalletBaseUri = new("https://wallet.client.test");

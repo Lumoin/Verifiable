@@ -54,7 +54,7 @@ public static class LibsodiumCryptographicFunctions
     public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignEd25519Async(
         ReadOnlyMemory<byte> privateKeyBytes,
         ReadOnlyMemory<byte> dataToSign,
-        MemoryPool<byte> signaturePool,
+        BaseMemoryPool signaturePool,
         FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signaturePool);

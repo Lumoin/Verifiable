@@ -95,7 +95,7 @@ public static class CredentialBbs2023Extensions
             SerializeBbsBaseProofDelegate serializeBaseProof,
             BbsSignDelegate bbsSign,
             EncodeDelegate encoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -175,7 +175,7 @@ public static class CredentialBbs2023Extensions
             SerializeBbsBaseProofDelegate serializeBaseProof,
             BbsSignDelegate bbsSign,
             EncodeDelegate encoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -336,7 +336,7 @@ public static class CredentialBbs2023Extensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
             DecodeDelegate decoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -389,7 +389,7 @@ public static class CredentialBbs2023Extensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
             DecodeDelegate decoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -550,7 +550,7 @@ public static class CredentialBbs2023Extensions
             BbsProofGenDelegate bbsProofGen,
             EncodeDelegate encoder,
             DecodeDelegate decoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -613,7 +613,7 @@ public static class CredentialBbs2023Extensions
             BbsProofGenDelegate bbsProofGen,
             EncodeDelegate encoder,
             DecodeDelegate decoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -796,7 +796,7 @@ public static class CredentialBbs2023Extensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
             DecodeDelegate decoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -846,7 +846,7 @@ public static class CredentialBbs2023Extensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
             DecodeDelegate decoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {

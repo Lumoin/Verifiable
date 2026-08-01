@@ -102,7 +102,7 @@ public static class Fido2ExtensionChecks
         IReadOnlyList<Fido2ExtensionOutput>? authenticatorExtensionOutputs,
         SelectExtensionOutputProcessorDelegate? extensionOutputProcessor,
         bool rejectUnregisteredExtensionOutputs,
-        MemoryPool<byte> extensionProcessingPool,
+        BaseMemoryPool extensionProcessingPool,
         CancellationToken cancellationToken)
     {
         bool hasClientOutputs = clientExtensionOutputs is { Count: > 0 };

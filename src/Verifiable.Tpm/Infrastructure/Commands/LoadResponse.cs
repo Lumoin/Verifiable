@@ -55,7 +55,7 @@ public sealed class LoadResponse: ITpmWireType, IDisposable
     /// <param name="objectHandle">The object handle from the response handle area.</param>
     /// <param name="pool">The memory pool for allocations.</param>
     /// <returns>The parsed response.</returns>
-    public static LoadResponse Parse(ref TpmReader reader, TpmiDhObject objectHandle, MemoryPool<byte> pool)
+    public static LoadResponse Parse(ref TpmReader reader, TpmiDhObject objectHandle, BaseMemoryPool pool)
     {
         Tpm2bName name = Tpm2bName.Parse(ref reader, pool);
 

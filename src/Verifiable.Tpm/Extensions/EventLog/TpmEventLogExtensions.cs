@@ -13,7 +13,7 @@ namespace Verifiable.Tpm.Extensions.EventLog;
 /// <code>
 /// using Verifiable.Tpm.Extensions.EventLog;
 /// 
-/// using var pool = MemoryPool&lt;byte&gt;.Shared;
+/// var pool = BaseMemoryPool.Shared;
 /// var result = TpmEventLogExtensions.ReadAndParseEventLog(pool);
 /// if(result.IsSuccess)
 /// {
@@ -32,7 +32,7 @@ public static class TpmEventLogExtensions
     /// </summary>
     /// <param name="pool">The memory pool for allocating buffers.</param>
     /// <returns>The parsed event log, or an error.</returns>
-    public static TpmResult<TcgEventLog> ReadAndParseEventLog(MemoryPool<byte> pool)
+    public static TpmResult<TcgEventLog> ReadAndParseEventLog(BaseMemoryPool pool)
     {
         var readResult = TcgEventLogReader.ReadEventLog(pool);
 
@@ -54,7 +54,7 @@ public static class TpmEventLogExtensions
     /// <param name="path">Path to the event log file.</param>
     /// <param name="pool">The memory pool for allocating buffers.</param>
     /// <returns>The parsed event log, or an error.</returns>
-    public static TpmResult<TcgEventLog> ReadAndParseEventLogFromFile(string path, MemoryPool<byte> pool)
+    public static TpmResult<TcgEventLog> ReadAndParseEventLogFromFile(string path, BaseMemoryPool pool)
     {
         var readResult = TcgEventLogReader.ReadEventLogFromFile(path, pool);
 
@@ -75,7 +75,7 @@ public static class TpmEventLogExtensions
     /// </summary>
     /// <param name="pool">The memory pool for allocating buffers.</param>
     /// <returns>The raw event log data, or an error. Caller must dispose the returned data.</returns>
-    public static TpmResult<TcgEventLogData> ReadEventLog(MemoryPool<byte> pool)
+    public static TpmResult<TcgEventLogData> ReadEventLog(BaseMemoryPool pool)
     {
         return TcgEventLogReader.ReadEventLog(pool);
     }
@@ -86,7 +86,7 @@ public static class TpmEventLogExtensions
     /// <param name="path">Path to the event log file.</param>
     /// <param name="pool">The memory pool for allocating buffers.</param>
     /// <returns>The raw event log data, or an error. Caller must dispose the returned data.</returns>
-    public static TpmResult<TcgEventLogData> ReadEventLogFromFile(string path, MemoryPool<byte> pool)
+    public static TpmResult<TcgEventLogData> ReadEventLogFromFile(string path, BaseMemoryPool pool)
     {
         return TcgEventLogReader.ReadEventLogFromFile(path, pool);
     }

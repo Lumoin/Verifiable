@@ -31,7 +31,7 @@ internal sealed class KeyAttestationVerifierTests
     private static readonly TimeSpan ClockSkew = TimeSpan.FromMinutes(5);
     private const string AttestationNonce = "attestation-nonce-7Qm2";
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private FakeTimeProvider TimeProvider { get; } = new(NowInstant);
 

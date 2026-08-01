@@ -156,7 +156,7 @@ public static class SignatureValidation
         SignatureValidationProcessSelection selection,
         SignatureValidationCapabilities capabilities,
         TimeProvider timeProvider,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -185,7 +185,7 @@ public static class SignatureValidation
         SignatureValidationProcessSelection selection,
         SignatureValidationCapabilities capabilities,
         DateTimeOffset currentTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(inputs);
@@ -259,7 +259,7 @@ public static class SignatureValidation
         SignatureValidationSeams seams,
         DateTimeOffset currentTime,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         BasicSignatureValidationResult basic = await BasicSignatureValidation.ValidateAsync(
@@ -290,7 +290,7 @@ public static class SignatureValidation
         SignatureValidationSeams seams,
         DateTimeOffset currentTime,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         SignatureWithTimeValidationResult withTime = await SignatureWithTimeValidation.ValidateAsync(
@@ -327,7 +327,7 @@ public static class SignatureValidation
         SignatureValidationSeams seams,
         DateTimeOffset currentTime,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         LongTermValidationResult longTerm = await LongTermValidation.ValidateAsync(

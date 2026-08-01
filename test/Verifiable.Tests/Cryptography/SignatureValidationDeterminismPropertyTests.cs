@@ -24,7 +24,7 @@ namespace Verifiable.Tests.Cryptography;
 /// One real world — a genuine CAdES-B-T signature over a real three-level certificate chain, minted once by
 /// <see cref="AnnexAValidationScenario"/> — is reused across every sample of both properties: what varies is the
 /// number of reruns and the unrelated extra validation data, never the signature or the chain. This keeps the
-/// properties fast while still exercising the composed engine (<see cref="SignatureValidation.ValidateAsync(SignatureValidationInputs,SignatureValidationSeams,SignatureValidationProcessSelection,SignatureValidationCapabilities,DateTimeOffset,MemoryPool{byte},System.Threading.CancellationToken)"/>)
+/// properties fast while still exercising the composed engine (<see cref="SignatureValidation.ValidateAsync(SignatureValidationInputs,SignatureValidationSeams,SignatureValidationProcessSelection,SignatureValidationCapabilities,DateTimeOffset,BaseMemoryPool,System.Threading.CancellationToken)"/>)
 /// end to end, not a stand-in.
 /// </para>
 /// <para>

@@ -50,7 +50,7 @@ public static class GeneralJweDecryptionExtensions
         KeyDerivationDelegate keyDerivationDelegate,
         KeyUnwrapDelegate keyUnwrapDelegate,
         AeadDecryptDelegate aeadDecryptDelegate,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -121,7 +121,7 @@ public static class GeneralJweDecryptionExtensions
         AuthenticatedKeyDerivationDelegate authenticatedKeyDerivationDelegate,
         KeyUnwrapDelegate keyUnwrapDelegate,
         AeadDecryptDelegate aeadDecryptDelegate,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -180,7 +180,7 @@ public static class GeneralJweDecryptionExtensions
         ContentEncryptionKey kek,
         KeyUnwrapDelegate keyUnwrapDelegate,
         AeadDecryptDelegate aeadDecryptDelegate,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         using SymmetricKeyMemory kekKey = kek.UseKey();
@@ -217,7 +217,7 @@ public static class GeneralJweDecryptionExtensions
     private static IMemoryOwner<byte>? DecodeAgreementInfo(
         IReadOnlyDictionary<string, object> header,
         string parameterName,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         out int length)
     {
         length = 0;

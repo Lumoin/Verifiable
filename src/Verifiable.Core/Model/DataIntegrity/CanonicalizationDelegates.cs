@@ -211,7 +211,7 @@ public delegate ValueTask<CanonicalizationResult> CanonicalizationDelegate(
 public delegate string ProofValueEncoderDelegate(
     ReadOnlySpan<byte> signatureBytes,
     EncodeDelegate encoder,
-    MemoryPool<byte> pool);
+    BaseMemoryPool pool);
 
 
 /// <summary>
@@ -237,4 +237,4 @@ public delegate string ProofValueEncoderDelegate(
 public delegate IMemoryOwner<byte> ProofValueDecoderDelegate(
     string proofValue,
     DecodeDelegate decoder,
-    MemoryPool<byte> pool);
+    BaseMemoryPool pool);

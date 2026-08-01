@@ -42,7 +42,7 @@ internal sealed class DidCommRoutingForwardTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly MemoryPool<byte> Pool = BaseMemoryPool.Shared;
+    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
 
     private static readonly ExchangeContext Context = new();
 

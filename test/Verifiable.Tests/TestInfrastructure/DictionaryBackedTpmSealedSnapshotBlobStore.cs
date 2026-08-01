@@ -54,7 +54,7 @@ internal sealed class DictionaryBackedTpmSealedSnapshotBlobStore
     /// <param name="pool">The memory pool the returned carrier rents from.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The stored bytes, copied into a pooled carrier, or <see langword="null"/> when nothing is stored.</returns>
-    public ValueTask<PooledMemory?> TryFetchSealedBlobAsync(string runId, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public ValueTask<PooledMemory?> TryFetchSealedBlobAsync(string runId, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         FetchCallCount++;
 

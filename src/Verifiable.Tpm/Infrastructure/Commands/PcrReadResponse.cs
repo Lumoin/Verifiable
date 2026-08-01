@@ -74,7 +74,7 @@ public sealed class PcrReadResponse: ITpmWireType, IDisposable
     /// <param name="reader">The reader positioned at the response parameters.</param>
     /// <param name="pool">The memory pool for allocations.</param>
     /// <returns>The parsed response.</returns>
-    public static PcrReadResponse Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static PcrReadResponse Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         uint pcrUpdateCounter = reader.ReadUInt32();
         TpmlPcrSelection pcrSelectionOut = TpmlPcrSelection.Parse(ref reader, pool);

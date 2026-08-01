@@ -84,7 +84,7 @@ internal sealed class MintingTimestampResponder
     /// <param name="cancellationToken">A cancellation token; unused, as this double performs no input or output.</param>
     /// <returns>The response. The caller disposes it.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the response carrier transfers to the caller via the returned ValueTask.")]
-    internal ValueTask<PkiCertificateMemory?> FetchAsync(TimestampFetchContext context, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    internal ValueTask<PkiCertificateMemory?> FetchAsync(TimestampFetchContext context, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(pool);
@@ -152,7 +152,7 @@ internal sealed class MintingTimestampResponder
     /// <param name="token">The DER-encoded token.</param>
     /// <param name="pool">The memory pool the response is rented from.</param>
     /// <returns>The response carrier. The caller disposes it.</returns>
-    private static PkiCertificateMemory BuildResponse(ReadOnlySpan<byte> token, MemoryPool<byte> pool)
+    private static PkiCertificateMemory BuildResponse(ReadOnlySpan<byte> token, BaseMemoryPool pool)
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);
         using(writer.PushSequence())

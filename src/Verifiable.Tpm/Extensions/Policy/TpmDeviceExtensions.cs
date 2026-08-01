@@ -255,7 +255,7 @@ public static class TpmDeviceExtensions
     private static async ValueTask<TpmResult<StartAuthSessionResponse>> StartPolicySessionCoreAsync(
         TpmDevice device, TpmSeConstants sessionType, TpmAlgIdConstants policyHash, CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
 
@@ -270,7 +270,7 @@ public static class TpmDeviceExtensions
     private static async ValueTask<TpmResult<PolicyCommandCodeResponse>> PolicyCommandCodeCoreAsync(
         TpmDevice device, uint policySession, TpmCcConstants restrictedCommand, CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_PolicyCommandCode, TpmResponseCodec.PolicyCommandCode);
 
@@ -283,7 +283,7 @@ public static class TpmDeviceExtensions
     private static async ValueTask<TpmResult<PolicyAuthValueResponse>> PolicyAuthValueCoreAsync(
         TpmDevice device, uint policySession, CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_PolicyAuthValue, TpmResponseCodec.PolicyAuthValue);
 
@@ -298,7 +298,7 @@ public static class TpmDeviceExtensions
         TpmDevice device, uint policySession, TpmAlgIdConstants pcrBank, int[] pcrIndices, ReadOnlyMemory<byte> pcrDigest, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pcrIndices);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_PolicyPCR, TpmResponseCodec.PolicyPcr);
 
@@ -312,7 +312,7 @@ public static class TpmDeviceExtensions
     private static async ValueTask<TpmResult<PolicyOrResponse>> PolicyOrCoreAsync(
         TpmDevice device, uint policySession, IReadOnlyList<ReadOnlyMemory<byte>> branchDigests, CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_PolicyOR, TpmResponseCodec.PolicyOr);
 
@@ -325,7 +325,7 @@ public static class TpmDeviceExtensions
     private static async ValueTask<TpmResult<PolicyNvResponse>> PolicyNvCoreAsync(
         TpmDevice device, uint authHandle, uint nvIndex, uint policySession, ReadOnlyMemory<byte> operandB, ushort offset, TpmEoConstants operation, CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_PolicyNV, TpmResponseCodec.PolicyNv);
 
@@ -341,7 +341,7 @@ public static class TpmDeviceExtensions
     private static async ValueTask<TpmResult<PolicyCounterTimerResponse>> PolicyCounterTimerCoreAsync(
         TpmDevice device, uint policySession, ReadOnlyMemory<byte> operandB, ushort offset, TpmEoConstants operation, CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_PolicyCounterTimer, TpmResponseCodec.PolicyCounterTimer);
 
@@ -354,7 +354,7 @@ public static class TpmDeviceExtensions
     private static async ValueTask<TpmResult<PolicySecretResponse>> PolicySecretCoreAsync(
         TpmDevice device, uint authHandle, uint policySession, CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_PolicySecret, TpmResponseCodec.PolicySecret);
 
@@ -380,7 +380,7 @@ public static class TpmDeviceExtensions
         TpmAlgIdConstants schemeHashAlg,
         CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_PolicySigned, TpmResponseCodec.PolicySigned);
 
@@ -403,7 +403,7 @@ public static class TpmDeviceExtensions
         TpmtTkVerified checkTicket,
         CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_PolicyAuthorize, TpmResponseCodec.PolicyAuthorize);
 
@@ -421,7 +421,7 @@ public static class TpmDeviceExtensions
     private static async ValueTask<TpmResult<PolicyGetDigestResponse>> PolicyGetDigestCoreAsync(
         TpmDevice device, uint policySession, CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_PolicyGetDigest, TpmResponseCodec.PolicyGetDigest);
 
@@ -434,7 +434,7 @@ public static class TpmDeviceExtensions
     private static async ValueTask<TpmResult<FlushContextResponse>> FlushContextCoreAsync(
         TpmDevice device, uint handle, CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_FlushContext, TpmResponseCodec.FlushContext);
 

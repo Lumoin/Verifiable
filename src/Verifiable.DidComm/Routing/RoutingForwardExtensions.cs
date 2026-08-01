@@ -31,9 +31,9 @@ namespace Verifiable.DidComm.Routing;
 /// </para>
 /// <para>
 /// Every wrapper is <em>anoncrypt</em>: the mediator never authenticates the sender (DIDComm v2.1
-/// §Routing Protocol 2.0 §Roles). The wrap path (<see cref="WrapInForwardAsync(DidCommEncryptedMessage, string, IReadOnlyList{string}, DidResolver, ExchangeContext, EphemeralKeyPairFactory, string, string, string, DidCommMessageSerializer, JwtHeaderSerializer, EncodeDelegate, TagToEpkCrvDelegate, GenerateNonceDelegate, MemoryPool{byte}, CancellationToken)"/>)
+/// §Routing Protocol 2.0 §Roles). The wrap path (<see cref="WrapInForwardAsync(DidCommEncryptedMessage, string, IReadOnlyList{string}, DidResolver, ExchangeContext, EphemeralKeyPairFactory, string, string, string, DidCommMessageSerializer, JwtHeaderSerializer, EncodeDelegate, TagToEpkCrvDelegate, GenerateNonceDelegate, BaseMemoryPool, CancellationToken)"/>)
 /// is producer-side and MAY throw on bad caller args; the unpack path
-/// (<see cref="UnpackForwardAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, MemoryPool{byte}, CancellationToken)"/>)
+/// (<see cref="UnpackForwardAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, BaseMemoryPool, CancellationToken)"/>)
 /// is the mediator over attacker-controlled wire input and is fail-closed — it never throws, returning a
 /// typed <see cref="ForwardUnpackError"/> instead. The mediator MUST NOT decrypt the forwarded message
 /// (it is "a blob"); it returns it as owned opaque bytes plus the next hop, and the transmit to that hop
@@ -161,7 +161,7 @@ public static class RoutingForwardExtensions
     /// Each wrapper anoncrypts with <see cref="WellKnownJweAlgorithms.EcdhEsA256Kw"/> over
     /// <see cref="WellKnownJweEncryptionAlgorithms.A256Gcm"/>, the registry-supported anoncrypt profile.
     /// </remarks>
-    /// <inheritdoc cref="WrapInForwardAsync(DidCommEncryptedMessage, string, IReadOnlyList{string}, DidResolver, ExchangeContext, EphemeralKeyPairFactory, string, string, string, DidCommMessageSerializer, JwtHeaderSerializer, EncodeDelegate, TagToEpkCrvDelegate, GenerateNonceDelegate, MemoryPool{byte}, CancellationToken)"/>
+    /// <inheritdoc cref="WrapInForwardAsync(DidCommEncryptedMessage, string, IReadOnlyList{string}, DidResolver, ExchangeContext, EphemeralKeyPairFactory, string, string, string, DidCommMessageSerializer, JwtHeaderSerializer, EncodeDelegate, TagToEpkCrvDelegate, GenerateNonceDelegate, BaseMemoryPool, CancellationToken)"/>
     public static ValueTask<DidCommEncryptedMessage?> WrapInForwardAsync(
         this DidCommEncryptedMessage innerPackedMessage,
         string to,
@@ -175,7 +175,7 @@ public static class RoutingForwardExtensions
         EncodeDelegate base64UrlEncoder,
         TagToEpkCrvDelegate tagToCrvConverter,
         GenerateNonceDelegate generateContentEncryptionKey,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         return innerPackedMessage.WrapInForwardAsync(
@@ -246,7 +246,7 @@ public static class RoutingForwardExtensions
         EncodeDelegate base64UrlEncoder,
         TagToEpkCrvDelegate tagToCrvConverter,
         GenerateNonceDelegate generateContentEncryptionKey,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(innerPackedMessage);
@@ -350,7 +350,7 @@ public static class RoutingForwardExtensions
     /// Unpacks a forward message a mediator received, resolving the anoncrypt cryptographic functions from
     /// the key-agreement registry. The delegate-taking overload does the work after resolution.
     /// </summary>
-    /// <inheritdoc cref="UnpackForwardAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, MemoryPool{byte}, CancellationToken)"/>
+    /// <inheritdoc cref="UnpackForwardAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, BaseMemoryPool, CancellationToken)"/>
     public static async ValueTask<ForwardUnpackResult> UnpackForwardAsync(
         this DidCommEncryptedMessage forwardEnvelope,
         string mediatorRecipientKeyId,
@@ -361,7 +361,7 @@ public static class RoutingForwardExtensions
         JwsMessageParser signedParser,
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         OutboundTransportDelegate? transport = null,
         HashFunctionSelector? hashFunctionSelector = null,
         JsonValueSerializer? jsonValueSerializer = null,
@@ -439,7 +439,7 @@ public static class RoutingForwardExtensions
         KeyDerivationDelegate keyDerivationDelegate,
         KeyUnwrapDelegate keyUnwrapDelegate,
         AeadDecryptDelegate aeadDecryptDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         OutboundTransportDelegate? transport = null,
         HashFunctionSelector? hashFunctionSelector = null,
         JsonValueSerializer? jsonValueSerializer = null,
@@ -516,7 +516,7 @@ public static class RoutingForwardExtensions
         EncodeDelegate base64UrlEncoder,
         TagToEpkCrvDelegate tagToCrvConverter,
         GenerateNonceDelegate generateContentEncryptionKey,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(innerPackedMessage);
@@ -588,7 +588,7 @@ public static class RoutingForwardExtensions
         string routingKey,
         DidResolver didResolver,
         ExchangeContext exchangeContext,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         string did = BaseDidOf(routingKey);
@@ -649,7 +649,7 @@ public static class RoutingForwardExtensions
         HashFunctionSelector? hashFunctionSelector,
         JsonValueSerializer? jsonValueSerializer,
         DecodeDelegate? hashBase58Decoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         if(!unpacked.IsUnpacked || unpacked.Message is null)
@@ -678,7 +678,7 @@ public static class RoutingForwardExtensions
         HashFunctionSelector? hashFunctionSelector,
         JsonValueSerializer? jsonValueSerializer,
         DecodeDelegate? hashBase58Decoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         if(!forward.IsForward())
@@ -779,7 +779,7 @@ public static class RoutingForwardExtensions
     //A json-value serializer stand-in used only to satisfy the resolver's non-null parameter when no json
     //seam is supplied; it fails closed (MalformedInline) so a data.json forward without the seam is rejected
     //rather than silently mishandled.
-    private static IMemoryOwner<byte> NoJsonValue(object jsonValue, MemoryPool<byte> memoryPool) =>
+    private static IMemoryOwner<byte> NoJsonValue(object jsonValue, BaseMemoryPool memoryPool) =>
         throw new FormatException("No JsonValueSerializer seam was supplied for a data.json attachment.");
 
 

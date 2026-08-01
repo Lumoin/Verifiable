@@ -29,7 +29,7 @@ namespace Verifiable.Tpm;
 /// plain static <see cref="SigningDelegate"/>. Build the context with
 /// <see cref="CreateP256SigningContext(TpmDevice)"/> (or assemble the <see cref="SchemeContextKey"/> and
 /// related entries directly for other schemes), and carry the handle with
-/// <see cref="CreateHandleKeyMemory(uint, Tag, MemoryPool{byte})"/>.
+/// <see cref="CreateHandleKeyMemory(uint, Tag, BaseMemoryPool)"/>.
 /// </para>
 /// </remarks>
 public static class TpmCryptographicFunctions
@@ -79,7 +79,7 @@ public static class TpmCryptographicFunctions
     /// <param name="tag">The key tag (algorithm/purpose), for example <see cref="CryptoTags.P256PrivateKey"/>.</param>
     /// <param name="pool">The memory pool for the handle buffer.</param>
     /// <returns>Private-key memory carrying the handle.</returns>
-    public static PrivateKeyMemory CreateHandleKeyMemory(uint handle, Tag tag, MemoryPool<byte> pool)
+    public static PrivateKeyMemory CreateHandleKeyMemory(uint handle, Tag tag, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);
@@ -107,7 +107,7 @@ public static class TpmCryptographicFunctions
     public static async ValueTask<(Signature Signature, CryptoEvent? Event)> SignAsync(
         ReadOnlyMemory<byte> handleBytes,
         ReadOnlyMemory<byte> dataToSign,
-        MemoryPool<byte> signaturePool,
+        BaseMemoryPool signaturePool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
@@ -172,7 +172,7 @@ public static class TpmCryptographicFunctions
     /// <param name="hash">The hash algorithm the digest was computed under.</param>
     /// <param name="pool">The memory pool for the command's buffers.</param>
     /// <returns>A configured <see cref="SignInput"/>.</returns>
-    private static SignInput BuildSignInput(uint handle, ReadOnlySpan<byte> digest, TpmAlgIdConstants scheme, TpmAlgIdConstants hash, MemoryPool<byte> pool)
+    private static SignInput BuildSignInput(uint handle, ReadOnlySpan<byte> digest, TpmAlgIdConstants scheme, TpmAlgIdConstants hash, BaseMemoryPool pool)
     {
         TpmiDhObject keyHandle = TpmiDhObject.FromValue(handle);
 
@@ -187,7 +187,7 @@ public static class TpmCryptographicFunctions
 
     /// <summary>
     /// Hashes <paramref name="message"/> through the registered async digest seam
-    /// (<see cref="CryptographicKeyEvents.ComputeDigestAsync(ReadOnlyMemory{byte}, int, Tag, MemoryPool{byte}, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>)
+    /// (<see cref="CryptographicKeyEvents.ComputeDigestAsync(ReadOnlyMemory{byte}, int, Tag, BaseMemoryPool, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>)
     /// into <paramref name="destination"/>, rather than a direct framework hash call — this TPM host-side
     /// pre-hash before <c>TPM2_Sign</c> is exactly the kind of trust/custody digest the async seam exists
     /// for (it may be TPM2_Hash- or KMS-backed), matching this assembly's own
@@ -200,7 +200,7 @@ public static class TpmCryptographicFunctions
     /// <param name="pool">The memory pool the digest computation rents pooled buffers from.</param>
     /// <param name="cancellationToken">A token observed while awaiting the digest.</param>
     private static async ValueTask ComputeDigestAsync(
-        ReadOnlyMemory<byte> message, TpmAlgIdConstants hash, Memory<byte> destination, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> message, TpmAlgIdConstants hash, Memory<byte> destination, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         Tag tag = BuildDigestTag(hash);
         using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(

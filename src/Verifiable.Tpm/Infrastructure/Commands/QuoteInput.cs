@@ -73,7 +73,7 @@ public sealed class QuoteInput: ITpmCommandInput, IDisposable
         ReadOnlySpan<byte> qualifyingData,
         TpmAlgIdConstants schemeHashAlg,
         TpmlPcrSelection pcrSelection,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return Create(signHandle, qualifyingData, TpmAlgIdConstants.TPM_ALG_ECDSA, schemeHashAlg, pcrSelection, pool);
     }
@@ -92,7 +92,7 @@ public sealed class QuoteInput: ITpmCommandInput, IDisposable
         ReadOnlySpan<byte> qualifyingData,
         TpmAlgIdConstants schemeHashAlg,
         TpmlPcrSelection pcrSelection,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return Create(signHandle, qualifyingData, TpmAlgIdConstants.TPM_ALG_RSASSA, schemeHashAlg, pcrSelection, pool);
     }
@@ -111,7 +111,7 @@ public sealed class QuoteInput: ITpmCommandInput, IDisposable
         ReadOnlySpan<byte> qualifyingData,
         TpmAlgIdConstants schemeHashAlg,
         TpmlPcrSelection pcrSelection,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return Create(signHandle, qualifyingData, TpmAlgIdConstants.TPM_ALG_RSAPSS, schemeHashAlg, pcrSelection, pool);
     }
@@ -132,7 +132,7 @@ public sealed class QuoteInput: ITpmCommandInput, IDisposable
         TpmAlgIdConstants signatureScheme,
         TpmAlgIdConstants schemeHashAlg,
         TpmlPcrSelection pcrSelection,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pcrSelection);
         ArgumentNullException.ThrowIfNull(pool);

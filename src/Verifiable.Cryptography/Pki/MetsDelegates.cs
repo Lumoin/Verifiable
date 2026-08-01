@@ -210,7 +210,7 @@ public sealed record MetsParseContext
 /// <returns>The parse result.</returns>
 public delegate ValueTask<MetsParseResult> ParseMetsDelegate(
     MetsParseContext context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 
@@ -356,5 +356,5 @@ public sealed record MetsEncodeContext
 /// <returns>The encoding result.</returns>
 public delegate ValueTask<MetsEncodeResult> EncodeMetsDelegate(
     MetsEncodeContext context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);

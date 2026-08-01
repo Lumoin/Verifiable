@@ -787,7 +787,7 @@ internal sealed class Bbs2023W3cVectorTests
         }
 
 
-        public byte[] Sign(ReadOnlyMemory<byte> bbsHeader, IReadOnlyList<byte[]> messages, MemoryPool<byte> pool)
+        public byte[] Sign(ReadOnlyMemory<byte> bbsHeader, IReadOnlyList<byte[]> messages, BaseMemoryPool pool)
         {
             var header = new BbsHeader(bbsHeader);
             var bbsMessages = ToBbsMessages(messages);
@@ -811,7 +811,7 @@ internal sealed class Bbs2023W3cVectorTests
         }
 
 
-        public bool Verify(ReadOnlyMemory<byte> bbsSignature, ReadOnlyMemory<byte> bbsHeader, IReadOnlyList<byte[]> messages, MemoryPool<byte> pool)
+        public bool Verify(ReadOnlyMemory<byte> bbsSignature, ReadOnlyMemory<byte> bbsHeader, IReadOnlyList<byte[]> messages, BaseMemoryPool pool)
         {
             var header = new BbsHeader(bbsHeader);
             var bbsMessages = ToBbsMessages(messages);
@@ -845,7 +845,7 @@ internal sealed class Bbs2023W3cVectorTests
             ReadOnlyMemory<byte> presentationHeader,
             IReadOnlyList<byte[]> messages,
             IReadOnlyList<int> disclosedIndexes,
-            MemoryPool<byte> pool)
+            BaseMemoryPool pool)
         {
             return GenerateProof(bbsSignature, bbsHeader, presentationHeader, messages, disclosedIndexes, scalarBackend.Random);
         }
@@ -880,7 +880,7 @@ internal sealed class Bbs2023W3cVectorTests
             ReadOnlyMemory<byte> presentationHeader,
             IReadOnlyList<byte[]> disclosedMessages,
             IReadOnlyList<int> disclosedIndexes,
-            MemoryPool<byte> pool)
+            BaseMemoryPool pool)
         {
             var header = new BbsHeader(bbsHeader);
             var ph = new BbsPresentationHeader(presentationHeader);

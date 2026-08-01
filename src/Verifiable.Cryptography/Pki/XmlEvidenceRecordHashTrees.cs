@@ -202,7 +202,7 @@ public static class XmlEvidenceRecordHashTrees
     public static async ValueTask<XmlEvidenceRecordRootComputation> ComputeRootAsync(
         XmlEvidenceRecordHashTree hashTree,
         PkiDigestAlgorithm algorithm,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(hashTree);
@@ -312,7 +312,7 @@ public static class XmlEvidenceRecordHashTrees
     public static async ValueTask<DigestValue> CombineAsync(
         IReadOnlyList<ReadOnlyMemory<byte>> hashValues,
         PkiDigestAlgorithm algorithm,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(hashValues);
@@ -463,7 +463,7 @@ public static class XmlEvidenceRecordHashTrees
         Justification = "At every await and every rent, a value is owned by exactly one of the nodes list, the next-level list, the sequences lists, or — for one combination's unowned window — a guard that disposes it; the catch disposes all four, and the root and the sequences transfer to the returned build, which the caller disposes.")]
     public static async ValueTask<XmlEvidenceRecordHashTreeBuild> BuildAsync(
         XmlEvidenceRecordHashTreeBuildContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -632,7 +632,7 @@ public static class XmlEvidenceRecordHashTrees
         //the sibling a verifier adds its carried value to at this level.
         static void AppendSiblingSequences(
             List<List<XmlEvidenceRecordSequence>> sequences, IReadOnlyList<int> groups, DigestValue sibling,
-            PkiDigestAlgorithm algorithm, MemoryPool<byte> pool)
+            PkiDigestAlgorithm algorithm, BaseMemoryPool pool)
         {
             for(int i = 0; i < groups.Count; ++i)
             {
@@ -655,7 +655,7 @@ public static class XmlEvidenceRecordHashTrees
     /// <param name="algorithm">The algorithm whose tag the carrier states.</param>
     /// <param name="pool">The memory pool the carrier is rented from.</param>
     /// <returns>The owned copy.</returns>
-    private static DigestValue Copy(ReadOnlyMemory<byte> value, PkiDigestAlgorithm algorithm, MemoryPool<byte> pool)
+    private static DigestValue Copy(ReadOnlyMemory<byte> value, PkiDigestAlgorithm algorithm, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(value.Length);
         try

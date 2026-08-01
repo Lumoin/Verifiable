@@ -31,7 +31,7 @@ internal sealed class TpmCreateLoadTests
     [TestMethod]
     public void Tpm2bPrivateRoundTripsThroughTheWire()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using Tpm2bPrivate original = Tpm2bPrivate.Create(SampleBlob, pool);
         Assert.AreEqual(SampleBlob.Length, original.Length);
@@ -52,7 +52,7 @@ internal sealed class TpmCreateLoadTests
     [TestMethod]
     public void EmptyTpm2bPrivateRoundTrips()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         Tpm2bPrivate empty = Tpm2bPrivate.Empty;
         Assert.IsTrue(empty.IsEmpty);
@@ -72,7 +72,7 @@ internal sealed class TpmCreateLoadTests
     [TestMethod]
     public void CreateInputSerializesHandleAndParameters()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using var input = CreateInput.ForEccSigningChild(
             ParentHandle,
@@ -112,7 +112,7 @@ internal sealed class TpmCreateLoadTests
     [TestMethod]
     public void LoadInputRoundTripsPrivateAndPublic()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //The input owns the blob and public area it is built with; the redundant using locals satisfy CA2000
         //and are safe via idempotent disposal.
@@ -148,7 +148,7 @@ internal sealed class TpmCreateLoadTests
     [TestMethod]
     public void CreateResponseParsesFieldsInSpecOrder()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //Build a TPM2_Create response parameter image by hand and confirm CreateResponse.Parse reads the
         //five fields in the Part 3, 12.1 order — outPrivate FIRST, then outPublic. Both are size-prefixed
@@ -184,7 +184,7 @@ internal sealed class TpmCreateLoadTests
     //Writes a minimal valid TPM2B_CREATION_DATA: TPMS_CREATION_DATA = pcrSelect (TPML_PCR_SELECTION) +
     //pcrDigest (TPM2B_DIGEST) + locality (BYTE) + parentNameAlg (TPM_ALG_ID) + parentName (TPM2B_NAME) +
     //parentQualifiedName (TPM2B_NAME) + outsideInfo (TPM2B_DATA), all empty, wrapped in the TPM2B size.
-    private static void WriteMinimalCreationData(ref TpmWriter writer, MemoryPool<byte> pool)
+    private static void WriteMinimalCreationData(ref TpmWriter writer, BaseMemoryPool pool)
     {
         using IMemoryOwner<byte> inner = pool.Rent(64);
         var innerWriter = new TpmWriter(inner.Memory.Span);
@@ -203,7 +203,7 @@ internal sealed class TpmCreateLoadTests
     [TestMethod]
     public void LoadResponseParsesHandleAndName()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         const uint ObjectHandle = 0x8000_00AB;
         ReadOnlySpan<byte> nameBytes = [0x00, 0x0B, 0xDE, 0xAD, 0xBE, 0xEF];
 

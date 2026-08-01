@@ -71,7 +71,7 @@ public sealed record JoseSigningConfig
     /// typically pass <c>BaseMemoryPool.Shared</c>; tests may
     /// inject a different pool for instrumentation.
     /// </summary>
-    public required MemoryPool<byte> MemoryPool { get; init; }
+    public required BaseMemoryPool MemoryPool { get; init; }
 
     /// <summary>
     /// Optional media type for the JWS <c>typ</c> header per

@@ -222,7 +222,7 @@ internal sealed class ObservedCbomTests
 
         //Draw entropy OUTSIDE the observed run. Its spans land in the same process-wide
         //listener but must be excluded because they carry a different trace id.
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using(Salt outsideSalt = CryptographicKeyEvents.GenerateSalt(32, CryptoTags.MdocIssuerSignedItemRandom, pool))
         {
             CbomDocument document = await observer.ObserveAsync(
@@ -260,7 +260,7 @@ internal sealed class ObservedCbomTests
     //(inside the run, so the keygen span inherits the run trace id).
     private static async Task RunSigningWorkloadAsync()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] payload = Encoding.UTF8.GetBytes("Observed CBOM signing workload payload.");
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> signingKeys =
@@ -290,7 +290,7 @@ internal sealed class ObservedCbomTests
     //stamped, not a single assumed value.
     private static Task RunPrimitiveDerivationWorkloadAsync()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> kemKeys =
             BouncyCastleKeyMaterialCreator.CreateMlKem768Keys(pool);
@@ -315,7 +315,7 @@ internal sealed class ObservedCbomTests
     //and entropy-backed salt and nonce via the registered key-event delegates.
     private static async Task RunWorkloadAsync()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] payload = Encoding.UTF8.GetBytes("Observed CBOM test workload payload.");
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =

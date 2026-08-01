@@ -72,7 +72,7 @@ internal sealed class DictionaryBackedCtapStateCustodyStore
 
 
     /// <summary>Attempts to load the snapshot bytes persisted for <paramref name="runId"/>. Has the <see cref="TryLoadSnapshotAsyncDelegate"/> shape.</summary>
-    private ValueTask<PooledMemory?> TryLoadSnapshotAsync(string runId, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private ValueTask<PooledMemory?> TryLoadSnapshotAsync(string runId, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         OperationLog.Add($"Load:{runId}");
 

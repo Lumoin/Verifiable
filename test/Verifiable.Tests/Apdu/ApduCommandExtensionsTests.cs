@@ -14,7 +14,7 @@ internal sealed class ApduCommandExtensionsTests
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The ApduResponse is owned by the returned ApduResult and disposed by the test that consumes it.")]
-    private static ApduResult<ApduResponse> SuccessFrame(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
+    private static ApduResult<ApduResponse> SuccessFrame(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(bytes.Length);
         bytes.CopyTo(owner.Memory.Span);
@@ -28,7 +28,7 @@ internal sealed class ApduCommandExtensionsTests
     {
         ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             //SELECT answers with an FCI template (tag 6F) followed by 9000.
@@ -38,7 +38,7 @@ internal sealed class ApduCommandExtensionsTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ApduResult<SelectResponse> result = await device.SelectAsync(
             WellKnownAid.Mrtd, pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -58,7 +58,7 @@ internal sealed class ApduCommandExtensionsTests
     {
         ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             byte[] frame = [0x6A, 0x82];
@@ -67,7 +67,7 @@ internal sealed class ApduCommandExtensionsTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ApduResult<SelectResponse> result = await device.SelectAsync(
             WellKnownAid.Mrtd, pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -81,14 +81,14 @@ internal sealed class ApduCommandExtensionsTests
     {
         ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             return ValueTask.FromResult(ApduResult<ApduResponse>.TransportError(0x80100069));
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ApduResult<SelectResponse> result = await device.SelectAsync(
             WellKnownAid.Mrtd, pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -103,7 +103,7 @@ internal sealed class ApduCommandExtensionsTests
 
         ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             observedCommand = commandApdu.ToArray();
@@ -113,7 +113,7 @@ internal sealed class ApduCommandExtensionsTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ApduResult<ReadBinaryResponse> result = await device.ReadBinaryAsync(
             0x7F12, 5, pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -144,7 +144,7 @@ internal sealed class ApduCommandExtensionsTests
 
         ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             byte ins = commandApdu.Span[1];
@@ -164,7 +164,7 @@ internal sealed class ApduCommandExtensionsTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ApduResult<ReadBinaryResponse> result = await device.ReadBinaryAsync(
             0, 4, pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -186,7 +186,7 @@ internal sealed class ApduCommandExtensionsTests
 
         ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             observedCommand = commandApdu.ToArray();
@@ -197,7 +197,7 @@ internal sealed class ApduCommandExtensionsTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ApduResult<GetChallengeResponse> result = await device.GetChallengeAsync(
             8, pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -225,7 +225,7 @@ internal sealed class ApduCommandExtensionsTests
     {
         using var device = ApduDevice.Create(static (command, pool, ct) =>
             ValueTask.FromResult(ApduResult<ApduResponse>.TransportError(0)));
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
             async () => await device.ReadBinaryAsync(0x8000, 1, pool, TestContext.CancellationToken)).ConfigureAwait(false);
@@ -236,7 +236,7 @@ internal sealed class ApduCommandExtensionsTests
     {
         using var device = ApduDevice.Create(static (command, pool, ct) =>
             ValueTask.FromResult(ApduResult<ApduResponse>.TransportError(0)));
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
             async () => await device.ReadBinaryAsync(0, 0, pool, TestContext.CancellationToken)).ConfigureAwait(false);
@@ -250,7 +250,7 @@ internal sealed class ApduCommandExtensionsTests
     {
         using var device = ApduDevice.Create(static (command, pool, ct) =>
             ValueTask.FromResult(ApduResult<ApduResponse>.TransportError(0)));
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
             async () => await device.GetChallengeAsync(0, pool, TestContext.CancellationToken)).ConfigureAwait(false);

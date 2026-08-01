@@ -100,7 +100,7 @@ public static partial class TcgEventLogReader
     /// <remarks>
     /// The caller is responsible for disposing the returned <see cref="IMemoryOwner{T}"/>.
     /// </remarks>
-    public static TpmResult<TcgEventLogData> ReadEventLog(MemoryPool<byte> pool)
+    public static TpmResult<TcgEventLogData> ReadEventLog(BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         if(RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -132,7 +132,7 @@ public static partial class TcgEventLogReader
     /// via <c>fstat</c> to confirm it refers to a regular file, preventing symlink-based redirection.
     /// </para>
     /// </remarks>
-    public static TpmResult<TcgEventLogData> ReadEventLogFromFile(string path, MemoryPool<byte> pool)
+    public static TpmResult<TcgEventLogData> ReadEventLogFromFile(string path, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(path);
         ArgumentNullException.ThrowIfNull(pool);
@@ -160,7 +160,7 @@ public static partial class TcgEventLogReader
     [UnsupportedOSPlatform("browser")]
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership transferred to TcgEventLogData and then to caller.")]
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Any exception is treated the same.")]
-    private static TpmResult<TcgEventLogData> ReadWindowsEventLog(MemoryPool<byte> pool)
+    private static TpmResult<TcgEventLogData> ReadWindowsEventLog(BaseMemoryPool pool)
     {
         IMemoryOwner<byte>? memoryOwner = null;
         try
@@ -216,7 +216,7 @@ public static partial class TcgEventLogReader
     /// Reads the Linux event log from securityfs.
     /// </summary>
     [UnsupportedOSPlatform("browser")]
-    private static TpmResult<TcgEventLogData> ReadLinuxEventLog(MemoryPool<byte> pool)
+    private static TpmResult<TcgEventLogData> ReadLinuxEventLog(BaseMemoryPool pool)
     {
         return ReadLinuxFileHardened(LinuxEventLogPath, pool);
     }
@@ -233,7 +233,7 @@ public static partial class TcgEventLogReader
     /// </remarks>
     [UnsupportedOSPlatform("browser")]
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Any exception during file operations is treated as I/O error.")]
-    private static TpmResult<TcgEventLogData> ReadLinuxFileHardened(string path, MemoryPool<byte> pool)
+    private static TpmResult<TcgEventLogData> ReadLinuxFileHardened(string path, BaseMemoryPool pool)
     {
         //O_NOFOLLOW: reject if the target is a symlink, preventing redirection to an attacker-controlled file.
         //O_CLOEXEC: prevent descriptor from being inherited by child processes.
@@ -332,7 +332,7 @@ public static partial class TcgEventLogReader
     /// <summary>
     /// Fallback file reading for non-Linux platforms using managed <see cref="FileStream"/>.
     /// </summary>
-    private static TpmResult<TcgEventLogData> ReadFileFallback(string path, MemoryPool<byte> pool)
+    private static TpmResult<TcgEventLogData> ReadFileFallback(string path, BaseMemoryPool pool)
     {
         try
         {
@@ -375,7 +375,7 @@ public static partial class TcgEventLogReader
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership transferred to TcgEventLogData and then to caller.")]
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "<Pending>")]
-    private static TpmResult<TcgEventLogData> ReadFromStream(Stream stream, MemoryPool<byte> pool)
+    private static TpmResult<TcgEventLogData> ReadFromStream(Stream stream, BaseMemoryPool pool)
     {
         //Read in chunks to avoid large single allocation for unknown-size streams.
         IMemoryOwner<byte> memoryOwner = pool.Rent(InitialBufferSize);

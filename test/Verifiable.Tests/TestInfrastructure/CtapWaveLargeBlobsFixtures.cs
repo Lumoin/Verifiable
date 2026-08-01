@@ -55,7 +55,7 @@ internal static class CtapWaveLargeBlobsFixtures
 
     /// <summary>Encodes and sends an <c>authenticatorLargeBlobs</c> request, returning the raw response envelope. The caller owns it and must dispose it.</summary>
     public static async Task<PooledMemory> SendAsync(
-        CtapAuthenticatorSimulator simulator, CtapLargeBlobsRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapAuthenticatorSimulator simulator, CtapLargeBlobsRequest request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] envelope = BuildEnvelope(request);
 
@@ -65,7 +65,7 @@ internal static class CtapWaveLargeBlobsFixtures
 
     /// <summary>Encodes, sends, and returns ONLY the CTAP2 status byte of an <c>authenticatorLargeBlobs</c> request.</summary>
     public static async Task<byte> SendExpectingStatusAsync(
-        CtapAuthenticatorSimulator simulator, CtapLargeBlobsRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapAuthenticatorSimulator simulator, CtapLargeBlobsRequest request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using PooledMemory response = await SendAsync(simulator, request, pool, cancellationToken).ConfigureAwait(false);
 
@@ -85,7 +85,7 @@ internal static class CtapWaveLargeBlobsFixtures
     /// <param name="pool">The memory pool the digest computation allocates from.</param>
     /// <param name="littleEndian">Whether the offset is written little-endian (spec-correct) or big-endian (deliberately wrong).</param>
     /// <returns>The assembled 70-byte verify message.</returns>
-    public static byte[] BuildVerifyMessage(int offset, ReadOnlySpan<byte> fragment, MemoryPool<byte> pool, bool littleEndian = true)
+    public static byte[] BuildVerifyMessage(int offset, ReadOnlySpan<byte> fragment, BaseMemoryPool pool, bool littleEndian = true)
     {
         using DigestValue fragmentDigest = CryptographicKeyEvents.ComputeDigest(fragment, Sha256Length, CryptoTags.Sha256Digest, pool);
 
@@ -116,7 +116,7 @@ internal static class CtapWaveLargeBlobsFixtures
     /// checks a presented value against.
     /// </summary>
     public static async Task<byte[]> ComputeSetSignatureAsync(
-        byte[] token, CtapPinUvAuthProtocolId protocolId, int offset, ReadOnlyMemory<byte> fragment, MemoryPool<byte> pool, CancellationToken cancellationToken,
+        byte[] token, CtapPinUvAuthProtocolId protocolId, int offset, ReadOnlyMemory<byte> fragment, BaseMemoryPool pool, CancellationToken cancellationToken,
         bool littleEndian = true)
     {
         byte[] message = BuildVerifyMessage(offset, fragment.Span, pool, littleEndian);
@@ -132,7 +132,7 @@ internal static class CtapWaveLargeBlobsFixtures
     /// Required" column) — <c>lbw</c> alone needs none, its own RP ID column is "Ignored".
     /// </summary>
     public static async Task<byte[]> EstablishPinAndIssueTokenAsync(
-        CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, int permissions, CancellationToken cancellationToken,
+        CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, int permissions, CancellationToken cancellationToken,
         string? rpId = null)
     {
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, cancellationToken).ConfigureAwait(false);
@@ -155,7 +155,7 @@ internal static class CtapWaveLargeBlobsFixtures
     /// can reach in isolation.
     /// </summary>
     public static async Task CompleteBootstrapEnrollmentAsync(
-        CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, CancellationToken cancellationToken)
+        CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, CancellationToken cancellationToken)
     {
         byte[] beToken = await EstablishPinAndIssueTokenAsync(
             simulator, pool, protocolId, WellKnownCtapPinUvAuthTokenPermissions.Be, cancellationToken).ConfigureAwait(false);
@@ -192,7 +192,7 @@ internal static class CtapWaveLargeBlobsFixtures
 
     /// <summary>Computes a gated <c>authenticatorBioEnrollment</c> subcommand's own <c>pinUvAuthParam</c> (bio scout Finding C: <c>uint8(modality) || uint8(subCommand) || subCommandParams</c>).</summary>
     private static async Task<byte[]> ComputeBioMessageSignatureAsync(
-        byte[] token, CtapPinUvAuthProtocolId protocolId, int subCommand, ReadOnlyMemory<byte> subCommandParams, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        byte[] token, CtapPinUvAuthProtocolId protocolId, int subCommand, ReadOnlyMemory<byte> subCommandParams, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] message = new byte[2 + subCommandParams.Length];
         message[0] = (byte)WellKnownCtapBioEnrollmentModalities.Fingerprint;
@@ -205,7 +205,7 @@ internal static class CtapWaveLargeBlobsFixtures
 
     /// <summary>Encodes and sends an <c>authenticatorBioEnrollment</c> request, returning the raw response envelope. The caller owns it and must dispose it.</summary>
     private static async Task<PooledMemory> SendBioEnrollmentAsync(
-        CtapAuthenticatorSimulator simulator, CtapBioEnrollmentRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapAuthenticatorSimulator simulator, CtapBioEnrollmentRequest request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         TaggedMemory<byte> parameters = CtapBioEnrollmentRequestCborWriter.Write(request);
         int envelopeLength = parameters.Length + 1;
@@ -225,7 +225,7 @@ internal static class CtapWaveLargeBlobsFixtures
     /// already-enabled, so the gate does not apply at all).
     /// </summary>
     public static async Task<byte> ToggleAlwaysUvAsync(
-        CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, CancellationToken cancellationToken,
+        CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, CancellationToken cancellationToken,
         ReadOnlyMemory<byte>? pinUvAuthParam = null, int? pinUvAuthProtocol = null)
     {
         var request = new CtapAuthenticatorConfigRequest(

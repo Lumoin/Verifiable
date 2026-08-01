@@ -47,7 +47,7 @@ internal sealed class CtapAuthenticatorConfigFlowTests
     {
         const string RpId = "waveconfig-capstone-a.example";
         const string Pin = "1234";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveconfig-capstone-a");
@@ -177,7 +177,7 @@ internal sealed class CtapAuthenticatorConfigFlowTests
         const string RpId = "waveconfig-capstone-b.example";
         const string InitialPin = "1234";
         const string RaisedPin = "123456";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveconfig-capstone-b");
@@ -304,7 +304,7 @@ internal sealed class CtapAuthenticatorConfigFlowTests
 
 
     /// <summary>Sends an <c>authenticatorGetInfo</c> request over <paramref name="transceive"/> and decodes the response.</summary>
-    private static async Task<CtapGetInfoResponse> GetInfoAsync(Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<CtapGetInfoResponse> GetInfoAsync(Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] request = [WellKnownCtapCommands.GetInfo];
         using PooledMemory response = await transceive(request, pool, cancellationToken).ConfigureAwait(false);
@@ -315,7 +315,7 @@ internal sealed class CtapAuthenticatorConfigFlowTests
 
     /// <summary>Establishes <paramref name="pin"/> as the authenticator's PIN over <paramref name="transceive"/>'s real transport.</summary>
     private static async Task EstablishPinAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string pin, CancellationToken cancellationToken)
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string pin, CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(transceive, protocolId, pool, cancellationToken)
             .ConfigureAwait(false);
@@ -335,7 +335,7 @@ internal sealed class CtapAuthenticatorConfigFlowTests
     /// (<c>0x09</c>) over <paramref name="transceive"/>'s real transport, decrypting it from wire bytes only.
     /// </summary>
     private static async Task<byte[]> IssueTokenAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string pin, int permissions, string? rpId,
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string pin, int permissions, string? rpId,
         CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(transceive, protocolId, pool, cancellationToken)
@@ -359,7 +359,7 @@ internal sealed class CtapAuthenticatorConfigFlowTests
     /// bytes the request will carry.
     /// </summary>
     private static async Task SendSetMinPinLengthAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, byte[] token, int? newMinPinLength,
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, byte[] token, int? newMinPinLength,
         CancellationToken cancellationToken)
     {
         ReadOnlyMemory<byte> subCommandParams = newMinPinLength is null

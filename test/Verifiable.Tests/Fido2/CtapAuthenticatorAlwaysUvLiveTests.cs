@@ -41,7 +41,7 @@ internal sealed class CtapAuthenticatorAlwaysUvLiveTests
     /// <summary>Enables <c>alwaysUv</c> (unprotected, no PIN yet — no gate) and then establishes a PIN under <paramref name="protocolId"/>.</summary>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the returned CtapAuthenticatorSimulator transfers to the caller, which every call site wraps in its own using declaration.")]
-    private async Task<CtapAuthenticatorSimulator> CreateAlwaysUvEnabledProtectedSimulatorAsync(string runId, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId)
+    private async Task<CtapAuthenticatorSimulator> CreateAlwaysUvEnabledProtectedSimulatorAsync(string runId, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId)
     {
         CtapAuthenticatorSimulator simulator = CreateSimulator(runId);
 
@@ -53,7 +53,7 @@ internal sealed class CtapAuthenticatorAlwaysUvLiveTests
 
 
     /// <summary>Enables <c>alwaysUv</c> via <c>toggleAlwaysUv</c>, asserting success.</summary>
-    private async Task EnableAlwaysUvAsync(CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool)
+    private async Task EnableAlwaysUvAsync(CtapAuthenticatorSimulator simulator, BaseMemoryPool pool)
     {
         var enableRequest = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.ToggleAlwaysUv);
         using PooledMemory enableResponse = await CtapWaveConfigFixtures.SendAuthenticatorConfigAsync(simulator, enableRequest, pool, TestContext.CancellationToken);
@@ -65,7 +65,7 @@ internal sealed class CtapAuthenticatorAlwaysUvLiveTests
     [TestMethod]
     public async Task McResidentKeyFalseAlwaysUvOnNoParamReturnsPuatRequired()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = await CreateAlwaysUvEnabledProtectedSimulatorAsync("alwaysuv-mc-rk-false", pool, CtapPinUvAuthProtocolId.Two);
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, options: new CtapCommandOptions(ResidentKey: false));
@@ -79,7 +79,7 @@ internal sealed class CtapAuthenticatorAlwaysUvLiveTests
     [TestMethod]
     public async Task McResidentKeyTrueAlwaysUvOnNoParamReturnsPuatRequired()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = await CreateAlwaysUvEnabledProtectedSimulatorAsync("alwaysuv-mc-rk-true", pool, CtapPinUvAuthProtocolId.Two);
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, options: new CtapCommandOptions(ResidentKey: true));
@@ -94,7 +94,7 @@ internal sealed class CtapAuthenticatorAlwaysUvLiveTests
     public async Task GaUpAbsentAlwaysUvOnReturnsPuatRequired()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("alwaysuv-ga-up-absent");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x30), TestContext.CancellationToken);
         await EnableAlwaysUvAsync(simulator, pool);
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, CtapPinUvAuthProtocolId.Two, DefaultPin, TestContext.CancellationToken);
@@ -111,7 +111,7 @@ internal sealed class CtapAuthenticatorAlwaysUvLiveTests
     public async Task GaUpTrueAlwaysUvOnReturnsPuatRequired()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("alwaysuv-ga-up-true");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x31), TestContext.CancellationToken);
         await EnableAlwaysUvAsync(simulator, pool);
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, CtapPinUvAuthProtocolId.Two, DefaultPin, TestContext.CancellationToken);
@@ -128,7 +128,7 @@ internal sealed class CtapAuthenticatorAlwaysUvLiveTests
     public async Task GaUpFalseAlwaysUvOnSucceedsUvZeroUpZero()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("alwaysuv-ga-up-false");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x32), TestContext.CancellationToken);
         await EnableAlwaysUvAsync(simulator, pool);
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, CtapPinUvAuthProtocolId.Two, DefaultPin, TestContext.CancellationToken);
@@ -148,7 +148,7 @@ internal sealed class CtapAuthenticatorAlwaysUvLiveTests
     [TestMethod]
     public async Task AlwaysUvOnValidTokenMcSucceedsUvOne()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         using CtapAuthenticatorSimulator simulator = await CreateAlwaysUvEnabledProtectedSimulatorAsync("alwaysuv-mc-valid-token", pool, protocolId);
 
@@ -171,7 +171,7 @@ internal sealed class CtapAuthenticatorAlwaysUvLiveTests
     public async Task AlwaysUvOnValidTokenGaSucceedsUvOne()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("alwaysuv-ga-valid-token");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x33), TestContext.CancellationToken);
         await EnableAlwaysUvAsync(simulator, pool);
@@ -196,7 +196,7 @@ internal sealed class CtapAuthenticatorAlwaysUvLiveTests
     public async Task AlwaysUvOnNoPinMcReturnsPuatRequired()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("alwaysuv-mc-no-pin");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var enableRequest = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.ToggleAlwaysUv);
         using PooledMemory enableResponse = await CtapWaveConfigFixtures.SendAuthenticatorConfigAsync(simulator, enableRequest, pool, TestContext.CancellationToken);

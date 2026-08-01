@@ -58,7 +58,7 @@ public sealed class GetCapabilityResponse: ITpmWireType, IDisposable
     /// <param name="reader">The reader positioned at the response parameters.</param>
     /// <param name="pool">The memory pool for allocations.</param>
     /// <returns>The parsed response.</returns>
-    public static GetCapabilityResponse Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static GetCapabilityResponse Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         TpmiYesNo moreData = TpmiYesNo.Parse(ref reader);
         TpmsCapabilityData capabilityData = TpmsCapabilityData.Parse(ref reader, pool);

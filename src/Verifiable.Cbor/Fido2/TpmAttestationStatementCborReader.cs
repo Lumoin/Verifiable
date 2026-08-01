@@ -65,7 +65,7 @@ public static class TpmAttestationStatementCborReader
     /// <paramref name="attestationStatement"/> is not a CTAP2 canonical CBOR map conforming to the
     /// tpm <c>attStmt</c> syntax.
     /// </exception>
-    public static TpmAttestationStatement Parse(ReadOnlyMemory<byte> attestationStatement, MemoryPool<byte> pool)
+    public static TpmAttestationStatement Parse(ReadOnlyMemory<byte> attestationStatement, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -158,7 +158,7 @@ public static class TpmAttestationStatementCborReader
 
         //Reads the CBOR array of DER-encoded certificate byte strings at the reader's current position
         //into pooled PkiCertificateMemory carriers, AIK certificate first, per the tpm x5c CDDL.
-        static List<PkiCertificateMemory> ReadCertificateChain(CborReader reader, MemoryPool<byte> pool)
+        static List<PkiCertificateMemory> ReadCertificateChain(CborReader reader, BaseMemoryPool pool)
         {
             var certificates = new List<PkiCertificateMemory>();
             int? elementCount = reader.ReadStartArray();

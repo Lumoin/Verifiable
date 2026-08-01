@@ -39,7 +39,7 @@ public delegate IReadOnlyDictionary<TDisclosure, CredentialPath> ExtractDisclosu
     ReadOnlySpan<byte> payload,
     IReadOnlyList<TDisclosure> disclosures,
     EncodeDelegate encoder,
-    MemoryPool<byte> pool);
+    BaseMemoryPool pool);
 
 
 /// <summary>

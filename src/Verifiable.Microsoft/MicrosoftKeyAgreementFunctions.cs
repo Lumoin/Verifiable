@@ -72,7 +72,7 @@ public static class MicrosoftKeyAgreementFunctions
     /// </returns>
     public static async ValueTask<EphemeralKeyAgreementResult> EcdhKeyAgreementEncryptP256Async(
         PublicKeyMemory recipientPublicKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(recipientPublicKey);
@@ -157,7 +157,7 @@ public static class MicrosoftKeyAgreementFunctions
     public static ValueTask<SharedSecret> EcdhKeyAgreementDecryptP256Async(
         ReadOnlyMemory<byte> privateKeyBytes,
         PublicKeyMemory epk,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(epk);
@@ -209,22 +209,22 @@ public static class MicrosoftKeyAgreementFunctions
 
     /// <summary>Performs ECDH key agreement (encrypt side) using NIST P-384 (RFC 7518 §6.2.1.2). Matches <see cref="KeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<EphemeralKeyAgreementResult> EcdhKeyAgreementEncryptP384Async(
-        PublicKeyMemory recipientPublicKey, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhEncryptNistAsync(ECCurve.NamedCurves.nistP384, CryptoTags.P384ExchangePublicKey, CryptoTags.P384ExchangePrivateKey, recipientPublicKey, pool, cancellationToken);
 
     /// <summary>Performs ECDH key agreement (decrypt side) using NIST P-384 (RFC 7518 §6.2.1.2). Matches <see cref="KeyAgreementDecryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> EcdhKeyAgreementDecryptP384Async(
-        ReadOnlyMemory<byte> privateKeyBytes, PublicKeyMemory epk, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        ReadOnlyMemory<byte> privateKeyBytes, PublicKeyMemory epk, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhDecryptNistAsync(ECCurve.NamedCurves.nistP384, P384CurveOid, CryptoTags.P384ExchangePrivateKey, privateKeyBytes, epk, pool, cancellationToken);
 
     /// <summary>Performs ECDH key agreement (encrypt side) using NIST P-521 (RFC 7518 §6.2.1.3). Matches <see cref="KeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<EphemeralKeyAgreementResult> EcdhKeyAgreementEncryptP521Async(
-        PublicKeyMemory recipientPublicKey, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhEncryptNistAsync(ECCurve.NamedCurves.nistP521, CryptoTags.P521ExchangePublicKey, CryptoTags.P521ExchangePrivateKey, recipientPublicKey, pool, cancellationToken);
 
     /// <summary>Performs ECDH key agreement (decrypt side) using NIST P-521 (RFC 7518 §6.2.1.3). Matches <see cref="KeyAgreementDecryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> EcdhKeyAgreementDecryptP521Async(
-        ReadOnlyMemory<byte> privateKeyBytes, PublicKeyMemory epk, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        ReadOnlyMemory<byte> privateKeyBytes, PublicKeyMemory epk, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhDecryptNistAsync(ECCurve.NamedCurves.nistP521, P521CurveOid, CryptoTags.P521ExchangePrivateKey, privateKeyBytes, epk, pool, cancellationToken);
 
 
@@ -236,7 +236,7 @@ public static class MicrosoftKeyAgreementFunctions
         Tag epkTag,
         Tag sharedSecretTag,
         PublicKeyMemory recipientPublicKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(recipientPublicKey);
@@ -311,7 +311,7 @@ public static class MicrosoftKeyAgreementFunctions
         Tag sharedSecretTag,
         ReadOnlyMemory<byte> privateKeyBytes,
         PublicKeyMemory epk,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(epk);
@@ -419,32 +419,32 @@ public static class MicrosoftKeyAgreementFunctions
 
     /// <summary>Performs ECDH-1PU key agreement (encrypt side) using NIST P-256 (draft-madden-jose-ecdh-1pu-04 §2.3). Matches <see cref="AuthenticatedKeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<EphemeralKeyAgreementResult> Ecdh1PuKeyAgreementEncryptP256Async(
-        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> senderPrivateKeyBytes, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> senderPrivateKeyBytes, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         Ecdh1PuEncryptNistAsync(ECCurve.NamedCurves.nistP256, P256CurveOid, CryptoTags.P256ExchangePublicKey, CryptoTags.P256ExchangePrivateKey, recipientPublicKey, senderPrivateKeyBytes, pool, cancellationToken);
 
     /// <summary>Performs ECDH-1PU key agreement (decrypt side) using NIST P-256 (draft-madden-jose-ecdh-1pu-04 §2.3). Matches <see cref="AuthenticatedKeyAgreementDecryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> Ecdh1PuKeyAgreementDecryptP256Async(
-        ReadOnlyMemory<byte> recipientPrivateKeyBytes, PublicKeyMemory ephemeralPublicKey, PublicKeyMemory senderPublicKey, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        ReadOnlyMemory<byte> recipientPrivateKeyBytes, PublicKeyMemory ephemeralPublicKey, PublicKeyMemory senderPublicKey, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         Ecdh1PuDecryptNistAsync(ECCurve.NamedCurves.nistP256, P256CurveOid, CryptoTags.P256ExchangePrivateKey, recipientPrivateKeyBytes, ephemeralPublicKey, senderPublicKey, pool, cancellationToken);
 
     /// <summary>Performs ECDH-1PU key agreement (encrypt side) using NIST P-384 (draft-madden-jose-ecdh-1pu-04 §2.3). Matches <see cref="AuthenticatedKeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<EphemeralKeyAgreementResult> Ecdh1PuKeyAgreementEncryptP384Async(
-        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> senderPrivateKeyBytes, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> senderPrivateKeyBytes, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         Ecdh1PuEncryptNistAsync(ECCurve.NamedCurves.nistP384, P384CurveOid, CryptoTags.P384ExchangePublicKey, CryptoTags.P384ExchangePrivateKey, recipientPublicKey, senderPrivateKeyBytes, pool, cancellationToken);
 
     /// <summary>Performs ECDH-1PU key agreement (decrypt side) using NIST P-384 (draft-madden-jose-ecdh-1pu-04 §2.3). Matches <see cref="AuthenticatedKeyAgreementDecryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> Ecdh1PuKeyAgreementDecryptP384Async(
-        ReadOnlyMemory<byte> recipientPrivateKeyBytes, PublicKeyMemory ephemeralPublicKey, PublicKeyMemory senderPublicKey, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        ReadOnlyMemory<byte> recipientPrivateKeyBytes, PublicKeyMemory ephemeralPublicKey, PublicKeyMemory senderPublicKey, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         Ecdh1PuDecryptNistAsync(ECCurve.NamedCurves.nistP384, P384CurveOid, CryptoTags.P384ExchangePrivateKey, recipientPrivateKeyBytes, ephemeralPublicKey, senderPublicKey, pool, cancellationToken);
 
     /// <summary>Performs ECDH-1PU key agreement (encrypt side) using NIST P-521 (draft-madden-jose-ecdh-1pu-04 §2.3). Matches <see cref="AuthenticatedKeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<EphemeralKeyAgreementResult> Ecdh1PuKeyAgreementEncryptP521Async(
-        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> senderPrivateKeyBytes, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> senderPrivateKeyBytes, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         Ecdh1PuEncryptNistAsync(ECCurve.NamedCurves.nistP521, P521CurveOid, CryptoTags.P521ExchangePublicKey, CryptoTags.P521ExchangePrivateKey, recipientPublicKey, senderPrivateKeyBytes, pool, cancellationToken);
 
     /// <summary>Performs ECDH-1PU key agreement (decrypt side) using NIST P-521 (draft-madden-jose-ecdh-1pu-04 §2.3). Matches <see cref="AuthenticatedKeyAgreementDecryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> Ecdh1PuKeyAgreementDecryptP521Async(
-        ReadOnlyMemory<byte> recipientPrivateKeyBytes, PublicKeyMemory ephemeralPublicKey, PublicKeyMemory senderPublicKey, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        ReadOnlyMemory<byte> recipientPrivateKeyBytes, PublicKeyMemory ephemeralPublicKey, PublicKeyMemory senderPublicKey, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         Ecdh1PuDecryptNistAsync(ECCurve.NamedCurves.nistP521, P521CurveOid, CryptoTags.P521ExchangePrivateKey, recipientPrivateKeyBytes, ephemeralPublicKey, senderPublicKey, pool, cancellationToken);
 
 
@@ -458,7 +458,7 @@ public static class MicrosoftKeyAgreementFunctions
         Tag sharedSecretTag,
         PublicKeyMemory recipientPublicKey,
         ReadOnlyMemory<byte> senderPrivateKeyBytes,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(recipientPublicKey);
@@ -530,7 +530,7 @@ public static class MicrosoftKeyAgreementFunctions
         ReadOnlyMemory<byte> recipientPrivateKeyBytes,
         PublicKeyMemory ephemeralPublicKey,
         PublicKeyMemory senderPublicKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(ephemeralPublicKey);
@@ -584,32 +584,32 @@ public static class MicrosoftKeyAgreementFunctions
 
     /// <summary>Performs multi-recipient ECDH-ES key agreement (encrypt side) with a caller-held ephemeral key using NIST P-256. Matches <see cref="MultiRecipientKeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> EcdhEsMultiRecipientAgreementEncryptP256Async(
-        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhEsMultiRecipientEncryptNistAsync(ECCurve.NamedCurves.nistP256, P256CurveOid, CryptoTags.P256ExchangePrivateKey, recipientPublicKey, ephemeralPrivateKeyBytes, pool, cancellationToken);
 
     /// <summary>Performs multi-recipient ECDH-ES key agreement (encrypt side) with a caller-held ephemeral key using NIST P-384. Matches <see cref="MultiRecipientKeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> EcdhEsMultiRecipientAgreementEncryptP384Async(
-        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhEsMultiRecipientEncryptNistAsync(ECCurve.NamedCurves.nistP384, P384CurveOid, CryptoTags.P384ExchangePrivateKey, recipientPublicKey, ephemeralPrivateKeyBytes, pool, cancellationToken);
 
     /// <summary>Performs multi-recipient ECDH-ES key agreement (encrypt side) with a caller-held ephemeral key using NIST P-521. Matches <see cref="MultiRecipientKeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> EcdhEsMultiRecipientAgreementEncryptP521Async(
-        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhEsMultiRecipientEncryptNistAsync(ECCurve.NamedCurves.nistP521, P521CurveOid, CryptoTags.P521ExchangePrivateKey, recipientPublicKey, ephemeralPrivateKeyBytes, pool, cancellationToken);
 
     /// <summary>Performs multi-recipient ECDH-1PU key agreement (encrypt side) with a caller-held ephemeral key using NIST P-256. Matches <see cref="MultiRecipientAuthenticatedKeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> Ecdh1PuMultiRecipientAgreementEncryptP256Async(
-        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, ReadOnlyMemory<byte> senderPrivateKeyBytes, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, ReadOnlyMemory<byte> senderPrivateKeyBytes, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         Ecdh1PuMultiRecipientEncryptNistAsync(ECCurve.NamedCurves.nistP256, P256CurveOid, CryptoTags.P256ExchangePrivateKey, recipientPublicKey, ephemeralPrivateKeyBytes, senderPrivateKeyBytes, pool, cancellationToken);
 
     /// <summary>Performs multi-recipient ECDH-1PU key agreement (encrypt side) with a caller-held ephemeral key using NIST P-384. Matches <see cref="MultiRecipientAuthenticatedKeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> Ecdh1PuMultiRecipientAgreementEncryptP384Async(
-        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, ReadOnlyMemory<byte> senderPrivateKeyBytes, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, ReadOnlyMemory<byte> senderPrivateKeyBytes, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         Ecdh1PuMultiRecipientEncryptNistAsync(ECCurve.NamedCurves.nistP384, P384CurveOid, CryptoTags.P384ExchangePrivateKey, recipientPublicKey, ephemeralPrivateKeyBytes, senderPrivateKeyBytes, pool, cancellationToken);
 
     /// <summary>Performs multi-recipient ECDH-1PU key agreement (encrypt side) with a caller-held ephemeral key using NIST P-521. Matches <see cref="MultiRecipientAuthenticatedKeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> Ecdh1PuMultiRecipientAgreementEncryptP521Async(
-        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, ReadOnlyMemory<byte> senderPrivateKeyBytes, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, ReadOnlyMemory<byte> senderPrivateKeyBytes, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         Ecdh1PuMultiRecipientEncryptNistAsync(ECCurve.NamedCurves.nistP521, P521CurveOid, CryptoTags.P521ExchangePrivateKey, recipientPublicKey, ephemeralPrivateKeyBytes, senderPrivateKeyBytes, pool, cancellationToken);
 
 
@@ -623,7 +623,7 @@ public static class MicrosoftKeyAgreementFunctions
         Tag sharedSecretTag,
         PublicKeyMemory recipientPublicKey,
         ReadOnlyMemory<byte> ephemeralPrivateKeyBytes,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(recipientPublicKey);
@@ -675,7 +675,7 @@ public static class MicrosoftKeyAgreementFunctions
         PublicKeyMemory recipientPublicKey,
         ReadOnlyMemory<byte> ephemeralPrivateKeyBytes,
         ReadOnlyMemory<byte> senderPrivateKeyBytes,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(recipientPublicKey);
@@ -736,7 +736,7 @@ public static class MicrosoftKeyAgreementFunctions
     public static async ValueTask<Ciphertext> AesKeyWrapAsync(
         SymmetricKeyMemory keyEncryptionKey,
         SymmetricKeyMemory contentEncryptionKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(keyEncryptionKey);
@@ -807,7 +807,7 @@ public static class MicrosoftKeyAgreementFunctions
     public static async ValueTask<SymmetricKeyMemory> AesKeyUnwrapAsync(
         SymmetricKeyMemory keyEncryptionKey,
         ReadOnlyMemory<byte> wrappedKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(keyEncryptionKey);
@@ -888,22 +888,22 @@ public static class MicrosoftKeyAgreementFunctions
 
     /// <summary>Performs A128CBC-HS256 authenticated encryption (RFC 7518 §5.2.3). Matches <see cref="AeadEncryptDelegate"/>.</summary>
     public static ValueTask<AeadEncryptResult> AesCbcHmacSha256EncryptAsync(
-        ReadOnlyMemory<byte> plaintext, SymmetricKeyMemory key, AdditionalData aad, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        ReadOnlyMemory<byte> plaintext, SymmetricKeyMemory key, AdditionalData aad, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         CbcHmacEncryptAsync(A128CbcHs256Parameters, plaintext, key, aad, pool, cancellationToken);
 
     /// <summary>Performs A128CBC-HS256 authenticated decryption (RFC 7518 §5.2.3). Matches <see cref="AeadDecryptDelegate"/>.</summary>
     public static ValueTask<DecryptedContent> AesCbcHmacSha256DecryptAsync(
-        Ciphertext ciphertext, SymmetricKeyMemory key, Nonce iv, AuthenticationTag tag, AdditionalData aad, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        Ciphertext ciphertext, SymmetricKeyMemory key, Nonce iv, AuthenticationTag tag, AdditionalData aad, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         CbcHmacDecryptAsync(A128CbcHs256Parameters, ciphertext, key, iv, tag, aad, pool, cancellationToken);
 
     /// <summary>Performs A192CBC-HS384 authenticated encryption (RFC 7518 §5.2.4). Matches <see cref="AeadEncryptDelegate"/>.</summary>
     public static ValueTask<AeadEncryptResult> AesCbcHmacSha384EncryptAsync(
-        ReadOnlyMemory<byte> plaintext, SymmetricKeyMemory key, AdditionalData aad, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        ReadOnlyMemory<byte> plaintext, SymmetricKeyMemory key, AdditionalData aad, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         CbcHmacEncryptAsync(A192CbcHs384Parameters, plaintext, key, aad, pool, cancellationToken);
 
     /// <summary>Performs A192CBC-HS384 authenticated decryption (RFC 7518 §5.2.4). Matches <see cref="AeadDecryptDelegate"/>.</summary>
     public static ValueTask<DecryptedContent> AesCbcHmacSha384DecryptAsync(
-        Ciphertext ciphertext, SymmetricKeyMemory key, Nonce iv, AuthenticationTag tag, AdditionalData aad, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        Ciphertext ciphertext, SymmetricKeyMemory key, Nonce iv, AuthenticationTag tag, AdditionalData aad, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         CbcHmacDecryptAsync(A192CbcHs384Parameters, ciphertext, key, iv, tag, aad, pool, cancellationToken);
 
     /// <summary>
@@ -918,7 +918,7 @@ public static class MicrosoftKeyAgreementFunctions
     /// 64-bit big-endian bit length of the AAD.
     /// </remarks>
     public static ValueTask<AeadEncryptResult> AesCbcHmacSha512EncryptAsync(
-        ReadOnlyMemory<byte> plaintext, SymmetricKeyMemory key, AdditionalData aad, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        ReadOnlyMemory<byte> plaintext, SymmetricKeyMemory key, AdditionalData aad, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         CbcHmacEncryptAsync(A256CbcHs512Parameters, plaintext, key, aad, pool, cancellationToken);
 
     /// <summary>
@@ -931,7 +931,7 @@ public static class MicrosoftKeyAgreementFunctions
     /// any decryption is attempted.
     /// </exception>
     public static ValueTask<DecryptedContent> AesCbcHmacSha512DecryptAsync(
-        Ciphertext ciphertext, SymmetricKeyMemory key, Nonce iv, AuthenticationTag tag, AdditionalData aad, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        Ciphertext ciphertext, SymmetricKeyMemory key, Nonce iv, AuthenticationTag tag, AdditionalData aad, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         CbcHmacDecryptAsync(A256CbcHs512Parameters, ciphertext, key, iv, tag, aad, pool, cancellationToken);
 
 
@@ -944,7 +944,7 @@ public static class MicrosoftKeyAgreementFunctions
         ReadOnlyMemory<byte> plaintext,
         SymmetricKeyMemory key,
         AdditionalData aad,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(key);
@@ -1012,7 +1012,7 @@ public static class MicrosoftKeyAgreementFunctions
         Nonce iv,
         AuthenticationTag tag,
         AdditionalData aad,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(ciphertext);
@@ -1119,7 +1119,7 @@ public static class MicrosoftKeyAgreementFunctions
         ReadOnlyMemory<byte> plaintext,
         SymmetricKeyMemory key,
         AdditionalData aad,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(key);
@@ -1165,7 +1165,7 @@ public static class MicrosoftKeyAgreementFunctions
         Nonce iv,
         AuthenticationTag tag,
         AdditionalData aad,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(ciphertext);

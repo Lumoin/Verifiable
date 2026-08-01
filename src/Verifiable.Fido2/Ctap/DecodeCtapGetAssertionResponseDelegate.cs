@@ -27,4 +27,4 @@ namespace Verifiable.Fido2.Ctap;
 /// <paramref name="payload"/> is not valid CTAP2 canonical CBOR, or omits a Required member
 /// (<c>credential</c>, <c>authData</c>, or <c>signature</c>).
 /// </exception>
-public delegate CtapGetAssertionResponse DecodeCtapGetAssertionResponseDelegate(ReadOnlyMemory<byte> payload, MemoryPool<byte> pool);
+public delegate CtapGetAssertionResponse DecodeCtapGetAssertionResponseDelegate(ReadOnlyMemory<byte> payload, BaseMemoryPool pool);

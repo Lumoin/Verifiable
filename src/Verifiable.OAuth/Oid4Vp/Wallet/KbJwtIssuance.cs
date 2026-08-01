@@ -80,7 +80,7 @@ public static class KbJwtIssuance
         EncodeDelegate base64UrlEncoder,
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         IReadOnlyList<string>? transactionDataHashes = null,
         string? transactionDataHashesAlg = null,
         CancellationToken cancellationToken = default)
@@ -152,7 +152,7 @@ public static class KbJwtIssuance
     private static async ValueTask<string> ComputeSdHashAsync(
         ReadOnlyMemory<byte> input,
         EncodeDelegate encoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(

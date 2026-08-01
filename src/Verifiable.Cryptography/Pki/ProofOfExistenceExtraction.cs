@@ -100,7 +100,7 @@ public static class ProofOfExistenceExtraction
         SignatureElementsConstraints signatureElementsConstraints,
         SignatureValidationSeams seams,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signature);
@@ -232,7 +232,7 @@ public static class ProofOfExistenceExtraction
         SignatureElementsConstraints signatureElementsConstraints,
         SignatureValidationSeams seams,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signature);
@@ -349,7 +349,7 @@ public static class ProofOfExistenceExtraction
         EmbeddedTimestamp timestamp,
         SignatureElementsConstraints signatureElementsConstraints,
         SignatureValidationSeams seams,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(seams.Format.StateTimestampCoverage is not StateTimestampCoverageAsyncDelegate stateCoverage)
@@ -411,7 +411,7 @@ public static class ProofOfExistenceExtraction
         ValidationObjectKind kind,
         string? reference,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(resources);
@@ -473,7 +473,7 @@ public static class ProofOfExistenceExtraction
         SignatureFacts signature,
         List<ValidationObjectIdentity> objects,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(signature.SignedDataObject is SensitiveMemory signedDataObject)
@@ -496,7 +496,7 @@ public static class ProofOfExistenceExtraction
         SignatureFacts signature,
         List<ValidationObjectIdentity> objects,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(signature.SignatureValue is SignedContentMemory signatureValue)
@@ -519,7 +519,7 @@ public static class ProofOfExistenceExtraction
         SignatureFacts signature,
         List<ValidationObjectIdentity> objects,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(signature.SignedContent is SignedContentMemory content)
@@ -545,7 +545,7 @@ public static class ProofOfExistenceExtraction
         List<ValidationObjectIdentity> objects,
         ProtectedObjectAdmission? admission,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         await AddCarriersAsync(signature.EmbeddedCertificates, ValidationObjectKind.Certificate, objects, admission, resources, pool, cancellationToken).ConfigureAwait(false);
@@ -582,7 +582,7 @@ public static class ProofOfExistenceExtraction
         Stack<PkiCertificateMemory> containers,
         ProtectedObjectAdmission? admission,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         await AddSignatureAsync(signature, objects, resources, pool, cancellationToken).ConfigureAwait(false);
@@ -606,7 +606,7 @@ public static class ProofOfExistenceExtraction
         SignatureFacts signature,
         List<ProtectedObjectReference> references,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         for(int i = 0; i < signature.SigningCertificateReferences.Count; ++i)
@@ -665,7 +665,7 @@ public static class ProofOfExistenceExtraction
         Stack<PkiCertificateMemory> containers,
         ProtectedObjectAdmission? admission,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         for(int i = 0; i < signature.Timestamps.Count; ++i)
@@ -705,7 +705,7 @@ public static class ProofOfExistenceExtraction
         List<ValidationObjectIdentity> objects,
         ProtectedObjectAdmission? admission,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         for(int i = 0; i < carriers.Count && objects.Count < MaximumProtectedObjects; ++i)
@@ -743,7 +743,7 @@ public static class ProofOfExistenceExtraction
         ProtectedObjectAdmission? admission,
         PkiCertificateMemory candidate,
         ValidationObjectKind kind,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(admission is null)

@@ -39,7 +39,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
     private const string IssuedCredential =
         "eyJhbGciOiJFUzI1NiJ9.eyJ2Y3QiOiJVbml2ZXJzaXR5RGVncmVlIn0.sig~WyJzYWx0IiwiZGVncmVlIiwiQmFjaGVsb3IiXQ~";
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private static readonly ImmutableHashSet<CapabilityIdentifier> IssuanceCapabilities =
         ImmutableHashSet.Create(

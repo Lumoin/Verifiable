@@ -25,7 +25,7 @@ namespace Verifiable.Tests.DidComm;
 [TestClass]
 internal sealed class DidCommAckProblemReportTests
 {
-    private static readonly MemoryPool<byte> Pool = BaseMemoryPool.Shared;
+    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
 
     private const string Alice = "did:example:alice";
     private const string ProblemReportType = "https://didcomm.org/report-problem/2.0/problem-report";

@@ -83,4 +83,4 @@ public sealed record FidoU2fAttestationStatement(ReadOnlyMemory<byte> Signature,
 /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-fido-u2f-attestation">W3C Web Authentication Level 3, section 8.6</see>,
 /// including when <c>x5c</c> does not carry exactly one element.
 /// </exception>
-public delegate FidoU2fAttestationStatement ParseFidoU2fAttestationStatementDelegate(ReadOnlyMemory<byte> attestationStatement, MemoryPool<byte> pool);
+public delegate FidoU2fAttestationStatement ParseFidoU2fAttestationStatementDelegate(ReadOnlyMemory<byte> attestationStatement, BaseMemoryPool pool);

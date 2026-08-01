@@ -145,7 +145,7 @@ public static class XmlEvidenceRecords
     /// </remarks>
     public static async ValueTask<XmlEvidenceRecordVerification> VerifyAsync(
         XmlEvidenceRecordVerificationContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -280,7 +280,7 @@ public static class XmlEvidenceRecords
         XmlEvidenceRecordVerificationContext context,
         int chainIndex,
         int memberIndex,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         XmlEvidenceRecordArchiveTimeStampChain chain = context.EvidenceRecord.Chains[chainIndex];
@@ -541,7 +541,7 @@ public static class XmlEvidenceRecords
         XmlEvidenceRecordVerificationContext context,
         XmlEvidenceRecordCanonicalizationContext canonicalizationContext,
         PkiDigestAlgorithm algorithm,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         using XmlEvidenceRecordCanonicalizationResult canonicalized =
@@ -597,7 +597,7 @@ public static class XmlEvidenceRecords
         Justification = "Ownership of each produced document transfers to the returned creation, which the caller disposes; the catch disposes the documents produced before a later group failed, and every intermediate model is disposed by its own using or finally.")]
     public static async ValueTask<XmlEvidenceRecordCreation> CreateInitialAsync(
         XmlEvidenceRecordCreationContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -711,7 +711,7 @@ public static class XmlEvidenceRecords
             string canonicalizationMethodUri,
             PkiDigestAlgorithm algorithm,
             CanonicalizeXmlEvidenceRecordDelegate canonicalize,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             if(!dataObject.IsXmlArchiveData)
@@ -752,7 +752,7 @@ public static class XmlEvidenceRecords
             PkiCertificateMemory token,
             string digestMethodUri,
             XmlEvidenceRecordCreationContext context,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             using var record = new XmlEvidenceRecord
@@ -798,7 +798,7 @@ public static class XmlEvidenceRecords
 
         //Copies the shared acquired token into a carrier of the model's own, because every group's record owns
         //its whole content and the token outlives none of them.
-        static PkiCertificateMemory CopyToken(PkiCertificateMemory token, MemoryPool<byte> pool)
+        static PkiCertificateMemory CopyToken(PkiCertificateMemory token, BaseMemoryPool pool)
         {
             IMemoryOwner<byte> owner = pool.Rent(token.AsReadOnlySpan().Length);
             try

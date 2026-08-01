@@ -83,7 +83,7 @@ internal sealed class TpmInHouseSimulatorAkCertificateTests
     [TestMethod]
     public async Task AkCertificateChainsAndVerifiesAttestation()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -149,7 +149,7 @@ internal sealed class TpmInHouseSimulatorAkCertificateTests
     [TestMethod]
     public async Task AkCertificateFromUntrustedCaFailsChainValidation()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -267,7 +267,7 @@ internal sealed class TpmInHouseSimulatorAkCertificateTests
     /// <param name="pool">The memory pool.</param>
     /// <returns>The pooled certificate (the caller owns it).</returns>
     [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned PkiCertificateMemory transfers to the caller.")]
-    private static PkiCertificateMemory ToPkiCertificate(byte[] der, MemoryPool<byte> pool)
+    private static PkiCertificateMemory ToPkiCertificate(byte[] der, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(der.Length);
         der.CopyTo(owner.Memory.Span);
@@ -284,7 +284,7 @@ internal sealed class TpmInHouseSimulatorAkCertificateTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="hierarchy">The hierarchy under which to create the key.</param>
     /// <returns>The CreatePrimary response.</returns>
-    private async Task<CreatePrimaryResponse> CreateAkPrimaryAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+    private async Task<CreatePrimaryResponse> CreateAkPrimaryAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmRh hierarchy)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForEccSigningKey(
             hierarchy, password: null, TpmEccCurveConstants.TPM_ECC_NIST_P256, TpmtEccScheme.Ecdsa(TpmAlgIdConstants.TPM_ALG_SHA256), pool, noDa: true);
@@ -306,7 +306,7 @@ internal sealed class TpmInHouseSimulatorAkCertificateTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="signHandle">The signing (attestation) key handle.</param>
     /// <returns>The Quote response.</returns>
-    private async Task<QuoteResponse> QuoteAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmiDhObject signHandle)
+    private async Task<QuoteResponse> QuoteAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmiDhObject signHandle)
     {
         using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
         using TpmlPcrSelection pcrSelection = TpmlPcrSelection.Create(PcrBank, PcrIndices, pool);
@@ -326,7 +326,7 @@ internal sealed class TpmInHouseSimulatorAkCertificateTests
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator("tpm-in-house-ak-certificate", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -341,7 +341,7 @@ internal sealed class TpmInHouseSimulatorAkCertificateTests
     /// </summary>
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
@@ -381,7 +381,7 @@ internal sealed class TpmInHouseSimulatorAkCertificateTests
     /// <param name="registry">The response codec registry.</param>
     /// <param name="handle">The handle to flush.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task FlushAsync(TpmDevice tpm, TpmResponseRegistry registry, uint handle, MemoryPool<byte> pool)
+    private async Task FlushAsync(TpmDevice tpm, TpmResponseRegistry registry, uint handle, BaseMemoryPool pool)
     {
         var flush = FlushContextInput.ForHandle(handle);
         _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
@@ -395,7 +395,7 @@ internal sealed class TpmInHouseSimulatorAkCertificateTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The 32-byte digest.</returns>
-    private static async Task<byte[]> ComputeSha256Async(ReadOnlyMemory<byte> message, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<byte[]> ComputeSha256Async(ReadOnlyMemory<byte> message, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         Tag tag = Tag.Create(HashAlgorithmName.SHA256)
             .With(Purpose.Digest)

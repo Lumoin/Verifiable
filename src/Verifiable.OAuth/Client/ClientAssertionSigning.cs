@@ -62,7 +62,7 @@ public static class ClientAssertionSigning
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(clientId);

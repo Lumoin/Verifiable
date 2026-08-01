@@ -57,7 +57,7 @@ public static class KeyAgreementExtensions
         /// </returns>
         public ValueTask<EphemeralKeyAgreementResult> AgreementEncryptAsync(
             KeyAgreementEncryptDelegate agreementDelegate,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(agreementDelegate);
@@ -77,7 +77,7 @@ public static class KeyAgreementExtensions
         /// The ephemeral key agreement result. The caller owns and must dispose.
         /// </returns>
         public ValueTask<EphemeralKeyAgreementResult> AgreementEncryptAsync(
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken = default)
         {
             CryptoAlgorithm algorithm = publicKey.Tag.Get<CryptoAlgorithm>();
@@ -107,7 +107,7 @@ public static class KeyAgreementExtensions
         public ValueTask<SharedSecret> AgreementDecryptAsync(
             PublicKeyMemory epk,
             KeyAgreementDecryptDelegate agreementDelegate,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(epk);
@@ -137,7 +137,7 @@ public static class KeyAgreementExtensions
         /// <returns>The shared secret Z. The caller owns and must dispose.</returns>
         public ValueTask<SharedSecret> AgreementDecryptAsync(
             PublicKeyMemory epk,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken = default)
         {
             CryptoAlgorithm algorithm = privateKey.Tag.Get<CryptoAlgorithm>();

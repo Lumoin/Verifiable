@@ -67,7 +67,7 @@ public static class JarmResponseValidation
         ResolveJarmVerificationKeyDelegate resolveVerificationKey,
         JwtPayloadDeserializer payloadDeserializer,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         KnownAuthorizationServerIssuerResolver? isKnownAuthorizationServerIssuer = null,
         TimeSpan? expirationLeeway = null,
         CancellationToken cancellationToken = default)

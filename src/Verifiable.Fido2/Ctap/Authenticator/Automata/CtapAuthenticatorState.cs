@@ -578,10 +578,10 @@ public sealed record CtapAuthenticatorState(
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of both CtapPinUvAuthKeyAgreementKeyPair instances, both CtapPinUvAuthTokenState instances, and the seeded PooledMemory transfers to the returned CtapAuthenticatorState, which CtapAuthenticatorSimulator.Dispose disposes as part of its dispose walk.")]
     public static CtapAuthenticatorState Initial(
-        Guid aaguid, DateTimeOffset poweredOnAt, IReadOnlyList<string>? supportedExtensions = null, int residentCredentialCapacity = 8, MemoryPool<byte>? keyAgreementPool = null,
+        Guid aaguid, DateTimeOffset poweredOnAt, IReadOnlyList<string>? supportedExtensions = null, int residentCredentialCapacity = 8, BaseMemoryPool? keyAgreementPool = null,
         CtapEnterpriseAttestationProvisioning? enterpriseAttestationProvisioning = null, int firmwareVersion = 1)
     {
-        MemoryPool<byte> resolvedKeyAgreementPool = keyAgreementPool ?? BaseMemoryPool.Shared;
+        BaseMemoryPool resolvedKeyAgreementPool = keyAgreementPool ?? BaseMemoryPool.Shared;
 
         (CtapPinUvAuthKeyAgreementKeyPair protocolOneKeyPair, CtapPinUvAuthKeyAgreementKeyPair protocolTwoKeyPair) =
             MintKeyAgreementKeyPairs(resolvedKeyAgreementPool);
@@ -675,9 +675,9 @@ public sealed record CtapAuthenticatorState(
     /// <returns>The post-power-cycle state.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the four newly minted objects transfers to the returned CtapAuthenticatorState.")]
-    public CtapAuthenticatorState PowerCycle(DateTimeOffset now, MemoryPool<byte>? keyAgreementPool = null)
+    public CtapAuthenticatorState PowerCycle(DateTimeOffset now, BaseMemoryPool? keyAgreementPool = null)
     {
-        MemoryPool<byte> resolvedPool = keyAgreementPool ?? BaseMemoryPool.Shared;
+        BaseMemoryPool resolvedPool = keyAgreementPool ?? BaseMemoryPool.Shared;
 
         (CtapPinUvAuthKeyAgreementKeyPair freshProtocolOneKeyPair, CtapPinUvAuthKeyAgreementKeyPair freshProtocolTwoKeyPair) =
             MintKeyAgreementKeyPairs(resolvedPool);
@@ -795,9 +795,9 @@ public sealed record CtapAuthenticatorState(
     /// </para>
     /// </remarks>
     /// <returns>The post-reset state, with every clientPIN/credential-store/config/large-blob field at its factory value.</returns>
-    public CtapAuthenticatorState FactoryReset(MemoryPool<byte>? pool = null)
+    public CtapAuthenticatorState FactoryReset(BaseMemoryPool? pool = null)
     {
-        MemoryPool<byte> resolvedPool = pool ?? BaseMemoryPool.Shared;
+        BaseMemoryPool resolvedPool = pool ?? BaseMemoryPool.Shared;
 
         foreach(CtapCredentialRecord record in CredentialsByCredentialId.Values)
         {
@@ -854,7 +854,7 @@ public sealed record CtapAuthenticatorState(
     /// </summary>
     /// <param name="pool">The memory pool both key pairs are minted from.</param>
     /// <returns>Protocol one's and protocol two's freshly minted key-agreement key pairs.</returns>
-    private static (CtapPinUvAuthKeyAgreementKeyPair ProtocolOne, CtapPinUvAuthKeyAgreementKeyPair ProtocolTwo) MintKeyAgreementKeyPairs(MemoryPool<byte> pool)
+    private static (CtapPinUvAuthKeyAgreementKeyPair ProtocolOne, CtapPinUvAuthKeyAgreementKeyPair ProtocolTwo) MintKeyAgreementKeyPairs(BaseMemoryPool pool)
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> protocolOneKeys =
             CryptographicKeyEvents.CreateKeyPair(CryptoAlgorithm.P256, Purpose.Exchange, pool);
@@ -891,7 +891,7 @@ public sealed record CtapAuthenticatorState(
     /// <param name="protocolTwoKeyPair">Protocol two's already-minted key-agreement key pair, disposed on failure.</param>
     /// <returns>Protocol one's and protocol two's freshly minted token states.</returns>
     private static (CtapPinUvAuthTokenState ProtocolOne, CtapPinUvAuthTokenState ProtocolTwo) MintTokens(
-        MemoryPool<byte> pool, CtapPinUvAuthKeyAgreementKeyPair protocolOneKeyPair, CtapPinUvAuthKeyAgreementKeyPair protocolTwoKeyPair)
+        BaseMemoryPool pool, CtapPinUvAuthKeyAgreementKeyPair protocolOneKeyPair, CtapPinUvAuthKeyAgreementKeyPair protocolTwoKeyPair)
     {
         CtapPinUvAuthTokenState protocolOneToken;
         try

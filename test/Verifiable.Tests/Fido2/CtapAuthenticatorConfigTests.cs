@@ -45,7 +45,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task SubCommandAbsentReturnsMissingParameter()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-subcommand-absent");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
         writer.WriteStartMap(0);
@@ -80,7 +80,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task UnsupportedSubCommandReturnsInvalidSubcommand(int subCommand)
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator($"config-unsupported-{subCommand:X2}");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapAuthenticatorConfigRequest(SubCommand: subCommand);
         using PooledMemory response = await CtapWaveConfigFixtures.SendAuthenticatorConfigAsync(simulator, request, pool, TestContext.CancellationToken);
@@ -102,7 +102,7 @@ internal sealed class CtapAuthenticatorConfigTests
     [TestMethod]
     public async Task FreshDeviceTokenlessEnableEnterpriseAttestationSucceeds()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = CtapWaveEpFixtures.CreateCapableSimulator("config-ep-fresh-tokenless", pool);
 
         var request = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.EnableEnterpriseAttestation);
@@ -121,7 +121,7 @@ internal sealed class CtapAuthenticatorConfigTests
     [TestMethod]
     public async Task EnableEnterpriseAttestationFlipsGetInfoEpToTrue()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = CtapWaveEpFixtures.CreateCapableSimulator("config-ep-getinfo-flip", pool);
 
         CtapGetInfoResponse before = await CtapWaveConfigFixtures.GetInfoAsync(simulator, pool, TestContext.CancellationToken);
@@ -144,7 +144,7 @@ internal sealed class CtapAuthenticatorConfigTests
     [TestMethod]
     public async Task EnableEnterpriseAttestationCalledTwiceStaysEnabledBothTimes()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = CtapWaveEpFixtures.CreateCapableSimulator("config-ep-idempotent", pool);
         var request = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.EnableEnterpriseAttestation);
 
@@ -171,7 +171,7 @@ internal sealed class CtapAuthenticatorConfigTests
     [TestMethod]
     public async Task EnableEnterpriseAttestationIgnoresSubCommandParams()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = CtapWaveEpFixtures.CreateCapableSimulator("config-ep-params-ignored", pool);
 
         CtapGetInfoResponse before = await CtapWaveConfigFixtures.GetInfoAsync(simulator, pool, TestContext.CancellationToken);
@@ -191,7 +191,7 @@ internal sealed class CtapAuthenticatorConfigTests
     [TestMethod]
     public async Task ProtectedTokenlessEnableEnterpriseAttestationReturnsPuatRequired()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = CtapWaveEpFixtures.CreateCapableSimulator("config-ep-protected-no-token", pool);
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, CtapPinUvAuthProtocolId.Two, DefaultPin, TestContext.CancellationToken);
 
@@ -211,7 +211,7 @@ internal sealed class CtapAuthenticatorConfigTests
     [TestMethod]
     public async Task TokenWithAcfgPermissionEnablesEnterpriseAttestationWithExactVerifyMessage()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = CtapWaveEpFixtures.CreateCapableSimulator("config-ep-acfg-success", pool);
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
@@ -241,7 +241,7 @@ internal sealed class CtapAuthenticatorConfigTests
     [TestMethod]
     public async Task TokenWithoutAcfgPermissionEnableEnterpriseAttestationReturnsPinAuthInvalid()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator simulator = CtapWaveEpFixtures.CreateCapableSimulator("config-ep-no-acfg", pool);
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
@@ -264,7 +264,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task UnprotectedAlwaysUvOffToggleAlwaysUvSucceedsWithoutTokenAndFlipsGetInfo()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-toggle-unprotected");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapGetInfoResponse before = await CtapWaveConfigFixtures.GetInfoAsync(simulator, pool, TestContext.CancellationToken);
         Assert.IsFalse(before.Options!.AlwaysUv!.Value);
@@ -285,7 +285,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task UnprotectedAlwaysUvOffSetMinPinLengthSucceedsWithJunkParamIgnored()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-setmin-unprotected-junk");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapAuthenticatorConfigRequest(
             SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.SetMinPinLength,
@@ -301,7 +301,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task ProtectedNoTokenPresentedReturnsPuatRequired()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-protected-no-token");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, CtapPinUvAuthProtocolId.Two, DefaultPin, TestContext.CancellationToken);
 
         var request = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.SetMinPinLength);
@@ -316,7 +316,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task ProtectedPinUvAuthProtocolAbsentReturnsMissingParameter()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-protected-protocol-absent");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, CtapPinUvAuthProtocolId.Two, DefaultPin, TestContext.CancellationToken);
 
         var request = new CtapAuthenticatorConfigRequest(
@@ -333,7 +333,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task ProtectedPinUvAuthProtocolUnsupportedReturnsInvalidParameter()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-protected-protocol-unsupported");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, CtapPinUvAuthProtocolId.Two, DefaultPin, TestContext.CancellationToken);
 
         var request = new CtapAuthenticatorConfigRequest(
@@ -351,7 +351,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task ProtectedBadHmacReturnsPinAuthInvalidAndTokenRemainsUsable()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-bad-hmac");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
         byte[] token = await CtapWaveConfigFixtures.IssueTokenAsync(
@@ -383,7 +383,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task TokenWithoutAcfgPermissionReturnsPinAuthInvalid()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-no-acfg-permission");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
         byte[] token = await CtapWaveConfigFixtures.IssueTokenAsync(
@@ -405,7 +405,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task TokenWithAcfgPermissionSucceeds()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-with-acfg-permission");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
         byte[] token = await CtapWaveConfigFixtures.IssueTokenAsync(
@@ -430,7 +430,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task ConfigSuccessDoesNotStripPermissionsSameTokenCompletesMakeCredentialWithUvOne()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-no-strip");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
 
@@ -460,7 +460,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task RpIdBoundAcfgTokenPassesConfig()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-rpid-bound-acfg");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
 
@@ -485,7 +485,7 @@ internal sealed class CtapAuthenticatorConfigTests
     {
         var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-expired-token", timeProvider: timeProvider);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
 
@@ -509,7 +509,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task CrossProtocolTokenReturnsPinAuthInvalid()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-cross-protocol");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, CtapPinUvAuthProtocolId.Two, DefaultPin, TestContext.CancellationToken);
 
         byte[] protocolTwoToken = await CtapWaveConfigFixtures.IssueTokenAsync(
@@ -534,7 +534,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task UnprotectedAlwaysUvOnToggleAlwaysUvTokenlessSucceedsDisabling()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-bypass-unprotected-disable");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var enableRequest = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.ToggleAlwaysUv);
         using PooledMemory enableResponse = await CtapWaveConfigFixtures.SendAuthenticatorConfigAsync(simulator, enableRequest, pool, TestContext.CancellationToken);
@@ -557,7 +557,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task ProtectedAlwaysUvOnToggleAlwaysUvTokenlessReturnsPuatRequired()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-bypass-protected-blocked");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var enableRequest = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.ToggleAlwaysUv);
         using PooledMemory enableResponse = await CtapWaveConfigFixtures.SendAuthenticatorConfigAsync(simulator, enableRequest, pool, TestContext.CancellationToken);
@@ -577,7 +577,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task UnprotectedAlwaysUvOnSetMinPinLengthTokenlessReturnsPuatRequired()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-bypass-setmin-not-covered");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var enableRequest = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.ToggleAlwaysUv);
         using PooledMemory enableResponse = await CtapWaveConfigFixtures.SendAuthenticatorConfigAsync(simulator, enableRequest, pool, TestContext.CancellationToken);
@@ -595,7 +595,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task SetMinPinLengthRaiseSucceedsAndUpdatesGetInfo()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-setmin-raise");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         const string longPin = "123456789";
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, longPin, TestContext.CancellationToken);
@@ -616,7 +616,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task SetMinPinLengthLowerReturnsPinPolicyViolation()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-setmin-lower-rejected");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         const string longPin = "123456789";
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, longPin, TestContext.CancellationToken);
@@ -637,7 +637,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task SetMinPinLengthEqualSucceeds()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-setmin-equal");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
         byte[] token = await CtapWaveConfigFixtures.IssueTokenAsync(
@@ -657,7 +657,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task SetMinPinLengthAbsentNewValueIsNoOp()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-setmin-absent-noop");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
         byte[] token = await CtapWaveConfigFixtures.IssueTokenAsync(
@@ -676,7 +676,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task SetMinPinLengthForceChangePinNoPinReturnsPinNotSet()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-setmin-force-no-pin");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.SetMinPinLength, ForceChangePin: true);
         using PooledMemory response = await CtapWaveConfigFixtures.SendAuthenticatorConfigAsync(simulator, request, pool, TestContext.CancellationToken);
@@ -696,7 +696,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task SetMinPinLengthMinPinLengthRpIdsAcceptsAndStoresTheAuthorizedList()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-setmin-rpids-accepted");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
         byte[] token = await CtapWaveConfigFixtures.IssueTokenAsync(
@@ -723,7 +723,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task SetMinPinLengthMinPinLengthRpIdsOverwritesPreviouslyStoredListWholesale()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-setmin-rpids-overwrite");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
 
@@ -754,7 +754,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task SetMinPinLengthMinPinLengthRpIdsEmptyArrayIsNoOp()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-setmin-rpids-empty-noop");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
         byte[] token = await CtapWaveConfigFixtures.IssueTokenAsync(
@@ -781,7 +781,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task SetMinPinLengthMinPinLengthRpIdsExceedingCapacityReturnsKeyStoreFull()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-setmin-rpids-over-capacity");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
         byte[] token = await CtapWaveConfigFixtures.IssueTokenAsync(
@@ -800,7 +800,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task SetMinPinLengthMinPinLengthRpIdsAtCapacityBoundarySucceeds()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-setmin-rpids-at-capacity");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
         byte[] token = await CtapWaveConfigFixtures.IssueTokenAsync(
@@ -828,7 +828,7 @@ internal sealed class CtapAuthenticatorConfigTests
 
 
     /// <summary>Sends an mc <c>minPinLength:true</c> request for <paramref name="rpId"/> and reports whether the response's real decoded authData carries the <c>minPinLength</c> output — the ONLY observable proof of <c>minPinLengthRPIDs</c> storage.</summary>
-    private static async Task<bool> IsAuthorizedForMinPinLengthAsync(CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, string rpId, CancellationToken cancellationToken)
+    private static async Task<bool> IsAuthorizedForMinPinLengthAsync(CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, string rpId, CancellationToken cancellationToken)
     {
         ReadOnlyMemory<byte> extensions = BuildMakeCredentialExtensionsInput(minPinLength: true);
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, rpId: rpId, userId: BuildFixedBytes(16, unchecked((byte)rpId.Length)), extensions: extensions);
@@ -850,7 +850,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task SetMinPinLengthPinComplexityPolicyIgnoredSucceeds()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-setmin-complexity-ignored");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.SetMinPinLength, PinComplexityPolicy: true);
         using PooledMemory response = await CtapWaveConfigFixtures.SendAuthenticatorConfigAsync(simulator, request, pool, TestContext.CancellationToken);
@@ -864,7 +864,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task SetMinPinLengthRaiseAboveExistingPinForcesChangeAndKillsTokens()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-setmin-force-raise");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
         byte[] token = await CtapWaveConfigFixtures.IssueTokenAsync(
@@ -894,7 +894,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task SetMinPinLengthRaiseToExactExistingPinLengthDoesNotForceChange()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-setmin-no-force-exact");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         const string sixCharPin = "123456";
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, sixCharPin, TestContext.CancellationToken);
@@ -923,7 +923,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task ForcePinChangeGetPinTokenReturnsPinInvalid()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-force-getpintoken");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
         byte[] acfgToken = await CtapWaveConfigFixtures.IssueTokenAsync(
@@ -955,7 +955,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task ForcePinChangePermissionsGateReturnsPinPolicyViolation()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-force-permissions-gate");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
         byte[] acfgToken = await CtapWaveConfigFixtures.IssueTokenAsync(
@@ -987,7 +987,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task ForcePinChangeChangePinToSameReturnsPinPolicyViolation()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-force-changepin-same");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
         byte[] acfgToken = await CtapWaveConfigFixtures.IssueTokenAsync(
@@ -1019,7 +1019,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task ForcePinChangeChangePinToNewCompliantClearsFlagAndAllowsFreshToken()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-force-changepin-clears");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
         byte[] acfgToken = await CtapWaveConfigFixtures.IssueTokenAsync(
@@ -1056,7 +1056,7 @@ internal sealed class CtapAuthenticatorConfigTests
     public async Task SetPinBelowRaisedMinimumReturnsPinPolicyViolation()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("config-setpin-below-raised-min");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var raiseRequest = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.SetMinPinLength, NewMinPinLength: 6);
         using PooledMemory raiseResponse = await CtapWaveConfigFixtures.SendAuthenticatorConfigAsync(simulator, raiseRequest, pool, TestContext.CancellationToken);
@@ -1084,7 +1084,7 @@ internal sealed class CtapAuthenticatorConfigTests
     /// over the SAME <c>subCommandParams</c> bytes the request will carry.
     /// </summary>
     private static async Task<PooledMemory> SendSetMinPinLengthAsync(
-        CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, byte[] token,
+        CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, byte[] token,
         int? newMinPinLength = null, bool? forceChangePin = null, IReadOnlyList<string>? minPinLengthRpIds = null, bool? pinComplexityPolicy = null,
         CancellationToken cancellationToken = default)
     {

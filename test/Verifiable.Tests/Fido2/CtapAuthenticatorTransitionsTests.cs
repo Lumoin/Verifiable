@@ -28,7 +28,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
     /// <summary>
     /// Builds a fresh automaton over the transitions under test, seeded with the given AAGUID, or with
     /// <paramref name="initialState"/> directly when the test needs a state shape
-    /// <see cref="CtapAuthenticatorState.Initial(Guid, DateTimeOffset, IReadOnlyList{string}?, int, MemoryPool{byte}?)"/>
+    /// <see cref="CtapAuthenticatorState.Initial(Guid, DateTimeOffset, IReadOnlyList{string}?, int, BaseMemoryPool?)"/>
     /// alone cannot produce (e.g. a pre-set PIN).
     /// </summary>
     private static PushdownAutomaton<CtapAuthenticatorState, CtapAuthenticatorInput, CtapAuthenticatorStackSymbol> BuildAutomaton(
@@ -42,7 +42,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
 
 
     /// <summary>Builds a fixed-content <see cref="DigestValue"/> standing in for a stored PIN hash, without a full <c>setPIN</c> round trip.</summary>
-    private static DigestValue BuildFixedDigest(byte seed, int length, MemoryPool<byte> pool)
+    private static DigestValue BuildFixedDigest(byte seed, int length, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(length);
         for(int i = 0; i < length; i++)
@@ -164,7 +164,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
     public async Task GetInfoRequestedAdvertisesMakeCredUvNotRqdDerivedFromAlwaysUv(bool isAlwaysUvEnabled)
     {
         Guid aaguid = Guid.NewGuid();
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapAuthenticatorState initialState = CtapAuthenticatorState.Initial(aaguid, TestClock.CanonicalEpoch, keyAgreementPool: pool) with
         {
             IsAlwaysUvEnabled = isAlwaysUvEnabled
@@ -225,7 +225,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
     public async Task GetInfoRequestedAdvertisesEpTriStateAndConditionalConfigCommandsForCapableAuthenticator(bool isEnterpriseAttestationEnabled)
     {
         Guid aaguid = Guid.NewGuid();
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapEnterpriseAttestationProvisioning provisioning = CtapWaveEpFixtures.BuildProvisioning(pool);
         CtapAuthenticatorState initialState = CtapAuthenticatorState.Initial(
             aaguid, TestClock.CanonicalEpoch, keyAgreementPool: pool, enterpriseAttestationProvisioning: provisioning) with
@@ -262,7 +262,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
     public async Task GetInfoRequestedAdvertisesRemainingDiscoverableCredentialsDerivedFromResidentCredentialCount()
     {
         Guid aaguid = Guid.NewGuid();
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapAuthenticatorState initialState = CtapAuthenticatorState.Initial(aaguid, TestClock.CanonicalEpoch, keyAgreementPool: pool);
 
         const int residentCredentialCount = 3;
@@ -436,7 +436,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
     /// content pattern, standing in for a minted <c>hmac-secret</c> CredRandom value without a full
     /// <c>authenticatorMakeCredential</c> round trip.
     /// </summary>
-    private static IMemoryOwner<byte> BuildFixedOwner(byte seed, int iteration, MemoryPool<byte> pool)
+    private static IMemoryOwner<byte> BuildFixedOwner(byte seed, int iteration, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(32);
         for(int i = 0; i < 32; i++)

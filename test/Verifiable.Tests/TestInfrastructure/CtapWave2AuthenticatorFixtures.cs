@@ -45,7 +45,7 @@ internal static class CtapWave2AuthenticatorFixtures
 
 
     /// <summary>Builds a 32-byte fixed-pattern <c>clientDataHash</c> carrier: rents from <paramref name="pool"/>, copies the fixed pattern, and returns the carrier immediately so ownership transfer is unambiguous to static analysis.</summary>
-    private static DigestValue BuildFixedClientDataHash(byte seed, MemoryPool<byte> pool)
+    private static DigestValue BuildFixedClientDataHash(byte seed, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(32);
         BuildFixedBytes(32, seed).AsSpan().CopyTo(owner.Memory.Span);
@@ -183,7 +183,7 @@ internal static class CtapWave2AuthenticatorFixtures
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the clientDataHash and user handle carriers transfers to the returned CtapMakeCredentialRequest, which DisposeMakeCredentialRequest (or the simulator's own request-carrier disposal) disposes.")]
     public static CtapMakeCredentialRequest BuildMakeCredentialRequest(
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         string rpId = DefaultRpId,
         byte[]? userId = null,
         int alg = DefaultAlgorithm,
@@ -390,7 +390,7 @@ internal static class CtapWave2AuthenticatorFixtures
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the clientDataHash carrier transfers to the returned CtapGetAssertionRequest, which DisposeGetAssertionRequest (or the simulator's own request-carrier disposal) disposes.")]
     public static CtapGetAssertionRequest BuildGetAssertionRequest(
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         string rpId = DefaultRpId,
         IReadOnlyList<PublicKeyCredentialDescriptor>? allowList = null,
         CtapCommandOptions? options = null,
@@ -421,7 +421,7 @@ internal static class CtapWave2AuthenticatorFixtures
 
     /// <summary>Encodes, sends, and disposes an <c>authenticatorMakeCredential</c> request, returning the raw response envelope.</summary>
     public static async Task<PooledMemory> SendMakeCredentialAsync(
-        CtapAuthenticatorSimulator simulator, CtapMakeCredentialRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapAuthenticatorSimulator simulator, CtapMakeCredentialRequest request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] envelope = CtapWave2RequestEnvelopes.BuildMakeCredentialEnvelope(request);
         DisposeMakeCredentialRequest(request);
@@ -432,7 +432,7 @@ internal static class CtapWave2AuthenticatorFixtures
 
     /// <summary>Encodes, sends, and disposes an <c>authenticatorGetAssertion</c> request, returning the raw response envelope.</summary>
     public static async Task<PooledMemory> SendGetAssertionAsync(
-        CtapAuthenticatorSimulator simulator, CtapGetAssertionRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapAuthenticatorSimulator simulator, CtapGetAssertionRequest request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] envelope = CtapWave2RequestEnvelopes.BuildGetAssertionEnvelope(request);
         DisposeGetAssertionRequest(request);
@@ -443,7 +443,7 @@ internal static class CtapWave2AuthenticatorFixtures
 
     /// <summary>Sends a bare <c>authenticatorGetNextAssertion</c> request, returning the raw response envelope.</summary>
     public static async Task<PooledMemory> SendGetNextAssertionAsync(
-        CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] envelope = CtapWave2RequestEnvelopes.BuildGetNextAssertionEnvelope();
 
@@ -462,7 +462,7 @@ internal static class CtapWave2AuthenticatorFixtures
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the credential ID carrier transfers to the returned CtapWave2RegisteredCredential, which the caller disposes.")]
     public static async Task<CtapWave2RegisteredCredential> RegisterCredentialAsync(
-        CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, byte[] userId, CancellationToken cancellationToken, string rpId = DefaultRpId, bool resident = true,
+        CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, byte[] userId, CancellationToken cancellationToken, string rpId = DefaultRpId, bool resident = true,
         int? credProtect = null, IReadOnlyList<PublicKeyCredentialDescriptor>? excludeList = null,
         ReadOnlyMemory<byte>? pinUvAuthParam = null, int? pinUvAuthProtocol = null)
     {
@@ -503,7 +503,7 @@ internal static class CtapWave2AuthenticatorFixtures
 
     /// <summary>Convenience overload of <see cref="RegisterCredentialAsync"/> for tests that need only the minted credential ID bytes, disposing the intermediate carrier once its bytes are copied out. <paramref name="credProtect"/> mints the credential with that <c>credProtect</c> level requested (R4/R6).</summary>
     public static async Task<byte[]> RegisterAndCaptureCredentialIdBytesAsync(
-        CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, byte[] userId, CancellationToken cancellationToken, string rpId = DefaultRpId, bool resident = true,
+        CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, byte[] userId, CancellationToken cancellationToken, string rpId = DefaultRpId, bool resident = true,
         int? credProtect = null)
     {
         CtapWave2RegisteredCredential registered = await RegisterCredentialAsync(

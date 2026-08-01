@@ -27,7 +27,7 @@ namespace Verifiable.Tests.DidComm;
 [TestClass]
 internal sealed class DidCommHttpTransportTests
 {
-    private static readonly MemoryPool<byte> Pool = BaseMemoryPool.Shared;
+    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
     private static readonly Uri Endpoint = new("https://recipient.example/didcomm");
     private static readonly Uri LoopbackEndpoint = new("https://127.0.0.1/inbox");
 

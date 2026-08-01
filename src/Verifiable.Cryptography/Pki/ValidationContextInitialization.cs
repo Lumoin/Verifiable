@@ -108,7 +108,7 @@ public sealed record SignaturePolicyResolutionContext
 /// </remarks>
 public delegate ValueTask<SignaturePolicyResolution> ResolveSignatureValidationPolicyAsyncDelegate(
     SignaturePolicyResolutionContext context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);
 
 
@@ -181,7 +181,7 @@ public static class ValidationContextInitialization
         UnmappedSignaturePolicyHandling unmappedPolicyHandling,
         ResolveSignatureValidationPolicyAsyncDelegate? resolveSignaturePolicy,
         IReadOnlyList<PkiCertificateMemory> callerSuppliedValidationData,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signature);

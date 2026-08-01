@@ -51,12 +51,12 @@ public static class DidResolverComposition
     /// <remarks>
     /// The <c>did:peer</c> numalgo-4 SHA-256 integrity hash is taken from the registered
     /// <see cref="ComputeDigestDelegate"/>. To control that digest per resolver, compose
-    /// <see cref="PeerDidResolver.Build(MemoryPool{byte}, PeerDidDocumentDeserializer, ComputeDigestDelegate)"/>
+    /// <see cref="PeerDidResolver.Build(BaseMemoryPool, PeerDidDocumentDeserializer, ComputeDigestDelegate)"/>
     /// explicitly and pass it through <paramref name="additionalMethods"/> (a later registration overrides the
     /// default <c>did:peer</c> one).
     /// </remarks>
     public static DidResolver Build(
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         OutboundTransportDelegate webTransport,
         WebDidDocumentDeserializer webDocumentDeserializer,
         PeerDidDocumentDeserializer peerDocumentDeserializer,

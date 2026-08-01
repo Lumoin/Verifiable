@@ -1,3 +1,4 @@
+using Lumoin.Base;
 using System.Buffers;
 using System.Buffers.Text;
 using System.Collections.Generic;
@@ -69,7 +70,7 @@ public static class CesrFieldMapCodec
     /// <param name="consumedChars">The number of leading characters the decoded label primitive occupied.</param>
     /// <returns>The label text.</returns>
     /// <exception cref="CesrFormatException">The leading primitive is not a tag- or Base64-string-coded field-map label.</exception>
-    public static string DecodeLabel(ReadOnlySpan<char> qb64, MemoryPool<byte> pool, out int consumedChars)
+    public static string DecodeLabel(ReadOnlySpan<char> qb64, BaseMemoryPool pool, out int consumedChars)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -100,7 +101,7 @@ public static class CesrFieldMapCodec
     /// <param name="consumedChars">The number of leading characters the decoded value occupied.</param>
     /// <returns>The neutral value: <see langword="null"/>, a <see cref="bool"/>, an <see cref="int"/>/<see cref="long"/>/<see cref="decimal"/> number, or a <see cref="string"/> (text or a verbatim qualified primitive).</returns>
     /// <exception cref="CesrFormatException">The leading material is a nested group (decoded by the field-map walk, not here).</exception>
-    public static object? DecodeValuePrimitive(ReadOnlySpan<char> qb64, MemoryPool<byte> pool, out int consumedChars)
+    public static object? DecodeValuePrimitive(ReadOnlySpan<char> qb64, BaseMemoryPool pool, out int consumedChars)
     {
         ArgumentNullException.ThrowIfNull(pool);
         RejectGroup(qb64);
@@ -153,7 +154,7 @@ public static class CesrFieldMapCodec
     /// <param name="consumedChars">The number of leading characters the decoded value occupied.</param>
     /// <returns>The neutral value: a primitive value, or a nested <see cref="MessageFieldMap"/>.</returns>
     /// <exception cref="CesrFormatException">The value is a list group, whose decode is a later slice, or is malformed.</exception>
-    public static object? DecodeValue(ReadOnlySpan<char> qb64, MemoryPool<byte> pool, out int consumedChars)
+    public static object? DecodeValue(ReadOnlySpan<char> qb64, BaseMemoryPool pool, out int consumedChars)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -180,7 +181,7 @@ public static class CesrFieldMapCodec
     /// <param name="pool">The memory pool the transient decode buffers are rented from.</param>
     /// <returns>The decoded field map, preserving field order, with nested maps as further <see cref="MessageFieldMap"/> values and lists as <see cref="IReadOnlyList{T}"/> of neutral values.</returns>
     /// <exception cref="CesrFormatException">The bytes are not a single well-formed generic map group, or carry trailing characters.</exception>
-    public static MessageFieldMap DecodeFieldMap(ReadOnlyMemory<byte> nativeText, MemoryPool<byte> pool)
+    public static MessageFieldMap DecodeFieldMap(ReadOnlyMemory<byte> nativeText, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -214,7 +215,7 @@ public static class CesrFieldMapCodec
     /// <param name="consumedChars">The number of leading characters the decoded map group occupied.</param>
     /// <returns>The decoded field map, preserving field order.</returns>
     /// <exception cref="CesrFormatException">The leading group is not a generic map group, or its body is malformed.</exception>
-    public static MessageFieldMap DecodeMap(ReadOnlySpan<char> qb64, MemoryPool<byte> pool, out int consumedChars)
+    public static MessageFieldMap DecodeMap(ReadOnlySpan<char> qb64, BaseMemoryPool pool, out int consumedChars)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -275,7 +276,7 @@ public static class CesrFieldMapCodec
     /// <param name="pool">The memory pool the transient primitive-classification buffers are rented from.</param>
     /// <param name="output">The buffer the CESR-native qb64 bytes (ASCII) are written to.</param>
     /// <exception cref="CesrFormatException">A value is of a type the neutral map does not use, or needs an encoding that is a later slice.</exception>
-    public static void EncodeFieldMap(MessageFieldMap map, MemoryPool<byte> pool, IBufferWriter<byte> output)
+    public static void EncodeFieldMap(MessageFieldMap map, BaseMemoryPool pool, IBufferWriter<byte> output)
     {
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(pool);
@@ -296,7 +297,7 @@ public static class CesrFieldMapCodec
     /// <param name="pool">The memory pool the transient primitive-classification buffers are rented from.</param>
     /// <returns>The value's qb64 text.</returns>
     /// <exception cref="CesrFormatException">The value is a list, whose encode is a later slice, or is of a type the neutral map does not use.</exception>
-    public static string EncodeValue(object? value, MemoryPool<byte> pool)
+    public static string EncodeValue(object? value, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -318,7 +319,7 @@ public static class CesrFieldMapCodec
     /// <param name="pool">The memory pool the transient decode buffers are rented from.</param>
     /// <returns>The decoded field map, preserving field order.</returns>
     /// <exception cref="CesrFormatException">The bytes are not a single well-formed 24-bit-aligned map group.</exception>
-    public static MessageFieldMap DecodeFieldMapBinary(ReadOnlyMemory<byte> qb2, MemoryPool<byte> pool)
+    public static MessageFieldMap DecodeFieldMapBinary(ReadOnlyMemory<byte> qb2, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -341,7 +342,7 @@ public static class CesrFieldMapCodec
     /// <param name="pool">The memory pool the transient primitive-classification buffers are rented from.</param>
     /// <param name="output">The buffer the CESR-native binary bytes are written to.</param>
     /// <exception cref="CesrFormatException">A value needs an encoding that is a later slice.</exception>
-    public static void EncodeFieldMapBinary(MessageFieldMap map, MemoryPool<byte> pool, IBufferWriter<byte> output)
+    public static void EncodeFieldMapBinary(MessageFieldMap map, BaseMemoryPool pool, IBufferWriter<byte> output)
     {
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(pool);
@@ -361,7 +362,7 @@ public static class CesrFieldMapCodec
     //Builds the qb64 text of a map group and all of its nesting by an iterative post-order walk: each frame
     //accumulates its group body, and a completed nested group is framed with its count code and appended to its
     //parent's body, so a group's count code is written only once its body length is known.
-    private static string EncodeToText(MessageFieldMap map, MemoryPool<byte> pool)
+    private static string EncodeToText(MessageFieldMap map, BaseMemoryPool pool)
     {
         var stack = new Stack<EncodeFrame>();
         stack.Push(new EncodeFrame(map));
@@ -409,7 +410,7 @@ public static class CesrFieldMapCodec
 
 
     //Appends a scalar value's encoding to a group body and yields no child frame (scalars do not open a group).
-    private static EncodeFrame? AppendScalar(StringBuilder body, object? value, MemoryPool<byte> pool)
+    private static EncodeFrame? AppendScalar(StringBuilder body, object? value, BaseMemoryPool pool)
     {
         body.Append(EncodeScalarValue(value, pool));
 
@@ -451,7 +452,7 @@ public static class CesrFieldMapCodec
 
     //Encodes a scalar field value as its primitive, inverse of the value-primitive decode: the fixed markers, a
     //number, or a text/verbatim primitive. A container value never reaches here (the walk opens a group for it).
-    private static string EncodeScalarValue(object? value, MemoryPool<byte> pool) => value switch
+    private static string EncodeScalarValue(object? value, BaseMemoryPool pool) => value switch
     {
         null => EncodeMarker(CesrFieldMapCodes.Null),
         bool boolean => EncodeMarker(boolean ? CesrFieldMapCodes.Yes : CesrFieldMapCodes.No),
@@ -492,7 +493,7 @@ public static class CesrFieldMapCodec
     //Encodes a string value, inverse of the value-primitive text/verbatim decode: the empty marker for an empty
     //string; a complete qualified primitive carried verbatim (escaped when it would be mistaken for a typed value);
     //otherwise a compact tag or Base64-string primitive for Base64 text, or a byte-string primitive for other text.
-    private static string EncodeStringValue(string text, MemoryPool<byte> pool)
+    private static string EncodeStringValue(string text, BaseMemoryPool pool)
     {
         if(text.Length == 0)
         {
@@ -539,7 +540,7 @@ public static class CesrFieldMapCodec
 
     //Whether a string is exactly one complete CESR primitive (it decodes and consumes the whole string), reporting
     //the primitive's code; used to decide whether a string value is carried verbatim or as text.
-    private static bool IsCompletePrimitive(string text, MemoryPool<byte> pool, out string code)
+    private static bool IsCompletePrimitive(string text, BaseMemoryPool pool, out string code)
     {
         try
         {
@@ -709,7 +710,7 @@ public static class CesrFieldMapCodec
 
     //Decodes an escaped value: the escape marker is followed by the primitive it escapes, whose verbatim qb64 text
     //is the neutral value. Both the marker and the escaped primitive are consumed.
-    private static string DecodeEscapedValue(ReadOnlySpan<char> qb64, MemoryPool<byte> pool, ref int consumedChars)
+    private static string DecodeEscapedValue(ReadOnlySpan<char> qb64, BaseMemoryPool pool, ref int consumedChars)
     {
         using CesrParsedPrimitive escaped = CesrPrimitiveCodec.DecodeText(qb64[consumedChars..], pool, out int escapedChars);
         string verbatim = new string(qb64.Slice(consumedChars, escapedChars));

@@ -22,7 +22,7 @@ internal sealed class GeneralJweEncRoundTripTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private static readonly JwtHeaderSerializer JwtHeaderSerializer =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
@@ -155,7 +155,7 @@ internal sealed class GeneralJweEncRoundTripTests
     //delegate pair: encrypt to two recipients with one shared ephemeral key, serialize to
     //General JSON, reparse, and decrypt every recipient back to the original plaintext.
     private async Task AnoncryptRoundTripAsync(
-        Func<MemoryPool<byte>, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
+        Func<BaseMemoryPool, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
         MultiRecipientKeyAgreementEncryptDelegate encryptAgreement,
         KeyAgreementDecryptDelegate decryptAgreement,
         string keyManagementAlgorithm,
@@ -243,7 +243,7 @@ internal sealed class GeneralJweEncRoundTripTests
     //A256CBC-HS512 (a compactly committing AEAD, the only family 1PU §2.1 permits). When
     //assertParsedHeader is non-null it inspects the reparsed protected header.
     private async Task AuthcryptRoundTripAsync(
-        Func<MemoryPool<byte>, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
+        Func<BaseMemoryPool, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
         MultiRecipientAuthenticatedKeyAgreementEncryptDelegate encryptAgreement,
         AuthenticatedKeyAgreementDecryptDelegate decryptAgreement,
         string keyManagementAlgorithm,

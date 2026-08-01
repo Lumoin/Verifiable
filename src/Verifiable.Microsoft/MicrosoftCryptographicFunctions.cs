@@ -59,7 +59,7 @@ namespace Verifiable.Microsoft
             ReadOnlySequence<byte> input,
             int outputByteLength,
             Tag tag,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             FrozenDictionary<string, object>? context = null,
             CancellationToken cancellationToken = default)
         {
@@ -148,7 +148,7 @@ namespace Verifiable.Microsoft
             return VerifyECDsa(dataToVerify.Span, signature.Span, publicKeyMaterial.Span, CryptoAlgorithm.P256, ECCurve.NamedCurves.nistP256, HashAlgorithmName.SHA256);
         }
 
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignP256Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignP256Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignECDsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, ECCurve.NamedCurves.nistP256, HashAlgorithmName.SHA256, CryptoTags.P256Signature);
@@ -159,7 +159,7 @@ namespace Verifiable.Microsoft
             return VerifyECDsa(dataToVerify.Span, signature.Span, publicKeyMaterial.Span, CryptoAlgorithm.P384, ECCurve.NamedCurves.nistP384, HashAlgorithmName.SHA384);
         }
 
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignP384Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignP384Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignECDsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, ECCurve.NamedCurves.nistP384, HashAlgorithmName.SHA384, CryptoTags.P384Signature);
@@ -170,7 +170,7 @@ namespace Verifiable.Microsoft
             return VerifyECDsa(dataToVerify.Span, signature.Span, publicKeyMaterial.Span, CryptoAlgorithm.P521, ECCurve.NamedCurves.nistP521, HashAlgorithmName.SHA512);
         }
 
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignP521Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignP521Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignECDsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, ECCurve.NamedCurves.nistP521, HashAlgorithmName.SHA512, CryptoTags.P521Signature);
@@ -181,13 +181,13 @@ namespace Verifiable.Microsoft
             return VerifyECDsa(dataToVerify.Span, signature.Span, publicKeyMaterial.Span, CryptoAlgorithm.Secp256k1, ECCurve.CreateFromFriendlyName("secP256k1"), HashAlgorithmName.SHA256);
         }
 
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignSecp256k1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignSecp256k1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignECDsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, ECCurve.CreateFromFriendlyName("secP256k1"), HashAlgorithmName.SHA256, CryptoTags.Secp256k1Signature);
         }
 
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsa2048Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsa2048Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1, CryptoTags.Rsa2048Signature);
@@ -198,7 +198,7 @@ namespace Verifiable.Microsoft
             return VerifyRsaAsync(dataToVerify.Span, signature.Span, publicKeyMaterial.Span, CryptoAlgorithm.Rsa2048, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         }
 
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsa4096Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsa4096Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1, CryptoTags.Rsa4096Signature);
@@ -214,7 +214,7 @@ namespace Verifiable.Microsoft
             return VerifyRsaAsync(dataToVerify.Span, signature.Span, publicKeyMaterial.Span, CryptoAlgorithm.RsaSha256, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         }
 
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha256Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha256Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1, CryptoTags.RsaSha256Pkcs1Signature);
@@ -225,7 +225,7 @@ namespace Verifiable.Microsoft
             return VerifyRsaAsync(dataToVerify.Span, signature.Span, publicKeyMaterial.Span, CryptoAlgorithm.RsaSha256Pss, HashAlgorithmName.SHA256, RSASignaturePadding.Pss);
         }
 
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha256PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha256PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA256, RSASignaturePadding.Pss, CryptoTags.RsaSha256PssSignature);
@@ -236,7 +236,7 @@ namespace Verifiable.Microsoft
             return VerifyRsaAsync(dataToVerify.Span, signature.Span, publicKeyMaterial.Span, CryptoAlgorithm.RsaSha384, HashAlgorithmName.SHA384, RSASignaturePadding.Pkcs1);
         }
 
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha384Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha384Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA384, RSASignaturePadding.Pkcs1, CryptoTags.RsaSha384Pkcs1Signature);
@@ -247,7 +247,7 @@ namespace Verifiable.Microsoft
             return VerifyRsaAsync(dataToVerify.Span, signature.Span, publicKeyMaterial.Span, CryptoAlgorithm.RsaSha384Pss, HashAlgorithmName.SHA384, RSASignaturePadding.Pss);
         }
 
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha384PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha384PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA384, RSASignaturePadding.Pss, CryptoTags.RsaSha384PssSignature);
@@ -258,7 +258,7 @@ namespace Verifiable.Microsoft
             return VerifyRsaAsync(dataToVerify.Span, signature.Span, publicKeyMaterial.Span, CryptoAlgorithm.RsaSha512, HashAlgorithmName.SHA512, RSASignaturePadding.Pkcs1);
         }
 
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha512Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha512Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA512, RSASignaturePadding.Pkcs1, CryptoTags.RsaSha512Pkcs1Signature);
@@ -269,7 +269,7 @@ namespace Verifiable.Microsoft
             return VerifyRsaAsync(dataToVerify.Span, signature.Span, publicKeyMaterial.Span, CryptoAlgorithm.RsaSha512Pss, HashAlgorithmName.SHA512, RSASignaturePadding.Pss);
         }
 
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha512PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha512PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA512, RSASignaturePadding.Pss, CryptoTags.RsaSha512PssSignature);
@@ -330,7 +330,7 @@ namespace Verifiable.Microsoft
         }
 
 
-        private static ValueTask<(Signature Signature, CryptoEvent? Event)> SignECDsa(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign, MemoryPool<byte> signaturePool, ECCurve curve, HashAlgorithmName hashAlgorithmName, Tag signatureTag)
+        private static ValueTask<(Signature Signature, CryptoEvent? Event)> SignECDsa(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign, BaseMemoryPool signaturePool, ECCurve curve, HashAlgorithmName hashAlgorithmName, Tag signatureTag)
         {
             ProviderOperation operation = new(nameof(SignECDsa));
             using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Sign);
@@ -403,7 +403,7 @@ namespace Verifiable.Microsoft
             }
         }
 
-        private static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsa(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign, MemoryPool<byte> signaturePool, HashAlgorithmName hashAlgorithmName, RSASignaturePadding padding, Tag signatureTag)
+        private static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsa(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign, BaseMemoryPool signaturePool, HashAlgorithmName hashAlgorithmName, RSASignaturePadding padding, Tag signatureTag)
         {
             ProviderOperation operation = new(nameof(SignRsa));
             using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Sign);

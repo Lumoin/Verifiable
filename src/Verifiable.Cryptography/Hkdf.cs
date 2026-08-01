@@ -36,7 +36,7 @@ namespace Verifiable.Cryptography;
 /// </para>
 /// <para>
 /// The inner HMAC routes through the registered <see cref="ComputeHmacDelegate"/> via
-/// <see cref="CryptographicKeyEvents.ComputeHmacAsync(ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, int, Tag, MemoryPool{byte}, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>
+/// <see cref="CryptographicKeyEvents.ComputeHmacAsync(ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, int, Tag, BaseMemoryPool, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>
 /// - the exact same seam <see cref="Kdfa"/> composes its own HMAC rounds through - so HKDF inherits
 /// the same observability, provenance stamping, and backend-agility (a hardware-bound HMAC backend
 /// serves HKDF exactly as it serves KDFa) without importing a provider assembly or calling
@@ -72,7 +72,7 @@ public static class Hkdf
         HashAlgorithmName hashAlgorithm,
         ReadOnlyMemory<byte> salt,
         ReadOnlyMemory<byte> ikm,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -111,7 +111,7 @@ public static class Hkdf
         ReadOnlyMemory<byte> prk,
         ReadOnlyMemory<byte> info,
         int outputLength,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -212,7 +212,7 @@ public static class Hkdf
         ReadOnlyMemory<byte> ikm,
         ReadOnlyMemory<byte> info,
         int outputLength,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(pool);

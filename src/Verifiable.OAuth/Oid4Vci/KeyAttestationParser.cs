@@ -29,7 +29,7 @@ public static class KeyAttestationParser
     public static bool TryParse(
         string compactAttestation,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         out KeyAttestation? attestation)
     {
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);

@@ -49,7 +49,7 @@ public sealed class TpmPolicySession: TpmSessionBase, IDisposable
     private Tpm2bNonce nonceCaller;
     private bool disposed;
 
-    private TpmPolicySession(TpmHandle sessionHandle, TpmAlgIdConstants sessionAlg, MemoryPool<byte> pool)
+    private TpmPolicySession(TpmHandle sessionHandle, TpmAlgIdConstants sessionAlg, BaseMemoryPool pool)
     {
         this.SessionHandle = sessionHandle;
         this.SessionAlg = sessionAlg;
@@ -68,7 +68,7 @@ public sealed class TpmPolicySession: TpmSessionBase, IDisposable
     /// <param name="sessionAlg">The policy session's hash algorithm (sizes the caller nonce and the cpHash).</param>
     /// <param name="pool">The memory pool for nonce allocation.</param>
     /// <returns>The policy authorization session.</returns>
-    public static TpmPolicySession ForSession(uint sessionHandle, TpmAlgIdConstants sessionAlg, MemoryPool<byte> pool)
+    public static TpmPolicySession ForSession(uint sessionHandle, TpmAlgIdConstants sessionAlg, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -82,7 +82,7 @@ public sealed class TpmPolicySession: TpmSessionBase, IDisposable
     public override TpmAlgIdConstants HashAlgorithm => SessionAlg;
 
     /// <inheritdoc/>
-    public override void RollNonceCaller(MemoryPool<byte> pool)
+    public override void RollNonceCaller(BaseMemoryPool pool)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
@@ -109,7 +109,7 @@ public sealed class TpmPolicySession: TpmSessionBase, IDisposable
     [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Tpm2bAuth.CreateEmpty returns the shared, non-owned empty singleton (never a freshly rented buffer); the caller must not dispose it.")]
     public override ValueTask<Tpm2bAuth?> PrepareAuthHmacAsync(
         ReadOnlyMemory<byte> cpHash,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken,
         ReadOnlyMemory<byte> foldedSessionNonces = default)
     {
@@ -147,7 +147,7 @@ public sealed class TpmPolicySession: TpmSessionBase, IDisposable
     public override ValueTask<bool> VerifyAndUpdateAsync(
         TpmsAuthResponse response,
         ReadOnlyMemory<byte> rpHash,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);

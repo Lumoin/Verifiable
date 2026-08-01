@@ -105,7 +105,7 @@ internal static class AsicEvidenceRecordAttaching
     /// <exception cref="InvalidOperationException">When the container cannot be read, an entry the record is to protect is missing, or the manifest seam refuses to write.</exception>
     public static async ValueTask<AsicAttachedEvidenceRecord> AttachAsync(
         AsicEvidenceRecordAttachmentContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -202,7 +202,7 @@ internal static class AsicEvidenceRecordAttaching
         string entryName,
         ReadOnlyMemory<byte> content,
         DateTimeOffset lastModified,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(entryName);
         ArgumentNullException.ThrowIfNull(pool);
@@ -296,7 +296,7 @@ internal static class AsicEvidenceRecordAttaching
         AsicEvidenceRecordAttachmentContext context,
         List<ReadOnlyMemory<byte>> dataObjects,
         string recordEntryName,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         var references = new List<AsicDataObjectReference>(dataObjects.Count);

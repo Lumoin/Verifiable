@@ -1,3 +1,4 @@
+using Lumoin.Base;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
@@ -39,7 +40,7 @@ public static class CesrMessageReader
     /// <exception cref="CesrFormatException">The stream is malformed, truncated, or carries an attachment group before any message.</exception>
     public static IAsyncEnumerable<CesrMessage> ReadTextAsync(
         PipeReader reader,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(reader);
@@ -59,7 +60,7 @@ public static class CesrMessageReader
     /// <exception cref="CesrFormatException">The stream is malformed, truncated, or carries an attachment group before any message.</exception>
     public static IAsyncEnumerable<CesrMessage> ReadBinaryAsync(
         PipeReader reader,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(reader);

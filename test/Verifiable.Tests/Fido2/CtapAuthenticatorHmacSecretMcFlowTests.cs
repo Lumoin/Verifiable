@@ -43,7 +43,7 @@ internal sealed class CtapAuthenticatorHmacSecretMcFlowTests
     [TestMethod]
     public async Task HmacSecretMcWithoutHmacSecretReturnsMissingParameter()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-hmac-secret-mc-unpaired-absent");
@@ -77,7 +77,7 @@ internal sealed class CtapAuthenticatorHmacSecretMcFlowTests
     [TestMethod]
     public async Task HmacSecretMcWithHmacSecretFalseReturnsMissingParameter()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-hmac-secret-mc-unpaired-false");
@@ -115,7 +115,7 @@ internal sealed class CtapAuthenticatorHmacSecretMcFlowTests
     public async Task HmacSecretMcPositiveFlowLinksToALaterGetAssertionHmacSecretOutput()
     {
         const string RpId = "waveclose-hmac-secret-mc.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         byte[] salt1 = CtapWave2AuthenticatorFixtures.BuildFixedBytes(32, 0x75);
 
@@ -180,7 +180,7 @@ internal sealed class CtapAuthenticatorHmacSecretMcFlowTests
 
     /// <summary>Sends <paramref name="request"/> through <see cref="CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync"/>, disposing the request either way.</summary>
     private static ValueTask<CtapMakeCredentialResponse> SendMakeCredentialAsync(
-        CtapAuthenticatorSimulator simulator, CtapMakeCredentialRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapAuthenticatorSimulator simulator, CtapMakeCredentialRequest request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         try
         {

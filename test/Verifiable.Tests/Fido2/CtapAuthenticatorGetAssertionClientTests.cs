@@ -28,7 +28,7 @@ internal sealed class CtapAuthenticatorGetAssertionClientTests
     [TestMethod]
     public async Task SendsCommandBytePlusParametersAndDecodesSuccessResponse()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapGetAssertionRequest request = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(pool);
         byte[] expectedRequestBytes = CtapWave2RequestEnvelopes.BuildGetAssertionEnvelope(request);
 
@@ -38,7 +38,7 @@ internal sealed class CtapAuthenticatorGetAssertionClientTests
             new byte[] { 0x0A, 0x0B }, new byte[] { 0x0C, 0x0D });
 
         byte[]? capturedRequest = null;
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> transceiveRequest, MemoryPool<byte> transceivePool, CancellationToken cancellationToken)
+        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> transceiveRequest, BaseMemoryPool transceivePool, CancellationToken cancellationToken)
         {
             capturedRequest = transceiveRequest.ToArray();
             TaggedMemory<byte> payload = CtapGetAssertionResponseCborWriter.Write(scriptedResponse);
@@ -66,10 +66,10 @@ internal sealed class CtapAuthenticatorGetAssertionClientTests
     [TestMethod]
     public async Task ThrowsCtapCommandExceptionOnNonSuccessStatus()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapGetAssertionRequest request = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(pool);
 
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> transceiveRequest, MemoryPool<byte> transceivePool, CancellationToken cancellationToken) =>
+        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> transceiveRequest, BaseMemoryPool transceivePool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes([WellKnownCtapStatusCodes.NoCredentials], transceivePool, Fido2BufferTags.CtapResponseEnvelope));
 
         CtapCommandException exception = await Assert.ThrowsExactlyAsync<CtapCommandException>(
@@ -86,10 +86,10 @@ internal sealed class CtapAuthenticatorGetAssertionClientTests
     [TestMethod]
     public async Task ThrowsFido2FormatExceptionOnEmptyResponse()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapGetAssertionRequest request = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(pool);
 
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> transceiveRequest, MemoryPool<byte> transceivePool, CancellationToken cancellationToken) =>
+        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> transceiveRequest, BaseMemoryPool transceivePool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes(ReadOnlySpan<byte>.Empty, transceivePool, Fido2BufferTags.CtapResponseEnvelope));
 
         await Assert.ThrowsExactlyAsync<Fido2FormatException>(

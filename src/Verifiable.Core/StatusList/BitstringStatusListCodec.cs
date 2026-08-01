@@ -114,7 +114,7 @@ public static class BitstringStatusListCodec
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="encodedList"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
     /// <exception cref="FormatException">Thrown when the value lacks the <c>u</c> Multibase prefix or is not valid base64url.</exception>
     /// <exception cref="InvalidDataException">Thrown when the payload is not valid GZIP data.</exception>
-    public static StatusList DecodeList(string encodedList, StatusListBitSize statusSize, MemoryPool<byte> pool)
+    public static StatusList DecodeList(string encodedList, StatusListBitSize statusSize, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(encodedList);
         ArgumentNullException.ThrowIfNull(pool);

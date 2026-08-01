@@ -95,7 +95,7 @@ public sealed class CertificateChainCompleter
     public ValueTask<IReadOnlyList<PkiCertificateMemory>> CompleteAsync(
         IReadOnlyList<PkiCertificateMemory> partialChain,
         IReadOnlyList<PkiCertificateMemory> trustAnchors,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(partialChain);
@@ -259,7 +259,7 @@ public sealed class CertificateChainCompleter
 
 
     /// <summary>Copies <paramref name="source"/>'s DER bytes into a new pooled <see cref="PkiCertificateMemory"/> the caller owns.</summary>
-    private static PkiCertificateMemory ClonePkiCertificate(PkiCertificateMemory source, MemoryPool<byte> pool)
+    private static PkiCertificateMemory ClonePkiCertificate(PkiCertificateMemory source, BaseMemoryPool pool)
     {
         ReadOnlyMemory<byte> sourceBytes = source.AsReadOnlyMemory();
         IMemoryOwner<byte> owner = pool.Rent(sourceBytes.Length);

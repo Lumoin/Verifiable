@@ -637,7 +637,7 @@ public sealed record UvTokenIssuanceCompleted(
 /// <see cref="MakeCredentialRequested.SelectedAlgorithm"/>'s own "precompute outside, use inside"
 /// precedent for a composition-time dependency the pure transition cannot construct itself).
 /// </param>
-public sealed record ResetRequested(DateTimeOffset Now, MemoryPool<byte> Pool): CtapAuthenticatorInput;
+public sealed record ResetRequested(DateTimeOffset Now, BaseMemoryPool Pool): CtapAuthenticatorInput;
 
 /// <summary>
 /// The effect fold-back of a <see cref="CtapFactoryResetKeyMaterialAction"/>: a freshly minted

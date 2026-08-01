@@ -27,4 +27,4 @@ namespace Verifiable.Core.Model.Mdoc;
 /// <returns>The parsed, owned <see cref="MdocParsedDeviceResponse"/>.</returns>
 public delegate MdocParsedDeviceResponse ParseMdocDeviceResponseDelegate(
     ReadOnlySpan<byte> encodedDeviceResponse,
-    MemoryPool<byte> pool);
+    BaseMemoryPool pool);

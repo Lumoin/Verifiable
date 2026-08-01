@@ -68,7 +68,7 @@ public static class VerifierAttestationIssuer
         JwtPayloadSerializer payloadSerializer,
         EncodeDelegate base64UrlEncoder,
         Func<PublicKeyMemory, Dictionary<string, object>> jwkConverter,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(issuer);

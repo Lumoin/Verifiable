@@ -77,7 +77,7 @@ public static class SignatureAcceptanceValidation
         CryptographicConstraints cryptographicConstraints,
         ValidateTimestampTokenAsyncDelegate? validateTimestampToken,
         DateTimeOffset validationTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signature);
@@ -247,7 +247,7 @@ public static class SignatureAcceptanceValidation
         IReadOnlyList<PkiCertificateMemory> certificateChain,
         SignatureElementsConstraints constraints,
         List<ValidationConstraintEvaluation> unsatisfied,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(signature.SigningCertificateReferences.Count == 0)
@@ -342,7 +342,7 @@ public static class SignatureAcceptanceValidation
         ValidateTimestampTokenAsyncDelegate? validateTimestampToken,
         DateTimeOffset validationTime,
         List<ValidationConstraintEvaluation> unsatisfied,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(!constraints.RequireContentTimestampValidity)
@@ -422,7 +422,7 @@ public static class SignatureAcceptanceValidation
     private static async ValueTask<bool> MatchesAsync(
         SigningCertificateReference reference,
         PkiCertificateMemory certificate,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(reference.CertificateDigest is null)

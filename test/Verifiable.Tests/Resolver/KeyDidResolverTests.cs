@@ -30,7 +30,7 @@ internal sealed class KeyDidResolverTests
 
     private static readonly ExchangeContext EmptyContext = new();
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
     //Encodes a public key into its did:key string (the same multibase the builder mints), so the resolver can

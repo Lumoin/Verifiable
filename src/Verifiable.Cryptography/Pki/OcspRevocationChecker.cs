@@ -145,7 +145,7 @@ public sealed class OcspRevocationChecker
         PkiCertificateMemory certificate,
         IReadOnlyList<PkiCertificateMemory> issuerCandidates,
         DateTimeOffset validationTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         using RetainedOcspResponse retained = await CheckRetainingResponseAsync(
@@ -176,7 +176,7 @@ public sealed class OcspRevocationChecker
         PkiCertificateMemory certificate,
         IReadOnlyList<PkiCertificateMemory> issuerCandidates,
         DateTimeOffset validationTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(certificate);
@@ -254,7 +254,7 @@ public sealed class OcspRevocationChecker
     /// </returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the fetched response transfers to the returned result on the verified path; every other path disposes it here.")]
     private async ValueTask<RetainedOcspResponse> CheckAgainstResponderAsync(
-        PkiCertificateMemory certificate, PkiCertificateMemory issuer, string responderUri, DateTimeOffset validationTime, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        PkiCertificateMemory certificate, PkiCertificateMemory issuer, string responderUri, DateTimeOffset validationTime, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using OcspRequestContent request = await OcspRequests.CreateAsync(certificate, issuer, CertIdDigestAlgorithm, pool, NonceByteLength, IncludeNonce, cancellationToken).ConfigureAwait(false);
         var fetchContext = new OcspFetchContext { ResponderUri = responderUri, Request = request.Request };

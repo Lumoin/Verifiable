@@ -58,7 +58,7 @@ public static class TerminalAuthenticationSignature
     /// constructs, or <see langword="null"/> to route it to <see cref="CryptographicKeyEvents.DefaultSink"/>.
     /// This overload resolves and invokes the registry delegate directly rather than through a bound
     /// <see cref="PrivateKey"/> (there is no key object here, only raw key bytes) — the sibling
-    /// <see cref="SignAsync(PrivateKey, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, MemoryPool{byte}, CancellationToken)"/>
+    /// <see cref="SignAsync(PrivateKey, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, BaseMemoryPool, CancellationToken)"/>
     /// overload emits through that choke point instead when a <see cref="PrivateKey"/> is already in hand.
     /// </param>
     /// <param name="cancellationToken">A cancellation token.</param>
@@ -70,7 +70,7 @@ public static class TerminalAuthenticationSignature
         ReadOnlyMemory<byte> chipIdentifier,
         ReadOnlyMemory<byte> chipChallenge,
         ReadOnlyMemory<byte> terminalEphemeralPublicKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {
@@ -122,7 +122,7 @@ public static class TerminalAuthenticationSignature
         ReadOnlyMemory<byte> chipIdentifier,
         ReadOnlyMemory<byte> chipChallenge,
         ReadOnlyMemory<byte> terminalEphemeralPublicKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(terminalKey);
@@ -158,7 +158,7 @@ public static class TerminalAuthenticationSignature
         ReadOnlyMemory<byte> chipIdentifier,
         ReadOnlyMemory<byte> chipChallenge,
         ReadOnlyMemory<byte> terminalEphemeralPublicKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {
@@ -208,7 +208,7 @@ public static class TerminalAuthenticationSignature
         ReadOnlyMemory<byte> chipIdentifier,
         ReadOnlyMemory<byte> chipChallenge,
         ReadOnlyMemory<byte> terminalEphemeralPublicKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {
@@ -256,7 +256,7 @@ public static class TerminalAuthenticationSignature
         ReadOnlyMemory<byte> chipIdentifier,
         ReadOnlyMemory<byte> chipChallenge,
         ReadOnlyMemory<byte> terminalEphemeralPublicKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {
@@ -315,7 +315,7 @@ public static class TerminalAuthenticationSignature
     /// the uncompressed SEC1 point). The message is public material, so a managed buffer suffices.
     /// </summary>
     private static IMemoryOwner<byte> BuildSignedMessage(
-        ReadOnlySpan<byte> chipIdentifier, ReadOnlySpan<byte> chipChallenge, ReadOnlySpan<byte> terminalEphemeralPublicKey, MemoryPool<byte> pool, out int length)
+        ReadOnlySpan<byte> chipIdentifier, ReadOnlySpan<byte> chipChallenge, ReadOnlySpan<byte> terminalEphemeralPublicKey, BaseMemoryPool pool, out int length)
     {
         ReadOnlySpan<byte> compressedEphemeralKey = CompressPoint(terminalEphemeralPublicKey);
         length = chipIdentifier.Length + chipChallenge.Length + compressedEphemeralKey.Length;

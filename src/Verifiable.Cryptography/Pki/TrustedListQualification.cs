@@ -80,7 +80,7 @@ public static class TrustedListQualification
         TrustServiceTypeIdentifier serviceTypeIdentifier,
         DateTimeOffset evaluationTime,
         MatchCertificateToTrustServiceAsyncDelegate matchCertificateToService,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(trustedList);
@@ -300,7 +300,7 @@ public static class TrustedListQualification
         QualifiedCertificateFacts certificateFacts,
         DateTimeOffset evaluationTime,
         MatchCertificateToTrustServiceAsyncDelegate matchCertificateToService,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(trustedList);
@@ -398,7 +398,7 @@ public static class TrustedListQualification
         QualifiedCertificateFacts certificateFacts,
         DateTimeOffset evaluationTime,
         MatchCertificateToTrustServiceAsyncDelegate matchCertificateToService,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(certificateFacts);
@@ -590,7 +590,7 @@ public static class TrustedListQualification
         TrustServiceTypeIdentifier serviceTypeIdentifier,
         DateTimeOffset evaluationTime,
         MatchCertificateToTrustServiceAsyncDelegate matchCertificateToService,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(trustedList);
@@ -804,7 +804,7 @@ public static class TrustedListQualification
         DateTimeOffset evaluationTime,
         DateTimeOffset tokenGenerationTime,
         MatchCertificateToTrustServiceAsyncDelegate matchCertificateToService,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         //PRO-4.7.4-01 through PRO-4.7.4-03: the token issuer determination at the evaluation time is the
@@ -921,7 +921,7 @@ public static class TrustedListQualification
         QualifiedCertificateFacts certificateFacts,
         DateTimeOffset evaluationTime,
         MatchCertificateToTrustServiceAsyncDelegate matchCertificateToService,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         var pass = new SinglePassDetermination();

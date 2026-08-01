@@ -584,7 +584,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         FillEntropyDelegate? rng = null,
         CtapCredentialSigningBackend? credentialSigningBackend = null,
         TimeProvider? timeProvider = null,
-        MemoryPool<byte>? pinUvAuthKeyAgreementPool = null,
+        BaseMemoryPool? pinUvAuthKeyAgreementPool = null,
         SimulateFingerprintCaptureDelegate? simulateFingerprintCapture = null,
         SimulateBuiltInUvDelegate? simulateBuiltInUv = null,
         SimulateUserPresenceDelegate? simulateUserPresence = null,
@@ -766,7 +766,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         FillEntropyDelegate? rng = null,
         CtapCredentialSigningBackend? credentialSigningBackend = null,
         TimeProvider? timeProvider = null,
-        MemoryPool<byte>? pinUvAuthKeyAgreementPool = null,
+        BaseMemoryPool? pinUvAuthKeyAgreementPool = null,
         SimulateFingerprintCaptureDelegate? simulateFingerprintCapture = null,
         SimulateBuiltInUvDelegate? simulateBuiltInUv = null,
         SimulateUserPresenceDelegate? simulateUserPresence = null,
@@ -783,7 +783,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
         EncodeCtapAuthenticatorSnapshotDelegate resolvedEncodeSnapshot = encodeSnapshot ?? CtapAuthenticatorSnapshotCborWriter.Write;
         DecodeCtapAuthenticatorSnapshotDelegate resolvedDecodeSnapshot = decodeSnapshot ?? CtapAuthenticatorSnapshotCborReader.Read;
-        MemoryPool<byte> resolvedPool = pinUvAuthKeyAgreementPool ?? BaseMemoryPool.Shared;
+        BaseMemoryPool resolvedPool = pinUvAuthKeyAgreementPool ?? BaseMemoryPool.Shared;
 
         CtapAuthenticatorSimulator simulator = new(
             runId, encodeGetInfoResponse, decodeMakeCredentialRequest, encodeMakeCredentialResponse, decodeGetAssertionRequest,
@@ -927,7 +927,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// The bytes failed to parse, or the parsed snapshot's AAGUID/firmware-version fingerprint does not
     /// match this instance's own personalization (R-2b, fail closed).
     /// </exception>
-    private void RehydratePersistentSubset(ReadOnlyMemory<byte> snapshotCbor, DecodeCtapAuthenticatorSnapshotDelegate decodeSnapshot, MemoryPool<byte> pool)
+    private void RehydratePersistentSubset(ReadOnlyMemory<byte> snapshotCbor, DecodeCtapAuthenticatorSnapshotDelegate decodeSnapshot, BaseMemoryPool pool)
     {
         CtapAuthenticatorSnapshot snapshot = decodeSnapshot(snapshotCbor, pool);
         try
@@ -1015,7 +1015,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <param name="pool">The memory pool available to this command's own call — reused for the snapshot encode/copy scratch work rather than reaching for a separate default.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     private async ValueTask ApplyCustodyPostCommandAsync(
-        CtapAuthenticatorState stateBeforeCommand, CtapAuthenticatorResponseIntent intent, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapAuthenticatorState stateBeforeCommand, CtapAuthenticatorResponseIntent intent, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(Custody is null)
         {
@@ -1128,7 +1128,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <see cref="BaseMemoryPool.Shared"/> when <see langword="null"/>.
     /// </param>
     /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
-    public void PowerCycle(MemoryPool<byte>? keyAgreementPool = null)
+    public void PowerCycle(BaseMemoryPool? keyAgreementPool = null)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
@@ -1165,7 +1165,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// </remarks>
     /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
-    public async ValueTask<PooledMemory> TransceiveAsync(ReadOnlyMemory<byte> request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public async ValueTask<PooledMemory> TransceiveAsync(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         ArgumentNullException.ThrowIfNull(pool);
@@ -1239,7 +1239,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// </returns>
     /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
-    public async ValueTask<PooledMemory> BeginDeferredTransceiveAsync(ReadOnlyMemory<byte> request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public async ValueTask<PooledMemory> BeginDeferredTransceiveAsync(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         ArgumentNullException.ThrowIfNull(pool);
@@ -1394,7 +1394,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">No user-presence wait is currently pending (internal-misuse guard: the pure transition itself never throws).</exception>
-    public async ValueTask<PooledMemory> PollDeferredTransceiveAsync(MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public async ValueTask<PooledMemory> PollDeferredTransceiveAsync(BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         ArgumentNullException.ThrowIfNull(pool);
@@ -1450,7 +1450,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">No user-presence wait is currently pending (internal-misuse guard: the pure transition itself never throws).</exception>
-    public async ValueTask<PooledMemory> CancelDeferredTransceiveAsync(MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public async ValueTask<PooledMemory> CancelDeferredTransceiveAsync(BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         ArgumentNullException.ThrowIfNull(pool);
@@ -1494,7 +1494,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <exception cref="Fido2FormatException">The request's parameters did not decode.</exception>
     private CtapAuthenticatorInput DecodeRequest(
         ReadOnlyMemory<byte> request,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         out CtapMakeCredentialRequest? makeCredentialRequest,
         out CtapGetAssertionRequest? getAssertionRequest,
         out CtapCredentialManagementRequest? credentialManagementRequest)
@@ -1564,7 +1564,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// intent; <see cref="BeginDeferredTransceiveAsync"/>/<see cref="PollDeferredTransceiveAsync"/> check
     /// for it themselves and map it to the empty "still pending" marker before ever reaching this method.
     /// </exception>
-    private PooledMemory FrameFinalResponse(CtapAuthenticatorResponseIntent intent, MemoryPool<byte> pool) =>
+    private PooledMemory FrameFinalResponse(CtapAuthenticatorResponseIntent intent, BaseMemoryPool pool) =>
         intent switch
         {
             GetInfoResponseReady getInfo => FrameSuccess(EncodeGetInfoResponse(getInfo.Response), pool),
@@ -1596,7 +1596,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// the pool: the one copy of the payload's bytes happens here, out of the codec seam's own wrapped
     /// array and into the pooled envelope the caller owns.
     /// </summary>
-    private static PooledMemory FrameSuccess(TaggedMemory<byte> payload, MemoryPool<byte> pool)
+    private static PooledMemory FrameSuccess(TaggedMemory<byte> payload, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> storage = pool.Rent(payload.Length + 1);
         try
@@ -1619,7 +1619,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// Frames a bare status-byte error response (CTAP 2.3 section 8.2: Status codes) with no CBOR body,
     /// into a one-byte buffer rented from the pool.
     /// </summary>
-    private static PooledMemory FrameError(byte statusCode, MemoryPool<byte> pool)
+    private static PooledMemory FrameError(byte statusCode, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> storage = pool.Rent(1);
         try
@@ -1640,7 +1640,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// Builds the "command parked awaiting user presence" marker (R2): a ZERO-LENGTH <see cref="PooledMemory"/>,
     /// unambiguous since every real CTAP2 response carries at least one status byte.
     /// </summary>
-    private static PooledMemory FrameDeferralPendingMarker(MemoryPool<byte> pool) =>
+    private static PooledMemory FrameDeferralPendingMarker(BaseMemoryPool pool) =>
         PooledMemory.FromBytes(ReadOnlySpan<byte>.Empty, pool, Fido2BufferTags.CtapResponseEnvelope);
 
 
@@ -1667,7 +1667,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// </summary>
     private static MakeCredentialRequested BuildMakeCredentialInput(
         ReadOnlyMemory<byte> parameters,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         DecodeCtapMakeCredentialRequestDelegate decodeMakeCredentialRequest,
         IReadOnlyList<int>? supportedAlgorithms,
         TimeProvider timeProvider,
@@ -1687,7 +1687,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// </summary>
     private static GetAssertionRequested BuildGetAssertionInput(
         ReadOnlyMemory<byte> parameters,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         DecodeCtapGetAssertionRequestDelegate decodeGetAssertionRequest,
         TimeProvider timeProvider,
         out CtapGetAssertionRequest getAssertionRequest)
@@ -1705,7 +1705,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// </summary>
     private static CredentialManagementRequested BuildCredentialManagementInput(
         ReadOnlyMemory<byte> parameters,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         DecodeCtapCredentialManagementRequestDelegate decodeCredentialManagementRequest,
         TimeProvider timeProvider,
         out CtapCredentialManagementRequest credentialManagementRequest)
@@ -1765,7 +1765,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// Drives the automaton through the effectful loop: step, execute any action the new state
     /// declares, feed the result back, repeat until no action remains.
     /// </summary>
-    private async ValueTask RunWithEffectsAsync(CtapAuthenticatorInput input, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private async ValueTask RunWithEffectsAsync(CtapAuthenticatorInput input, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         _ = await PdaRunner.StepWithEffectsAsync<CtapAuthenticatorState, CtapAuthenticatorInput, CtapActionContext>(
             Automaton.CurrentState,
@@ -2222,7 +2222,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         //Wavepin review fix F-4: copies decryptedCurrentPinHash's bytes into a carrier that outlives its
         //own using-scope, so the forcePINChange same-PIN comparison further up this method can compare
         //against the just-verified current hash rather than the possibly-stale action.CurrentStoredPin.
-        static DigestValue CopyConfirmedCurrentPinHash(ReadOnlySpan<byte> confirmedHash, MemoryPool<byte> pool)
+        static DigestValue CopyConfirmedCurrentPinHash(ReadOnlySpan<byte> confirmedHash, BaseMemoryPool pool)
         {
             IMemoryOwner<byte> copy = pool.Rent(confirmedHash.Length);
             try
@@ -2622,7 +2622,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// digest primitive always produces its algorithm's native output length, so the truncation happens
     /// as a separate copy rather than by requesting a short digest.
     /// </summary>
-    private static DigestValue ComputeStoredPinHash(ReadOnlySpan<byte> newPin, MemoryPool<byte> pool)
+    private static DigestValue ComputeStoredPinHash(ReadOnlySpan<byte> newPin, BaseMemoryPool pool)
     {
         using DigestValue fullDigest = CryptographicKeyEvents.ComputeDigest(newPin, Sha256Length, CryptoTags.Sha256Digest, pool);
 
@@ -2647,7 +2647,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <c>regenerate()</c> effect (CTAP 2.3, line 5674 and analogously for <c>getPinToken</c>/
     /// <c>getPinUvAuthTokenUsingPinWithPermissions</c>), which replaces only the SELECTED protocol's pair.
     /// </summary>
-    private static CtapPinUvAuthKeyAgreementKeyPair MintSingleKeyAgreementKeyPair(MemoryPool<byte> pool)
+    private static CtapPinUvAuthKeyAgreementKeyPair MintSingleKeyAgreementKeyPair(BaseMemoryPool pool)
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
             CryptographicKeyEvents.CreateKeyPair(CryptoAlgorithm.P256, Purpose.Exchange, pool);
@@ -2662,7 +2662,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// (non-secret), but the buffer is still pool-allocated rather than a bare <c>byte[]</c>, matching
     /// this library's uniform pooled-buffer convention.
     /// </summary>
-    private static SlicedMemoryOwner BuildConcatenatedMessage(ReadOnlyMemory<byte> left, ReadOnlyMemory<byte> right, MemoryPool<byte> pool)
+    private static SlicedMemoryOwner BuildConcatenatedMessage(ReadOnlyMemory<byte> left, ReadOnlyMemory<byte> right, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> combined = pool.Rent(left.Length + right.Length);
         try
@@ -3310,7 +3310,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// it, since this message has a fixed 32-byte prefix and a command byte <c>BuildConcatenatedMessage</c>'s
     /// two-segment shape does not carry.
     /// </summary>
-    private static SlicedMemoryOwner BuildAuthenticatorConfigMessage(int subCommand, ReadOnlyMemory<byte> subCommandParams, MemoryPool<byte> pool)
+    private static SlicedMemoryOwner BuildAuthenticatorConfigMessage(int subCommand, ReadOnlyMemory<byte> subCommandParams, BaseMemoryPool pool)
     {
         const int PrefixLength = 32;
         IMemoryOwner<byte> combined = pool.Rent(PrefixLength + 1 + 1 + subCommandParams.Length);
@@ -3375,7 +3375,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <c>enumerateRPsBegin</c>, which structurally never carry one — the message then elides this
     /// segment entirely, contributing zero trailing bytes.
     /// </summary>
-    private static SlicedMemoryOwner BuildCredentialManagementMessage(int subCommand, ReadOnlyMemory<byte> subCommandParams, MemoryPool<byte> pool)
+    private static SlicedMemoryOwner BuildCredentialManagementMessage(int subCommand, ReadOnlyMemory<byte> subCommandParams, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> combined = pool.Rent(1 + subCommandParams.Length);
         try
@@ -3434,7 +3434,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// never carries one — the message then elides this segment entirely, contributing zero trailing
     /// bytes.
     /// </summary>
-    private static SlicedMemoryOwner BuildBioEnrollmentMessage(int modality, int subCommand, ReadOnlyMemory<byte> subCommandParams, MemoryPool<byte> pool)
+    private static SlicedMemoryOwner BuildBioEnrollmentMessage(int modality, int subCommand, ReadOnlyMemory<byte> subCommandParams, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> combined = pool.Rent(2 + subCommandParams.Length);
         try
@@ -3503,7 +3503,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// is not a pure byte concatenation the pure transition function could assemble itself (D3, seams
     /// Finding D).
     /// </summary>
-    private static SlicedMemoryOwner BuildLargeBlobsMessage(uint offset, ReadOnlySpan<byte> fragment, MemoryPool<byte> pool)
+    private static SlicedMemoryOwner BuildLargeBlobsMessage(uint offset, ReadOnlySpan<byte> fragment, BaseMemoryPool pool)
     {
         const int PrefixLength = 32;
         const int CommandSegmentLength = 2;
@@ -3812,7 +3812,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// decoded <c>authenticatorGetAssertion</c> request that carried it, which the transport layer
     /// disposes once that single command completes.
     /// </summary>
-    private static DigestValue CopyClientDataHash(DigestValue source, MemoryPool<byte> pool)
+    private static DigestValue CopyClientDataHash(DigestValue source, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(source.Length);
         try
@@ -3835,7 +3835,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <c>clientDataHash</c>, this is a public-data digest sent openly on the wire, not a trust/custody
     /// hash.
     /// </summary>
-    private static DigestValue ComputeRpIdHash(string rpId, MemoryPool<byte> pool)
+    private static DigestValue ComputeRpIdHash(string rpId, BaseMemoryPool pool)
     {
         int maxByteCount = Encoding.UTF8.GetMaxByteCount(rpId.Length);
         using IMemoryOwner<byte> rpIdBytes = pool.Rent(maxByteCount);
@@ -3998,7 +3998,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <param name="pinRetriesCustody">The NV-backed persistent-tier PIN-retries custody seam bundle, or <see langword="null"/> when none is composed (contract R-1..R-6, wavepin).</param>
     private readonly struct CtapActionContext(
         FillEntropyDelegate rng,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         Guid aaguid,
         CtapCredentialSigningBackend? credentialSigningBackend,
         EncodeCredentialPublicKeyDelegate encodeCredentialPublicKey,
@@ -4018,7 +4018,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         public FillEntropyDelegate Rng { get; } = rng;
 
         /// <summary>The memory pool backing every effect's allocations.</summary>
-        public MemoryPool<byte> Pool { get; } = pool;
+        public BaseMemoryPool Pool { get; } = pool;
 
         /// <summary>The authenticator's own AAGUID, embedded in every minted credential's <c>attestedCredentialData</c>.</summary>
         public Guid Aaguid { get; } = aaguid;

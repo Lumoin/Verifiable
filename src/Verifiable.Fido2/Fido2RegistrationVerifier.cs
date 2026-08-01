@@ -114,7 +114,7 @@ public static class Fido2RegistrationVerifier
         IReadOnlyList<PkiCertificateMemory> trustAnchors,
         DateTimeOffset validationTime,
         string correlationId,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         IReadOnlyList<string>? transports = null,
         string? authenticatorAttachment = null,
         bool acceptsUntrustedAttestationAsNone = false,
@@ -207,7 +207,7 @@ public static class Fido2RegistrationVerifier
         IReadOnlyList<PkiCertificateMemory> trustAnchors,
         DateTimeOffset validationTime,
         string correlationId,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         IReadOnlyList<string>? transports = null,
         string? authenticatorAttachment = null,
         bool acceptsUntrustedAttestationAsNone = false,
@@ -277,7 +277,7 @@ public static class Fido2RegistrationVerifier
         IReadOnlyList<PkiCertificateMemory> trustAnchors,
         TimeProvider timeProvider,
         string correlationId,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         IReadOnlyList<string>? transports = null,
         string? authenticatorAttachment = null,
         bool acceptsUntrustedAttestationAsNone = false,
@@ -314,7 +314,7 @@ public static class Fido2RegistrationVerifier
         SelectAttestationVerifierDelegate selectAttestationVerifier,
         IReadOnlyList<PkiCertificateMemory> trustAnchors,
         DateTimeOffset validationTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         bool acceptsUntrustedAttestationAsNone,
         CancellationToken cancellationToken)
     {
@@ -489,7 +489,7 @@ public static class Fido2RegistrationVerifier
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the fresh CredentialId copy transfers to the returned Fido2CredentialRecord, which in turn transfers to the caller via VerifyAsync's returned outcome.")]
     private static Fido2CredentialRecord? BuildCredentialRecord(
-        AuthenticatorData authenticatorData, IReadOnlyList<string> transports, string? authenticatorAttachment, MemoryPool<byte> pool)
+        AuthenticatorData authenticatorData, IReadOnlyList<string> transports, string? authenticatorAttachment, BaseMemoryPool pool)
     {
         if(authenticatorData.AttestedCredentialData is not { } attestedCredentialData)
         {

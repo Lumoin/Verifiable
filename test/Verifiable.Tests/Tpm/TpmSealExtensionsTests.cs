@@ -74,7 +74,7 @@ internal sealed class TpmSealExtensionsTests
     [TestMethod]
     public async Task SealUnsealRoundTripsThroughTheVerbsAcrossADiskByteRoundTrip()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
@@ -127,7 +127,7 @@ internal sealed class TpmSealExtensionsTests
     [TestMethod]
     public async Task UnsealAsyncWithWrongSealAuthReturnsSessionEncodedAuthFailAndStillAdmitsAFollowUpUnseal()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
@@ -176,7 +176,7 @@ internal sealed class TpmSealExtensionsTests
     [TestMethod]
     public async Task PolicyGatedSealUnsealsUnderASatisfiedPolicySessionViaTheVerbs()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
@@ -219,7 +219,7 @@ internal sealed class TpmSealExtensionsTests
     [TestMethod]
     public async Task UnsealUnderPolicyAsyncRejectsAMismatchedPolicyDigestWithPolicyFail()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
@@ -299,7 +299,7 @@ internal sealed class TpmSealExtensionsTests
     {
         const int cycles = 5;
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
@@ -346,7 +346,7 @@ internal sealed class TpmSealExtensionsTests
     [TestMethod]
     public async Task FlushContextReleasesALoadedSealedObjectHandle()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
@@ -486,7 +486,7 @@ internal sealed class TpmSealExtensionsTests
     /// <param name="sealedBlob">The sealed blob to serialize.</param>
     /// <param name="pool">The memory pool for the staging buffer.</param>
     /// <returns>The serialized bytes.</returns>
-    private static byte[] CopyToBytes(TpmSealedBlob sealedBlob, MemoryPool<byte> pool)
+    private static byte[] CopyToBytes(TpmSealedBlob sealedBlob, BaseMemoryPool pool)
     {
         int size = sealedBlob.GetSerializedSize();
         using IMemoryOwner<byte> owner = pool.Rent(size);
@@ -503,7 +503,7 @@ internal sealed class TpmSealExtensionsTests
     /// <param name="tpm">The TPM device.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The CreatePrimary response for the storage parent.</returns>
-    private async Task<CreatePrimaryResponse> CreateStorageParentAsync(TpmDevice tpm, MemoryPool<byte> pool)
+    private async Task<CreatePrimaryResponse> CreateStorageParentAsync(TpmDevice tpm, BaseMemoryPool pool)
     {
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);
@@ -526,7 +526,7 @@ internal sealed class TpmSealExtensionsTests
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator("tpm-in-house-seal-verbs", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -541,7 +541,7 @@ internal sealed class TpmSealExtensionsTests
     /// </summary>
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();

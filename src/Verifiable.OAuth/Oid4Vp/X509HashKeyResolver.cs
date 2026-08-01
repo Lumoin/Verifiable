@@ -88,7 +88,7 @@ public static class X509HashKeyResolver
         IsSelfSignedCertificateDelegate isSelfSigned,
         HashFunctionDelegate hashFunction,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(x5cValues);

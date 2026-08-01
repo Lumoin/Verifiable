@@ -821,7 +821,7 @@ internal sealed class SignatureValidationBuildingBlockTests
     private static ValueTask<IReadOnlyList<PkiCertificateMemory>> NoCompletion(
         IReadOnlyList<PkiCertificateMemory> partialChain,
         IReadOnlyList<PkiCertificateMemory> trustAnchors,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         System.Threading.CancellationToken cancellationToken) => ValueTask.FromResult(partialChain);
 
 

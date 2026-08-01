@@ -115,7 +115,7 @@ public sealed class Tpm2bAttest: ITpmWireType, IDisposable
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed attestation buffer.</returns>
-    public static Tpm2bAttest Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static Tpm2bAttest Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ushort size = reader.ReadUInt16();

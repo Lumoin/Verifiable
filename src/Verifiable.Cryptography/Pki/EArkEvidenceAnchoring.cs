@@ -453,7 +453,7 @@ public static class EArkEvidenceAnchoring
     public static ValueTask<EvidenceRecordCreation> CreateProvenanceEvidenceAsync(
         EArkProvenanceAnchorPlan plan,
         EvidenceRecordCreationContext creation,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(plan);
@@ -490,7 +490,7 @@ public static class EArkEvidenceAnchoring
     /// </remarks>
     public static async ValueTask<EArkProvenanceAnchorVerification> VerifyProvenanceAnchorAsync(
         EArkProvenanceAnchorVerificationContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);

@@ -750,7 +750,7 @@ internal static partial class VerifiableOperations
     /// (<see cref="CryptographicKeyEvents.ComputeDigest"/>) — the same seam every other public-data
     /// hash in this codebase uses, mirroring <c>Fido2ClientDataHash.Compute</c>'s own call shape.
     /// </summary>
-    private static DigestValue ComputeRpIdHash(string rpId, MemoryPool<byte> pool) =>
+    private static DigestValue ComputeRpIdHash(string rpId, BaseMemoryPool pool) =>
         CryptographicKeyEvents.ComputeDigest(Encoding.UTF8.GetBytes(rpId), 32, CryptoTags.Sha256Digest, pool);
 
 
@@ -838,7 +838,7 @@ internal static partial class VerifiableOperations
     /// </remarks>
     internal static async Task RunFido2ObservedWorkloadAsync(CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //Routes through the CreateKeyPair choke point so the observed CBOM's provenance also carries the
         //KeyMaterialGeneratedEvent for this ceremony's mint step, completing mint+sign+verify coverage

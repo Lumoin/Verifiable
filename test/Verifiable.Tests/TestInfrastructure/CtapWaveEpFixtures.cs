@@ -45,7 +45,7 @@ internal static class CtapWaveEpFixtures
 
     /// <summary>
     /// Builds a <see cref="CtapEnterpriseAttestationProvisioning"/> fixture: a fresh P-256 (ES256)
-    /// attestation private key minted through <see cref="CryptographicKeyEvents.CreateKeyPair(CryptoAlgorithm, Purpose, MemoryPool{byte}, string?)"/>
+    /// attestation private key minted through <see cref="CryptographicKeyEvents.CreateKeyPair(CryptoAlgorithm, Purpose, BaseMemoryPool, string?)"/>
     /// and bound via <see cref="CryptographicKeyFactory.CreatePrivateKey(PrivateKeyMemory, string, Tag, string?, System.Collections.Frozen.FrozenDictionary{string, object}?)"/>
     /// (never a bespoke keygen routine), paired with one placeholder DER-shaped x5c entry — opaque
     /// bytes to PKG-A's own state/getInfo surface, which never parses or validates certificate content.
@@ -58,7 +58,7 @@ internal static class CtapWaveEpFixtures
     /// <returns>The built provisioning fixture. The caller owns it and must dispose it.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the minted PrivateKey and the wrapped PkiCertificateMemory transfers to the returned CtapEnterpriseAttestationProvisioning, which the caller disposes.")]
-    public static CtapEnterpriseAttestationProvisioning BuildProvisioning(MemoryPool<byte> pool, IReadOnlyList<string>? preConfiguredRpIds = null)
+    public static CtapEnterpriseAttestationProvisioning BuildProvisioning(BaseMemoryPool pool, IReadOnlyList<string>? preConfiguredRpIds = null)
     {
         (CtapEnterpriseAttestationProvisioning provisioning, PublicKeyMemory attestationPublicKey) = BuildProvisioningCore(pool, preConfiguredRpIds);
         attestationPublicKey.Dispose();
@@ -78,21 +78,21 @@ internal static class CtapWaveEpFixtures
     /// <param name="preConfiguredRpIds">The vendor's pre-configured RP ID list — see <see cref="BuildProvisioning"/>.</param>
     /// <returns>The built provisioning fixture and its attestation public key. The caller owns both and must dispose both.</returns>
     public static (CtapEnterpriseAttestationProvisioning Provisioning, PublicKeyMemory AttestationPublicKey) BuildProvisioningWithAttestationPublicKey(
-        MemoryPool<byte> pool, IReadOnlyList<string>? preConfiguredRpIds = null) =>
+        BaseMemoryPool pool, IReadOnlyList<string>? preConfiguredRpIds = null) =>
         BuildProvisioningCore(pool, preConfiguredRpIds);
 
 
     /// <summary>
     /// The shared core <see cref="BuildProvisioning"/> and <see cref="BuildProvisioningWithAttestationPublicKey"/>
     /// both funnel through, so the two never drift: mints a fresh P-256 (ES256) attestation key pair
-    /// through <see cref="CryptographicKeyEvents.CreateKeyPair(CryptoAlgorithm, Purpose, MemoryPool{byte}, string?)"/>,
+    /// through <see cref="CryptographicKeyEvents.CreateKeyPair(CryptoAlgorithm, Purpose, BaseMemoryPool, string?)"/>,
     /// binds the private half via <see cref="CryptographicKeyFactory.CreatePrivateKey(PrivateKeyMemory, string, Tag, string?, System.Collections.Frozen.FrozenDictionary{string, object}?)"/>,
     /// and pairs it with one placeholder DER-shaped x5c entry.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the minted PrivateKey/PublicKeyMemory and the wrapped PkiCertificateMemory transfers to the returned tuple; both callers dispose what they don't keep.")]
     private static (CtapEnterpriseAttestationProvisioning Provisioning, PublicKeyMemory AttestationPublicKey) BuildProvisioningCore(
-        MemoryPool<byte> pool, IReadOnlyList<string>? preConfiguredRpIds)
+        BaseMemoryPool pool, IReadOnlyList<string>? preConfiguredRpIds)
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys = CryptographicKeyEvents.CreateKeyPair(CryptoAlgorithm.P256, Purpose.Signing, pool);
 
@@ -151,7 +151,7 @@ internal static class CtapWaveEpFixtures
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the minted PrivateKey and the wrapped PkiCertificateMemory transfers to the returned CtapEnterpriseAttestationProvisioning; ownership of the root certificate transfers to the returned tuple. Both callers dispose what they don't keep.")]
     public static (CtapEnterpriseAttestationProvisioning Provisioning, X509Certificate2 RootCertificate) BuildRealCertificateProvisioning(
-        MemoryPool<byte> pool, Guid aaguid, byte[] serialNumber, IReadOnlyList<string>? preConfiguredRpIds = null)
+        BaseMemoryPool pool, Guid aaguid, byte[] serialNumber, IReadOnlyList<string>? preConfiguredRpIds = null)
     {
         // Certificate-factory carve-out: these ECDsa keys are the raw material CreateSelfSignedCa
         // and CreateLeafAttestationCertificate embed and sign the X.509 certificates below with.
@@ -219,7 +219,7 @@ internal static class CtapWaveEpFixtures
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the built CtapEnterpriseAttestationProvisioning transfers to CtapWave2AuthenticatorFixtures.CreateSimulator's own enterpriseAttestationProvisioning parameter, and from there to the returned CtapAuthenticatorSimulator, whose Dispose disposes it; the analyzer cannot see this transfer through the nested method calls.")]
     public static CtapAuthenticatorSimulator CreateCapableSimulator(
-        string runId, MemoryPool<byte> pool, IReadOnlyList<string>? preConfiguredRpIds = null, TimeProvider? timeProvider = null) =>
+        string runId, BaseMemoryPool pool, IReadOnlyList<string>? preConfiguredRpIds = null, TimeProvider? timeProvider = null) =>
         CtapWave2AuthenticatorFixtures.CreateSimulator(
             runId, timeProvider: timeProvider, enterpriseAttestationProvisioning: BuildProvisioning(pool, preConfiguredRpIds));
 
@@ -239,7 +239,7 @@ internal static class CtapWaveEpFixtures
     /// <returns>The built, capable-and-enabled simulator. The caller owns it and must dispose it.</returns>
     /// <exception cref="Fido2FormatException">The fixture's own enable call did not answer <c>CTAP2_OK</c>.</exception>
     public static async Task<CtapAuthenticatorSimulator> CreateCapableEnabledSimulatorAsync(
-        string runId, MemoryPool<byte> pool, IReadOnlyList<string>? preConfiguredRpIds, CancellationToken cancellationToken)
+        string runId, BaseMemoryPool pool, IReadOnlyList<string>? preConfiguredRpIds, CancellationToken cancellationToken)
     {
         CtapAuthenticatorSimulator simulator = CreateCapableSimulator(runId, pool, preConfiguredRpIds);
         try

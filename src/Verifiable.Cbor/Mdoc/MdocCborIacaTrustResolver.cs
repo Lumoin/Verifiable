@@ -68,7 +68,7 @@ public static class MdocCborIacaTrustResolver
         ValidateCertificateChainAsyncDelegate validateChain,
         IReadOnlyList<PkiCertificateMemory> trustAnchors,
         DateTimeOffset validationTime,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(validateChain);
         ArgumentNullException.ThrowIfNull(trustAnchors);

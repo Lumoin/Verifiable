@@ -41,7 +41,7 @@ internal sealed class RotationFixture: IAsyncDisposable
     private static readonly DateTimeOffset RotationTime = DateTimeOffset.FromUnixTimeSeconds(1516239022);
 
     private readonly ExchangeContext context = new();
-    private readonly MemoryPool<byte> pool;
+    private readonly BaseMemoryPool pool;
     private readonly PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> priorKeys;
     private readonly PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> newSignKeys;
     private readonly DidDocument priorDocument;
@@ -49,7 +49,7 @@ internal sealed class RotationFixture: IAsyncDisposable
 
 
     private RotationFixture(
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> priorKeys,
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> newSignKeys,
         DidDocument priorDocument,
@@ -78,7 +78,7 @@ internal sealed class RotationFixture: IAsyncDisposable
     public PrivateKeyMemory PriorSigningKey => priorKeys.PrivateKey;
 
 
-    public static async ValueTask<RotationFixture> CreateAsync(MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public static async ValueTask<RotationFixture> CreateAsync(BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> priorKeys = TestKeyMaterialProvider.CreateFreshEd25519KeyMaterial();
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> newSignKeys = TestKeyMaterialProvider.CreateFreshEd25519KeyMaterial();

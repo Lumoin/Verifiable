@@ -19,4 +19,4 @@ namespace Verifiable.Fido2.Ctap;
 /// <c>authenticatorCredentialManagement</c> responses.
 /// </remarks>
 /// <exception cref="Fido2FormatException"><paramref name="payload"/> is not valid CTAP2 canonical CBOR.</exception>
-public delegate CtapCredentialManagementResponse DecodeCtapCredentialManagementResponseDelegate(ReadOnlyMemory<byte> payload, MemoryPool<byte> pool);
+public delegate CtapCredentialManagementResponse DecodeCtapCredentialManagementResponseDelegate(ReadOnlyMemory<byte> payload, BaseMemoryPool pool);

@@ -38,7 +38,7 @@ public static class SdJwtPathExtraction
         SdToken<string> token,
         DecodeDelegate decoder,
         EncodeDelegate encoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         string hashAlgorithm = WellKnownHashAlgorithms.Sha256Iana)
     {
         ArgumentNullException.ThrowIfNull(token);
@@ -74,7 +74,7 @@ public static class SdJwtPathExtraction
     public static IReadOnlySet<CredentialPath> ExtractAllPaths(
         SdToken<string> token,
         DecodeDelegate decoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(token);
         ArgumentNullException.ThrowIfNull(decoder);
@@ -99,7 +99,7 @@ public static class SdJwtPathExtraction
     public static IReadOnlySet<CredentialPath> ExtractMandatoryPaths(
         SdToken<string> token,
         DecodeDelegate decoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(token);
         ArgumentNullException.ThrowIfNull(decoder);
@@ -127,7 +127,7 @@ public static class SdJwtPathExtraction
         SdToken<string> token,
         DecodeDelegate decoder,
         EncodeDelegate encoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         string hashAlgorithm = WellKnownHashAlgorithms.Sha256Iana)
     {
         ArgumentNullException.ThrowIfNull(token);
@@ -192,7 +192,7 @@ public static class SdJwtPathExtraction
         return digest.AsReadOnlySpan().ToArray();
     }
 
-    private static JsonElement ParseJwtPayload(string jwt, DecodeDelegate decoder, MemoryPool<byte> pool)
+    private static JsonElement ParseJwtPayload(string jwt, DecodeDelegate decoder, BaseMemoryPool pool)
     {
         string[] parts = jwt.Split('.');
 

@@ -98,7 +98,7 @@ public static class DidCommEncryptedExtensions
         KeyDerivationDelegate keyDerivationDelegate,
         KeyWrapDelegate keyWrapDelegate,
         AeadEncryptDelegate aeadEncryptDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -158,7 +158,7 @@ public static class DidCommEncryptedExtensions
     /// <see cref="AeadEncryptDelegate"/>. This mirrors <c>JweMessageExtensions</c>'s registry overload,
     /// whose AEAD is likewise resolved from the key tag.
     /// </remarks>
-    /// <inheritdoc cref="PackAnoncryptAsync(DidCommMessage, IReadOnlyList{GeneralJweRecipientInput}, string, string, PublicPrivateKeyMaterial{PublicKeyMemory, PrivateKeyMemory}, DidCommMessageSerializer, JwtHeaderSerializer, EncodeDelegate, TagToEpkCrvDelegate, GenerateNonceDelegate, MultiRecipientKeyAgreementEncryptDelegate, KeyDerivationDelegate, KeyWrapDelegate, AeadEncryptDelegate, MemoryPool{byte}, CancellationToken)"/>
+    /// <inheritdoc cref="PackAnoncryptAsync(DidCommMessage, IReadOnlyList{GeneralJweRecipientInput}, string, string, PublicPrivateKeyMaterial{PublicKeyMemory, PrivateKeyMemory}, DidCommMessageSerializer, JwtHeaderSerializer, EncodeDelegate, TagToEpkCrvDelegate, GenerateNonceDelegate, MultiRecipientKeyAgreementEncryptDelegate, KeyDerivationDelegate, KeyWrapDelegate, AeadEncryptDelegate, BaseMemoryPool, CancellationToken)"/>
     /// <exception cref="NotSupportedException">Thrown when <paramref name="contentEncryptionAlgorithm"/> is in neither the AES-GCM nor the XChaCha20-Poly1305 (XC20P) family.</exception>
     public static ValueTask<DidCommEncryptedMessage> PackAnoncryptAsync(
         this DidCommMessage message,
@@ -171,7 +171,7 @@ public static class DidCommEncryptedExtensions
         EncodeDelegate base64UrlEncoder,
         TagToEpkCrvDelegate tagToCrvConverter,
         GenerateNonceDelegate generateContentEncryptionKey,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(ephemeralKey);
@@ -271,7 +271,7 @@ public static class DidCommEncryptedExtensions
         AuthenticatedKeyDerivationDelegate keyDerivationDelegate,
         KeyWrapDelegate keyWrapDelegate,
         AeadEncryptDelegate aeadEncryptDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -357,7 +357,7 @@ public static class DidCommEncryptedExtensions
     /// AEAD resolution qualifier so the application can wire the AES_CBC_HMAC_SHA2 delegate. A GCM
     /// <paramref name="contentEncryptionAlgorithm"/> is rejected by the delegate-taking overload.
     /// </remarks>
-    /// <inheritdoc cref="PackAuthcryptAsync(DidCommMessage, IReadOnlyList{GeneralJweRecipientInput}, string, PrivateKeyMemory, string, string, PublicPrivateKeyMaterial{PublicKeyMemory, PrivateKeyMemory}, DidCommMessageSerializer, JwtHeaderSerializer, EncodeDelegate, TagToEpkCrvDelegate, GenerateNonceDelegate, MultiRecipientAuthenticatedKeyAgreementEncryptDelegate, AuthenticatedKeyDerivationDelegate, KeyWrapDelegate, AeadEncryptDelegate, MemoryPool{byte}, CancellationToken)"/>
+    /// <inheritdoc cref="PackAuthcryptAsync(DidCommMessage, IReadOnlyList{GeneralJweRecipientInput}, string, PrivateKeyMemory, string, string, PublicPrivateKeyMaterial{PublicKeyMemory, PrivateKeyMemory}, DidCommMessageSerializer, JwtHeaderSerializer, EncodeDelegate, TagToEpkCrvDelegate, GenerateNonceDelegate, MultiRecipientAuthenticatedKeyAgreementEncryptDelegate, AuthenticatedKeyDerivationDelegate, KeyWrapDelegate, AeadEncryptDelegate, BaseMemoryPool, CancellationToken)"/>
     public static ValueTask<DidCommEncryptedMessage> PackAuthcryptAsync(
         this DidCommMessage message,
         IReadOnlyList<GeneralJweRecipientInput> recipients,
@@ -371,7 +371,7 @@ public static class DidCommEncryptedExtensions
         EncodeDelegate base64UrlEncoder,
         TagToEpkCrvDelegate tagToCrvConverter,
         GenerateNonceDelegate generateContentEncryptionKey,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(ephemeralKey);
@@ -418,7 +418,7 @@ public static class DidCommEncryptedExtensions
     /// This is the sign-then-encrypt nesting the spec mandates: "If a message is signed and encrypted to add
     /// non-repudiation, it MUST be signed prior to encryption. This is known as a nested JWM." (DIDComm v2.1
     /// §Message Signing). Produce <paramref name="signedMessage"/> first with
-    /// <see cref="DidCommSignedExtensions.PackSignedAsync(DidCommMessage, PrivateKeyMemory, string, DidCommMessageSerializer, JwtPartEncoder{JwtHeader}, JwsMessageSerializer, EncodeDelegate, MemoryPool{byte}, JoseSerializationFormat, CancellationToken)"/>;
+    /// <see cref="DidCommSignedExtensions.PackSignedAsync(DidCommMessage, PrivateKeyMemory, string, DidCommMessageSerializer, JwtPartEncoder{JwtHeader}, JwsMessageSerializer, EncodeDelegate, BaseMemoryPool, JoseSerializationFormat, CancellationToken)"/>;
     /// its bytes (a JWS JSON serialization) are encrypted verbatim as the JWE content. The inner signed JWM
     /// MUST carry a <c>to</c> header (DIDComm v2.1 §DIDComm Signed Messages: the surreptitious-forwarding
     /// defense), which the consumer enforces on unpack. The outer envelope is an ordinary anoncrypt JWE — a
@@ -455,7 +455,7 @@ public static class DidCommEncryptedExtensions
         KeyDerivationDelegate keyDerivationDelegate,
         KeyWrapDelegate keyWrapDelegate,
         AeadEncryptDelegate aeadEncryptDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signedMessage);
@@ -503,7 +503,7 @@ public static class DidCommEncryptedExtensions
     /// <see cref="KeyAgreementFunctionRegistry{TAlgorithm, TPurpose}"/> using the ephemeral key's
     /// <see cref="SensitiveData.Tag"/>. The delegate-taking overload above does the work after resolution.
     /// </summary>
-    /// <inheritdoc cref="PackAnoncryptAsync(DidCommSignedMessage, IReadOnlyList{GeneralJweRecipientInput}, string, string, PublicPrivateKeyMaterial{PublicKeyMemory, PrivateKeyMemory}, JwtHeaderSerializer, EncodeDelegate, TagToEpkCrvDelegate, GenerateNonceDelegate, MultiRecipientKeyAgreementEncryptDelegate, KeyDerivationDelegate, KeyWrapDelegate, AeadEncryptDelegate, MemoryPool{byte}, CancellationToken)"/>
+    /// <inheritdoc cref="PackAnoncryptAsync(DidCommSignedMessage, IReadOnlyList{GeneralJweRecipientInput}, string, string, PublicPrivateKeyMaterial{PublicKeyMemory, PrivateKeyMemory}, JwtHeaderSerializer, EncodeDelegate, TagToEpkCrvDelegate, GenerateNonceDelegate, MultiRecipientKeyAgreementEncryptDelegate, KeyDerivationDelegate, KeyWrapDelegate, AeadEncryptDelegate, BaseMemoryPool, CancellationToken)"/>
     /// <exception cref="NotSupportedException">Thrown when <paramref name="contentEncryptionAlgorithm"/> is in neither the AES-GCM nor the XChaCha20-Poly1305 (XC20P) family.</exception>
     public static ValueTask<DidCommEncryptedMessage> PackAnoncryptAsync(
         this DidCommSignedMessage signedMessage,
@@ -515,7 +515,7 @@ public static class DidCommEncryptedExtensions
         EncodeDelegate base64UrlEncoder,
         TagToEpkCrvDelegate tagToCrvConverter,
         GenerateNonceDelegate generateContentEncryptionKey,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(ephemeralKey);
@@ -573,7 +573,7 @@ public static class DidCommEncryptedExtensions
     /// path that MAY accept it. When you do emit it, the inner signer MUST be the same party as
     /// <paramref name="senderKeyId"/> (their DIDs MUST match): a recipient MUST reject a message whose inner
     /// signer differs from the authcrypt sender (DIDComm v2.1 §Message Types). Prefer
-    /// <see cref="PackAnoncryptAsync(DidCommSignedMessage, IReadOnlyList{GeneralJweRecipientInput}, string, string, PublicPrivateKeyMaterial{PublicKeyMemory, PrivateKeyMemory}, JwtHeaderSerializer, EncodeDelegate, TagToEpkCrvDelegate, GenerateNonceDelegate, MultiRecipientKeyAgreementEncryptDelegate, KeyDerivationDelegate, KeyWrapDelegate, AeadEncryptDelegate, MemoryPool{byte}, CancellationToken)"/>.
+    /// <see cref="PackAnoncryptAsync(DidCommSignedMessage, IReadOnlyList{GeneralJweRecipientInput}, string, string, PublicPrivateKeyMaterial{PublicKeyMemory, PrivateKeyMemory}, JwtHeaderSerializer, EncodeDelegate, TagToEpkCrvDelegate, GenerateNonceDelegate, MultiRecipientKeyAgreementEncryptDelegate, KeyDerivationDelegate, KeyWrapDelegate, AeadEncryptDelegate, BaseMemoryPool, CancellationToken)"/>.
     /// </para>
     /// <para>
     /// Produce <paramref name="signedMessage"/> first (sign-before-encrypt, DIDComm v2.1 §Message Signing);
@@ -617,7 +617,7 @@ public static class DidCommEncryptedExtensions
         AuthenticatedKeyDerivationDelegate keyDerivationDelegate,
         KeyWrapDelegate keyWrapDelegate,
         AeadEncryptDelegate aeadEncryptDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signedMessage);
@@ -677,7 +677,7 @@ public static class DidCommEncryptedExtensions
     /// <see cref="SensitiveData.Tag"/> and the content algorithm as the AEAD qualifier. The delegate-taking
     /// overload above does the work after resolution.
     /// </summary>
-    /// <inheritdoc cref="PackAuthcryptAsync(DidCommSignedMessage, IReadOnlyList{GeneralJweRecipientInput}, string, PrivateKeyMemory, string, string, PublicPrivateKeyMaterial{PublicKeyMemory, PrivateKeyMemory}, JwtHeaderSerializer, EncodeDelegate, TagToEpkCrvDelegate, GenerateNonceDelegate, MultiRecipientAuthenticatedKeyAgreementEncryptDelegate, AuthenticatedKeyDerivationDelegate, KeyWrapDelegate, AeadEncryptDelegate, MemoryPool{byte}, CancellationToken)"/>
+    /// <inheritdoc cref="PackAuthcryptAsync(DidCommSignedMessage, IReadOnlyList{GeneralJweRecipientInput}, string, PrivateKeyMemory, string, string, PublicPrivateKeyMaterial{PublicKeyMemory, PrivateKeyMemory}, JwtHeaderSerializer, EncodeDelegate, TagToEpkCrvDelegate, GenerateNonceDelegate, MultiRecipientAuthenticatedKeyAgreementEncryptDelegate, AuthenticatedKeyDerivationDelegate, KeyWrapDelegate, AeadEncryptDelegate, BaseMemoryPool, CancellationToken)"/>
     public static ValueTask<DidCommEncryptedMessage> PackAuthcryptAsync(
         this DidCommSignedMessage signedMessage,
         IReadOnlyList<GeneralJweRecipientInput> recipients,
@@ -690,7 +690,7 @@ public static class DidCommEncryptedExtensions
         EncodeDelegate base64UrlEncoder,
         TagToEpkCrvDelegate tagToCrvConverter,
         GenerateNonceDelegate generateContentEncryptionKey,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(ephemeralKey);
@@ -779,7 +779,7 @@ public static class DidCommEncryptedExtensions
         KeyDerivationDelegate keyDerivationDelegate,
         KeyUnwrapDelegate keyUnwrapDelegate,
         AeadDecryptDelegate aeadDecryptDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer = null,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null,
         DidCommEncryptedHeaderPolicy headerPolicy = DidCommEncryptedHeaderPolicy.Strict,
@@ -961,7 +961,7 @@ public static class DidCommEncryptedExtensions
     /// <see cref="DidCommDecryptionError.DecryptionFailed"/>; a missing or malformed protected header is
     /// <see cref="DidCommDecryptionError.MalformedEnvelope"/>.
     /// </remarks>
-    /// <inheritdoc cref="UnpackAnoncryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, KeyAgreementDecryptDelegate, KeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, MemoryPool{byte}, CancellationToken)"/>
+    /// <inheritdoc cref="UnpackAnoncryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, KeyAgreementDecryptDelegate, KeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, BaseMemoryPool, CancellationToken)"/>
     public static ValueTask<DidCommEncryptedUnpackResult> UnpackAnoncryptAsync(
         this DidCommEncryptedMessage encryptedMessage,
         string recipientKeyId,
@@ -972,7 +972,7 @@ public static class DidCommEncryptedExtensions
         JwsMessageParser signedParser,
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer = null,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null,
         DidCommEncryptedHeaderPolicy headerPolicy = DidCommEncryptedHeaderPolicy.Strict,
@@ -1083,7 +1083,7 @@ public static class DidCommEncryptedExtensions
         AuthenticatedKeyDerivationDelegate keyDerivationDelegate,
         KeyUnwrapDelegate keyUnwrapDelegate,
         AeadDecryptDelegate aeadDecryptDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer = null,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null,
         DidCommEncryptedHeaderPolicy headerPolicy = DidCommEncryptedHeaderPolicy.Strict,
@@ -1283,7 +1283,7 @@ public static class DidCommEncryptedExtensions
     /// the AES_CBC_HMAC_SHA2 delegate authcrypt mandates (1PU §2.1), which the curve-keyed registry
     /// cannot select by curve alone.
     /// </remarks>
-    /// <inheritdoc cref="UnpackAuthcryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, AuthenticatedKeyAgreementDecryptDelegate, AuthenticatedKeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, MemoryPool{byte}, CancellationToken)"/>
+    /// <inheritdoc cref="UnpackAuthcryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, AuthenticatedKeyAgreementDecryptDelegate, AuthenticatedKeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, BaseMemoryPool, CancellationToken)"/>
     public static ValueTask<DidCommEncryptedUnpackResult> UnpackAuthcryptAsync(
         this DidCommEncryptedMessage encryptedMessage,
         string recipientKeyId,
@@ -1294,7 +1294,7 @@ public static class DidCommEncryptedExtensions
         JwsMessageParser signedParser,
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer = null,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null,
         DidCommEncryptedHeaderPolicy headerPolicy = DidCommEncryptedHeaderPolicy.Strict,
@@ -1368,7 +1368,7 @@ public static class DidCommEncryptedExtensions
         AuthenticatedKeyDerivationDelegate keyDerivationDelegate,
         KeyUnwrapDelegate keyUnwrapDelegate,
         AeadDecryptDelegate aeadDecryptDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer,
         CancellationToken cancellationToken)
@@ -1491,7 +1491,7 @@ public static class DidCommEncryptedExtensions
         KeyDerivationDelegate keyDerivationDelegate,
         KeyWrapDelegate keyWrapDelegate,
         AeadEncryptDelegate aeadEncryptDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         IReadOnlyDictionary<string, object> protectedHeaderExtras = BuildAnoncryptProtectedHeaderExtras(
@@ -1538,7 +1538,7 @@ public static class DidCommEncryptedExtensions
         AuthenticatedKeyDerivationDelegate keyDerivationDelegate,
         KeyWrapDelegate keyWrapDelegate,
         AeadEncryptDelegate aeadEncryptDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         IReadOnlyDictionary<string, object> protectedHeaderExtras = BuildAuthcryptProtectedHeaderExtras(
@@ -1574,7 +1574,7 @@ public static class DidCommEncryptedExtensions
     //Returns true when apv is absent (nothing to bind) or matches; false on a mismatch (DIDComm v2.1
     //§ECDH-ES / §ECDH-1PU key wrapping — the recipient binding). This is the DIDComm profile, so it lives at
     //this layer, not in the generic JWE decrypt where apv is an opaque octet string.
-    private static bool IsApvRecipientBindingValid(AeadGeneralMessage parsed, DidCommEncryptedHeaderPolicy headerPolicy, EncodeDelegate base64UrlEncoder, MemoryPool<byte> memoryPool)
+    private static bool IsApvRecipientBindingValid(AeadGeneralMessage parsed, DidCommEncryptedHeaderPolicy headerPolicy, EncodeDelegate base64UrlEncoder, BaseMemoryPool memoryPool)
     {
         if(!parsed.Header.TryGetValue(WellKnownJoseHeaderNames.Apv, out object? apvValue)
             || apvValue is not string apv
@@ -1611,7 +1611,7 @@ public static class DidCommEncryptedExtensions
     private static Dictionary<string, object> BuildAnoncryptProtectedHeaderExtras(
         IReadOnlyList<GeneralJweRecipientInput> recipients,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         string[] recipientKeyIds = new string[recipients.Count];
         for(int i = 0; i < recipients.Count; ++i)
@@ -1640,7 +1640,7 @@ public static class DidCommEncryptedExtensions
         IReadOnlyList<GeneralJweRecipientInput> recipients,
         string senderKeyId,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         string[] recipientKeyIds = new string[recipients.Count];
         for(int i = 0; i < recipients.Count; ++i)
@@ -1675,7 +1675,7 @@ public static class DidCommEncryptedExtensions
     private static DidCommEncryptedMessage SerializeEncryptedMessage(
         GeneralJweMessage jwe,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         string generalJson = jwe.ToGeneralJson(base64UrlEncoder);
 
@@ -1694,7 +1694,7 @@ public static class DidCommEncryptedExtensions
     internal static bool TryReadProtectedAlgorithms(
         ReadOnlySpan<byte> wireJsonUtf8,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         out string? algorithm,
         out string? encryption,
         out string? typ,
@@ -1763,7 +1763,7 @@ public static class DidCommEncryptedExtensions
         string? skid,
         string? agreementPartyUInfo,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         [NotNullWhen(true)] out string? senderKeyId,
         out bool isMalformed)
     {
@@ -1939,7 +1939,7 @@ public static class DidCommEncryptedExtensions
         EncodeDelegate base64UrlEncoder,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         if(!IsSignedInnerShape(decryptedContent.Span))
@@ -2073,7 +2073,7 @@ public static class DidCommEncryptedExtensions
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer,
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         if(string.IsNullOrEmpty(plaintextMessage.FromPrior))

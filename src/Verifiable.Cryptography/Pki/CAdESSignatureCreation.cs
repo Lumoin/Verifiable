@@ -22,9 +22,9 @@ namespace Verifiable.Cryptography.Pki;
 /// attributes and returns the exact octets a signer signs (the inverse of
 /// <see cref="ManagedCmsVerification"/>'s <c>ReencodeSignedAttributes</c>, authored through
 /// <see cref="CmsSignedAttributesEncoding"/>) together with their digest;
-/// <see cref="Complete(CAdESSignaturePreparation, PkiCertificateMemory, CryptoAlgorithm, ReadOnlyMemory{byte}, IReadOnlyList{PkiCertificateMemory}?, MemoryPool{byte})"/> takes a
+/// <see cref="Complete(CAdESSignaturePreparation, PkiCertificateMemory, CryptoAlgorithm, ReadOnlyMemory{byte}, IReadOnlyList{PkiCertificateMemory}?, BaseMemoryPool)"/> takes a
 /// signature value produced however the caller obtained it and assembles the final <c>SignedData</c>;
-/// <see cref="SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, MemoryPool{byte}, CancellationToken)"/>
+/// <see cref="SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken)"/>
 /// composes both phases around a <see cref="SigningDelegate"/> resolved from the signer's <see cref="Tag"/>
 /// through <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/> — the same shape
 /// <see cref="Verifiable.JCose.Cose"/>'s <c>SignAsync</c> uses for COSE_Sign1. A remote signer (CSC,
@@ -47,7 +47,7 @@ namespace Verifiable.Cryptography.Pki;
 /// to 5, as the same §5.1 rule requires; that is <see cref="CAdESSignatureAugmentation"/>'s concern, not this
 /// creation surface's. The degenerate no-signer case (clause 4.6) cannot arise: every completion writes at
 /// least one <c>SignerInfo</c>, and the multi-signer
-/// <see cref="Complete(IReadOnlyList{CAdESSignerCompletion}, IReadOnlyList{PkiCertificateMemory}?, MemoryPool{byte})"/>
+/// <see cref="Complete(IReadOnlyList{CAdESSignerCompletion}, IReadOnlyList{PkiCertificateMemory}?, BaseMemoryPool)"/>
 /// refuses an empty signer list.
 /// </para>
 /// <para>
@@ -58,9 +58,9 @@ namespace Verifiable.Cryptography.Pki;
 /// carrier), <see cref="CompleteParallelSignature"/> assembles the whole <c>SignerInfo</c> through the same
 /// writer, and <see cref="CmsSignedDataAugmentation.AddSignerInfo"/> places it while preserving every octet
 /// already there;
-/// <see cref="AddParallelSignatureAsync(CmsSignedData, PkiCertificateMemory, PrivateKeyMemory, DigestValue?, DateTimeOffset, CryptographicConstraints?, bool, MemoryPool{byte}, CancellationToken, CAdESOptionalSignedAttributes?)"/>
+/// <see cref="AddParallelSignatureAsync(CmsSignedData, PkiCertificateMemory, PrivateKeyMemory, DigestValue?, DateTimeOffset, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken, CAdESOptionalSignedAttributes?)"/>
 /// composes the three. Signers completing one fresh <c>SignedData</c> together go through the multi-signer
-/// <see cref="Complete(IReadOnlyList{CAdESSignerCompletion}, IReadOnlyList{PkiCertificateMemory}?, MemoryPool{byte})"/>
+/// <see cref="Complete(IReadOnlyList{CAdESSignerCompletion}, IReadOnlyList{PkiCertificateMemory}?, BaseMemoryPool)"/>
 /// instead, and the per-signer verification addressing of a multi-signer structure is
 /// <see cref="CmsSignedDataReduction.SelectSigner"/>'s projection.
 /// </para>
@@ -101,7 +101,7 @@ namespace Verifiable.Cryptography.Pki;
 /// <c>SignerInfo</c>, signed over the outer <c>SignerInfo.signature</c> value octets and carrying no
 /// <c>content-type</c> attribute, so it is produced here rather than by a separate signing path:
 /// <see cref="PrepareCountersignatureAsync"/>, <see cref="CompleteCountersignature"/>, and
-/// <see cref="CountersignAsync(CmsSignedData, int, PkiCertificateMemory, PrivateKeyMemory, DateTimeOffset, CryptographicConstraints?, bool, MemoryPool{byte}, CancellationToken)"/>
+/// <see cref="CountersignAsync(CmsSignedData, int, PkiCertificateMemory, PrivateKeyMemory, DateTimeOffset, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken)"/>
 /// mirror the three phases above and reuse the same attribute builders, the same R-8 algorithm gate, the same
 /// signing-profile resolution and the same <c>SignerInfo</c> writer. It becomes an unsigned attribute of the
 /// signature it counters through <see cref="CAdESSignatureAugmentation.AddCountersignatureAsync"/>, which is the
@@ -181,7 +181,7 @@ public static class CAdESSignatureCreation
         DateTimeOffset signingTime,
         CryptographicConstraints? algorithmConstraints,
         string? cmsAlgorithmProtectionSignatureAlgorithmOid,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default,
         CAdESOptionalSignedAttributes? optionalAttributes = null)
     {
@@ -321,7 +321,7 @@ public static class CAdESSignatureCreation
 
         //Wraps a caller-supplied detached content digest in the tagged carrier the message-digest attribute and
         //the content-time-stamp acquisition consume; copied because the carrier owns its memory.
-        static DigestValue WrapDetachedDigest(ReadOnlyMemory<byte> digest, PkiDigestAlgorithm algorithm, MemoryPool<byte> pool)
+        static DigestValue WrapDetachedDigest(ReadOnlyMemory<byte> digest, PkiDigestAlgorithm algorithm, BaseMemoryPool pool)
         {
             IMemoryOwner<byte> owner = pool.Rent(digest.Length);
             digest.Span.CopyTo(owner.Memory.Span);
@@ -351,7 +351,7 @@ public static class CAdESSignatureCreation
         CryptoAlgorithm signingAlgorithm,
         ReadOnlyMemory<byte> signatureValue,
         IReadOnlyList<PkiCertificateMemory>? additionalCertificates,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(preparation);
         ArgumentNullException.ThrowIfNull(signerCertificate);
@@ -380,7 +380,7 @@ public static class CAdESSignatureCreation
     /// <para>
     /// Each signer's <c>SignerInfo</c> stands alone — its signature covers its own signed attributes and the
     /// shared content, never a sibling's — so every entry is validated exactly as the single-signer
-    /// <see cref="Complete(CAdESSignaturePreparation, PkiCertificateMemory, CryptoAlgorithm, ReadOnlyMemory{byte}, IReadOnlyList{PkiCertificateMemory}?, MemoryPool{byte})"/>
+    /// <see cref="Complete(CAdESSignaturePreparation, PkiCertificateMemory, CryptoAlgorithm, ReadOnlyMemory{byte}, IReadOnlyList{PkiCertificateMemory}?, BaseMemoryPool)"/>
     /// validates its one signer, and the single-signer form is this method over one entry.
     /// </para>
     /// <para>
@@ -397,7 +397,7 @@ public static class CAdESSignatureCreation
     public static CmsSignedData Complete(
         IReadOnlyList<CAdESSignerCompletion> signers,
         IReadOnlyList<PkiCertificateMemory>? additionalCertificates,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(signers);
         ArgumentNullException.ThrowIfNull(pool);
@@ -585,7 +585,7 @@ public static class CAdESSignatureCreation
 
     /// <summary>
     /// Composes <see cref="PrepareAsync"/> and
-    /// <see cref="Complete(CAdESSignaturePreparation, PkiCertificateMemory, CryptoAlgorithm, ReadOnlyMemory{byte}, IReadOnlyList{PkiCertificateMemory}?, MemoryPool{byte})"/>
+    /// <see cref="Complete(CAdESSignaturePreparation, PkiCertificateMemory, CryptoAlgorithm, ReadOnlyMemory{byte}, IReadOnlyList{PkiCertificateMemory}?, BaseMemoryPool)"/>
     /// around a <see cref="SigningDelegate"/>
     /// resolved from <paramref name="privateKey"/>'s <see cref="Tag"/> — phase (3), the convenience the
     /// registry-resolved <see cref="Verifiable.JCose.Cose"/>'s <c>SignAsync</c> overload mirrors.
@@ -613,7 +613,7 @@ public static class CAdESSignatureCreation
         IReadOnlyList<PkiCertificateMemory>? additionalCertificates,
         CryptographicConstraints? algorithmConstraints,
         bool includeCmsAlgorithmProtection,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default,
         CAdESOptionalSignedAttributes? optionalAttributes = null)
     {
@@ -632,7 +632,7 @@ public static class CAdESSignatureCreation
 
     /// <summary>
     /// Composes <see cref="PrepareAsync"/> and
-    /// <see cref="Complete(CAdESSignaturePreparation, PkiCertificateMemory, CryptoAlgorithm, ReadOnlyMemory{byte}, IReadOnlyList{PkiCertificateMemory}?, MemoryPool{byte})"/>
+    /// <see cref="Complete(CAdESSignaturePreparation, PkiCertificateMemory, CryptoAlgorithm, ReadOnlyMemory{byte}, IReadOnlyList{PkiCertificateMemory}?, BaseMemoryPool)"/>
     /// around an explicit
     /// <see cref="SigningDelegate"/>, for a caller that has already resolved one (testing, or a custom
     /// cryptographic backend) rather than routing through the registry.
@@ -668,7 +668,7 @@ public static class CAdESSignatureCreation
         IReadOnlyList<PkiCertificateMemory>? additionalCertificates,
         CryptographicConstraints? algorithmConstraints,
         bool includeCmsAlgorithmProtection,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default,
         CAdESOptionalSignedAttributes? optionalAttributes = null)
@@ -773,7 +773,7 @@ public static class CAdESSignatureCreation
         DateTimeOffset signingTime,
         CryptographicConstraints? algorithmConstraints,
         string? cmsAlgorithmProtectionSignatureAlgorithmOid,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(countersignedSignature);
@@ -868,9 +868,9 @@ public static class CAdESSignatureCreation
     /// cardinality restriction on the <c>countersignature</c> attribute's values and clause 5.5.3 NOTE 6 names
     /// both shapes explicitly: a further countersignature may be added "in the same attribute or as a new
     /// countersignature attribute". One value is
-    /// <see cref="CmsAttribute.Create(string, ReadOnlySpan{byte}, MemoryPool{byte})"/> over these octets — which
-    /// is what <see cref="CountersignAsync(CmsSignedData, int, PkiCertificateMemory, PrivateKeyMemory, DateTimeOffset, CryptographicConstraints?, bool, MemoryPool{byte}, CancellationToken)"/>
-    /// does; several are <see cref="CmsAttribute.Create(string, IReadOnlyList{ReadOnlyMemory{byte}}, MemoryPool{byte})"/>
+    /// <see cref="CmsAttribute.Create(string, ReadOnlySpan{byte}, BaseMemoryPool)"/> over these octets — which
+    /// is what <see cref="CountersignAsync(CmsSignedData, int, PkiCertificateMemory, PrivateKeyMemory, DateTimeOffset, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken)"/>
+    /// does; several are <see cref="CmsAttribute.Create(string, IReadOnlyList{ReadOnlyMemory{byte}}, BaseMemoryPool)"/>
     /// over several of them.
     /// </para>
     /// <para>
@@ -888,7 +888,7 @@ public static class CAdESSignatureCreation
         CryptoAlgorithm signingAlgorithm,
         ReadOnlyMemory<byte> signatureValue,
         IReadOnlyList<CmsAttribute>? unsignedAttributes,
-        MemoryPool<byte> pool) =>
+        BaseMemoryPool pool) =>
         CompleteSignerInfo(preparation, countersignerCertificate, signingAlgorithm, signatureValue, unsignedAttributes, pool, "countersignature");
 
 
@@ -920,7 +920,7 @@ public static class CAdESSignatureCreation
         PkiCertificateMemory signerCertificate,
         CryptoAlgorithm signingAlgorithm,
         ReadOnlyMemory<byte> signatureValue,
-        MemoryPool<byte> pool) =>
+        BaseMemoryPool pool) =>
         CompleteSignerInfo(preparation, signerCertificate, signingAlgorithm, signatureValue, unsignedAttributes: null, pool, "parallel signature");
 
 
@@ -928,7 +928,7 @@ public static class CAdESSignatureCreation
     /// The one completion both <see cref="CompleteCountersignature"/> and
     /// <see cref="CompleteParallelSignature"/> resolve to: validates the signature value and the
     /// algorithm-digest agreement, and writes the whole DER <c>SignerInfo</c> through the same writer
-    /// <see cref="Complete(IReadOnlyList{CAdESSignerCompletion}, IReadOnlyList{PkiCertificateMemory}?, MemoryPool{byte})"/>
+    /// <see cref="Complete(IReadOnlyList{CAdESSignerCompletion}, IReadOnlyList{PkiCertificateMemory}?, BaseMemoryPool)"/>
     /// uses, because RFC 5652 defines both results as a <c>SignerInfo</c>.
     /// </summary>
     /// <param name="preparation">The prepared signed attributes.</param>
@@ -947,7 +947,7 @@ public static class CAdESSignatureCreation
         CryptoAlgorithm signingAlgorithm,
         ReadOnlyMemory<byte> signatureValue,
         IReadOnlyList<CmsAttribute>? unsignedAttributes,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         string operationDescription)
     {
         ArgumentNullException.ThrowIfNull(preparation);
@@ -1013,7 +1013,7 @@ public static class CAdESSignatureCreation
         DateTimeOffset signingTime,
         CryptographicConstraints? algorithmConstraints,
         bool includeCmsAlgorithmProtection,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(countersignerPrivateKey);
@@ -1059,7 +1059,7 @@ public static class CAdESSignatureCreation
         DateTimeOffset signingTime,
         CryptographicConstraints? algorithmConstraints,
         bool includeCmsAlgorithmProtection,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {
@@ -1138,7 +1138,7 @@ public static class CAdESSignatureCreation
         DateTimeOffset signingTime,
         CryptographicConstraints? algorithmConstraints,
         string? cmsAlgorithmProtectionSignatureAlgorithmOid,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default,
         CAdESOptionalSignedAttributes? optionalAttributes = null)
     {
@@ -1215,7 +1215,7 @@ public static class CAdESSignatureCreation
     /// <see cref="CmsSignedDataAugmentation.AddSignerInfo"/> around a <see cref="SigningDelegate"/> resolved
     /// from <paramref name="privateKey"/>'s <see cref="Tag"/> — phase (3) for a signer joining an existing
     /// <c>SignedData</c> side by side, the parallel counterpart of
-    /// <see cref="CountersignAsync(CmsSignedData, int, PkiCertificateMemory, PrivateKeyMemory, DateTimeOffset, CryptographicConstraints?, bool, MemoryPool{byte}, CancellationToken)"/>.
+    /// <see cref="CountersignAsync(CmsSignedData, int, PkiCertificateMemory, PrivateKeyMemory, DateTimeOffset, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken)"/>.
     /// </summary>
     /// <param name="signedData">The Signed Data Object being joined. Not modified; the result is a new carrier.</param>
     /// <param name="signerCertificate">The joining signer's own certificate; placed into <c>SignedData.certificates</c> (requirement a) alongside the new <c>SignerInfo</c>.</param>
@@ -1239,7 +1239,7 @@ public static class CAdESSignatureCreation
         DateTimeOffset signingTime,
         CryptographicConstraints? algorithmConstraints,
         bool includeCmsAlgorithmProtection,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default,
         CAdESOptionalSignedAttributes? optionalAttributes = null)
     {
@@ -1290,7 +1290,7 @@ public static class CAdESSignatureCreation
         DateTimeOffset signingTime,
         CryptographicConstraints? algorithmConstraints,
         bool includeCmsAlgorithmProtection,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default,
         CAdESOptionalSignedAttributes? optionalAttributes = null)
@@ -1405,7 +1405,7 @@ public static class CAdESSignatureCreation
 
 
     /// <summary>Builds the mandatory <c>content-type</c> attribute (RFC 5652 §11.1), always <c>id-data</c> (requirement f).</summary>
-    private static CmsAttribute BuildContentTypeAttribute(MemoryPool<byte> pool)
+    private static CmsAttribute BuildContentTypeAttribute(BaseMemoryPool pool)
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);
         writer.WriteObjectIdentifier(DataOid);
@@ -1415,7 +1415,7 @@ public static class CAdESSignatureCreation
 
 
     /// <summary>Builds the mandatory <c>message-digest</c> attribute (RFC 5652 §5.4/§11.2).</summary>
-    private static CmsAttribute BuildMessageDigestAttribute(ReadOnlySpan<byte> digest, MemoryPool<byte> pool)
+    private static CmsAttribute BuildMessageDigestAttribute(ReadOnlySpan<byte> digest, BaseMemoryPool pool)
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);
         writer.WriteOctetString(digest);
@@ -1429,7 +1429,7 @@ public static class CAdESSignatureCreation
     /// 1950-2049, a <c>GeneralizedTime</c> otherwise, mirroring <see cref="ManagedCertificate"/>'s own reading
     /// convention for the same <c>Time</c> CHOICE.
     /// </summary>
-    private static CmsAttribute BuildSigningTimeAttribute(DateTimeOffset signingTime, MemoryPool<byte> pool)
+    private static CmsAttribute BuildSigningTimeAttribute(DateTimeOffset signingTime, BaseMemoryPool pool)
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);
         if(signingTime.Year is >= 1950 and <= 2049)
@@ -1452,7 +1452,7 @@ public static class CAdESSignatureCreation
     /// it applies (X.690 clause 11.5) — matching how <see cref="CAdESVerification"/> reads the default back.
     /// The <c>policies</c> field is never written (clauses 5.2.2.2/.3).
     /// </summary>
-    private static CmsAttribute BuildSigningCertificateV2Attribute(ReadOnlySpan<byte> certificateHash, PkiDigestAlgorithm digestAlgorithm, MemoryPool<byte> pool)
+    private static CmsAttribute BuildSigningCertificateV2Attribute(ReadOnlySpan<byte> certificateHash, PkiDigestAlgorithm digestAlgorithm, BaseMemoryPool pool)
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);
         using(writer.PushSequence())                  //SigningCertificateV2
@@ -1484,7 +1484,7 @@ public static class CAdESSignatureCreation
     /// (<see href="https://www.rfc-editor.org/rfc/rfc6211#section-3">RFC 6211 §3</see>): the digest algorithm
     /// and the (IMPLICIT <c>[1]</c>) signature algorithm, no <c>macAlgorithm</c> (not applicable to signing).
     /// </summary>
-    private static CmsAttribute BuildCmsAlgorithmProtectionAttribute(PkiDigestAlgorithm digestAlgorithm, string signatureAlgorithmOid, MemoryPool<byte> pool)
+    private static CmsAttribute BuildCmsAlgorithmProtectionAttribute(PkiDigestAlgorithm digestAlgorithm, string signatureAlgorithmOid, BaseMemoryPool pool)
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);
         using(writer.PushSequence())                                    //CMSAlgorithmProtection
@@ -1510,7 +1510,7 @@ public static class CAdESSignatureCreation
     /// commitmentTypeQualifier SEQUENCE SIZE (1..MAX) OF CommitmentTypeQualifier OPTIONAL }</c>. The qualifier,
     /// when supplied, is spliced in as a pre-encoded value (<see cref="CAdESCommitmentType.Qualifiers"/>).
     /// </summary>
-    private static CmsAttribute BuildCommitmentTypeIndicationAttribute(CAdESCommitmentType commitmentType, MemoryPool<byte> pool)
+    private static CmsAttribute BuildCommitmentTypeIndicationAttribute(CAdESCommitmentType commitmentType, BaseMemoryPool pool)
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);
         using(writer.PushSequence())                                    //CommitmentTypeIndication
@@ -1531,7 +1531,7 @@ public static class CAdESSignatureCreation
     /// <see href="https://www.rfc-editor.org/rfc/rfc2634#section-2.9">RFC 2634 §2.9</see>):
     /// <c>ContentHints ::= SEQUENCE { contentDescription UTF8String OPTIONAL, contentType ContentType }</c>.
     /// </summary>
-    private static CmsAttribute BuildContentHintsAttribute(CAdESContentHints contentHints, MemoryPool<byte> pool)
+    private static CmsAttribute BuildContentHintsAttribute(CAdESContentHints contentHints, BaseMemoryPool pool)
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);
         using(writer.PushSequence())                                    //ContentHints
@@ -1549,7 +1549,7 @@ public static class CAdESSignatureCreation
 
 
     /// <summary>Builds the opt-in <c>mime-type</c> attribute (clause 5.2.4.2): a bare <c>MimeType ::= UTF8String</c>.</summary>
-    private static CmsAttribute BuildMimeTypeAttribute(string mimeType, MemoryPool<byte> pool)
+    private static CmsAttribute BuildMimeTypeAttribute(string mimeType, BaseMemoryPool pool)
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);
         writer.WriteCharacterString(UniversalTagNumber.UTF8String, mimeType);
@@ -1572,7 +1572,7 @@ public static class CAdESSignatureCreation
     /// TagDefault; <c>postalAddress</c> is a <c>SEQUENCE OF</c>, so it is explicit solely because of the module's
     /// EXPLICIT TagDefault.)
     /// </summary>
-    private static CmsAttribute BuildSignerLocationAttribute(CAdESSignerLocation location, MemoryPool<byte> pool)
+    private static CmsAttribute BuildSignerLocationAttribute(CAdESSignerLocation location, BaseMemoryPool pool)
     {
         bool hasPostalAddress = location.PostalAddress is { Count: > 0 };
         if(location.CountryName is null && location.LocalityName is null && !hasPostalAddress)
@@ -1634,7 +1634,7 @@ public static class CAdESSignatureCreation
     /// <c>ContentReference ::= SEQUENCE { contentType ContentType, signedContentIdentifier ContentIdentifier,
     /// originatorSignatureValue OCTET STRING }</c>.
     /// </summary>
-    private static CmsAttribute BuildContentReferenceAttribute(CAdESContentReference contentReference, MemoryPool<byte> pool)
+    private static CmsAttribute BuildContentReferenceAttribute(CAdESContentReference contentReference, BaseMemoryPool pool)
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);
         using(writer.PushSequence())                                    //ContentReference
@@ -1649,7 +1649,7 @@ public static class CAdESSignatureCreation
 
 
     /// <summary>Builds the opt-in <c>content-identifier</c> attribute (clause 5.2.12): a bare <c>ContentIdentifier ::= OCTET STRING</c>.</summary>
-    private static CmsAttribute BuildContentIdentifierAttribute(ReadOnlySpan<byte> contentIdentifier, MemoryPool<byte> pool)
+    private static CmsAttribute BuildContentIdentifierAttribute(ReadOnlySpan<byte> contentIdentifier, BaseMemoryPool pool)
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);
         writer.WriteOctetString(contentIdentifier);
@@ -1665,7 +1665,7 @@ public static class CAdESSignatureCreation
     /// <c>SignaturePolicyId ::= SEQUENCE { sigPolicyId SigPolicyId, sigPolicyHash SigPolicyHash,
     /// sigPolicyQualifiers SEQUENCE SIZE (1..MAX) OF SigPolicyQualifierInfo OPTIONAL }</c>.
     /// </summary>
-    private static CmsAttribute BuildSignaturePolicyIdentifierAttribute(CAdESSignaturePolicyIdentifier identifier, MemoryPool<byte> pool)
+    private static CmsAttribute BuildSignaturePolicyIdentifierAttribute(CAdESSignaturePolicyIdentifier identifier, BaseMemoryPool pool)
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);
         using(writer.PushSequence())                                    //SignaturePolicyId
@@ -1712,7 +1712,7 @@ public static class CAdESSignatureCreation
     /// construction because of it.
     /// </para>
     /// </remarks>
-    private static CmsAttribute BuildSignerAttributesV2Attribute(CAdESSignerAttributesV2 signerAttributes, MemoryPool<byte> pool)
+    private static CmsAttribute BuildSignerAttributesV2Attribute(CAdESSignerAttributesV2 signerAttributes, BaseMemoryPool pool)
     {
         IReadOnlyList<CmsAttribute> claimed = signerAttributes.ClaimedAttributes;
         if(claimed is null || claimed.Count == 0)
@@ -1758,7 +1758,7 @@ public static class CAdESSignatureCreation
     private static async ValueTask<CmsAttribute> BuildContentTimestampAttributeAsync(
         IReadOnlyList<CAdESContentTimestampRequest> requests,
         DigestValue messageImprint,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         List<AcquiredTimestampToken> tokens = new(requests.Count);
@@ -1887,10 +1887,10 @@ public static class CAdESSignatureCreation
 
     /// <summary>
     /// Encodes the completed value <paramref name="valueWriter"/> holds into a whole <c>Attribute</c> SEQUENCE
-    /// via <see cref="CmsAttribute.Create(string, ReadOnlySpan{byte}, MemoryPool{byte})"/>, using a stack
+    /// via <see cref="CmsAttribute.Create(string, ReadOnlySpan{byte}, BaseMemoryPool)"/>, using a stack
     /// buffer for the small, bounded values every attribute this surface builds encodes to.
     /// </summary>
-    private static CmsAttribute EncodeAttribute(string attributeType, AsnWriter valueWriter, MemoryPool<byte> pool)
+    private static CmsAttribute EncodeAttribute(string attributeType, AsnWriter valueWriter, BaseMemoryPool pool)
     {
         int length = valueWriter.GetEncodedLength();
         Span<byte> buffer = length <= MaximumStackAllocatedAttributeValueLength ? stackalloc byte[length] : new byte[length];
@@ -1931,7 +1931,7 @@ public static class CAdESSignatureCreation
 /// <summary>
 /// The result of <see cref="CAdESSignatureCreation.PrepareAsync"/>: the CAdES-B-B <c>SignedAttributes</c> in
 /// both DER forms and their digest, ready for either an external signer (phases 1+2, e.g. CSC/TS 119 432) or
-/// the registered signing seam (<see cref="CAdESSignatureCreation.SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, MemoryPool{byte}, CancellationToken)"/>).
+/// the registered signing seam (<see cref="CAdESSignatureCreation.SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken)"/>).
 /// </summary>
 public sealed class CAdESSignaturePreparation: IDisposable
 {
@@ -2000,7 +2000,7 @@ public sealed class CAdESSignaturePreparation: IDisposable
 
 /// <summary>
 /// One signer's inputs to the multi-signer
-/// <see cref="CAdESSignatureCreation.Complete(IReadOnlyList{CAdESSignerCompletion}, IReadOnlyList{PkiCertificateMemory}?, MemoryPool{byte})"/> —
+/// <see cref="CAdESSignatureCreation.Complete(IReadOnlyList{CAdESSignerCompletion}, IReadOnlyList{PkiCertificateMemory}?, BaseMemoryPool)"/> —
 /// one <c>SignerInfo</c> per signer, the multi-signer shape of
 /// <see href="https://www.rfc-editor.org/rfc/rfc5652#section-5.1">RFC 5652 §5.1</see>.
 /// </summary>

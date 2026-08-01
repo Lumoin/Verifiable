@@ -92,7 +92,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     /// </summary>
     private async Task RunProductionEncryptedRoundTripAsync(TpmtSymDef symmetric)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -175,7 +175,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     {
         const TpmAlgIdConstants DecryptSessionAlg = TpmAlgIdConstants.TPM_ALG_SHA384;
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -224,7 +224,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     [TestMethod]
     public async Task DecryptSessionThatSkipsEncryptionProducesGarbageUserAuthDetectedByLaterUnseal()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -323,7 +323,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     [TestMethod]
     public async Task TwoDecryptAttributedSessionsAreRejectedWithSessionEncodedAttributes()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -352,7 +352,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
                     decryptSession.SessionAttributes = TpmaSession.CONTINUE_SESSION | TpmaSession.DECRYPT;
 
                     byte[]? captured = null;
-                    async ValueTask<TpmResult<TpmResponse>> SetFirstSessionDecryptBitAsync(ReadOnlyMemory<byte> command, MemoryPool<byte> commandPool, CancellationToken ct)
+                    async ValueTask<TpmResult<TpmResponse>> SetFirstSessionDecryptBitAsync(ReadOnlyMemory<byte> command, BaseMemoryPool commandPool, CancellationToken ct)
                     {
                         byte[] mutable = command.ToArray();
                         captured = mutable;
@@ -389,7 +389,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     [TestMethod]
     public async Task DecryptOnUnsealIsRejectedBecauseItHasNoEncryptableCommandParameter()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -414,7 +414,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
                 //rejected outright (Part 3, clause 5.5) — set by wire tampering, since Unseal's own UnsealInput
                 //never exposes a decrypt-eligible first parameter for the host to agree to in the first place.
                 byte[]? captured = null;
-                async ValueTask<TpmResult<TpmResponse>> SetDecryptBitAsync(ReadOnlyMemory<byte> command, MemoryPool<byte> commandPool, CancellationToken ct)
+                async ValueTask<TpmResult<TpmResponse>> SetDecryptBitAsync(ReadOnlyMemory<byte> command, BaseMemoryPool commandPool, CancellationToken ct)
                 {
                     byte[] mutable = command.ToArray();
                     captured = mutable;
@@ -446,7 +446,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     [TestMethod]
     public async Task NullSymmetricDecryptSessionIsRejectedWithSessionEncodedSymmetric()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -472,7 +472,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
                     nullSymmetricSession.SessionAttributes = TpmaSession.CONTINUE_SESSION;
 
                     byte[]? captured = null;
-                    async ValueTask<TpmResult<TpmResponse>> SetSecondSessionDecryptBitAsync(ReadOnlyMemory<byte> command, MemoryPool<byte> commandPool, CancellationToken ct)
+                    async ValueTask<TpmResult<TpmResponse>> SetSecondSessionDecryptBitAsync(ReadOnlyMemory<byte> command, BaseMemoryPool commandPool, CancellationToken ct)
                     {
                         byte[] mutable = command.ToArray();
                         captured = mutable;
@@ -509,7 +509,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     [TestMethod]
     public async Task StrippingTheDecryptSessionMakesTheParentAuthHmacMismatch()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -533,7 +533,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
                     decryptSession.SessionAttributes = TpmaSession.CONTINUE_SESSION | TpmaSession.DECRYPT;
 
                     byte[]? captured = null;
-                    async ValueTask<TpmResult<TpmResponse>> CaptureAsync(ReadOnlyMemory<byte> command, MemoryPool<byte> commandPool, CancellationToken ct)
+                    async ValueTask<TpmResult<TpmResponse>> CaptureAsync(ReadOnlyMemory<byte> command, BaseMemoryPool commandPool, CancellationToken ct)
                     {
                         captured = command.ToArray();
                         return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
@@ -582,7 +582,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     [TestMethod]
     public async Task IndependentlyEncryptedInSensitiveDecryptsCorrectlyThroughTheHandCraftedWirePath()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -638,7 +638,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     [TestMethod]
     public async Task TruncatedFirstParameterSizeIsRejectedWithSessionEncodedSize()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -675,7 +675,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     [TestMethod]
     public async Task LockedOutTpmRejectsCreateOverPasswordAuthorizedDaProtectedParent()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -790,7 +790,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     /// truncated-size guard independently of the host executor's identical, unavoidable pre-flight guard.
     /// </param>
     private static async Task<HandCraftedCreateResult> SendHandCraftedCreateAsync(
-        TpmSimulator simulator, MemoryPool<byte> pool, uint parentHandle, ReadOnlyMemory<byte> parentName,
+        TpmSimulator simulator, BaseMemoryPool pool, uint parentHandle, ReadOnlyMemory<byte> parentName,
         bool corruptDeclaredInSensitiveSize, CancellationToken cancellationToken)
     {
         (uint firstHandle, Tpm2bAuth firstKey, byte[] firstNonceTpm) = await StartUnboundHmacSessionWithIndependentKeyAsync(
@@ -930,7 +930,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     /// disposes the returned <see cref="Tpm2bAuth"/>, which zeroes the key on release.
     /// </summary>
     private static async Task<(uint SessionHandle, Tpm2bAuth SessionKey, byte[] NonceTpm)> StartUnboundHmacSessionWithIndependentKeyAsync(
-        TpmSimulator simulator, MemoryPool<byte> pool, TpmtSymDef symmetric, CancellationToken cancellationToken)
+        TpmSimulator simulator, BaseMemoryPool pool, TpmtSymDef symmetric, CancellationToken cancellationToken)
     {
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         var registry = new TpmResponseRegistry();
@@ -969,7 +969,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     /// </summary>
     private static async ValueTask<HmacValue> ComputeIndependentCommandHmacAsync(
         ReadOnlyMemory<byte> sessionKey, ReadOnlyMemory<byte> cpHash, ReadOnlyMemory<byte> nonceCaller, ReadOnlyMemory<byte> nonceTpm,
-        ReadOnlyMemory<byte> foldedNonces, byte sessionAttributes, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> foldedNonces, byte sessionAttributes, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         int inputLength = cpHash.Length + nonceCaller.Length + nonceTpm.Length + foldedNonces.Length + 1;
         using IMemoryOwner<byte> input = pool.Rent(inputLength);
@@ -992,7 +992,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     /// (never a bare <see cref="RandomNumberGenerator"/> call) and materializes it as a plain octet array, the
     /// shape the hand-crafted wire assembly above holds every session field in.
     /// </summary>
-    private static byte[] DrawNonceCaller(int length, MemoryPool<byte> pool)
+    private static byte[] DrawNonceCaller(int length, BaseMemoryPool pool)
     {
         using Nonce nonce = CryptographicKeyEvents.GenerateNonce(length, Tag.Create((typeof(Purpose), Purpose.Nonce)), pool);
         return nonce.AsReadOnlySpan().ToArray();
@@ -1127,11 +1127,11 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
         public override ReadOnlyMemory<byte> NonceTpm => inner.NonceTpm;
 
         /// <inheritdoc/>
-        public override void RollNonceCaller(MemoryPool<byte> pool) => inner.RollNonceCaller(pool);
+        public override void RollNonceCaller(BaseMemoryPool pool) => inner.RollNonceCaller(pool);
 
         /// <inheritdoc/>
         /// <remarks>Deliberately a no-op: the data is left exactly as received, unlike a genuine decrypt session.</remarks>
-        public override ValueTask EncryptFirstParameterAsync(Memory<byte> firstParameterData, MemoryPool<byte> pool, CancellationToken cancellationToken) =>
+        public override ValueTask EncryptFirstParameterAsync(Memory<byte> firstParameterData, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             ValueTask.CompletedTask;
 
         /// <inheritdoc/>
@@ -1139,14 +1139,14 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
 
         /// <inheritdoc/>
         public override ValueTask<Tpm2bAuth?> PrepareAuthHmacAsync(
-            ReadOnlyMemory<byte> cpHash, MemoryPool<byte> pool, CancellationToken cancellationToken, ReadOnlyMemory<byte> foldedSessionNonces = default) =>
+            ReadOnlyMemory<byte> cpHash, BaseMemoryPool pool, CancellationToken cancellationToken, ReadOnlyMemory<byte> foldedSessionNonces = default) =>
             inner.PrepareAuthHmacAsync(cpHash, pool, cancellationToken, foldedSessionNonces);
 
         /// <inheritdoc/>
         public override void WriteAuthCommand(ref TpmWriter writer, Tpm2bAuth? precomputedHmac) => inner.WriteAuthCommand(ref writer, precomputedHmac);
 
         /// <inheritdoc/>
-        public override ValueTask<bool> VerifyAndUpdateAsync(TpmsAuthResponse response, ReadOnlyMemory<byte> rpHash, MemoryPool<byte> pool, CancellationToken cancellationToken) =>
+        public override ValueTask<bool> VerifyAndUpdateAsync(TpmsAuthResponse response, ReadOnlyMemory<byte> rpHash, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             inner.VerifyAndUpdateAsync(response, rpHash, pool, cancellationToken);
 
         /// <summary>Disposes the wrapped session.</summary>
@@ -1169,7 +1169,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     /// build a mixed-hash multi-session command (F5: two sessions negotiating DIFFERENT hash algorithms).
     /// </summary>
     private async Task<(uint SessionHandle, TpmSession Session, byte[] InitialNonceCaller, byte[] InitialNonceTpm)> StartHmacSessionAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, uint bindHandle, TpmtSymDef symmetric, TpmAlgIdConstants sessionAlg = SessionAlg)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, uint bindHandle, TpmtSymDef symmetric, TpmAlgIdConstants sessionAlg = SessionAlg)
     {
         StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(bindHandle, sessionAlg, symmetric);
 
@@ -1192,11 +1192,11 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     }
 
     /// <summary>Loads a just-created sealed object back through the production <c>TPM2_Load()</c> path (password-authorized parent).</summary>
-    private async Task<LoadResponse> LoadSealedObjectAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, uint parentHandle, CreateResponse created) =>
+    private async Task<LoadResponse> LoadSealedObjectAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, uint parentHandle, CreateResponse created) =>
         await LoadSealedObjectRawAsync(tpm, registry, pool, parentHandle, created.OutPrivate.Span.ToArray(), ClonePublic(created.OutPublic, pool)).ConfigureAwait(false);
 
     /// <summary>Loads a sealed object from raw private-blob bytes and a public area back through the production <c>TPM2_Load()</c> path.</summary>
-    private async Task<LoadResponse> LoadSealedObjectRawAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, uint parentHandle, byte[] outPrivate, Tpm2bPublic outPublic)
+    private async Task<LoadResponse> LoadSealedObjectRawAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, uint parentHandle, byte[] outPrivate, Tpm2bPublic outPublic)
     {
         using Tpm2bPrivate inPrivate = Tpm2bPrivate.Create(outPrivate, pool);
         using Tpm2bPublic inPublic = outPublic;
@@ -1211,7 +1211,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     }
 
     /// <summary>Seals a fixed secret under an empty authValue via the plain (untouched) password-only Create form, then loads it — used only to exercise Unseal's own rejection, independent of Package B's decrypt path.</summary>
-    private async Task<LoadResponse> SealAndLoadPlainAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, uint parentHandle)
+    private async Task<LoadResponse> SealAndLoadPlainAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, uint parentHandle)
     {
         using Tpm2bSensitiveCreate inSensitive = Tpm2bSensitiveCreate.ForSealedData(SecretBytes, IntendedUserAuth, pool);
         using Tpm2bPublic sealTemplate = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, authPolicy: default, noDa: true);
@@ -1228,7 +1228,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     }
 
     /// <summary>Reserializes a public area into a fresh <see cref="Tpm2bPublic"/> (a disk-persisted round trip).</summary>
-    private static Tpm2bPublic ClonePublic(Tpm2bPublic source, MemoryPool<byte> pool)
+    private static Tpm2bPublic ClonePublic(Tpm2bPublic source, BaseMemoryPool pool)
     {
         int size = source.GetSerializedSize();
         using IMemoryOwner<byte> owner = pool.Rent(size);
@@ -1258,7 +1258,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     }
 
     /// <summary>Creates the deterministic ECC storage parent under the owner hierarchy.</summary>
-    private async Task<CreatePrimaryResponse> CreateStorageParentAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool)
+    private async Task<CreatePrimaryResponse> CreateStorageParentAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
         using CreatePrimaryInput parentInput = CreatePrimaryInput.ForEccStorageParent(
             TpmRh.TPM_RH_OWNER, null, TpmEccCurveConstants.TPM_ECC_NIST_P256, pool, noDa: true);
@@ -1289,7 +1289,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     /// Creates a simulator with the ECC (BouncyCastle) signing backend wired, powers it on, and brings it through
     /// <c>TPM2_Startup(CLEAR)</c> into the operational phase.
     /// </summary>
-    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator("tpm-in-house-param-decryption", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -1302,7 +1302,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     /// Issues <c>TPM2_Startup(CLEAR)</c> directly against the simulator, mirroring how the executor frames an
     /// unauthorized command on the wire.
     /// </summary>
-    private async Task IssueStartupClearAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task IssueStartupClearAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();

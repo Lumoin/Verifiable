@@ -39,7 +39,7 @@ public static class MdocCborX5ChainExtractor
     /// </exception>
     public static IReadOnlyList<PkiCertificateMemory> Extract(
         ReadOnlyMemory<byte> encodedCoseSign1,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -72,7 +72,7 @@ public static class MdocCborX5ChainExtractor
 
     private static List<PkiCertificateMemory> ReadUnprotectedHeaderX5Chain(
         CborReader reader,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         if(reader.PeekState() != CborReaderState.StartMap)
         {
@@ -118,7 +118,7 @@ public static class MdocCborX5ChainExtractor
     }
 
 
-    private static void ReadX5ChainValue(CborReader reader, MemoryPool<byte> pool, List<PkiCertificateMemory> chain)
+    private static void ReadX5ChainValue(CborReader reader, BaseMemoryPool pool, List<PkiCertificateMemory> chain)
     {
         CborReaderState state = reader.PeekState();
         if(state == CborReaderState.ByteString)
@@ -148,7 +148,7 @@ public static class MdocCborX5ChainExtractor
     }
 
 
-    private static PkiCertificateMemory CopyToPkiCertificate(byte[] derBytes, MemoryPool<byte> pool)
+    private static PkiCertificateMemory CopyToPkiCertificate(byte[] derBytes, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(derBytes.Length);
         derBytes.CopyTo(owner.Memory.Span);

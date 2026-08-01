@@ -36,7 +36,7 @@ namespace Verifiable.Tests.X509;
 /// </para>
 /// <para>
 /// The message imprint is taken through the registered digest seam
-/// (<see cref="CryptographicKeyEvents.ComputeDigestAsync(ReadOnlyMemory{byte}, int, Tag, MemoryPool{byte}, System.Collections.Frozen.FrozenDictionary{string, object}?, CancellationToken)"/>),
+/// (<see cref="CryptographicKeyEvents.ComputeDigestAsync(ReadOnlyMemory{byte}, int, Tag, BaseMemoryPool, System.Collections.Frozen.FrozenDictionary{string, object}?, CancellationToken)"/>),
 /// never a direct framework hash, so a minted token carries the same provenance events as production material.
 /// Every instant a caller passes is expected to be derived from <see cref="TestClock.CanonicalEpoch"/>; nothing
 /// here reads a clock.
@@ -75,7 +75,7 @@ internal static class X509ChainTestRingTimestamping
         IReadOnlyList<X509ChainTestRingNode> embeddedCertificates,
         ReadOnlyMemory<byte> timestampedOctets,
         DateTimeOffset generationTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TimeSpan? accuracy = null,
         bool isOrdered = false,
         CancellationToken cancellationToken = default)
@@ -223,7 +223,7 @@ internal static class X509ChainTestRingTimestamping
         RSA authorityKey,
         ReadOnlyMemory<byte> timestampedOctets,
         DateTimeOffset generationTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         string signatureAlgorithm = "SHA512WITHRSA",
         CancellationToken cancellationToken = default)
     {

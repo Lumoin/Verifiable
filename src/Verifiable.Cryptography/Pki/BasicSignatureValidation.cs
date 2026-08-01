@@ -133,7 +133,7 @@ public static class BasicSignatureValidation
         ValidateTimestampTokenAsyncDelegate? validateTimestampToken,
         DateTimeOffset validationTime,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(inputs);
@@ -365,7 +365,7 @@ public static class BasicSignatureValidation
         SignatureFacts signature,
         ValidateTimestampTokenAsyncDelegate validateTimestampToken,
         DateTimeOffset validationTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         IReadOnlyList<EmbeddedTimestamp> contentTimestamps = signature.TimestampsOfClass(SignatureTimestampClass.ContentTimestamp);

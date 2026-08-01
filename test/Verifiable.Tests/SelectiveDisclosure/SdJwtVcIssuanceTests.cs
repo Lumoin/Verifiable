@@ -21,7 +21,7 @@ internal sealed class SdJwtVcIssuanceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private static HashSet<CredentialPath> DisclosablePaths { get; } =
     [

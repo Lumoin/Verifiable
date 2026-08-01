@@ -566,7 +566,7 @@ internal sealed class CAdESSignatureCreationTests
 
 
     /// <summary>Copies DER bytes into a pooled <see cref="PkiCertificateMemory"/> tagged as an X.509 certificate.</summary>
-    private static PkiCertificateMemory ToPkiCertificate(ReadOnlySpan<byte> der, MemoryPool<byte> pool)
+    private static PkiCertificateMemory ToPkiCertificate(ReadOnlySpan<byte> der, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(der.Length);
         der.CopyTo(owner.Memory.Span);

@@ -6183,7 +6183,7 @@ public static class AuthCodeEndpoints
         int digestByteLength,
         ComputeDigestDelegate computeDigest,
         EncodeDelegate encoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         //PKCE S256 verification here is a SHA-256 of the presented code verifier — sync by nature, no
         //hardware-async backend — so it hashes through the registered synchronous HashFunctionDelegate seam. The

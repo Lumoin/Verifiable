@@ -205,7 +205,7 @@ internal sealed class Fido2CoseRfcVectorTests
     /// Mints a firewalled assertion signed directly with <paramref name="independentSigner"/> over
     /// <paramref name="privateKeyBytes"/> — never through the library's registered signing path — then
     /// reconstructs the ceremony input from the minted wire bytes only and runs it through the shipped
-    /// <see cref="Fido2AssertionVerifier.VerifyAsync(CoseKey, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, AssertionCeremonyInput, string, MemoryPool{byte}, TimeProvider?, CancellationToken)"/>.
+    /// <see cref="Fido2AssertionVerifier.VerifyAsync(CoseKey, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, AssertionCeremonyInput, string, BaseMemoryPool, TimeProvider?, CancellationToken)"/>.
     /// </summary>
     /// <param name="privateKeyBytes">The raw private key bytes to sign with.</param>
     /// <param name="credentialPublicKey">The stored credential public key the verifier checks the signature against.</param>
@@ -277,7 +277,7 @@ internal sealed class Fido2CoseRfcVectorTests
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the signature (re-encoded or passed through) transfers to the caller, which disposes it.")]
-    private static Signature ReencodeToDerIfEcdsa(Signature mintedSignature, bool isEcdsaSignature, MemoryPool<byte> pool)
+    private static Signature ReencodeToDerIfEcdsa(Signature mintedSignature, bool isEcdsaSignature, BaseMemoryPool pool)
     {
         if(!isEcdsaSignature)
         {

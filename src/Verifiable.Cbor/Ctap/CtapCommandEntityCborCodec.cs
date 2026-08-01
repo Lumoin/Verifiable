@@ -167,7 +167,7 @@ internal static class CtapCommandEntityCborCodec
     /// <exception cref="Fido2FormatException">The map omits the required <c>id</c> member.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the UserHandle created here transfers to the returned entity, which the caller (and, transitively, the request/response model it decorates) disposes — the CA2000 flag is a false positive, mirroring Fido2CredentialRecordJsonReader's identical CredentialId.Create suppression.")]
-    public static CtapPublicKeyCredentialUserEntity ReadUserEntity(CborReader reader, MemoryPool<byte> pool)
+    public static CtapPublicKeyCredentialUserEntity ReadUserEntity(CborReader reader, BaseMemoryPool pool)
     {
         int? count = reader.ReadStartMap();
         byte[]? idBytes = null;
@@ -254,7 +254,7 @@ internal static class CtapCommandEntityCborCodec
     /// <param name="pool">The memory pool the returned descriptor's credential identifier rents from.</param>
     /// <returns>The decoded credential descriptor.</returns>
     /// <exception cref="Fido2FormatException">The map omits a required member.</exception>
-    public static PublicKeyCredentialDescriptor ReadDescriptor(CborReader reader, MemoryPool<byte> pool)
+    public static PublicKeyCredentialDescriptor ReadDescriptor(CborReader reader, BaseMemoryPool pool)
     {
         int? count = reader.ReadStartMap();
         byte[]? idBytes = null;
@@ -526,7 +526,7 @@ internal static class CtapCommandEntityCborCodec
     /// <param name="reader">The CBOR reader positioned at the array.</param>
     /// <param name="pool">The memory pool each descriptor's credential identifier rents from.</param>
     /// <returns>The decoded descriptors, in wire order.</returns>
-    public static List<PublicKeyCredentialDescriptor> ReadDescriptorArray(CborReader reader, MemoryPool<byte> pool)
+    public static List<PublicKeyCredentialDescriptor> ReadDescriptorArray(CborReader reader, BaseMemoryPool pool)
     {
         int? count = reader.ReadStartArray();
         var descriptors = new List<PublicKeyCredentialDescriptor>();

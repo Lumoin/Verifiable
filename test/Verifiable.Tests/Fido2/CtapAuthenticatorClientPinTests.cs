@@ -34,7 +34,7 @@ internal sealed class CtapAuthenticatorClientPinTests
     public async Task GetPinRetriesReportsSeededCounter()
     {
         using CtapAuthenticatorSimulator simulator = CtapWave5AuthenticatorFixtures.CreateSimulator("clientpin-get-pin-retries");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.GetPinRetries);
         CtapClientPinResponse response = await SendClientPinAsync(simulator, request, pool);
@@ -52,7 +52,7 @@ internal sealed class CtapAuthenticatorClientPinTests
     public async Task GetUvRetriesReportsSeededCounter()
     {
         using CtapAuthenticatorSimulator simulator = CtapWave5AuthenticatorFixtures.CreateSimulator("clientpin-get-uv-retries");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.GetUvRetries);
         CtapClientPinResponse response = await SendClientPinAsync(simulator, request, pool);
@@ -72,7 +72,7 @@ internal sealed class CtapAuthenticatorClientPinTests
     public async Task GetKeyAgreementForProtocolOneReturnsValidCoseKey()
     {
         using CtapAuthenticatorSimulator simulator = CtapWave5AuthenticatorFixtures.CreateSimulator("clientpin-get-key-agreement-one");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapClientPinRequest(
             SubCommand: WellKnownCtapClientPinSubCommands.GetKeyAgreement, PinUvAuthProtocol: (int)CtapPinUvAuthProtocolId.One);
@@ -90,7 +90,7 @@ internal sealed class CtapAuthenticatorClientPinTests
     public async Task GetKeyAgreementForProtocolTwoReturnsValidDistinctCoseKey()
     {
         using CtapAuthenticatorSimulator simulator = CtapWave5AuthenticatorFixtures.CreateSimulator("clientpin-get-key-agreement-two");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapClientPinResponse protocolOneResponse = await SendClientPinAsync(
             simulator, new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.GetKeyAgreement, PinUvAuthProtocol: (int)CtapPinUvAuthProtocolId.One), pool);
@@ -110,7 +110,7 @@ internal sealed class CtapAuthenticatorClientPinTests
     public async Task GetKeyAgreementWithoutProtocolReturnsMissingParameter()
     {
         using CtapAuthenticatorSimulator simulator = CtapWave5AuthenticatorFixtures.CreateSimulator("clientpin-get-key-agreement-missing-protocol");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.GetKeyAgreement);
         byte statusCode = await SendClientPinExpectingErrorAsync(simulator, request, pool);
@@ -124,7 +124,7 @@ internal sealed class CtapAuthenticatorClientPinTests
     public async Task GetKeyAgreementWithUnsupportedProtocolReturnsInvalidParameter()
     {
         using CtapAuthenticatorSimulator simulator = CtapWave5AuthenticatorFixtures.CreateSimulator("clientpin-get-key-agreement-bad-protocol");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.GetKeyAgreement, PinUvAuthProtocol: 99);
         byte statusCode = await SendClientPinExpectingErrorAsync(simulator, request, pool);
@@ -152,7 +152,7 @@ internal sealed class CtapAuthenticatorClientPinTests
     public async Task UnsupportedSubCommandReturnsInvalidSubcommand(int subCommand)
     {
         using CtapAuthenticatorSimulator simulator = CtapWave5AuthenticatorFixtures.CreateSimulator($"clientpin-unsupported-subcommand-{subCommand:X2}");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapClientPinRequest(SubCommand: subCommand);
         byte statusCode = await SendClientPinExpectingErrorAsync(simulator, request, pool);
@@ -179,7 +179,7 @@ internal sealed class CtapAuthenticatorClientPinTests
 
 
     /// <summary>Sends an <c>authenticatorClientPIN</c> request expected to succeed and decodes its response.</summary>
-    private async Task<CtapClientPinResponse> SendClientPinAsync(CtapAuthenticatorSimulator simulator, CtapClientPinRequest request, MemoryPool<byte> pool)
+    private async Task<CtapClientPinResponse> SendClientPinAsync(CtapAuthenticatorSimulator simulator, CtapClientPinRequest request, BaseMemoryPool pool)
     {
         return await CtapAuthenticatorClientPinClient.ClientPinAsync(
             simulator.TransceiveAsync, CtapClientPinRequestCborWriter.Write, request, CtapClientPinResponseCborReader.Read, pool, TestContext.CancellationToken);
@@ -187,7 +187,7 @@ internal sealed class CtapAuthenticatorClientPinTests
 
 
     /// <summary>Sends an <c>authenticatorClientPIN</c> request expected to fail and returns the exact status code.</summary>
-    private async Task<byte> SendClientPinExpectingErrorAsync(CtapAuthenticatorSimulator simulator, CtapClientPinRequest request, MemoryPool<byte> pool)
+    private async Task<byte> SendClientPinExpectingErrorAsync(CtapAuthenticatorSimulator simulator, CtapClientPinRequest request, BaseMemoryPool pool)
     {
         CtapCommandException exception = await Assert.ThrowsExactlyAsync<CtapCommandException>(
             () => SendClientPinAsync(simulator, request, pool));

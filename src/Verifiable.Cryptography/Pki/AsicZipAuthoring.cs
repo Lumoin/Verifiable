@@ -394,7 +394,7 @@ public static class AsicZipAuthoring
     /// <returns>The container's octets, tagged <see cref="AsicTags.Container"/>. The caller owns and disposes them.</returns>
     /// <exception cref="ArgumentNullException">When an argument is <see langword="null"/>.</exception>
     /// <exception cref="AsicZipAuthoringException">When the supplied material is not a container this library writes; <see cref="AsicZipAuthoringException.FailureKind"/> names which rule refused it.</exception>
-    public static PooledMemory Write(AsicZipAuthoringContext context, MemoryPool<byte> pool)
+    public static PooledMemory Write(AsicZipAuthoringContext context, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(pool);
@@ -830,7 +830,7 @@ public static class AsicZipAuthoring
     private sealed class PooledZipWriter: Stream
     {
         /// <summary>The pool every buffer of this writer is rented from.</summary>
-        private readonly MemoryPool<byte> pool;
+        private readonly BaseMemoryPool pool;
 
         /// <summary>The largest number of octets this writer accepts.</summary>
         private readonly int maximumByteLength;
@@ -848,7 +848,7 @@ public static class AsicZipAuthoring
         /// <param name="pool">The pool to rent from.</param>
         /// <param name="initialByteLength">The capacity to rent first.</param>
         /// <param name="maximumByteLength">The largest number of octets this writer accepts.</param>
-        public PooledZipWriter(MemoryPool<byte> pool, int initialByteLength, int maximumByteLength)
+        public PooledZipWriter(BaseMemoryPool pool, int initialByteLength, int maximumByteLength)
         {
             this.pool = pool;
             this.maximumByteLength = maximumByteLength;

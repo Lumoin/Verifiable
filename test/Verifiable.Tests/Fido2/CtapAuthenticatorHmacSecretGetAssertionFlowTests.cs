@@ -60,7 +60,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
     [DataRow(2, true, true, DisplayName = "two salt, protocol 2, uv")]
     public async Task HmacSecretGetAssertionSucceedsAcrossSaltCountProtocolAndUvPosture(int saltCount, bool isProtocolTwo, bool userVerified)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = isProtocolTwo ? CtapPinUvAuthProtocolId.Two : CtapPinUvAuthProtocolId.One;
 
@@ -132,7 +132,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
     [TestMethod]
     public async Task HmacSecretUnsupportedProtocolReturnsInvalidParameter()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-hmac-secret-unsupported-protocol");
@@ -164,7 +164,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
     [TestMethod]
     public async Task HmacSecretUpFalseReturnsUnsupportedOption()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-hmac-secret-up-false");
@@ -196,7 +196,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
     [TestMethod]
     public async Task HmacSecretTamperedSaltAuthReturnsPinAuthInvalid()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-hmac-secret-tampered-auth");
@@ -230,7 +230,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
     [TestMethod]
     public async Task HmacSecretDecryptFailureReturnsInvalidParameter()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-hmac-secret-decrypt-failure");
@@ -260,7 +260,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
     [TestMethod]
     public async Task HmacSecretDecryptedPlaintextWrongLengthReturnsInvalidParameter()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-hmac-secret-wrong-length");
@@ -294,7 +294,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
     [TestMethod]
     public async Task HmacSecretServesBothDiscoverableAndAllowListResolution()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-hmac-secret-13087");
@@ -318,7 +318,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
     [TestMethod]
     public async Task HmacSecretServesAssertionForCredentialMintedWithoutTheExtension()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-hmac-secret-r2c");
@@ -342,7 +342,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
     [TestMethod]
     public async Task HmacSecretOutputIsDeterministicForTheSameSaltAndUvPosture()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-hmac-secret-determinism");
@@ -369,7 +369,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
     [TestMethod]
     public async Task HmacSecretOutputDiffersBetweenUvAndNonUvForTheSameCredentialAndSalt()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         const CtapPinUvAuthProtocolId ProtocolId = CtapPinUvAuthProtocolId.Two;
 
@@ -403,7 +403,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
     [TestMethod]
     public async Task TwoSaltOutputsFirstHalfLinksToTheOneSaltOutputForTheSameSalt1()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-hmac-secret-linkage");
@@ -436,7 +436,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
     [TestMethod]
     public async Task HmacSecretOutputDiffersAcrossTwoDifferentCredentialsForTheSameSalt()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-hmac-secret-isolation");
@@ -462,7 +462,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
     [TestMethod]
     public async Task ProtocolTwoCiphertextIsFreshPerRequestButDecryptsIdentically()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-hmac-secret-iv-freshness");
@@ -491,7 +491,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
     /// <c>pinUvAuthToken</c> under <paramref name="protocolId"/>, decrypted from wire bytes only.
     /// </summary>
     private static async Task<byte[]> EstablishPinAndIssueGaTokenAsync(
-        CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string? rpId, CancellationToken cancellationToken)
+        CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string? rpId, CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession setPinSession = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
             simulator.TransceiveAsync, protocolId, pool, cancellationToken).ConfigureAwait(false);
@@ -526,7 +526,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
     /// file's property tests compose from.
     /// </summary>
     private static async Task<byte[]> RunOneSaltHmacSecretAsync(
-        CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, string rpId, IReadOnlyList<PublicKeyCredentialDescriptor>? allowList,
+        CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, string rpId, IReadOnlyList<PublicKeyCredentialDescriptor>? allowList,
         CancellationToken cancellationToken, byte[]? gaParam = null, CtapPinUvAuthProtocolId? gaProtocolId = null)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
@@ -543,7 +543,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
     /// <paramref name="allowList"/>, and returns the decrypted output.
     /// </summary>
     private static async Task<byte[]> SendHmacSecretRequestAsync(
-        CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, string rpId, IReadOnlyList<PublicKeyCredentialDescriptor>? allowList,
+        CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, string rpId, IReadOnlyList<PublicKeyCredentialDescriptor>? allowList,
         CtapWave5bPlatformPinSession session, byte[] salt1, byte[]? salt2, CancellationToken cancellationToken,
         byte[]? gaParam = null, CtapPinUvAuthProtocolId? gaProtocolId = null)
     {
@@ -585,7 +585,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
     /// distinct from every other helper here that returns only the decrypted content.
     /// </summary>
     private static async Task<(byte[] Ciphertext, byte[] Decrypted)> SendAndCaptureCiphertextAsync(
-        CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, string rpId, IReadOnlyList<PublicKeyCredentialDescriptor> allowList,
+        CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, string rpId, IReadOnlyList<PublicKeyCredentialDescriptor> allowList,
         ReadOnlyMemory<byte> extensions, CtapWave5bPlatformPinSession session, CancellationToken cancellationToken)
     {
         CtapGetAssertionRequest request = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(pool, rpId: rpId, allowList: allowList, extensions: extensions);
@@ -636,7 +636,7 @@ internal sealed class CtapAuthenticatorHmacSecretGetAssertionFlowTests
 
     /// <summary>Sends <paramref name="request"/> through <see cref="CtapAuthenticatorGetAssertionClient.GetAssertionAsync"/>, disposing the request either way.</summary>
     private static ValueTask<CtapGetAssertionResponse> SendGetAssertionAsync(
-        CtapAuthenticatorSimulator simulator, CtapGetAssertionRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapAuthenticatorSimulator simulator, CtapGetAssertionRequest request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         try
         {

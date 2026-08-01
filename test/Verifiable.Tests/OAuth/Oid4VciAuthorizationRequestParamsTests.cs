@@ -51,7 +51,7 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
     /// <summary>The Credential Issuer Identifier the Wallet sends as the RFC 8707 resource.</summary>
     private const string IssuerResource = "https://credential-issuer.example.com";
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     /// <summary>The capabilities the Authorization Code flow tests need.</summary>
     private static readonly ImmutableHashSet<CapabilityIdentifier> AuthCodeCapabilities =

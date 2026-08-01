@@ -169,7 +169,7 @@ public static class CredentialDataIntegrityExtensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
             ComputeDigestDelegate computeDigest,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext context,
             CancellationToken cancellationToken = default)
         {
@@ -335,7 +335,7 @@ public static class CredentialDataIntegrityExtensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             DecodeDelegate decoder,
             ComputeDigestDelegate computeDigest,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext context,
             CancellationToken cancellationToken = default)
         {
@@ -442,7 +442,7 @@ public static class CredentialDataIntegrityExtensions
         ProofOptionsSerializeDelegate serializeProofOptions,
         DecodeDelegate decoder,
         ComputeDigestDelegate computeDigest,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {

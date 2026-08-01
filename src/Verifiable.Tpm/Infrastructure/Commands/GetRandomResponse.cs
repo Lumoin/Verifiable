@@ -46,7 +46,7 @@ public sealed class GetRandomResponse: ITpmWireType, IDisposable
     /// <param name="reader">The reader positioned at the response parameters.</param>
     /// <param name="pool">The memory pool for allocations.</param>
     /// <returns>The parsed response.</returns>
-    public static GetRandomResponse Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static GetRandomResponse Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         Tpm2bDigest randomBytes = Tpm2bDigest.Parse(ref reader, pool);
         return new GetRandomResponse(randomBytes);

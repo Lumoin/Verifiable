@@ -87,7 +87,7 @@ public static class Fido2AssertionVerifier
         AssertionCeremonyInput ceremonyInput,
         ClaimIssuer<AssertionCeremonyInput> claimIssuer,
         string correlationId,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(credentialPublicKey);
@@ -132,7 +132,7 @@ public static class Fido2AssertionVerifier
         ReadOnlyMemory<byte> clientDataJson,
         AssertionCeremonyInput ceremonyInput,
         string correlationId,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TimeProvider? timeProvider = null,
         CancellationToken cancellationToken = default)
     {
@@ -156,7 +156,7 @@ public static class Fido2AssertionVerifier
         ReadOnlyMemory<byte> signature,
         ReadOnlyMemory<byte> authenticatorData,
         ReadOnlyMemory<byte> clientDataJson,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         try
@@ -194,7 +194,7 @@ public static class Fido2AssertionVerifier
     /// assertion signature covers.
     /// </summary>
     /// <param name="length">The exact number of meaningful bytes in the returned owner's memory.</param>
-    private static IMemoryOwner<byte> RentToBeSigned(ReadOnlyMemory<byte> authenticatorData, DigestValue clientDataHash, MemoryPool<byte> pool, out int length)
+    private static IMemoryOwner<byte> RentToBeSigned(ReadOnlyMemory<byte> authenticatorData, DigestValue clientDataHash, BaseMemoryPool pool, out int length)
     {
         length = authenticatorData.Length + clientDataHash.Length;
         IMemoryOwner<byte> owner = pool.Rent(length);

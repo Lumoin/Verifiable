@@ -107,7 +107,7 @@ public sealed class Fido2AssertionOptionsBuilder: Builder<PublicKeyCredentialReq
     /// <exception cref="System.ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
     public ValueTask<PublicKeyCredentialRequestOptions> BuildAsync(
         string rpId,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         IReadOnlyList<Fido2CredentialRecord>? allowedCredentials = null,
         string? challenge = null,
         uint? timeout = null,

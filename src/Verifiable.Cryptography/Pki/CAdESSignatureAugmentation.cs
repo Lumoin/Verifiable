@@ -506,7 +506,7 @@ public static class CAdESSignatureAugmentation
     /// </remarks>
     public static async ValueTask<CmsSignedData> AddSignatureTimestampAsync(
         CAdESSignatureTimestampContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -564,7 +564,7 @@ public static class CAdESSignatureAugmentation
     /// countersignature may be added "in the same attribute or as a new <c>countersignature</c> attribute". Each
     /// call here appends a new attribute, which the splice does without touching the attributes already present;
     /// several values of one attribute are
-    /// <see cref="CmsAttribute.Create(string, IReadOnlyList{ReadOnlyMemory{byte}}, MemoryPool{byte})"/> over
+    /// <see cref="CmsAttribute.Create(string, IReadOnlyList{ReadOnlyMemory{byte}}, BaseMemoryPool)"/> over
     /// several <see cref="CAdESSignatureCreation.CompleteCountersignature"/> results, appended once.
     /// </para>
     /// <para>
@@ -588,7 +588,7 @@ public static class CAdESSignatureAugmentation
     /// </remarks>
     public static async ValueTask<CmsSignedData> AddCountersignatureAsync(
         CAdESCountersignatureContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -652,7 +652,7 @@ public static class CAdESSignatureAugmentation
         CmsSignedData signedData,
         int signerIndex,
         CAdESSignaturePolicyStore store,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(signedData);
         ArgumentNullException.ThrowIfNull(store);
@@ -757,7 +757,7 @@ public static class CAdESSignatureAugmentation
     /// Builds the <c>signature-policy-store</c> attribute value (clause 5.2.10):
     /// <c>SignaturePolicyStore ::= SEQUENCE { spDocSpec SPDocSpecification, spDocument SignaturePolicyDocument }</c>.
     /// </summary>
-    private static CmsAttribute BuildSignaturePolicyStoreAttribute(CAdESSignaturePolicyStore store, MemoryPool<byte> pool)
+    private static CmsAttribute BuildSignaturePolicyStoreAttribute(CAdESSignaturePolicyStore store, BaseMemoryPool pool)
     {
         if(store.DocumentSpecificationOid is null == store.DocumentSpecificationUri is null)
         {
@@ -920,7 +920,7 @@ public static class CAdESSignatureAugmentation
         CmsSignedData signedData,
         int signerIndex,
         CAdESValidationMaterial material,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(signedData);
         ArgumentNullException.ThrowIfNull(material);
@@ -985,7 +985,7 @@ public static class CAdESSignatureAugmentation
     /// </remarks>
     public static async ValueTask<CmsSignedData> AddArchiveTimestampAsync(
         CAdESArchiveTimestampContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -1054,7 +1054,7 @@ public static class CAdESSignatureAugmentation
     /// <param name="material">The material to place.</param>
     /// <param name="pool">The memory pool every carrier is rented from.</param>
     /// <returns>The augmented signature. The caller owns and disposes it.</returns>
-    private static CmsSignedData PlaceInRootSignedData(CmsSignedData signedData, CAdESValidationMaterial material, MemoryPool<byte> pool)
+    private static CmsSignedData PlaceInRootSignedData(CmsSignedData signedData, CAdESValidationMaterial material, BaseMemoryPool pool)
     {
         List<ReadOnlyMemory<byte>> certificates = CollectCertificateEncodings(material);
         List<PooledMemory> wrappedResponses = [];
@@ -1128,7 +1128,7 @@ public static class CAdESSignatureAugmentation
         CmsSignedData signedData,
         int signerIndex,
         CAdESValidationMaterial material,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         CmsUnsignedAttributeValueLocation location = SelectLatestArchiveTimestamp(signedData, signerIndex);
         ReadOnlyMemory<byte> tokenEncoding = CmsSignedDataAugmentation.ReadUnsignedAttributeValue(
@@ -1246,7 +1246,7 @@ public static class CAdESSignatureAugmentation
     /// <param name="certificates">The whole encodings of the certificates the attribute states.</param>
     /// <param name="pool">The memory pool the attribute is rented from.</param>
     /// <returns>The attribute. The caller disposes it.</returns>
-    private static CmsAttribute BuildCertificateValuesAttribute(List<ReadOnlyMemory<byte>> certificates, MemoryPool<byte> pool)
+    private static CmsAttribute BuildCertificateValuesAttribute(List<ReadOnlyMemory<byte>> certificates, BaseMemoryPool pool)
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);
         using(writer.PushSequence())
@@ -1274,7 +1274,7 @@ public static class CAdESSignatureAugmentation
     /// <param name="pool">The memory pool the attribute is rented from.</param>
     /// <returns>The attribute. The caller disposes it.</returns>
     /// <exception cref="CAdESAugmentationException">When a supplied object is not of a kind the attribute admits.</exception>
-    private static CmsAttribute BuildRevocationValuesAttribute(CAdESValidationMaterial material, MemoryPool<byte> pool)
+    private static CmsAttribute BuildRevocationValuesAttribute(CAdESValidationMaterial material, BaseMemoryPool pool)
     {
         List<ReadOnlyMemory<byte>> basicResponses = [];
         List<ReadOnlyMemory<byte>> wholeResponses = [];
@@ -1357,7 +1357,7 @@ public static class CAdESSignatureAugmentation
     /// <param name="pool">The memory pool the encoding is rented from.</param>
     /// <returns>The encoded <c>RevocationInfoChoice</c>. The caller disposes it.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned carrier, which the caller disposes; the catch disposes it on a partial failure.")]
-    private static PooledMemory WrapOcspResponseAsRevocationInfoChoice(ReadOnlySpan<byte> response, MemoryPool<byte> pool)
+    private static PooledMemory WrapOcspResponseAsRevocationInfoChoice(ReadOnlySpan<byte> response, BaseMemoryPool pool)
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);
         using(writer.PushSequence(ContextConstructed1))
@@ -1390,7 +1390,7 @@ public static class CAdESSignatureAugmentation
     /// <param name="valueWriter">The writer holding exactly the attribute's value.</param>
     /// <param name="pool">The memory pool the attribute is rented from.</param>
     /// <returns>The attribute. The caller disposes it.</returns>
-    private static CmsAttribute EncodeAttribute(string attributeType, AsnWriter valueWriter, MemoryPool<byte> pool)
+    private static CmsAttribute EncodeAttribute(string attributeType, AsnWriter valueWriter, BaseMemoryPool pool)
     {
         int encodedLength = valueWriter.GetEncodedLength();
         byte[]? rented = null;

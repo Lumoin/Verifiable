@@ -96,7 +96,7 @@ internal static class CbeffBiometricTemplate
     /// <param name="pool">The memory pool for the file carrier.</param>
     /// <returns>The data-group <see cref="ElementaryFile"/>. The caller disposes it.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned ElementaryFile, which the caller disposes; the catch disposes it on failure.")]
-    public static ElementaryFile Write(int dataGroupTemplateTag, ReadOnlySpan<byte> biometricRecord, ushort fileIdentifier, MemoryPool<byte> pool)
+    public static ElementaryFile Write(int dataGroupTemplateTag, ReadOnlySpan<byte> biometricRecord, ushort fileIdentifier, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

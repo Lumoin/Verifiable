@@ -30,7 +30,7 @@ internal sealed class CtapAuthenticatorClientPinClientTests
         byte[]? capturedRequest = null;
         var scriptedResponse = new CtapClientPinResponse(PinRetries: 8);
 
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             capturedRequest = request.ToArray();
             TaggedMemory<byte> payload = CtapClientPinResponseCborWriter.Write(scriptedResponse);
@@ -55,7 +55,7 @@ internal sealed class CtapAuthenticatorClientPinClientTests
     [TestMethod]
     public async Task ThrowsCtapCommandExceptionOnNonSuccessStatus()
     {
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, MemoryPool<byte> pool, CancellationToken cancellationToken) =>
+        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes([WellKnownCtapStatusCodes.InvalidParameter], pool, Fido2BufferTags.CtapResponseEnvelope));
 
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.SetPin);
@@ -71,7 +71,7 @@ internal sealed class CtapAuthenticatorClientPinClientTests
     [TestMethod]
     public async Task ThrowsFido2FormatExceptionOnEmptyResponse()
     {
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, MemoryPool<byte> pool, CancellationToken cancellationToken) =>
+        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes(ReadOnlySpan<byte>.Empty, pool, Fido2BufferTags.CtapResponseEnvelope));
 
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.GetUvRetries);

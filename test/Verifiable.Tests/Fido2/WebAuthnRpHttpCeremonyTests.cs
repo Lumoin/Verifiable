@@ -51,7 +51,7 @@ internal sealed class WebAuthnRpHttpCeremonyTests
     [TestMethod]
     public async Task RegistrationThenAssertionSucceedOverRealHttpAndApduTransports()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         var skin = new WebAuthnRelyingPartyCeremonySkin(
@@ -81,7 +81,7 @@ internal sealed class WebAuthnRpHttpCeremonyTests
     [TestMethod]
     public async Task TamperedAssertionSignatureFailsVerificationWithExactShape()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         var skin = new WebAuthnRelyingPartyCeremonySkin(
@@ -110,7 +110,7 @@ internal sealed class WebAuthnRpHttpCeremonyTests
     [TestMethod]
     public async Task MalformedEnvelopeAtAssertionResultReturnsExactBadRequestShape()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         var skin = new WebAuthnRelyingPartyCeremonySkin(
@@ -145,7 +145,7 @@ internal sealed class WebAuthnRpHttpCeremonyTests
     [TestMethod]
     public async Task RequestFailsStructurallyOnceTheHostStops()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         var skin = new WebAuthnRelyingPartyCeremonySkin(
@@ -192,7 +192,7 @@ internal sealed class WebAuthnRpHttpCeremonyTests
     /// as <c>RegistrationResponseJSON</c>, and POSTs it back, asserting the RP accepts it.
     /// </summary>
     private static async Task RegisterOverRealTransportsAsync(
-        HttpClient httpClient, CtapWave2TransportHarness harness, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        HttpClient httpClient, CtapWave2TransportHarness harness, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using HttpResponseMessage optionsResponse = await PostAsync(
             httpClient, WebAuthnRelyingPartyCeremonySkin.AttestationOptionsPath, jsonBody: null, cancellationToken).ConfigureAwait(false);
@@ -239,7 +239,7 @@ internal sealed class WebAuthnRpHttpCeremonyTests
     /// back, returning the raw HTTP response for the caller to assert on.
     /// </summary>
     private static async Task<HttpResponseMessage> AssertOverRealTransportsAsync(
-        HttpClient httpClient, CtapWave2TransportHarness harness, MemoryPool<byte> pool, bool tamperSignature, CancellationToken cancellationToken)
+        HttpClient httpClient, CtapWave2TransportHarness harness, BaseMemoryPool pool, bool tamperSignature, CancellationToken cancellationToken)
     {
         using HttpResponseMessage optionsResponse = await PostAsync(
             httpClient, WebAuthnRelyingPartyCeremonySkin.AssertionOptionsPath, jsonBody: null, cancellationToken).ConfigureAwait(false);

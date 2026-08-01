@@ -46,7 +46,7 @@ internal sealed class TpmInHouseSimulatorNameAlgTests
     [DataRow(TpmAlgIdConstants.TPM_ALG_SHA512, 64)]
     public async Task CreatePrimaryRecomputesNameForEachSupportedNameAlg(TpmAlgIdConstants nameAlg, int digestSize)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -69,7 +69,7 @@ internal sealed class TpmInHouseSimulatorNameAlgTests
     [TestMethod]
     public async Task CreatePrimaryWithSha1NameAlgSucceeds()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -87,7 +87,7 @@ internal sealed class TpmInHouseSimulatorNameAlgTests
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of inPublic and the sensitive-create buffer transfers to input, which is disposed by its using declaration.")]
     public async Task CreatePrimaryWithUnsupportedNameAlgReturnsHash()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -124,7 +124,7 @@ internal sealed class TpmInHouseSimulatorNameAlgTests
     /// <returns>The CreatePrimary response.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of inPublic and the sensitive-create buffer transfers to input, which is disposed by its using declaration.")]
     private async Task<CreatePrimaryResponse> CreatePrimaryWithNameAlgAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmAlgIdConstants nameAlg)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmAlgIdConstants nameAlg)
     {
         TpmaObject objectAttributes =
             TpmaObject.FIXED_TPM | TpmaObject.FIXED_PARENT | TpmaObject.SENSITIVE_DATA_ORIGIN | TpmaObject.USER_WITH_AUTH | TpmaObject.SIGN_ENCRYPT | TpmaObject.NO_DA;
@@ -150,7 +150,7 @@ internal sealed class TpmInHouseSimulatorNameAlgTests
     /// <param name="outPublic">The exported public area.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The marshaled TPMT_PUBLIC bytes.</returns>
-    private static byte[] MarshalPublicArea(Tpm2bPublic outPublic, MemoryPool<byte> pool)
+    private static byte[] MarshalPublicArea(Tpm2bPublic outPublic, BaseMemoryPool pool)
     {
         int size = outPublic.PublicArea.GetSerializedSize();
         using IMemoryOwner<byte> owner = pool.Rent(size);
@@ -170,7 +170,7 @@ internal sealed class TpmInHouseSimulatorNameAlgTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The digest.</returns>
-    private static async Task<byte[]> ComputeDigestAsync(ReadOnlyMemory<byte> message, TpmAlgIdConstants nameAlg, int digestSize, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<byte[]> ComputeDigestAsync(ReadOnlyMemory<byte> message, TpmAlgIdConstants nameAlg, int digestSize, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         Tag tag = nameAlg switch
         {
@@ -194,7 +194,7 @@ internal sealed class TpmInHouseSimulatorNameAlgTests
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator("tpm-in-house-namealg", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -209,7 +209,7 @@ internal sealed class TpmInHouseSimulatorNameAlgTests
     /// </summary>
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();

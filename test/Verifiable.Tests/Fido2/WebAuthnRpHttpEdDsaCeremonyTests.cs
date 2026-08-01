@@ -62,7 +62,7 @@ internal sealed class WebAuthnRpHttpEdDsaCeremonyTests
     [TestMethod]
     public async Task EdDsaFirstOfferIsHonouredByAnEdDsaOnlyAuthenticatorAndAcceptedByTheDerivedAllowedAlgorithms()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         var skin = new WebAuthnRelyingPartyCeremonySkin(
@@ -146,7 +146,7 @@ internal sealed class WebAuthnRpHttpEdDsaCeremonyTests
     /// through the registered production seam, not merely that registration parsed the public key.
     /// </summary>
     private static async Task AssertOverRealTransportsAsync(
-        HttpClient httpClient, CtapWave2TransportHarness harness, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        HttpClient httpClient, CtapWave2TransportHarness harness, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using HttpResponseMessage optionsResponse = await PostAsync(
             httpClient, WebAuthnRelyingPartyCeremonySkin.AssertionOptionsPath, jsonBody: null, cancellationToken).ConfigureAwait(false);

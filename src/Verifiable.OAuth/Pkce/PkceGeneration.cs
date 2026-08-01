@@ -50,7 +50,7 @@ public static class PkceGeneration
     /// </returns>
     public static PkceParameters Generate(
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
         ArgumentNullException.ThrowIfNull(pool);

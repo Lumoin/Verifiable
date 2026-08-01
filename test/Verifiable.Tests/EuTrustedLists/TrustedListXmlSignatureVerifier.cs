@@ -41,7 +41,7 @@ namespace Verifiable.Cryptography.Pki.Xml;
 /// </para>
 /// <para>
 /// <strong>Fail-closed hash algorithm handling.</strong> The certificate-digest hash inside the
-/// <c>SigningCertificate</c> binding is computed through <see cref="CryptographicKeyEvents.ComputeDigestAsync(ReadOnlyMemory{byte},int,Tag,MemoryPool{byte},System.Collections.Frozen.FrozenDictionary{string,object}?,string?,CancellationToken)"/> —
+/// <c>SigningCertificate</c> binding is computed through <see cref="CryptographicKeyEvents.ComputeDigestAsync(ReadOnlyMemory{byte},int,Tag,BaseMemoryPool,System.Collections.Frozen.FrozenDictionary{string,object}?,string?,CancellationToken)"/> —
 /// the registered digest seam, never a direct <c>System.Security.Cryptography.SHA256</c> call — exactly as
 /// <see cref="CAdESVerification"/>'s own <c>signing-certificate-v2</c> check does; an algorithm this seam does
 /// not recognise fails closed as <see cref="TrustedListSignatureStatus.UnsupportedHashAlgorithm"/> rather than
@@ -79,7 +79,7 @@ public static class TrustedListXmlSignatureVerifier
     public static async ValueTask<TrustedListSignatureVerificationResult> VerifyAsync(
         PooledMemory document,
         IReadOnlyList<PkiCertificateMemory> trustAnchors,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(document);
@@ -211,7 +211,7 @@ public static class TrustedListXmlSignatureVerifier
     /// CMS. Also reads the optional <c>xades:SigningTime</c>.
     /// </summary>
     private static async ValueTask<(TrustedListSignatureStatus Status, string? Reason, DateTimeOffset? SigningTime)> VerifySigningCertificateBindingAsync(
-        XmlElement signatureElement, X509Certificate2 signerCertificate, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        XmlElement signatureElement, X509Certificate2 signerCertificate, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         XmlNamespaceManager namespaceManager = new(signatureElement.OwnerDocument!.NameTable);
         namespaceManager.AddNamespace("xades", XadesNamespace);

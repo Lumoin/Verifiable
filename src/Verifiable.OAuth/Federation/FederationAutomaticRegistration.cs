@@ -98,7 +98,7 @@ public static class FederationAutomaticRegistration
         ValidateTrustChainAsyncDelegate validateChain,
         EvaluateMetadataPolicyDelegate metadataPolicyEvaluator,
         ApplyMetadataPolicyDelegate metadataPolicyApplicator,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(trustChainValues);

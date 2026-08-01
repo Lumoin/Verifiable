@@ -71,7 +71,7 @@ public static class DidCommFromPriorExtensions
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(priorSigningKey);
@@ -100,7 +100,7 @@ public static class DidCommFromPriorExtensions
     /// registry-resolving overload above delegates here after resolving the function from
     /// <paramref name="priorSigningKey"/>'s <see cref="SensitiveData.Tag"/>.
     /// </summary>
-    /// <inheritdoc cref="PackFromPriorAsync(DidCommMessage, string, string, PrivateKeyMemory, DateTimeOffset, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, MemoryPool{byte}, CancellationToken)"/>
+    /// <inheritdoc cref="PackFromPriorAsync(DidCommMessage, string, string, PrivateKeyMemory, DateTimeOffset, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/>
     /// <param name="signingDelegate">The signing function to use.</param>
     public static async ValueTask PackFromPriorAsync(
         this DidCommMessage message,
@@ -112,7 +112,7 @@ public static class DidCommFromPriorExtensions
         JwtPayloadSerializer payloadSerializer,
         EncodeDelegate base64UrlEncoder,
         SigningDelegate signingDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -218,7 +218,7 @@ public static class DidCommFromPriorExtensions
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -395,7 +395,7 @@ public static class DidCommFromPriorExtensions
     private static IMemoryOwner<byte> RentSigningInput(
         string segment1,
         string segment2,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         out int signingInputLength)
     {
         signingInputLength = checked(segment1.Length + 1 + segment2.Length);

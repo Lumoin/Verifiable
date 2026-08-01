@@ -140,7 +140,7 @@ internal sealed class CredProtectExtensionProcessorTests
     private static async Task<byte[]> MintCredProtectAuthenticatorOutputBytesAsync(int credProtect, CancellationToken cancellationToken)
     {
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator($"credprotect-processor-{credProtect}");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ReadOnlyMemory<byte> extensions = CtapWave2AuthenticatorFixtures.BuildMakeCredentialExtensionsInput(credProtect: credProtect);
         CtapMakeCredentialRequest request = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(pool, extensions: extensions);

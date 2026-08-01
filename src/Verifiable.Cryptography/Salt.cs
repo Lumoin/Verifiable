@@ -77,7 +77,7 @@ public sealed class Salt(IMemoryOwner<byte> sensitiveMemory, Tag tag, Activity? 
     /// <summary>
     /// A sensible general-purpose salt length in bytes (16 bytes = 128 bits) —
     /// NIST SP 800-132's 128-bit minimum for salts. A convenience default for
-    /// <see cref="Generate(Tag, MemoryPool{byte})"/> and an explicit-provenance
+    /// <see cref="Generate(Tag, BaseMemoryPool)"/> and an explicit-provenance
     /// alternative to a literal length; it is <strong>not</strong> a protocol
     /// rule. Salt is a general primitive — its <see cref="Length"/> flows through
     /// the seams and each consumer decides whether a length is sufficient against
@@ -108,7 +108,7 @@ public sealed class Salt(IMemoryOwner<byte> sensitiveMemory, Tag tag, Activity? 
         Tag tag,
         FillEntropyDelegate fillEntropy,
         EntropyHealthObservation health,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         Activity? lifetime = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(byteLength, 0);
@@ -161,7 +161,7 @@ public sealed class Salt(IMemoryOwner<byte> sensitiveMemory, Tag tag, Activity? 
         HashFunctionDelegate hashFunction,
         int outputByteLength,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         Activity? lifetime = null)
     {
         ArgumentNullException.ThrowIfNull(hashFunction);

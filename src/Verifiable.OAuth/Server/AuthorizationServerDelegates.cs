@@ -1434,7 +1434,7 @@ public delegate ValueTask DeliverBackChannelLogoutDelegate(
 /// (the PDP identifier, the chain-resolved endpoint URLs, and any
 /// <c>capabilities</c>); the application signs it with its own key and
 /// algorithm — e.g. via <c>Verifiable.JCose</c>
-/// <see cref="Verifiable.JCose.Jose.SignAsync{TJwtPart}(TJwtPart, TJwtPart, Verifiable.JCose.JwtPartEncoder{TJwtPart}, Verifiable.JCose.EncodeDelegate, Verifiable.Cryptography.PrivateKeyMemory, System.Buffers.MemoryPool{byte}, System.Threading.CancellationToken)"/> —
+/// <see cref="Verifiable.JCose.Jose.SignAsync{TJwtPart}(TJwtPart, TJwtPart, Verifiable.JCose.JwtPartEncoder{TJwtPart}, Verifiable.JCose.EncodeDelegate, Verifiable.Cryptography.PrivateKeyMemory, System.Buffers.BaseMemoryPool, System.Threading.CancellationToken)"/> —
 /// and returns the compact JWS. The application MUST add the spec-required
 /// <c>iss</c> claim (the PDP identifier, available as
 /// <c>policy_decision_point</c> in <paramref name="metadata"/>).

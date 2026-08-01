@@ -40,7 +40,7 @@ public static class CtapAuthenticatorGetNextAssertionClient
     public static async ValueTask<CtapGetAssertionResponse> GetNextAssertionAsync(
         Ctap2TransceiveDelegate transceive,
         DecodeCtapGetAssertionResponseDelegate decodeResponse,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(transceive);

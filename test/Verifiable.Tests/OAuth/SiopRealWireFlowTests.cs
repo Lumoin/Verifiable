@@ -56,7 +56,7 @@ internal sealed class SiopRealWireFlowTests
     /// <summary>
     /// The shared memory pool backing every pooled carrier these capstones allocate.
     /// </summary>
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     /// <summary>
     /// The Relying Party's client identifier, registered with the host and asserted as the

@@ -78,7 +78,7 @@ public static class PeerDidGenerator
         DidDocument inputDocument,
         PeerDidDocumentSerializer documentSerializer,
         HashFunctionDelegate hashFunction,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(inputDocument);
         ArgumentNullException.ThrowIfNull(documentSerializer);
@@ -253,7 +253,7 @@ public static class PeerDidGenerator
     public static string GenerateNumalgo2(
         IReadOnlyList<PeerDidPurposedKey> keys,
         IReadOnlyList<Service> services,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(keys);
         ArgumentNullException.ThrowIfNull(services);

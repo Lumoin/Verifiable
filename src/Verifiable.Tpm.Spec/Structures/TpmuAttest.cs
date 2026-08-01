@@ -205,7 +205,7 @@ public sealed class TpmuAttest: IDisposable
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed attestation body.</returns>
     /// <exception cref="NotSupportedException">Thrown when <paramref name="type"/> is not a supported attestation type.</exception>
-    public static TpmuAttest Parse(TpmStConstants type, ref TpmReader reader, MemoryPool<byte> pool)
+    public static TpmuAttest Parse(TpmStConstants type, ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

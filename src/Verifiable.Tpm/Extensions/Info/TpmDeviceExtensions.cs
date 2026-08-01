@@ -41,7 +41,7 @@ public static class TpmDeviceExtensions
 
     private static async ValueTask<TpmResult<TpmInfo>> GetInfoCoreAsync(TpmDevice device, CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_GetCapability, TpmResponseCodec.GetCapability);
@@ -94,7 +94,7 @@ public static class TpmDeviceExtensions
 
     private static async ValueTask<TpmResult<TpmIdentity>> GetIdentityAsync(
         TpmDevice device,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TpmResponseRegistry registry,
         CancellationToken cancellationToken)
     {
@@ -178,7 +178,7 @@ public static class TpmDeviceExtensions
 
     private static async ValueTask<TpmResult<List<string>>> GetSupportedAlgorithmsAsync(
         TpmDevice device,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TpmResponseRegistry registry,
         CancellationToken cancellationToken)
     {
@@ -209,7 +209,7 @@ public static class TpmDeviceExtensions
 
     private static async ValueTask<TpmResult<List<string>>> GetSupportedCurvesAsync(
         TpmDevice device,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TpmResponseRegistry registry,
         CancellationToken cancellationToken)
     {

@@ -352,7 +352,7 @@ public sealed class EvidenceRecord: SensitiveMemory, IEquatable<EvidenceRecord>
         IReadOnlyList<AlgorithmIdentifier> digestAlgorithms,
         IReadOnlyList<CmsAttribute>? cryptoInfos,
         IReadOnlyList<ReadOnlyMemory<byte>> archiveTimeStampChains,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(digestAlgorithms);
         ArgumentNullException.ThrowIfNull(archiveTimeStampChains);
@@ -442,7 +442,7 @@ public sealed class EvidenceRecord: SensitiveMemory, IEquatable<EvidenceRecord>
     /// <exception cref="ArgumentNullException">When <paramref name="pool"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">When <paramref name="encodedValue"/> is empty.</exception>
     /// <exception cref="AsnContentException">When the octets are not a well-formed DER <c>EvidenceRecord</c>, carry trailing octets, or exceed the bounds this type reads within.</exception>
-    public static EvidenceRecord Read(ReadOnlySpan<byte> encodedValue, MemoryPool<byte> pool)
+    public static EvidenceRecord Read(ReadOnlySpan<byte> encodedValue, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         if(encodedValue.IsEmpty)

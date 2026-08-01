@@ -39,5 +39,5 @@ namespace Verifiable.Cryptography.Aead;
 public delegate ValueTask<SymmetricKeyMemory> KeyUnwrapDelegate(
     SymmetricKeyMemory keyEncryptionKey,
     ReadOnlyMemory<byte> wrappedKey,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);

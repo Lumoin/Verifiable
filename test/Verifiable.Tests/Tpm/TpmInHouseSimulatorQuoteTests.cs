@@ -69,7 +69,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     [TestMethod]
     public async Task EcdsaP256QuoteVerifiesAgainstInHouseSimulator()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -136,7 +136,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     [TestMethod]
     public async Task QuoteVerifiesThroughTheCryptographyVerificationSeam()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -164,7 +164,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     [TestMethod]
     public async Task QuoteReplaysAsACryptoProofLogEntry()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -202,7 +202,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     [TestMethod]
     public async Task QuoteWithUnknownSignKeyReturnsHandle()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -232,7 +232,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     [TestMethod]
     public async Task RsaQuoteVerifiesAgainstInHouseSimulator()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -257,7 +257,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     [TestMethod]
     public async Task QuoteWithSchemeMismatchedToSignerKeyTypeReturnsScheme()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -282,7 +282,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     [TestMethod]
     public async Task QuoteWithNonSigningKeyReturnsKey()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -307,7 +307,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     [TestMethod]
     public async Task QuoteWithOversizedQualifyingDataReturnsSize()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -343,7 +343,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     [TestMethod]
     public async Task RsaQuoteWithSha384SchemeHashVerifies()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -373,7 +373,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     /// <param name="schemeHashAlg">The scheme hash algorithm to quote and verify under.</param>
     /// <param name="usePss">When <see langword="true"/>, quotes and verifies RSAPSS; otherwise RSASSA (PKCS#1 v1.5).</param>
     private async Task QuoteAndVerifyRsaAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, CreatePrimaryResponse ak, RSAParameters rsaParameters, TpmAlgIdConstants schemeHashAlg, bool usePss)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, CreatePrimaryResponse ak, RSAParameters rsaParameters, TpmAlgIdConstants schemeHashAlg, bool usePss)
     {
         using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
         using TpmlPcrSelection pcrSelection = TpmlPcrSelection.Create(PcrBank, PcrIndices, pool);
@@ -436,7 +436,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     /// <param name="hierarchy">The hierarchy under which to create the key.</param>
     /// <returns>The CreatePrimary response.</returns>
     private async Task<CreatePrimaryResponse> CreateSigningPrimaryAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmRh hierarchy)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForEccSigningKey(
             hierarchy,
@@ -465,7 +465,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     /// <param name="hierarchy">The hierarchy under which to create the key.</param>
     /// <returns>The CreatePrimary response.</returns>
     private async Task<CreatePrimaryResponse> CreateRsaSigningPrimaryAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmRh hierarchy)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForRsaSigningKey(
             hierarchy, password: null, keyBits: Rsa2048KeyBits, TpmtRsaScheme.Null, pool, noDa: true);
@@ -488,7 +488,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     /// <param name="hierarchy">The hierarchy under which to create the parent.</param>
     /// <returns>The CreatePrimary response.</returns>
     private async Task<CreatePrimaryResponse> CreateStorageParentAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmRh hierarchy)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForEccStorageParent(
             hierarchy, authPassword: null, TpmEccCurveConstants.TPM_ECC_NIST_P256, pool, noDa: true);
@@ -510,7 +510,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="signHandle">The signing (attestation) key handle.</param>
     /// <returns>The Quote response.</returns>
-    private async Task<QuoteResponse> QuoteAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmiDhObject signHandle)
+    private async Task<QuoteResponse> QuoteAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmiDhObject signHandle)
     {
         using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
         using TpmlPcrSelection pcrSelection = TpmlPcrSelection.Create(PcrBank, PcrIndices, pool);
@@ -535,7 +535,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="hashAlg">The scheme hash algorithm the quote was signed under.</param>
     /// <returns>The expected composite PCR digest.</returns>
-    private async Task<byte[]> ReadAndComputePcrCompositeAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmAlgIdConstants hashAlg)
+    private async Task<byte[]> ReadAndComputePcrCompositeAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmAlgIdConstants hashAlg)
     {
         using PcrReadInput input = PcrReadInput.ForPcrs(PcrBank, PcrIndices, pool);
         TpmResult<PcrReadResponse> result = await TpmCommandExecutor.ExecuteAsync<PcrReadResponse>(
@@ -571,7 +571,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator(
             "tpm-in-house-quote",
@@ -589,7 +589,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     /// </summary>
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
@@ -629,7 +629,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The 32-byte digest.</returns>
-    private static async Task<byte[]> ComputeSha256Async(ReadOnlyMemory<byte> message, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<byte[]> ComputeSha256Async(ReadOnlyMemory<byte> message, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         Tag tag = Tag.Create(HashAlgorithmName.SHA256)
             .With(Purpose.Digest)
@@ -656,7 +656,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The digest, sized for <paramref name="hashAlg"/>.</returns>
-    private static async Task<byte[]> ComputeDigestAsync(ReadOnlyMemory<byte> message, TpmAlgIdConstants hashAlg, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<byte[]> ComputeDigestAsync(ReadOnlyMemory<byte> message, TpmAlgIdConstants hashAlg, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         (int outputByteLength, HashAlgorithmName algorithmName) = hashAlg switch
         {
@@ -707,7 +707,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The recomputed Qualified Name.</returns>
-    private static async Task<byte[]> ComputeQualifiedNameAsync(uint hierarchy, ReadOnlyMemory<byte> name, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<byte[]> ComputeQualifiedNameAsync(uint hierarchy, ReadOnlyMemory<byte> name, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ushort nameAlg = BinaryPrimitives.ReadUInt16BigEndian(name.Span[..sizeof(ushort)]);
         Assert.AreEqual((ushort)TpmAlgIdConstants.TPM_ALG_SHA256, nameAlg, "This test assumes a SHA-256 nameAlg.");

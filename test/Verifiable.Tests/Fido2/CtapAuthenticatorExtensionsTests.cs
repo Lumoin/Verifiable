@@ -50,7 +50,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     public async Task MakeCredentialWithCredProtectAloneEmitsOnlyCredProtectKeyWithRequestedLevel()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-credprotect-alone");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ReadOnlyMemory<byte> extensions = BuildMakeCredentialExtensionsInput(credProtect: 2);
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, extensions: extensions);
@@ -79,7 +79,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     public async Task MakeCredentialWithMinPinLengthAloneForAuthorizedRpEmitsOnlyMinPinLengthKeyAndNeverCredProtect()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-minpinlength-alone");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
         await AuthorizeRpForMinPinLengthAsync(simulator, pool, protocolId, [DefaultRpId], TestContext.CancellationToken);
@@ -109,7 +109,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     public async Task MakeCredentialWithMinPinLengthForUnauthorizedRpReturnsOkWithNoExtensionsOutput()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-minpinlength-unauthorized");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ReadOnlyMemory<byte> extensions = BuildMakeCredentialExtensionsInput(minPinLength: true);
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, extensions: extensions);
@@ -128,7 +128,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     public async Task MakeCredentialWithBothExtensionsRequestedAndAuthorizedEmitsBothKeysInCanonicalOrder()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-both-extensions");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
         await AuthorizeRpForMinPinLengthAsync(simulator, pool, protocolId, [DefaultRpId], TestContext.CancellationToken);
@@ -157,7 +157,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     public async Task MakeCredentialWithInvalidCredProtectValueReturnsInvalidParameter(int illegalCredProtect)
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator($"ext-mc-credprotect-invalid-{illegalCredProtect}");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ReadOnlyMemory<byte> extensions = BuildMakeCredentialExtensionsInput(credProtect: illegalCredProtect);
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, extensions: extensions);
@@ -172,7 +172,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     public async Task MakeCredentialWithNoExtensionsRequestedProducesNoExtensionDataFlag()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-no-extensions");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool);
         using PooledMemory response = await SendMakeCredentialAsync(simulator, request, pool, TestContext.CancellationToken);
@@ -191,7 +191,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     public async Task MakeCredentialExcludeListMatchAtDefaultLevelIsExcludedUnconditionally()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-exclude-level1");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapWave2RegisteredCredential registered = await RegisterCredentialAsync(simulator, pool, BuildFixedBytes(16, 0xC0), TestContext.CancellationToken);
 
@@ -210,7 +210,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     public async Task MakeCredentialExcludeListMatchAtLevelTwoIsExcludedUnconditionally()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-exclude-level2");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapWave2RegisteredCredential registered = await RegisterCredentialAsync(
             simulator, pool, BuildFixedBytes(16, 0xC2), TestContext.CancellationToken, credProtect: 2);
@@ -230,7 +230,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     public async Task MakeCredentialExcludeListMatchAtLevelThreeWithUvCollectedIsExcluded()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-exclude-level3-uv");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
         CtapWave2RegisteredCredential registered = await RegisterCredentialAsync(
@@ -260,7 +260,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     public async Task MakeCredentialExcludeListMatchAtLevelThreeWithoutUvSucceeds()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-exclude-level3-no-uv");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapWave2RegisteredCredential registered = await RegisterCredentialAsync(
             simulator, pool, BuildFixedBytes(16, 0xC6), TestContext.CancellationToken, credProtect: 3);
@@ -286,7 +286,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     public async Task MakeCredentialExcludeListExemptedLevelThreeFirstThenLevelOneSecondStillExcludes()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-mc-exclude-level3-then-level1");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapWave2RegisteredCredential levelThree = await RegisterCredentialAsync(
             simulator, pool, BuildFixedBytes(16, 0xC8), TestContext.CancellationToken, credProtect: 3);
@@ -314,7 +314,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     {
         const string rpId = "ext-ga-level2.example";
         using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-ga-level2");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapWave2RegisteredCredential registered = await RegisterCredentialAsync(
             simulator, pool, BuildFixedBytes(16, 0xD0), TestContext.CancellationToken, rpId: rpId, credProtect: 2);
@@ -341,7 +341,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     {
         const string rpId = "ext-ga-level3.example";
         using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-ga-level3");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
         CtapWave2RegisteredCredential registered = await RegisterCredentialAsync(
@@ -401,7 +401,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     {
         const string rpId = "ext-ga-level1.example";
         using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-ga-level1");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xD4), TestContext.CancellationToken, rpId: rpId);
 
@@ -420,7 +420,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
     public async Task SetMinPinLengthAuthorizedRpLosesAuthorizationAfterReset()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("ext-minpinlength-reset-clears");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
         await AuthorizeRpForMinPinLengthAsync(simulator, pool, protocolId, [DefaultRpId], TestContext.CancellationToken);
@@ -452,7 +452,7 @@ internal sealed class CtapAuthenticatorExtensionsTests
 
     /// <summary>Establishes a PIN, issues an <c>acfg</c>-permission token, and calls <c>setMinPINLength</c> naming <paramref name="rpIds"/> as the authorized <c>minPinLengthRPIDs</c> list.</summary>
     private static async Task AuthorizeRpForMinPinLengthAsync(
-        CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string[] rpIds, CancellationToken cancellationToken)
+        CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string[] rpIds, CancellationToken cancellationToken)
     {
         await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, cancellationToken);
         byte[] token = await CtapWaveConfigFixtures.IssueTokenAsync(
@@ -476,12 +476,12 @@ internal sealed class CtapAuthenticatorExtensionsTests
 
 
     /// <summary>Computes the platform-side mc <c>pinUvAuthParam</c>: <c>authenticate(token, clientDataHash)</c>, mirroring the wave-5c binding tests' own helper.</summary>
-    private static async Task<byte[]> ComputeMcSignatureAsync(byte[] token, CtapPinUvAuthProtocolId protocolId, MemoryPool<byte> pool, CancellationToken cancellationToken) =>
+    private static async Task<byte[]> ComputeMcSignatureAsync(byte[] token, CtapPinUvAuthProtocolId protocolId, BaseMemoryPool pool, CancellationToken cancellationToken) =>
         await CtapWaveConfigFixtures.ComputeSignatureAsync(token, protocolId, McClientDataHash, pool, cancellationToken);
 
 
     /// <summary>Computes the platform-side ga <c>pinUvAuthParam</c>: <c>authenticate(token, clientDataHash)</c>, mirroring the wave-5c binding tests' own helper.</summary>
-    private static async Task<byte[]> ComputeGaSignatureAsync(byte[] token, CtapPinUvAuthProtocolId protocolId, MemoryPool<byte> pool, CancellationToken cancellationToken) =>
+    private static async Task<byte[]> ComputeGaSignatureAsync(byte[] token, CtapPinUvAuthProtocolId protocolId, BaseMemoryPool pool, CancellationToken cancellationToken) =>
         await CtapWaveConfigFixtures.ComputeSignatureAsync(token, protocolId, GaClientDataHash, pool, cancellationToken);
 
 

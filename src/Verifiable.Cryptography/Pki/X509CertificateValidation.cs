@@ -152,7 +152,7 @@ public static class X509CertificateValidation
         ValidateCertificateChainAsyncDelegate validateCertificateChain,
         CheckCertificateRevocationStatusAsyncDelegate? checkRevocation,
         DateTimeOffset validationTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signingCertificate);

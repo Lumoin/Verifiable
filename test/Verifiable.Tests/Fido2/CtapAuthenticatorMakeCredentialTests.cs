@@ -39,7 +39,7 @@ internal sealed class CtapAuthenticatorMakeCredentialTests
     public async Task NonResidentRegistrationWithNonePreferenceSucceedsWithAttStmtOmittedAndFaithfulAuthData()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-success-non-resident");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, attestationFormatsPreference: [WellKnownWebAuthnAttestationFormats.None]);
         using PooledMemory response = await SendMakeCredentialAsync(simulator, request, pool, TestContext.CancellationToken);
@@ -77,7 +77,7 @@ internal sealed class CtapAuthenticatorMakeCredentialTests
     public async Task ResidentRegistrationSucceeds()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-success-resident");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         byte[] credentialId = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x41), TestContext.CancellationToken);
 
@@ -96,7 +96,7 @@ internal sealed class CtapAuthenticatorMakeCredentialTests
     public async Task PinUvAuthParamWithSupportedProtocolAndNoPinSetSucceedsWithUvClear()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-pinuv-with-protocol");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> pinUvAuthParamOwner = pool.Rent(16);
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, pinUvAuthParam: pinUvAuthParamOwner.Memory[..16], pinUvAuthProtocol: 1);
@@ -115,7 +115,7 @@ internal sealed class CtapAuthenticatorMakeCredentialTests
     public async Task PinUvAuthParamWithUnsupportedProtocolReturnsInvalidParameter()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-pinuv-unsupported-protocol");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> pinUvAuthParamOwner = pool.Rent(16);
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, pinUvAuthParam: pinUvAuthParamOwner.Memory[..16], pinUvAuthProtocol: 3);
@@ -131,7 +131,7 @@ internal sealed class CtapAuthenticatorMakeCredentialTests
     public async Task PinUvAuthParamWithoutProtocolReturnsMissingParameter()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-pinuv-without-protocol");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using IMemoryOwner<byte> pinUvAuthParamOwner = pool.Rent(16);
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, pinUvAuthParam: pinUvAuthParamOwner.Memory[..16]);
@@ -151,7 +151,7 @@ internal sealed class CtapAuthenticatorMakeCredentialTests
     public async Task UserVerificationTrueReturnsInvalidOption()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-uv-true");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, options: new CtapCommandOptions(UserVerification: true));
         using PooledMemory response = await SendMakeCredentialAsync(simulator, request, pool, TestContext.CancellationToken);
@@ -165,7 +165,7 @@ internal sealed class CtapAuthenticatorMakeCredentialTests
     public async Task UserPresenceFalseReturnsInvalidOption()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-up-false");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, options: new CtapCommandOptions(UserPresence: false));
         using PooledMemory response = await SendMakeCredentialAsync(simulator, request, pool, TestContext.CancellationToken);
@@ -179,7 +179,7 @@ internal sealed class CtapAuthenticatorMakeCredentialTests
     public async Task EnterpriseAttestationPresentReturnsInvalidParameter()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-enterprise-attestation");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, enterpriseAttestation: 1);
         using PooledMemory response = await SendMakeCredentialAsync(simulator, request, pool, TestContext.CancellationToken);
@@ -193,7 +193,7 @@ internal sealed class CtapAuthenticatorMakeCredentialTests
     public async Task ExcludeListMatchForSameRpIdReturnsCredentialExcluded()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-exclude-match");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         byte[] existingCredentialId = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x42), TestContext.CancellationToken);
 
@@ -216,7 +216,7 @@ internal sealed class CtapAuthenticatorMakeCredentialTests
     public async Task ExcludeListMatchForDifferentRpIdDoesNotExclude()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-exclude-different-rp");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         byte[] otherRpCredentialId = await RegisterAndCaptureCredentialIdBytesAsync(
             simulator, pool, BuildFixedBytes(16, 0x44), TestContext.CancellationToken, rpId: "other.example");
@@ -238,7 +238,7 @@ internal sealed class CtapAuthenticatorMakeCredentialTests
     public async Task UnsupportedAlgorithmReturnsUnsupportedAlgorithm()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-unsupported-algorithm");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, alg: WellKnownCoseAlgorithms.Rs256);
         using PooledMemory response = await SendMakeCredentialAsync(simulator, request, pool, TestContext.CancellationToken);
@@ -252,7 +252,7 @@ internal sealed class CtapAuthenticatorMakeCredentialTests
     public async Task NoBackendInjectedReturnsUnsupportedAlgorithm()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulatorWithBackend("mc-no-backend", backend: null);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool);
         using PooledMemory response = await SendMakeCredentialAsync(simulator, request, pool, TestContext.CancellationToken);
@@ -271,7 +271,7 @@ internal sealed class CtapAuthenticatorMakeCredentialTests
     public async Task ResidentRegistrationExceedingCapacityReturnsKeyStoreFull()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-key-store-full", residentCredentialCapacity: 2);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x50), TestContext.CancellationToken);
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x60), TestContext.CancellationToken);
@@ -293,7 +293,7 @@ internal sealed class CtapAuthenticatorMakeCredentialTests
     public async Task MultipleDifferentAccountsAtSameRelyingPartySucceedUnderCapacity()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-multi-account", residentCredentialCapacity: 3);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         byte[] firstCredentialId = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x91), TestContext.CancellationToken);
         byte[] secondCredentialId = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x92), TestContext.CancellationToken);
@@ -311,7 +311,7 @@ internal sealed class CtapAuthenticatorMakeCredentialTests
     public async Task OverwriteAtFullCapacityStillSucceeds()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-overwrite-at-capacity", residentCredentialCapacity: 1);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] userId = BuildFixedBytes(16, 0xA1);
 
         byte[] firstCredentialId = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, userId, TestContext.CancellationToken);
@@ -331,7 +331,7 @@ internal sealed class CtapAuthenticatorMakeCredentialTests
     public async Task ResidentRegistrationForSameUserOverwritesAndRemovesOldCredentialId()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-overwrite");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] userId = BuildFixedBytes(16, 0x70);
 
         byte[] firstCredentialId = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, userId, TestContext.CancellationToken);
@@ -359,7 +359,7 @@ internal sealed class CtapAuthenticatorMakeCredentialTests
     public async Task ResidentRegistrationForDifferentUserSucceedsWhenExistingCredentialIsNonResident()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-key-store-not-full-non-resident");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x51), TestContext.CancellationToken, resident: false);
 

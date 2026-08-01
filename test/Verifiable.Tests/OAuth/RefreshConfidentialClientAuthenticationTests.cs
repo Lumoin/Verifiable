@@ -49,7 +49,7 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
 
     private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
     /// <summary>

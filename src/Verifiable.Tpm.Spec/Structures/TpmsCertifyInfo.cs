@@ -98,7 +98,7 @@ public sealed class TpmsCertifyInfo: ITpmWireType, IDisposable
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed certify info.</returns>
-    public static TpmsCertifyInfo Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static TpmsCertifyInfo Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         Tpm2bName name = Tpm2bName.Parse(ref reader, pool);

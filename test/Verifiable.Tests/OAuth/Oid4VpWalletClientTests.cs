@@ -51,7 +51,7 @@ internal sealed class Oid4VpWalletClientTests
 
     private const string IssuerId = SdJwtVpFixture.IssuerId;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private static readonly ImmutableHashSet<CapabilityIdentifier> Oid4VpCapabilities =
         ImmutableHashSet.Create(

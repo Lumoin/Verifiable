@@ -136,7 +136,7 @@ internal sealed class PreservationDigestListTests
         List<ReadOnlyMemory<byte>> dataObjects = DataObjects("first", "second");
 
         using EvidenceRecord record = await MintRecordAsync(dataObjects, authority);
-        using var pool = new PreservationMessageSource.CountingMemoryPool();
+        using MeteredHousePool pool = new();
 
         var digestValues = new List<DigestValue>(dataObjects.Count);
         for(int i = 0; i < dataObjects.Count; ++i)
@@ -145,7 +145,7 @@ internal sealed class PreservationDigestListTests
                 dataObjects[i],
                 RenewalAlgorithm.OutputByteLength,
                 RenewalAlgorithm.DigestTag,
-                pool,
+                pool.Pool,
                 cancellationToken: TestContext.CancellationToken));
         }
 
@@ -155,7 +155,7 @@ internal sealed class PreservationDigestListTests
             DigestValues = digestValues,
             Evidence = new PreservationEvidence
             {
-                Content = PooledMemory.FromBytes(record.AsReadOnlySpan(), pool, PreservationTags.PreservationEvidence),
+                Content = PooledMemory.FromBytes(record.AsReadOnlySpan(), pool.Pool, PreservationTags.PreservationEvidence),
                 ContentForm = PreservationContentForm.BinaryData,
                 FormatId = PreservationFormatWellKnown.EvidenceRecordEvidenceFormat
             }

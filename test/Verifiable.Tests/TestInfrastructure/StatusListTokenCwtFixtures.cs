@@ -25,7 +25,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 internal static class StatusListTokenCwtFixtures
 {
     /// <summary>The shared memory pool backing every pooled carrier this fixture allocates.</summary>
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     /// <summary>The CBOR converter reading and writing the Status List Token Claims Set (§5.2).</summary>
     private static StatusListTokenCborConverter Converter { get; } = new(BaseMemoryPool.Shared);

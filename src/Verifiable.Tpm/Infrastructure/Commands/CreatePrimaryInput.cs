@@ -143,7 +143,7 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
         string? password,
         TpmEccCurveConstants curve,
         TpmtEccScheme scheme,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         bool noDa = false)
     {
         var objectAttributes =
@@ -192,7 +192,7 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
         string? password,
         ushort keyBits,
         TpmtRsaScheme scheme,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         bool noDa = false)
     {
         var objectAttributes =
@@ -251,7 +251,7 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
         TpmRh hierarchy,
         string? authPassword,
         TpmEccCurveConstants curve,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         var inSensitive = string.IsNullOrEmpty(authPassword)
             ? Tpm2bSensitiveCreate.CreateEmpty(pool)
@@ -286,7 +286,7 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
         TpmRh hierarchy,
         string? authPassword,
         TpmEccCurveConstants curve,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         bool noDa = false)
     {
         Tpm2bSensitiveCreate inSensitive = string.IsNullOrEmpty(authPassword)
@@ -327,7 +327,7 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
     /// <param name="hierarchy">The hierarchy under which to create the key (typically <see cref="TpmRh.TPM_RH_ENDORSEMENT"/>).</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>A <see cref="CreatePrimaryInput"/> configured for the standard endorsement key.</returns>
-    public static CreatePrimaryInput ForEndorsementKey(TpmRh hierarchy, MemoryPool<byte> pool)
+    public static CreatePrimaryInput ForEndorsementKey(TpmRh hierarchy, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -365,7 +365,7 @@ public sealed class CreatePrimaryInput: ITpmCommandInput, IDisposable
     /// <param name="hierarchy">The hierarchy under which to create the key (typically <see cref="TpmRh.TPM_RH_ENDORSEMENT"/>).</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>A <see cref="CreatePrimaryInput"/> configured for the standard RSA endorsement key.</returns>
-    public static CreatePrimaryInput ForRsaEndorsementKey(TpmRh hierarchy, MemoryPool<byte> pool)
+    public static CreatePrimaryInput ForRsaEndorsementKey(TpmRh hierarchy, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

@@ -108,7 +108,7 @@ internal static class CAdESSignatureTestFactory
     internal static CmsSignedData EmbedCertificates(
         CmsSignedData signature,
         IReadOnlyList<X509ChainTestRingNode> certificates,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(signature);
         ArgumentNullException.ThrowIfNull(certificates);
@@ -144,7 +144,7 @@ internal static class CAdESSignatureTestFactory
         X509ChainTestRingNode timestampAuthority,
         IReadOnlyList<X509ChainTestRingNode> timestampAuthorityChain,
         DateTimeOffset timestampTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signature);
@@ -183,7 +183,7 @@ internal static class CAdESSignatureTestFactory
         X509ChainTestRingNode timestampAuthority,
         IReadOnlyList<X509ChainTestRingNode> timestampAuthorityChain,
         DateTimeOffset timestampTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         using CmsSignedData baseline = SignBaseline(content, signer, signingTime);
@@ -228,7 +228,7 @@ internal static class CAdESSignatureTestFactory
         X509ChainTestRingNode timestampAuthority,
         IReadOnlyList<X509ChainTestRingNode> timestampAuthorityChain,
         DateTimeOffset generationTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signature);
@@ -280,7 +280,7 @@ internal static class CAdESSignatureTestFactory
         IReadOnlyList<X509ChainTestRingNode> timestampAuthorityChain,
         ReadOnlyMemory<byte> timestampedOctets,
         DateTimeOffset timestampTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signature);
@@ -306,7 +306,7 @@ internal static class CAdESSignatureTestFactory
     /// <param name="pool">The memory pool the carrier is rented from.</param>
     /// <returns>The signature value; the caller disposes it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when a required argument is <see langword="null"/>.</exception>
-    internal static SignedContentMemory ReadSignatureValue(CmsSignedData signature, MemoryPool<byte> pool)
+    internal static SignedContentMemory ReadSignatureValue(CmsSignedData signature, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(signature);
         ArgumentNullException.ThrowIfNull(pool);
@@ -334,7 +334,7 @@ internal static class CAdESSignatureTestFactory
         CmsSignedData signature,
         string attributeOid,
         PkiCertificateMemory token,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         var signedCms = new SignedCms();
         signedCms.Decode(signature.AsReadOnlySpan());

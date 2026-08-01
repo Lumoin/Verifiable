@@ -106,7 +106,7 @@ public static class AsicManifestXmlBinding
     /// <param name="pool">The memory pool digest and extension carriers are rented from.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The parse result.</returns>
-    public static ValueTask<AsicManifestParseResult> ParseAsync(AsicManifestParseContext context, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static ValueTask<AsicManifestParseResult> ParseAsync(AsicManifestParseContext context, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(pool);
@@ -178,7 +178,7 @@ public static class AsicManifestXmlBinding
     /// <param name="pool">The memory pool the produced document's carrier is rented from.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The encoding result.</returns>
-    public static ValueTask<AsicManifestEncodeResult> EncodeAsync(AsicManifestEncodeContext context, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static ValueTask<AsicManifestEncodeResult> EncodeAsync(AsicManifestEncodeContext context, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(pool);
@@ -246,7 +246,7 @@ public static class AsicManifestXmlBinding
     /// <returns>The parse result.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of every carrier built here transfers to the successful AsicManifestParseResult, which the caller disposes; the finally block disposes them on every path that does not transfer.")]
-    private static AsicManifestParseResult ReadManifest(XElement root, AsicManifestParseLimits limits, MemoryPool<byte> pool)
+    private static AsicManifestParseResult ReadManifest(XElement root, AsicManifestParseLimits limits, BaseMemoryPool pool)
     {
         List<AsicDataObjectReference> references = [];
         List<AsicManifestExtension> manifestExtensions = [];
@@ -352,7 +352,7 @@ public static class AsicManifestXmlBinding
     private static (AsicManifestParseStatus Status, AsicDataObjectReference? Reference, string Reason) ReadDataObjectReference(
         XElement referenceElement,
         AsicManifestParseLimits limits,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         string? uri = (string?)referenceElement.Attribute(UriAttributeName);
         if(uri is null)
@@ -451,7 +451,7 @@ public static class AsicManifestXmlBinding
     private static (AsicManifestParseStatus Status, string Reason) ReadExtensions(
         XElement? listElement,
         AsicManifestParseLimits limits,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         List<AsicManifestExtension> into)
     {
         if(listElement is null)
@@ -524,7 +524,7 @@ public static class AsicManifestXmlBinding
     /// of the wrong length can never equal a recomputation and the clause 4.4.4.2 item d comparison is
     /// unconditional — a producer that stated one has stated something no verifier can act on.
     /// </remarks>
-    private static DigestValue? ReadDigestValue(string value, PkiDigestAlgorithm algorithm, MemoryPool<byte> pool)
+    private static DigestValue? ReadDigestValue(string value, PkiDigestAlgorithm algorithm, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(algorithm.OutputByteLength);
         try
@@ -652,7 +652,7 @@ public static class AsicManifestXmlBinding
     /// <param name="root">The <c>ASiCManifest</c> element to write.</param>
     /// <param name="pool">The memory pool the carrier is rented from.</param>
     /// <returns>The produced octets. The caller owns and disposes them.</returns>
-    private static PooledMemory Serialize(XElement root, MemoryPool<byte> pool)
+    private static PooledMemory Serialize(XElement root, BaseMemoryPool pool)
     {
         var writerSettings = new XmlWriterSettings
         {

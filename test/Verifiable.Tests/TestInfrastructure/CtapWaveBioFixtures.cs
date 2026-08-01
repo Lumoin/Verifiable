@@ -28,7 +28,7 @@ internal static class CtapWaveBioFixtures
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The raw response envelope. The caller owns it and must dispose it.</returns>
     public static async Task<PooledMemory> SendBioEnrollmentAsync(
-        CtapAuthenticatorSimulator simulator, CtapBioEnrollmentRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapAuthenticatorSimulator simulator, CtapBioEnrollmentRequest request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] envelope = BuildBioEnrollmentEnvelope(request);
 

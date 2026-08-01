@@ -27,11 +27,11 @@ namespace Verifiable.Tests.Cryptography;
 /// <remarks>
 /// <para>
 /// <strong>Every structure here is produced by the shipped surfaces</strong> — the multi-signer
-/// <see cref="CAdESSignatureCreation.Complete(IReadOnlyList{CAdESSignerCompletion}, IReadOnlyList{PkiCertificateMemory}?, MemoryPool{byte})"/>,
+/// <see cref="CAdESSignatureCreation.Complete(IReadOnlyList{CAdESSignerCompletion}, IReadOnlyList{PkiCertificateMemory}?, BaseMemoryPool)"/>,
 /// the parallel three-phase split
 /// (<see cref="CAdESSignatureCreation.PrepareParallelSignatureAsync"/> /
 /// <see cref="CAdESSignatureCreation.CompleteParallelSignature"/> /
-/// <see cref="CAdESSignatureCreation.AddParallelSignatureAsync(CmsSignedData, PkiCertificateMemory, PrivateKeyMemory, DigestValue?, DateTimeOffset, CryptographicConstraints?, bool, MemoryPool{byte}, CancellationToken, CAdESOptionalSignedAttributes?)"/>),
+/// <see cref="CAdESSignatureCreation.AddParallelSignatureAsync(CmsSignedData, PkiCertificateMemory, PrivateKeyMemory, DigestValue?, DateTimeOffset, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken, CAdESOptionalSignedAttributes?)"/>),
 /// <see cref="CmsSignedDataAugmentation.AddSignerInfo"/> and
 /// <see cref="CmsSignedDataReduction.SelectSigner"/> — over key material from
 /// <see cref="BouncyCastleKeyMaterialCreator"/>, the repository's test-key convention.

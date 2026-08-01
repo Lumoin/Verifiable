@@ -43,7 +43,7 @@ internal sealed class MultiHostHttpLifecycleTests
 
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string IssuerHostName = "issuer";
     private const string IssuerClientId = "https://wallet.client.test";

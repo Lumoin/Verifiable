@@ -72,7 +72,7 @@ internal class HwTpmSessionTests
     [TestMethod]
     public async Task StartAuthSessionCreatesValidSession()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
@@ -113,7 +113,7 @@ internal class HwTpmSessionTests
     [TestMethod]
     public async Task GetRandomWithAuditSessionVerifiesIntegrity()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
@@ -183,7 +183,7 @@ internal class HwTpmSessionTests
     [TestMethod]
     public async Task MultipleCommandsWithSameSessionUpdateNonces()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_StartAuthSession, TpmResponseCodec.StartAuthSession);
@@ -265,7 +265,7 @@ internal class HwTpmSessionTests
         //byte by the deterministic KAT, so a verified, correctly-sized decrypted response is end-to-end proof
         //the host decrypts what the TPM encrypted. The bind object is noDA, so a regression (diverged key) yields
         //TPM_RC_AUTH_FAIL without advancing this box's dictionary-attack counter.
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);
@@ -373,7 +373,7 @@ internal class HwTpmSessionTests
     /// <param name="bindPassword">The bind object's authValue as a password, or <see langword="null"/> for empty auth.</param>
     private async Task RunBoundSessionGetRandomAsync(string? bindPassword)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);
@@ -488,7 +488,7 @@ internal class HwTpmSessionTests
         //refusal to authorize an object without its Name is covered deterministically in TpmCommandExecutorTests;
         //here the real TPM confirms the positive direction end-to-end. The parent is noDA, so a regression that
         //produced a wrong cpHash would return BAD_AUTH without advancing this box's dictionary-attack counter.
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);
         _ = registry.Register(TpmCcConstants.TPM_CC_Create, TpmResponseCodec.CreateObject);
@@ -538,7 +538,7 @@ internal class HwTpmSessionTests
         byte[] parentAuth,
         IReadOnlyList<ReadOnlyMemory<byte>>? handleNames,
         TpmAlgIdConstants sessionAlg,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TpmResponseRegistry registry)
     {
         StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(sessionAlg);

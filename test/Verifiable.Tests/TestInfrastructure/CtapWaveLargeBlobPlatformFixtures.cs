@@ -168,7 +168,7 @@ internal static class CtapWaveLargeBlobPlatformFixtures
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The ciphertext-with-appended-tag bytes and the fresh, random twelve-byte nonce.</returns>
     public static async Task<(byte[] CiphertextWithTag, byte[] Nonce)> EncryptEntryAsync(
-        ReadOnlyMemory<byte> compressedPlaintext, ReadOnlyMemory<byte> largeBlobKey, int origSize, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> compressedPlaintext, ReadOnlyMemory<byte> largeBlobKey, int origSize, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] associatedData = BuildAssociatedData(origSize);
 
@@ -207,7 +207,7 @@ internal static class CtapWaveLargeBlobPlatformFixtures
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The decrypted, DEFLATE-compressed plaintext bytes.</returns>
     public static async Task<byte[]> DecryptEntryAsync(
-        ReadOnlyMemory<byte> ciphertextWithTag, ReadOnlyMemory<byte> nonce, int origSize, ReadOnlyMemory<byte> largeBlobKey, MemoryPool<byte> pool,
+        ReadOnlyMemory<byte> ciphertextWithTag, ReadOnlyMemory<byte> nonce, int origSize, ReadOnlyMemory<byte> largeBlobKey, BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         byte[] associatedData = BuildAssociatedData(origSize);
@@ -251,7 +251,7 @@ internal static class CtapWaveLargeBlobPlatformFixtures
     /// <param name="origSize">The entry's <c>origSize</c> member.</param>
     /// <param name="pool">The memory pool the trailing-hash computation allocates from.</param>
     /// <returns>The complete serialized large-blob array bytes.</returns>
-    public static byte[] BuildSerializedArrayWithSingleEntry(ReadOnlyMemory<byte> ciphertextWithTag, ReadOnlyMemory<byte> nonce, int origSize, MemoryPool<byte> pool)
+    public static byte[] BuildSerializedArrayWithSingleEntry(ReadOnlyMemory<byte> ciphertextWithTag, ReadOnlyMemory<byte> nonce, int origSize, BaseMemoryPool pool)
     {
         var writer = new CborWriter(CborConformanceMode.Ctap2Canonical);
         writer.WriteStartArray(1);
@@ -342,7 +342,7 @@ internal static class CtapWaveLargeBlobPlatformFixtures
     /// <param name="pool">The memory pool the digest computation allocates from.</param>
     /// <param name="payloadLength">The total serialized array length, at least 17.</param>
     /// <returns>The byte-exact, integrity-valid array.</returns>
-    public static byte[] BuildValidSerializedArray(MemoryPool<byte> pool, int payloadLength)
+    public static byte[] BuildValidSerializedArray(BaseMemoryPool pool, int payloadLength)
     {
         byte[] array = new byte[payloadLength];
         array[0] = 0x80;
@@ -374,7 +374,7 @@ internal static class CtapWaveLargeBlobPlatformFixtures
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The raw CTAP2 status byte.</returns>
     public static async Task<byte> SendFragmentAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, ReadOnlyMemory<byte> fragment, int offset, int? length, byte[]? token,
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, ReadOnlyMemory<byte> fragment, int offset, int? length, byte[]? token,
         CtapPinUvAuthProtocolId protocolId, CancellationToken cancellationToken)
     {
         ReadOnlyMemory<byte>? pinUvAuthParam = null;
@@ -410,7 +410,7 @@ internal static class CtapWaveLargeBlobPlatformFixtures
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <exception cref="CtapCommandException">A fragment returned a non-success status.</exception>
     public static async Task WriteSerializedArrayAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, ReadOnlyMemory<byte> fullArray, int fragmentLength, byte[]? token,
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, ReadOnlyMemory<byte> fullArray, int fragmentLength, byte[]? token,
         CtapPinUvAuthProtocolId protocolId, CancellationToken cancellationToken)
     {
         int totalLength = fullArray.Length;
@@ -444,7 +444,7 @@ internal static class CtapWaveLargeBlobPlatformFixtures
     /// <returns>The complete, hash-confirmed serialized large-blob array bytes.</returns>
     /// <exception cref="CtapCommandException">A <c>get</c> request returned a non-success status.</exception>
     /// <exception cref="Fido2FormatException">The read-back array's trailing hash does not match its own preceding bytes (line 7699's own MUST).</exception>
-    public static async Task<byte[]> ReadEntireSerializedArrayAsync(Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public static async Task<byte[]> ReadEntireSerializedArrayAsync(Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         var accumulated = new List<byte>();
         int offset = 0;
@@ -490,7 +490,7 @@ internal static class CtapWaveLargeBlobPlatformFixtures
     /// <param name="protocolId">Which PIN/UV auth protocol <paramref name="token"/> was issued under.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     public static async Task WriteEncryptedEntryAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, ReadOnlyMemory<byte> opaqueData, ReadOnlyMemory<byte> largeBlobKey, int fragmentLength,
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, ReadOnlyMemory<byte> opaqueData, ReadOnlyMemory<byte> largeBlobKey, int fragmentLength,
         byte[]? token, CtapPinUvAuthProtocolId protocolId, CancellationToken cancellationToken)
     {
         byte[] compressed = DeflateCompress(opaqueData.Span);
@@ -511,7 +511,7 @@ internal static class CtapWaveLargeBlobPlatformFixtures
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The recovered plaintext opaque large-blob data.</returns>
     public static async Task<byte[]> ReadAndDecryptEntryAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, ReadOnlyMemory<byte> largeBlobKey, CancellationToken cancellationToken)
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, ReadOnlyMemory<byte> largeBlobKey, CancellationToken cancellationToken)
     {
         byte[] serializedArray = await ReadEntireSerializedArrayAsync(transceive, pool, cancellationToken).ConfigureAwait(false);
         (byte[] ciphertextWithTag, byte[] nonce, int origSize) = DecodeSerializedArraySingleEntry(serializedArray);
@@ -528,7 +528,7 @@ internal static class CtapWaveLargeBlobPlatformFixtures
     /// <param name="serializedArray">The complete serialized large-blob array bytes.</param>
     /// <param name="pool">The memory pool the digest computation allocates from.</param>
     /// <exception cref="Fido2FormatException">The trailing hash does not match.</exception>
-    private static void ConfirmTrailingHash(byte[] serializedArray, MemoryPool<byte> pool)
+    private static void ConfirmTrailingHash(byte[] serializedArray, BaseMemoryPool pool)
     {
         ReadOnlySpan<byte> precedingBytes = serializedArray.AsSpan(0, serializedArray.Length - TrailingHashLength);
         ReadOnlySpan<byte> trailingHash = serializedArray.AsSpan(serializedArray.Length - TrailingHashLength);

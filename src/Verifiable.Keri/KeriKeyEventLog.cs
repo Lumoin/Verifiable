@@ -1,3 +1,4 @@
+using Lumoin.Base;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
@@ -38,7 +39,7 @@ public sealed class KeriReplayValidationContext
     public required ComputeDigestDelegate ComputeDigest { get; init; }
 
     /// <summary>Gets the pool the digest buffers are rented from.</summary>
-    public required MemoryPool<byte> MemoryPool { get; init; }
+    public required BaseMemoryPool MemoryPool { get; init; }
 
     /// <summary>
     /// Gets the resolver for a delegated event's delegating seal, supplied by a caller that has verified the
@@ -91,7 +92,7 @@ public static class KeriKeyEventLog
     /// <returns>The replay context to pass to <see cref="LogReplayer{TState,TOperation,TProof,TContext}.ReplayAsync"/>.</returns>
     public static LogReplayContext<KeriKeyState, KeriKeyEvent, CryptoProof, KeriReplayValidationContext> CreateReplayContext(
         ComputeDigestDelegate computeDigest,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TimeProvider timeProvider,
         DelegationSealResolver? resolveDelegationSeal = null)
     {
@@ -299,7 +300,7 @@ public static class KeriKeyEventLog
     /// with no inverse algorithm-to-code map to drift from it. A list key whose code the seam does not know, or that
     /// is not well-formed CESR, names no verifier and matches nothing (fail closed).
     /// </summary>
-    private static bool SatisfiesThreshold(IReadOnlyList<CryptoProof> verifiedProofs, IReadOnlyList<string?> keyList, KeriThreshold threshold, MemoryPool<byte> pool)
+    private static bool SatisfiesThreshold(IReadOnlyList<CryptoProof> verifiedProofs, IReadOnlyList<string?> keyList, KeriThreshold threshold, BaseMemoryPool pool)
     {
         var signingPositions = new HashSet<int>();
         for(int position = 0; position < keyList.Count; position++)
@@ -312,7 +313,7 @@ public static class KeriKeyEventLog
 
         return threshold.IsSatisfiedBy(signingPositions, keyList.Count);
 
-        static bool SignedByAnyProof(string qualifiedKey, IReadOnlyList<CryptoProof> verifiedProofs, MemoryPool<byte> pool)
+        static bool SignedByAnyProof(string qualifiedKey, IReadOnlyList<CryptoProof> verifiedProofs, BaseMemoryPool pool)
         {
             CesrParsedPrimitive parsedKey;
             try

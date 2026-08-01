@@ -33,7 +33,7 @@ namespace Verifiable.Cryptography;
 /// </para>
 /// <para>
 /// The inner HMAC routes through the registered <see cref="ComputeHmacDelegate"/> via
-/// <see cref="CryptographicKeyEvents.ComputeHmacAsync(ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, int, Tag, MemoryPool{byte}, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>,
+/// <see cref="CryptographicKeyEvents.ComputeHmacAsync(ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, int, Tag, BaseMemoryPool, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>,
 /// so KDFa inherits the same observability and provenance stamping as every other MAC. The function is
 /// asynchronous because the HMAC backend may be hardware-bound. The hash family is carried inline on the
 /// <see cref="Tag"/> via <see cref="HashAlgorithmName"/> rather than a convenience <see cref="CryptoTags"/>
@@ -73,7 +73,7 @@ public static class Kdfa
         ReadOnlyMemory<byte> contextU,
         ReadOnlyMemory<byte> contextV,
         int outputBits,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(label);

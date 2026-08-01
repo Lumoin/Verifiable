@@ -90,7 +90,7 @@ public static class SdJwtVpTokenVerification
         ComputeDigestDelegate computeDigest,
         DecodeDelegate decoder,
         EncodeDelegate encoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CommitmentReuseDetectionSeam? saltReuseSeam,
         CancellationToken cancellationToken)
     {

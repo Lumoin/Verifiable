@@ -116,7 +116,7 @@ public sealed class EfCom
     /// <param name="pool">The memory pool for the file carrier.</param>
     /// <returns>The EF.COM <see cref="ElementaryFile"/>. The caller disposes it.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned ElementaryFile, which the caller disposes; the catch disposes it on failure.")]
-    public static ElementaryFile Write(string ldsVersion, string unicodeVersion, ReadOnlySpan<byte> dataGroupTags, MemoryPool<byte> pool)
+    public static ElementaryFile Write(string ldsVersion, string unicodeVersion, ReadOnlySpan<byte> dataGroupTags, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(ldsVersion);
         ArgumentNullException.ThrowIfNull(unicodeVersion);

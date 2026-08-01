@@ -70,7 +70,7 @@ public sealed class Tpm2bNonce: SensitiveMemory, ITpmWireType
     /// <param name="reader">The reader positioned at the nonce.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed nonce.</returns>
-    public static Tpm2bNonce Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static Tpm2bNonce Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ushort size = reader.ReadUInt16();
@@ -107,7 +107,7 @@ public sealed class Tpm2bNonce: SensitiveMemory, ITpmWireType
     /// </summary>
     /// <param name="pool">The memory pool (unused for empty nonces).</param>
     /// <returns>An empty nonce.</returns>
-    public static Tpm2bNonce CreateEmpty(MemoryPool<byte> pool)
+    public static Tpm2bNonce CreateEmpty(BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         return EmptyInstance;
@@ -119,7 +119,7 @@ public sealed class Tpm2bNonce: SensitiveMemory, ITpmWireType
     /// <param name="bytes">The nonce bytes.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The created nonce.</returns>
-    public static Tpm2bNonce Create(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
+    public static Tpm2bNonce Create(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         if(bytes.IsEmpty)
@@ -139,7 +139,7 @@ public sealed class Tpm2bNonce: SensitiveMemory, ITpmWireType
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>A nonce filled with random data.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Length is zero or negative.</exception>
-    public static Tpm2bNonce CreateRandom(int length, MemoryPool<byte> pool)
+    public static Tpm2bNonce CreateRandom(int length, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         if(length <= 0)

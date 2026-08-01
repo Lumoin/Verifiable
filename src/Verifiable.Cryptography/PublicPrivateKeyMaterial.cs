@@ -9,7 +9,7 @@ namespace Verifiable.Cryptography
     /// <typeparam name="TPrivateKeyMemory">The private key memory type.</typeparam>
     /// <param name="keyDataPool">The memory pool for key data allocation.</param>
     /// <returns>The created key material.</returns>
-    public delegate PublicPrivateKeyMaterial<TPublicKeyMemory, TPrivateKeyMemory> PublicPrivateKeyCreationDelegate<TPublicKeyMemory, TPrivateKeyMemory>(MemoryPool<byte> keyDataPool)
+    public delegate PublicPrivateKeyMaterial<TPublicKeyMemory, TPrivateKeyMemory> PublicPrivateKeyCreationDelegate<TPublicKeyMemory, TPrivateKeyMemory>(BaseMemoryPool keyDataPool)
         where TPublicKeyMemory: PublicKeyMemory
         where TPrivateKeyMemory: PrivateKeyMemory;
 
@@ -22,7 +22,7 @@ namespace Verifiable.Cryptography
     /// <typeparam name="TPrivateKeyMemory">The private key memory type.</typeparam>
     /// <param name="keyDataPool">The memory pool for key data allocation.</param>
     /// <returns>The created key material.</returns>
-    public delegate TPublicPrivateKeyMaterial PublicPrivateKeyCreationDelegateWithPool<TPublicPrivateKeyMaterial, TPublicKeyMemory, TPrivateKeyMemory>(MemoryPool<byte> keyDataPool)
+    public delegate TPublicPrivateKeyMaterial PublicPrivateKeyCreationDelegateWithPool<TPublicPrivateKeyMaterial, TPublicKeyMemory, TPrivateKeyMemory>(BaseMemoryPool keyDataPool)
         where TPublicPrivateKeyMaterial : PublicPrivateKeyMaterial<TPublicKeyMemory, TPrivateKeyMemory>
         where TPublicKeyMemory: PublicKeyMemory
         where TPrivateKeyMemory: PrivateKeyMemory;
@@ -96,7 +96,7 @@ namespace Verifiable.Cryptography
         /// <returns>A transport tuple containing the generated key pair. The caller assumes
         /// ownership of both keys and is responsible for their disposal.</returns>
         public static PublicPrivateKeyMaterial<TPublicKeyMemory, TPrivateKeyMemory> Create<TPublicKeyMemory, TPrivateKeyMemory>(
-            MemoryPool<byte> keyDataPool,
+            BaseMemoryPool keyDataPool,
             PublicPrivateKeyCreationDelegate<TPublicKeyMemory, TPrivateKeyMemory> keyCreator)
             where TPublicKeyMemory: PublicKeyMemory
             where TPrivateKeyMemory: PrivateKeyMemory
@@ -119,7 +119,7 @@ namespace Verifiable.Cryptography
         /// <returns>A transport tuple containing the generated key pair. The caller assumes
         /// ownership of both keys and is responsible for their disposal.</returns>
         public static TPublicPrivateKeyMaterial Create<TPublicPrivateKeyMaterial, TPublicKeyMemory, TPrivateKeyMemory>(
-            MemoryPool<byte> keyDataPool,
+            BaseMemoryPool keyDataPool,
             PublicPrivateKeyCreationDelegateWithPool<TPublicPrivateKeyMaterial, TPublicKeyMemory, TPrivateKeyMemory> keyCreator)
             where TPublicPrivateKeyMaterial : PublicPrivateKeyMaterial<TPublicKeyMemory, TPrivateKeyMemory>
             where TPublicKeyMemory: PublicKeyMemory

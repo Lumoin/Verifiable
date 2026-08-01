@@ -55,7 +55,7 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
     //not a WellKnownJweAlgorithms member, until the IANA registration is final.
     private const string MlKem768JweAlgorithm = "ML-KEM-768";
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private static readonly ImmutableHashSet<CapabilityIdentifier> IssuanceCapabilities =
         ImmutableHashSet.Create(

@@ -235,7 +235,7 @@ public static class OcspResponseVerification
         OcspRequestContent request,
         PkiCertificateMemory issuerCertificate,
         DateTimeOffset validationTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         bool allowResponsesWithoutNextUpdate = false,
         bool allowResponsesWithoutNonce = false,
         CancellationToken cancellationToken = default)
@@ -286,7 +286,7 @@ public static class OcspResponseVerification
         OcspRequestContent request,
         ManagedCertificate issuer,
         DateTimeOffset validationTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         bool allowResponsesWithoutNextUpdate,
         bool allowResponsesWithoutNonce,
         CancellationToken cancellationToken)
@@ -827,7 +827,7 @@ public static class OcspResponseVerification
     /// <param name="cancellationToken">A cancellation token observed by the <c>byKey</c> arm's digest computation.</param>
     /// <returns><see langword="true"/> when <paramref name="candidate"/>'s identity matches.</returns>
     private static async ValueTask<bool> ResponderIdMatches(
-        ManagedCertificate candidate, ReadOnlyMemory<byte>? responderName, ReadOnlyMemory<byte>? responderKeyHash, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ManagedCertificate candidate, ReadOnlyMemory<byte>? responderName, ReadOnlyMemory<byte>? responderKeyHash, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(responderName is { } name)
         {
@@ -858,7 +858,7 @@ public static class OcspResponseVerification
     /// <param name="cancellationToken">A cancellation token observed by each candidate's digest computation.</param>
     /// <returns>The matching candidates, in certificate order; empty when none match.</returns>
     private static async ValueTask<List<ManagedCertificate>> FindMatchingIdentities(
-        IReadOnlyList<ManagedCertificate> embeddedCertificates, ReadOnlyMemory<byte>? responderName, ReadOnlyMemory<byte>? responderKeyHash, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        IReadOnlyList<ManagedCertificate> embeddedCertificates, ReadOnlyMemory<byte>? responderName, ReadOnlyMemory<byte>? responderKeyHash, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         List<ManagedCertificate> matches = [];
         foreach(ManagedCertificate candidate in embeddedCertificates)
@@ -897,7 +897,7 @@ public static class OcspResponseVerification
     /// identifier. Any other key form fails closed to <see langword="false"/>.
     /// </summary>
     private static async ValueTask<bool> VerifySignatureAsync(
-        ReadOnlyMemory<byte> message, string signatureAlgorithmOid, ReadOnlyMemory<byte> signatureValue, ManagedCertificate signer, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> message, string signatureAlgorithmOid, ReadOnlyMemory<byte> signatureValue, ManagedCertificate signer, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(signer.EllipticCurve != EllipticCurveTypes.None)
         {
@@ -963,7 +963,7 @@ public static class OcspResponseVerification
 
     /// <summary>Verifies an ECDSA signature: the DER <c>SEQUENCE {r, s}</c> is converted to fixed width and verified against the signer's public point.</summary>
     private static async ValueTask<bool> VerifyEllipticCurveAsync(
-        ReadOnlyMemory<byte> message, string signatureAlgorithmOid, ReadOnlyMemory<byte> signatureValue, ManagedCertificate signer, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> message, string signatureAlgorithmOid, ReadOnlyMemory<byte> signatureValue, ManagedCertificate signer, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         CryptoAlgorithm? algorithm = EcdsaAlgorithmForOidAndCurve(signatureAlgorithmOid, signer.EllipticCurve);
         if(algorithm is null)
@@ -1042,7 +1042,7 @@ public static class OcspResponseVerification
     /// Converts a DER <c>ECDSA-Sig-Value ::= SEQUENCE { r INTEGER, s INTEGER }</c> to the fixed-width
     /// <c>r ‖ s</c> form the verification seam expects, left-padding each coordinate to the field width.
     /// </summary>
-    private static IMemoryOwner<byte> ConvertDerSignatureToFixedWidth(ReadOnlySpan<byte> derSignature, int fieldWidth, MemoryPool<byte> pool)
+    private static IMemoryOwner<byte> ConvertDerSignatureToFixedWidth(ReadOnlySpan<byte> derSignature, int fieldWidth, BaseMemoryPool pool)
     {
         var reader = new AsnReader(derSignature.ToArray(), AsnEncodingRules.DER);
         AsnReader sequence = reader.ReadSequence();

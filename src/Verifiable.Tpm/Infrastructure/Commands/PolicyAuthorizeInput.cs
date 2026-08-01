@@ -100,7 +100,7 @@ public sealed class PolicyAuthorizeInput: ITpmCommandInput, IDisposable
         ushort checkTicketTag,
         uint checkTicketHierarchy,
         ReadOnlySpan<byte> checkTicketDigest,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

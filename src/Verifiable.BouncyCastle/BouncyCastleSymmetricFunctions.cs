@@ -79,7 +79,7 @@ public static class BouncyCastleSymmetricFunctions
         ReadOnlyMemory<byte> keyBytes,
         ReadOnlyMemory<byte> iv,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
@@ -119,7 +119,7 @@ public static class BouncyCastleSymmetricFunctions
         ReadOnlyMemory<byte> keyBytes,
         ReadOnlyMemory<byte> iv,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
@@ -158,7 +158,7 @@ public static class BouncyCastleSymmetricFunctions
         ReadOnlyMemory<byte> keyBytes,
         int outputByteLength,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
@@ -200,7 +200,7 @@ public static class BouncyCastleSymmetricFunctions
         ReadOnlyMemory<byte> keyBytes,
         ReadOnlyMemory<byte> expectedMac,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
@@ -276,7 +276,7 @@ public static class BouncyCastleSymmetricFunctions
         ReadOnlySpan<byte> iv,
         CryptoAlgorithm algorithm,
         bool forEncryption,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         (IBlockCipher engine, int blockSize) = ResolveBlockCipher(algorithm);
         ValidateKeyLength(algorithm, key.Length);
@@ -327,7 +327,7 @@ public static class BouncyCastleSymmetricFunctions
         ReadOnlySpan<byte> key,
         int outputByteLength,
         CryptoAlgorithm algorithm,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         IMac mac = ResolveMac(algorithm, outputByteLength);
         ValidateKeyLength(algorithm, key.Length);

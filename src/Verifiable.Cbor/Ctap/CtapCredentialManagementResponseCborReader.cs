@@ -33,7 +33,7 @@ public static class CtapCredentialManagementResponseCborReader
     /// <param name="pool">The memory pool the decoded <c>credentialID</c>/<c>user</c> carriers rent from.</param>
     /// <returns>The decoded response model.</returns>
     /// <exception cref="Fido2FormatException"><paramref name="payload"/> is not valid CTAP2 canonical CBOR.</exception>
-    public static CtapCredentialManagementResponse Read(ReadOnlyMemory<byte> payload, MemoryPool<byte> pool)
+    public static CtapCredentialManagementResponse Read(ReadOnlyMemory<byte> payload, BaseMemoryPool pool)
     {
         try
         {

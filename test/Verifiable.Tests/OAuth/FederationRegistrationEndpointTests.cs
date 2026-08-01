@@ -33,7 +33,7 @@ internal sealed class FederationRegistrationEndpointTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string OpEntityId = "https://op.example.com";
     private const string RpEntityId = "https://rp.example.com";

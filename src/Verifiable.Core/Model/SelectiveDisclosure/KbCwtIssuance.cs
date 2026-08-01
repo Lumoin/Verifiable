@@ -78,7 +78,7 @@ public static class KbCwtIssuance
         BuildKbtPayloadDelegate buildPayload,
         BuildSigStructureDelegate buildSigStructure,
         SerializeCoseSign1Delegate serializeCoseSign1,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(presentationToken);

@@ -21,7 +21,7 @@ internal sealed class FederationAutomaticRegistrationTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private static readonly EntityTypeIdentifier RpType =
         WellKnownEntityTypeIdentifiers.OpenIdRelyingParty;

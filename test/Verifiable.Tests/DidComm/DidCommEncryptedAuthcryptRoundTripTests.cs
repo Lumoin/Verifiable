@@ -34,7 +34,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly MemoryPool<byte> Pool = BaseMemoryPool.Shared;
+    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
     private static readonly ExchangeContext Context = new();
@@ -606,7 +606,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
     //material creator, the encrypt/decrypt authenticated agreement pair, and the sender skid (which selects
     //the curve via the keypair). Asserts the recovered plaintext and the authcrypt sender-authentication flags.
     private async Task AssertDelegateRoundTripAsync(
-        Func<MemoryPool<byte>, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
+        Func<BaseMemoryPool, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
         MultiRecipientAuthenticatedKeyAgreementEncryptDelegate encryptAgreement,
         AuthenticatedKeyAgreementDecryptDelegate decryptAgreement,
         string skid)

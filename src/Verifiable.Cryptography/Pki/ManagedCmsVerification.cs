@@ -95,7 +95,7 @@ public static class ManagedCmsVerification
         Justification = "Ownership of the content buffer, certificate memories, and signed-attribute carriers transfers to the returned CmsVerifiedContent, which the caller disposes; the catch disposes them on a partial failure.")]
     public static async ValueTask<CmsVerifiedContent> VerifyCmsSignedDataAsync(
         CmsSignedData signedData,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signedData);
@@ -163,7 +163,7 @@ public static class ManagedCmsVerification
     public static async ValueTask<CmsVerifiedContent> VerifyDetachedCmsSignedDataAsync(
         CmsSignedData signedData,
         SignedContentMemory detachedContent,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signedData);
@@ -201,7 +201,7 @@ public static class ManagedCmsVerification
     /// Verifies the message-digest signed attribute equals the hash of the encapsulated content under the
     /// SignerInfo digest algorithm.
     /// </summary>
-    private static async ValueTask VerifyMessageDigestAsync(ParsedSignedData parsed, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async ValueTask VerifyMessageDigestAsync(ParsedSignedData parsed, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(!TryGetAttributeValue(parsed.Signer.SignedAttributeList, MessageDigestOid, out ReadOnlyMemory<byte> messageDigestValue))
         {
@@ -226,7 +226,7 @@ public static class ManagedCmsVerification
     /// <c>SET OF</c> tag in place of the implicit <c>[0]</c>, RFC 5652 §5.4) against the signer certificate's
     /// public key, through the registered verification function — elliptic-curve, RSA or ML-DSA.
     /// </summary>
-    private static async ValueTask VerifySignatureAsync(SignerInfo signer, ManagedCertificate signerCertificate, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async ValueTask VerifySignatureAsync(SignerInfo signer, ManagedCertificate signerCertificate, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using IMemoryOwner<byte> signedMessage = ReencodeSignedAttributes(signer.SignedAttributes.Span, pool, out int messageLength);
 
@@ -249,7 +249,7 @@ public static class ManagedCmsVerification
     /// Verifies an elliptic-curve (ECDSA) signature: the DER <c>SEQUENCE { r, s }</c> is converted to the
     /// fixed-width <c>r ‖ s</c> the seam expects, and verified against the certificate's public point.
     /// </summary>
-    private static async ValueTask<bool> VerifyEllipticCurveAsync(SignerInfo signer, ManagedCertificate signerCertificate, ReadOnlyMemory<byte> signedMessage, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async ValueTask<bool> VerifyEllipticCurveAsync(SignerInfo signer, ManagedCertificate signerCertificate, ReadOnlyMemory<byte> signedMessage, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         CryptoAlgorithm algorithm = CurveAlgorithm(signerCertificate.EllipticCurve);
         VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, Purpose.Verification);
@@ -380,7 +380,7 @@ public static class ManagedCmsVerification
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the content buffer, certificate memories, and signed-attribute carriers transfers to the returned CmsVerifiedContent; the catch disposes them on a partial failure.")]
-    private static CmsVerifiedContent BuildVerifiedContent(ParsedSignedData parsed, ManagedCertificate signerCertificate, MemoryPool<byte> pool)
+    private static CmsVerifiedContent BuildVerifiedContent(ParsedSignedData parsed, ManagedCertificate signerCertificate, BaseMemoryPool pool)
     {
         var certificates = new List<PkiCertificateMemory>(parsed.Certificates.Count);
         var signedAttributes = new List<CmsSignedAttribute>(parsed.Signer.SignedAttributeList.Count);
@@ -580,7 +580,7 @@ public static class ManagedCmsVerification
     /// universal <c>SET OF</c> tag (RFC 5652 §5.4); the content and length octets are unchanged.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the caller, which disposes it via a using declaration.")]
-    private static IMemoryOwner<byte> ReencodeSignedAttributes(ReadOnlySpan<byte> signedAttributes, MemoryPool<byte> pool, out int length)
+    private static IMemoryOwner<byte> ReencodeSignedAttributes(ReadOnlySpan<byte> signedAttributes, BaseMemoryPool pool, out int length)
     {
         IMemoryOwner<byte> owner = pool.Rent(signedAttributes.Length);
         try
@@ -605,7 +605,7 @@ public static class ManagedCmsVerification
     /// <c>r ‖ s</c> form the verification seam expects, left-padding each coordinate to the field width.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the caller, which disposes it via a using declaration.")]
-    private static IMemoryOwner<byte> ConvertDerSignatureToFixedWidth(ReadOnlySpan<byte> derSignature, int fieldWidth, MemoryPool<byte> pool)
+    private static IMemoryOwner<byte> ConvertDerSignatureToFixedWidth(ReadOnlySpan<byte> derSignature, int fieldWidth, BaseMemoryPool pool)
     {
         var reader = new AsnReader(derSignature.ToArray(), AsnEncodingRules.DER);
         AsnReader sequence = reader.ReadSequence();
@@ -703,7 +703,7 @@ public static class ManagedCmsVerification
     /// <see href="https://www.rfc-editor.org/rfc/rfc5652#section-5.1">RFC 5652 clause 5.1</see> states the
     /// <c>certificates</c> field the octets are read from.
     /// </remarks>
-    private static PkiCertificateMemory ToPkiCertificate(ReadOnlySpan<byte> der, MemoryPool<byte> pool)
+    private static PkiCertificateMemory ToPkiCertificate(ReadOnlySpan<byte> der, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(der.Length);
         der.CopyTo(owner.Memory.Span);
@@ -725,7 +725,7 @@ public static class ManagedCmsVerification
     /// <see href="https://www.rfc-editor.org/rfc/rfc5652#section-5.3">RFC 5652 clause 5.3</see> states the
     /// <c>signedAttrs</c> field the octets are read from.
     /// </remarks>
-    private static CmsSignedAttribute ToSignedAttribute(string oid, ReadOnlySpan<byte> der, MemoryPool<byte> pool)
+    private static CmsSignedAttribute ToSignedAttribute(string oid, ReadOnlySpan<byte> der, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(der.Length);
         der.CopyTo(owner.Memory.Span);

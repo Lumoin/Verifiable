@@ -44,7 +44,7 @@ namespace Verifiable.Libsodium
         /// </summary>
         /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
         /// <returns>A new key pair. The caller is responsible for disposing each key individually.</returns>
-        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateEd25519Keys(MemoryPool<byte> memoryPool)
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateEd25519Keys(BaseMemoryPool memoryPool)
         {
             ArgumentNullException.ThrowIfNull(memoryPool);
             LibsodiumNativeMethods.EnsureInitialized();
@@ -110,7 +110,7 @@ namespace Verifiable.Libsodium
         /// </summary>
         /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
         /// <returns>A new key pair. The caller is responsible for disposing each key individually.</returns>
-        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateX25519Keys(MemoryPool<byte> memoryPool)
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateX25519Keys(BaseMemoryPool memoryPool)
         {
             ArgumentNullException.ThrowIfNull(memoryPool);
             LibsodiumNativeMethods.EnsureInitialized();

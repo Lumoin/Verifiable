@@ -48,7 +48,7 @@ public static class CtapAuthenticatorSnapshotCborWriter
     /// persist a credential whose signing key has no custody-exportable copy (see that property's own
     /// remarks for why the copy exists and which shipped backend populates it).
     /// </exception>
-    public static PooledMemory Write(CtapAuthenticatorState state, MemoryPool<byte> pool)
+    public static PooledMemory Write(CtapAuthenticatorState state, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(pool);

@@ -9,4 +9,4 @@ namespace Verifiable.DidComm.Routing;
 /// </summary>
 /// <param name="memoryPool">The pool the key material is drawn from.</param>
 /// <returns>The ephemeral public/private key pair. The caller disposes both halves.</returns>
-public delegate Verifiable.Cryptography.PublicPrivateKeyMaterial<Verifiable.Cryptography.PublicKeyMemory, Verifiable.Cryptography.PrivateKeyMemory> EphemeralKeyPairFactory(MemoryPool<byte> memoryPool);
+public delegate Verifiable.Cryptography.PublicPrivateKeyMaterial<Verifiable.Cryptography.PublicKeyMemory, Verifiable.Cryptography.PrivateKeyMemory> EphemeralKeyPairFactory(BaseMemoryPool memoryPool);

@@ -176,7 +176,7 @@ public sealed class AtsHashIndexV3: SensitiveMemory, IEquatable<AtsHashIndexV3>
         IReadOnlyList<DigestValue> certificateHashes,
         IReadOnlyList<DigestValue> revocationInformationHashes,
         IReadOnlyList<DigestValue> unsignedAttributeValueHashes,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(certificateHashes);
         ArgumentNullException.ThrowIfNull(revocationInformationHashes);
@@ -231,7 +231,7 @@ public sealed class AtsHashIndexV3: SensitiveMemory, IEquatable<AtsHashIndexV3>
     /// <exception cref="ArgumentNullException">When <paramref name="pool"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">When <paramref name="encodedValue"/> is empty.</exception>
     /// <exception cref="AsnContentException">When the octets are not a well-formed DER <c>ATSHashIndexV3</c>, carry trailing octets, or exceed the bounds this type reads within.</exception>
-    public static AtsHashIndexV3 Read(ReadOnlySpan<byte> encodedValue, MemoryPool<byte> pool)
+    public static AtsHashIndexV3 Read(ReadOnlySpan<byte> encodedValue, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         if(encodedValue.IsEmpty)

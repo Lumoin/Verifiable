@@ -14,7 +14,7 @@ namespace Verifiable.Tests.Fido2;
 /// Firewalled end-to-end hardening battery for <see cref="Fido2AssertionVerifier"/>: exercises the
 /// WebAuthn L3 <see href="https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion">section 7.2</see>
 /// assertion-signature check together with the verifier-level ceremony rules, through the real
-/// <see cref="Fido2AssertionVerifier.VerifyAsync(CoseKey, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, AssertionCeremonyInput, string, MemoryPool{byte}, TimeProvider?, CancellationToken)"/>
+/// <see cref="Fido2AssertionVerifier.VerifyAsync(CoseKey, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, AssertionCeremonyInput, string, BaseMemoryPool, TimeProvider?, CancellationToken)"/>
 /// entry point, complementing <see cref="Fido2AssertionVerifierTests"/>'s algorithm-matrix and
 /// single-axis coverage with adversarial wire-tampering and multi-signal scenarios.
 /// </summary>

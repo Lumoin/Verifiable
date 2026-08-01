@@ -116,7 +116,7 @@ public static class BearerTokenValidation
     /// <summary>
     /// Validates the structure, signature, issuer, and expiry of a bearer access token. Composes
     /// against <see cref="JwsParsing.ParseCompact"/>,
-    /// <see cref="Jws.VerifyAsync(string, DecodeDelegate, MemoryPool{byte}, PublicKeyMemory, CancellationToken)"/>,
+    /// <see cref="Jws.VerifyAsync(string, DecodeDelegate, BaseMemoryPool, PublicKeyMemory, CancellationToken)"/>,
     /// and the AS's wired <see cref="AuthorizationServerCryptography.VerificationKeyResolver"/> /
     /// <see cref="AuthorizationServerCodecs.JwtPayloadDeserializer"/>.
     /// </summary>

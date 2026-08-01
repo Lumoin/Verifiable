@@ -65,7 +65,7 @@ public sealed class SymmetricKey: SensitiveMemoryKey
     public ValueTask<HmacValue> ComputeHmacAsync(
         ReadOnlyMemory<byte> message,
         int outputByteLength,
-        System.Buffers.MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
@@ -82,7 +82,7 @@ public sealed class SymmetricKey: SensitiveMemoryKey
     public ValueTask<bool> VerifyHmacAsync(
         ReadOnlyMemory<byte> message,
         HmacValue expectedMac,
-        System.Buffers.MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
@@ -100,7 +100,7 @@ public sealed class SymmetricKey: SensitiveMemoryKey
     public ValueTask<bool> VerifyHmacAsync(
         ReadOnlyMemory<byte> message,
         ReadOnlyMemory<byte> expectedMacBytes,
-        System.Buffers.MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {

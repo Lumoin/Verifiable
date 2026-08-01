@@ -39,7 +39,7 @@ internal sealed class JarmAuthorizeFlowTests
 
     private const string RequestState = "S8NJ7uqk5fY4EjNvP_G_FtyJu6pUsvH9jsYni9dMAJw";
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private static readonly string[] AllowedAlgorithms = [WellKnownJwaValues.Es256];
 

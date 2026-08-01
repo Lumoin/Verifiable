@@ -43,7 +43,7 @@ public sealed record AuthCodeStartJarParOptions
     public required JwtPayloadSerializer PayloadSerializer { get; init; }
 
     /// <summary>Memory pool for transient signing buffers.</summary>
-    public required MemoryPool<byte> MemoryPool { get; init; }
+    public required BaseMemoryPool MemoryPool { get; init; }
 
     /// <summary>
     /// Open-ended additional outer body fields for the POST to the PAR endpoint

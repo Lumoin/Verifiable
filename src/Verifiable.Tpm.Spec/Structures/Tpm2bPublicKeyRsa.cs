@@ -82,7 +82,7 @@ public readonly struct Tpm2bPublicKeyRsa: IDisposable, IEquatable<Tpm2bPublicKey
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool to allocate from.</param>
     /// <returns>The parsed RSA public key.</returns>
-    public static Tpm2bPublicKeyRsa Parse(ref TpmReader reader, MemoryPool<byte>? pool = null)
+    public static Tpm2bPublicKeyRsa Parse(ref TpmReader reader, BaseMemoryPool? pool = null)
     {
         ushort size = reader.ReadUInt16();
 
@@ -108,7 +108,7 @@ public readonly struct Tpm2bPublicKeyRsa: IDisposable, IEquatable<Tpm2bPublicKey
     /// <param name="modulus">The RSA modulus.</param>
     /// <param name="pool">The memory pool to allocate from.</param>
     /// <returns>The RSA public key.</returns>
-    public static Tpm2bPublicKeyRsa Create(ReadOnlySpan<byte> modulus, MemoryPool<byte>? pool = null)
+    public static Tpm2bPublicKeyRsa Create(ReadOnlySpan<byte> modulus, BaseMemoryPool? pool = null)
     {
         if(modulus.Length > MaxRsaKeyBytes)
         {

@@ -53,7 +53,7 @@ public class PrivateKeyMemory: SensitiveMemory
     public TResult WithKeyBytesAsync<TDataToSign, TResult>(
         SigningFunction<byte, TDataToSign, TResult> operation,
         ReadOnlyMemory<TDataToSign> dataToSign,
-        MemoryPool<byte> signaturePool)
+        BaseMemoryPool signaturePool)
     {
         ArgumentNullException.ThrowIfNull(operation);
         return operation(MemoryOwner.Memory, dataToSign, signaturePool);

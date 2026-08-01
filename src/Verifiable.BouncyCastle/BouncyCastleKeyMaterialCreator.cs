@@ -42,7 +42,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates a P-256 key pair for signing and verification.</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP256Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP256Keys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateEcKeys("secp256r1", CryptoTags.P256PublicKey, CryptoTags.P256PrivateKey, memoryPool);
@@ -52,7 +52,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates a P-384 key pair for signing and verification.</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP384Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP384Keys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateEcKeys("secp384r1", CryptoTags.P384PublicKey, CryptoTags.P384PrivateKey, memoryPool);
@@ -62,7 +62,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates a P-521 key pair for signing and verification.</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP521Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP521Keys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateEcKeys("secp521r1", CryptoTags.P521PublicKey, CryptoTags.P521PrivateKey, memoryPool);
@@ -72,7 +72,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates a secp256k1 key pair for signing and verification.</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateSecp256k1Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateSecp256k1Keys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateEcKeys("secp256k1", CryptoTags.Secp256k1PublicKey, CryptoTags.Secp256k1PrivateKey, memoryPool);
@@ -82,7 +82,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates an RSA 2048-bit key pair.</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateRsa2048Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateRsa2048Keys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateRsaKeys(2048, memoryPool);
@@ -92,7 +92,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates an RSA 4096-bit key pair.</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateRsa4096Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateRsa4096Keys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateRsaKeys(4096, memoryPool);
@@ -102,7 +102,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates an Ed25519 key pair for signing and verification.</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateEd25519Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateEd25519Keys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
 
@@ -137,7 +137,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates an X25519 key pair for ECDH key agreement.</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateX25519Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateX25519Keys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
 
@@ -188,7 +188,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// </remarks>
     /// <param name="memoryPool">Memory pool for key material allocation.</param>
     /// <returns>A new key pair. The caller owns and must dispose each key individually.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP256ExchangeKeys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP256ExchangeKeys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
 
@@ -265,7 +265,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// </remarks>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP384ExchangeKeys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP384ExchangeKeys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateNistExchangeKeys("secp384r1", CryptoTags.P384ExchangePublicKey, CryptoTags.P384ExchangePrivateKey, memoryPool);
@@ -279,7 +279,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// </remarks>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP521ExchangeKeys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP521ExchangeKeys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateNistExchangeKeys("secp521r1", CryptoTags.P521ExchangePublicKey, CryptoTags.P521ExchangePrivateKey, memoryPool);
@@ -294,7 +294,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// </remarks>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP256r1Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP256r1Keys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateBrainpoolEcKeys("brainpoolP256r1", CryptoTags.BrainpoolP256r1PublicKey, CryptoTags.BrainpoolP256r1PrivateKey, memoryPool);
@@ -304,7 +304,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates a Brainpool P-224r1 ECDH exchange key pair (uncompressed public point).</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP224r1ExchangeKeys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP224r1ExchangeKeys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateBrainpoolExchangeKeys("brainpoolP224r1", CryptoTags.BrainpoolP224r1ExchangePublicKey, CryptoTags.BrainpoolP224r1ExchangePrivateKey, memoryPool);
@@ -314,7 +314,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates a Brainpool P-256r1 ECDH exchange key pair (uncompressed public point).</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP256r1ExchangeKeys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP256r1ExchangeKeys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateBrainpoolExchangeKeys("brainpoolP256r1", CryptoTags.BrainpoolP256r1ExchangePublicKey, CryptoTags.BrainpoolP256r1ExchangePrivateKey, memoryPool);
@@ -324,7 +324,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates a Brainpool P-320r1 ECDH exchange key pair (uncompressed public point).</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP320r1ExchangeKeys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP320r1ExchangeKeys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateBrainpoolExchangeKeys("brainpoolP320r1", CryptoTags.BrainpoolP320r1ExchangePublicKey, CryptoTags.BrainpoolP320r1ExchangePrivateKey, memoryPool);
@@ -334,7 +334,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates a Brainpool P-384r1 ECDH exchange key pair (uncompressed public point).</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP384r1ExchangeKeys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP384r1ExchangeKeys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateBrainpoolExchangeKeys("brainpoolP384r1", CryptoTags.BrainpoolP384r1ExchangePublicKey, CryptoTags.BrainpoolP384r1ExchangePrivateKey, memoryPool);
@@ -344,7 +344,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates a Brainpool P-512r1 ECDH exchange key pair (uncompressed public point).</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP512r1ExchangeKeys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP512r1ExchangeKeys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateBrainpoolExchangeKeys("brainpoolP512r1", CryptoTags.BrainpoolP512r1ExchangePublicKey, CryptoTags.BrainpoolP512r1ExchangePrivateKey, memoryPool);
@@ -354,7 +354,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates a Brainpool P-224r1 key pair for signing and verification.</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP224r1Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP224r1Keys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateBrainpoolEcKeys("brainpoolP224r1", CryptoTags.BrainpoolP224r1PublicKey, CryptoTags.BrainpoolP224r1PrivateKey, memoryPool);
@@ -364,7 +364,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates a Brainpool P-320r1 key pair for signing and verification.</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP320r1Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP320r1Keys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateBrainpoolEcKeys("brainpoolP320r1", CryptoTags.BrainpoolP320r1PublicKey, CryptoTags.BrainpoolP320r1PrivateKey, memoryPool);
@@ -374,7 +374,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates a Brainpool P-384r1 key pair for signing and verification.</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP384r1Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP384r1Keys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateBrainpoolEcKeys("brainpoolP384r1", CryptoTags.BrainpoolP384r1PublicKey, CryptoTags.BrainpoolP384r1PrivateKey, memoryPool);
@@ -384,7 +384,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates a Brainpool P-512r1 key pair for signing and verification.</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP512r1Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateBrainpoolP512r1Keys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateBrainpoolEcKeys("brainpoolP512r1", CryptoTags.BrainpoolP512r1PublicKey, CryptoTags.BrainpoolP512r1PrivateKey, memoryPool);
@@ -394,7 +394,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates ML-DSA-44 key material (NIST FIPS 204, security level 2).</summary>
     /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
     /// <returns>A new key pair. The caller must dispose each key individually.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlDsa44Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlDsa44Keys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateMlDsaKeys(MLDsaParameters.ml_dsa_44, memoryPool, CryptoTags.MlDsa44PublicKey, CryptoTags.MlDsa44PrivateKey);
@@ -404,7 +404,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates ML-DSA-65 key material (NIST FIPS 204, security level 3).</summary>
     /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
     /// <returns>A new key pair. The caller must dispose each key individually.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlDsa65Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlDsa65Keys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateMlDsaKeys(MLDsaParameters.ml_dsa_65, memoryPool, CryptoTags.MlDsa65PublicKey, CryptoTags.MlDsa65PrivateKey);
@@ -414,7 +414,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates ML-DSA-87 key material (NIST FIPS 204, security level 5).</summary>
     /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
     /// <returns>A new key pair. The caller must dispose each key individually.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlDsa87Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlDsa87Keys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateMlDsaKeys(MLDsaParameters.ml_dsa_87, memoryPool, CryptoTags.MlDsa87PublicKey, CryptoTags.MlDsa87PrivateKey);
@@ -424,7 +424,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates ML-KEM-512 key material (NIST FIPS 203, security level 1).</summary>
     /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
     /// <returns>A new key pair. The caller must dispose each key individually.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlKem512Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlKem512Keys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateMlKemKeys(MLKemParameters.ml_kem_512, memoryPool, CryptoTags.MlKem512PublicKey, CryptoTags.MlKem512PrivateKey);
@@ -434,7 +434,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates ML-KEM-768 key material (NIST FIPS 203, security level 3).</summary>
     /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
     /// <returns>A new key pair. The caller must dispose each key individually.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlKem768Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlKem768Keys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateMlKemKeys(MLKemParameters.ml_kem_768, memoryPool, CryptoTags.MlKem768PublicKey, CryptoTags.MlKem768PrivateKey);
@@ -444,7 +444,7 @@ public static class BouncyCastleKeyMaterialCreator
     /// <summary>Creates ML-KEM-1024 key material (NIST FIPS 203, security level 5).</summary>
     /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
     /// <returns>A new key pair. The caller must dispose each key individually.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlKem1024Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlKem1024Keys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateMlKemKeys(MLKemParameters.ml_kem_1024, memoryPool, CryptoTags.MlKem1024PublicKey, CryptoTags.MlKem1024PrivateKey);
@@ -455,7 +455,7 @@ public static class BouncyCastleKeyMaterialCreator
         string brainpoolCurveName,
         Tag publicKeyTag,
         Tag privateKeyTag,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ProviderOperation operation = new(nameof(CreateBrainpoolEcKeys));
         using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
@@ -519,7 +519,7 @@ public static class BouncyCastleKeyMaterialCreator
         string brainpoolCurveName,
         Tag publicKeyTag,
         Tag privateKeyTag,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ProviderOperation operation = new(nameof(CreateBrainpoolExchangeKeys));
         using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
@@ -579,7 +579,7 @@ public static class BouncyCastleKeyMaterialCreator
         string secCurveName,
         Tag publicKeyTag,
         Tag privateKeyTag,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ProviderOperation operation = new(nameof(CreateNistExchangeKeys));
         using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
@@ -634,7 +634,7 @@ public static class BouncyCastleKeyMaterialCreator
         string secCurveName,
         Tag publicKeyTag,
         Tag privateKeyTag,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ProviderOperation operation = new(nameof(CreateEcKeys));
         using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
@@ -687,7 +687,7 @@ public static class BouncyCastleKeyMaterialCreator
 
     private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateRsaKeys(
         int keySizeInBits,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         static (Tag PublicKeyTag, Tag PrivateKeyTag) GetTags(int keySizeInBits) => keySizeInBits switch
         {
@@ -742,7 +742,7 @@ public static class BouncyCastleKeyMaterialCreator
 
     private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlDsaKeys(
         MLDsaParameters parameters,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         Tag publicKeyTag,
         Tag privateKeyTag)
     {
@@ -777,7 +777,7 @@ public static class BouncyCastleKeyMaterialCreator
 
     private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateMlKemKeys(
         MLKemParameters parameters,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         Tag publicKeyTag,
         Tag privateKeyTag)
     {
@@ -830,7 +830,7 @@ public static class BouncyCastleKeyMaterialCreator
         PublicPrivateKeyCreationDelegate<PublicKeyMemory, PrivateKeyMemory> creator,
         CryptoAlgorithm algorithm,
         Purpose purpose,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(creator);
         ArgumentNullException.ThrowIfNull(memoryPool);
@@ -842,7 +842,7 @@ public static class BouncyCastleKeyMaterialCreator
     }
 
 
-    private static IMemoryOwner<byte> AsPooledMemory(byte[] keyBytes, MemoryPool<byte> memoryPool)
+    private static IMemoryOwner<byte> AsPooledMemory(byte[] keyBytes, BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(keyBytes);
         ArgumentNullException.ThrowIfNull(memoryPool);

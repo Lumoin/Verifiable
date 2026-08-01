@@ -92,7 +92,7 @@ public static class WalletMetadataWriter
         PublicKeyMemory walletExchangePublicKey,
         string? jarEncryptionEnc,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(capabilities);
         ArgumentNullException.ThrowIfNull(walletExchangePublicKey);
@@ -234,7 +234,7 @@ public static class WalletMetadataWriter
         string x,
         string? y,
         string? jarEncryptionEnc,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         Oid4VpWalletCapabilities capabilities)
     {
         //Discovery members written as raw JSON value tokens. Values are controlled

@@ -35,7 +35,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Cose.SignAsync(EncodedCoseProtectedHeader, IReadOnlyDictionary{int, object}?, ReadOnlyMemory{byte}, BuildSigStructureDelegate, PrivateKeyMemory, SigningDelegate, MemoryPool{byte}, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Cose.SignAsync(EncodedCoseProtectedHeader, IReadOnlyDictionary{int, object}?, ReadOnlyMemory{byte}, BuildSigStructureDelegate, PrivateKeyMemory, SigningDelegate, BaseMemoryPool, CancellationToken, CryptoEventSink?)"/>
     /// forwards the <see cref="SignatureProducedEvent"/> to an explicit sink instead of the global stream.
     /// </summary>
     [TestMethod]
@@ -104,7 +104,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, SigningDelegate, MemoryPool{byte}, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, SigningDelegate, BaseMemoryPool, CancellationToken, CryptoEventSink?)"/>
     /// (the typed explicit-delegate overload) forwards the <see cref="SignatureProducedEvent"/> to an
     /// explicit sink.
     /// </summary>
@@ -138,10 +138,10 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, ReadOnlyMemory{byte}, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, SigningDelegate, MemoryPool{byte}, IReadOnlyDictionary{string, object}?, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, ReadOnlyMemory{byte}, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, SigningDelegate, BaseMemoryPool, IReadOnlyDictionary{string, object}?, CancellationToken, CryptoEventSink?)"/>
     /// (the raw-payload overload <c>DidCommSignedExtensions.PackSignedAsync</c> reaches) forwards to an
     /// explicit sink, and — the DIDComm symmetry property — reaches <see cref="CryptographicKeyEvents.DefaultSink"/>
-    /// (the global stream) when no sink is supplied, matching what <see cref="Jws.VerifySignatureAsync(string, ReadOnlyMemory{byte}, bool, ReadOnlyMemory{byte}, EncodeDelegate, VerificationDelegate, ReadOnlyMemory{byte}, MemoryPool{byte}, CancellationToken, CryptoEventSink?)"/>
+    /// (the global stream) when no sink is supplied, matching what <see cref="Jws.VerifySignatureAsync(string, ReadOnlyMemory{byte}, bool, ReadOnlyMemory{byte}, EncodeDelegate, VerificationDelegate, ReadOnlyMemory{byte}, BaseMemoryPool, CancellationToken, CryptoEventSink?)"/>
     /// (the sibling <c>UnpackSignedAsync</c> reaches) already does on the verify side.
     /// </summary>
     [TestMethod]
@@ -198,7 +198,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Jws.VerifyAsync(JwsMessage, EncodeDelegate, PublicKeyMemory, VerificationDelegate, MemoryPool{byte}, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Jws.VerifyAsync(JwsMessage, EncodeDelegate, PublicKeyMemory, VerificationDelegate, BaseMemoryPool, CancellationToken, CryptoEventSink?)"/>
     /// forwards the <see cref="VerificationCompletedEvent"/> to an explicit sink.
     /// </summary>
     [TestMethod]
@@ -232,7 +232,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Jws.VerifySignatureAsync(string, ReadOnlyMemory{byte}, bool, ReadOnlyMemory{byte}, EncodeDelegate, VerificationDelegate, ReadOnlyMemory{byte}, MemoryPool{byte}, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Jws.VerifySignatureAsync(string, ReadOnlyMemory{byte}, bool, ReadOnlyMemory{byte}, EncodeDelegate, VerificationDelegate, ReadOnlyMemory{byte}, BaseMemoryPool, CancellationToken, CryptoEventSink?)"/>
     /// (the overload <c>DidCommSignedExtensions.UnpackSignedAsync</c> reaches) forwards to an explicit sink.
     /// </summary>
     [TestMethod]
@@ -271,7 +271,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Jws.VerifyAsync(string, DecodeDelegate, MemoryPool{byte}, PublicKeyMemory, VerificationDelegate, int, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Jws.VerifyAsync(string, DecodeDelegate, BaseMemoryPool, PublicKeyMemory, VerificationDelegate, int, CancellationToken, CryptoEventSink?)"/>
     /// (compact serialization) forwards to an explicit sink.
     /// </summary>
     [TestMethod]
@@ -307,7 +307,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Jws.VerifyAndDecodeAsync(string, DecodeDelegate, JwtPartDecoder, MemoryPool{byte}, PublicKeyMemory, VerificationDelegate, int, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Jws.VerifyAndDecodeAsync(string, DecodeDelegate, JwtPartDecoder, BaseMemoryPool, PublicKeyMemory, VerificationDelegate, int, CancellationToken, CryptoEventSink?)"/>
     /// forwards to an explicit sink.
     /// </summary>
     [TestMethod]
@@ -344,7 +344,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="JwtSigningExtensions.SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, SigningDelegate, MemoryPool{byte}, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="JwtSigningExtensions.SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, SigningDelegate, BaseMemoryPool, CancellationToken, CryptoEventSink?)"/>
     /// (the primitive <c>DidCommFromPriorExtensions.PackFromPriorAsync</c> calls) forwards to an explicit sink.
     /// </summary>
     [TestMethod]
@@ -494,7 +494,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
     /// <summary>Resolves the COSE resolver/binder test state's private key bytes into pooled key material.</summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned PrivateKeyMemory transfers to the caller which disposes via PrivateKey.")]
-    private static ValueTask<PrivateKeyMemory?> ResolvePrivateKeyMaterial(CoseKeyContext context, MemoryPool<byte> pool, CoseResolverBinderState state, CancellationToken cancellationToken)
+    private static ValueTask<PrivateKeyMemory?> ResolvePrivateKeyMaterial(CoseKeyContext context, BaseMemoryPool pool, CoseResolverBinderState state, CancellationToken cancellationToken)
     {
         IMemoryOwner<byte> owner = pool.Rent(state.PrivateKeyBytes.Length);
         state.PrivateKeyBytes.CopyTo(owner.Memory.Span);
@@ -504,7 +504,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
     /// <summary>Resolves the COSE resolver/binder test state's public key bytes into pooled key material.</summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned PublicKeyMemory transfers to the caller which disposes via PublicKey.")]
-    private static ValueTask<PublicKeyMemory?> ResolvePublicKeyMaterial(CoseKeyContext context, MemoryPool<byte> pool, CoseResolverBinderState state, CancellationToken cancellationToken)
+    private static ValueTask<PublicKeyMemory?> ResolvePublicKeyMaterial(CoseKeyContext context, BaseMemoryPool pool, CoseResolverBinderState state, CancellationToken cancellationToken)
     {
         IMemoryOwner<byte> owner = pool.Rent(state.PublicKeyBytes.Length);
         state.PublicKeyBytes.CopyTo(owner.Memory.Span);
@@ -530,7 +530,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
     /// <summary>Resolves the Jws resolver/binder test state's private key bytes into pooled key material.</summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned PrivateKeyMemory transfers to the caller which disposes via PrivateKey.")]
-    private static ValueTask<PrivateKeyMemory?> ResolveJwsPrivateKeyMaterial(JoseKeyContext context, MemoryPool<byte> pool, JwsResolverBinderState state, CancellationToken cancellationToken)
+    private static ValueTask<PrivateKeyMemory?> ResolveJwsPrivateKeyMaterial(JoseKeyContext context, BaseMemoryPool pool, JwsResolverBinderState state, CancellationToken cancellationToken)
     {
         IMemoryOwner<byte> owner = pool.Rent(state.PrivateKeyBytes.Length);
         state.PrivateKeyBytes.CopyTo(owner.Memory.Span);
@@ -540,7 +540,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
     /// <summary>Resolves the Jws resolver/binder test state's public key bytes into pooled key material.</summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned PublicKeyMemory transfers to the caller which disposes via PublicKey.")]
-    private static ValueTask<PublicKeyMemory?> ResolveJwsPublicKeyMaterial(JoseKeyContext context, MemoryPool<byte> pool, JwsResolverBinderState state, CancellationToken cancellationToken)
+    private static ValueTask<PublicKeyMemory?> ResolveJwsPublicKeyMaterial(JoseKeyContext context, BaseMemoryPool pool, JwsResolverBinderState state, CancellationToken cancellationToken)
     {
         IMemoryOwner<byte> owner = pool.Rent(state.PublicKeyBytes.Length);
         state.PublicKeyBytes.CopyTo(owner.Memory.Span);

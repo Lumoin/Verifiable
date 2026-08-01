@@ -363,7 +363,7 @@ internal sealed class SignatureValidationBuildingBlockGapTests
         IReadOnlyList<PkiCertificateMemory> chain,
         IReadOnlyList<PkiCertificateMemory> trustAnchors,
         DateTimeOffset validationTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CheckCertificateRevocationStatusAsyncDelegate? checkRevocation,
         CancellationToken cancellationToken)
     {

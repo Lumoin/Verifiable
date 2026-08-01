@@ -39,7 +39,7 @@ public delegate ValueTask<(MacValue Result, CryptoEvent? Event)> ComputeBlockCip
     ReadOnlyMemory<byte> keyBytes,
     int outputByteLength,
     Tag tag,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     FrozenDictionary<string, object>? context = null,
     CancellationToken cancellationToken = default);
 
@@ -66,6 +66,6 @@ public delegate ValueTask<(bool IsValid, CryptoEvent? Event)> VerifyBlockCipherM
     ReadOnlyMemory<byte> keyBytes,
     ReadOnlyMemory<byte> expectedMac,
     Tag tag,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     FrozenDictionary<string, object>? context = null,
     CancellationToken cancellationToken = default);

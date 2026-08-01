@@ -66,7 +66,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     /// <param name="AuthorityHandle">The authority key's handle.</param>
     /// <param name="HashAlg">The scheme hash algorithm to sign under.</param>
     private sealed record SignedAssertionSigningContext(
-        TpmDevice Tpm, TpmResponseRegistry Registry, MemoryPool<byte> Pool, TpmiDhObject AuthorityHandle, TpmAlgIdConstants HashAlg);
+        TpmDevice Tpm, TpmResponseRegistry Registry, BaseMemoryPool Pool, TpmiDhObject AuthorityHandle, TpmAlgIdConstants HashAlg);
 
     /// <summary>
     /// Flagship flow: predicts the FIXED authPolicy <c>ExtendForAuthorize</c> will produce, seals a secret under
@@ -77,7 +77,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     [TestMethod]
     public async Task PolicyAuthorizeEccFlowRevisesThePolicyAndUnsealsUnderThePredictedAuthPolicy()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -210,7 +210,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     [TestMethod]
     public async Task PolicyAuthorizeWithTamperedApprovedPolicyReturnsValue()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -260,7 +260,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     [TestMethod]
     public async Task PolicyAuthorizeWithForgedCheckTicketReturnsValue()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -313,7 +313,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     [TestMethod]
     public async Task PolicyAuthorizeWithWrongHierarchyCheckTicketReturnsValue()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -386,7 +386,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     [TestMethod]
     public async Task PolicyAuthorizeWithUnrecognizedKeySignHashAlgReturnsHash()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
@@ -425,7 +425,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     [TestMethod]
     public async Task PolicyAuthorizeWithKeySignLengthMismatchReturnsSize()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
@@ -466,7 +466,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     [TestMethod]
     public async Task PolicyAuthorizeTrialSessionWithNullTicketFoldsCorrectlyAndMatchesHostPrediction()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -519,7 +519,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     [TestMethod]
     public async Task BuilderRoundTripPredictedDigestMatchesExecutedDigestForWithSignedThenWithAuthorize()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -607,7 +607,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     /// <param name="pool">The memory pool backing the returned signature.</param>
     /// <param name="cancellationToken">A token observed across the exchange.</param>
     /// <returns>The IEEE P1363 <c>r ‖ s</c> signature as a pooled carrier the caller disposes.</returns>
-    private static async ValueTask<Signature> SignViaDeviceAsync(DigestValue aHash, object? context, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async ValueTask<Signature> SignViaDeviceAsync(DigestValue aHash, object? context, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         var signingContext = (SignedAssertionSigningContext)context!;
 
@@ -650,7 +650,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     /// <param name="registry">The response codec registry.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The CreatePrimary response for the storage parent.</returns>
-    private async Task<CreatePrimaryResponse> CreateStorageParentAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool)
+    private async Task<CreatePrimaryResponse> CreateStorageParentAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
         using CreatePrimaryInput parentInput = CreatePrimaryInput.ForEccStorageParent(
             TpmRh.TPM_RH_OWNER, null, TpmEccCurveConstants.TPM_ECC_NIST_P256, pool, noDa: true);
@@ -671,7 +671,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     /// <param name="registry">The response codec registry.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The CreatePrimary response for the authority key.</returns>
-    private async Task<CreatePrimaryResponse> CreateEccAuthorityKeyAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool)
+    private async Task<CreatePrimaryResponse> CreateEccAuthorityKeyAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForEccSigningKey(
             TpmRh.TPM_RH_OWNER, password: null, TpmEccCurveConstants.TPM_ECC_NIST_P256, TpmtEccScheme.Ecdsa(TpmAlgIdConstants.TPM_ALG_SHA256), pool, noDa: true);
@@ -693,7 +693,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     /// <param name="digest">The ticket digest octets.</param>
     /// <param name="pool">The memory pool backing the parsed ticket.</param>
     /// <returns>The composed ticket; the caller disposes it.</returns>
-    private static TpmtTkVerified MintTicket(TpmRh hierarchy, ReadOnlySpan<byte> digest, MemoryPool<byte> pool)
+    private static TpmtTkVerified MintTicket(TpmRh hierarchy, ReadOnlySpan<byte> digest, BaseMemoryPool pool)
     {
         int size = sizeof(ushort) + sizeof(uint) + sizeof(ushort) + digest.Length;
         using IMemoryOwner<byte> owner = pool.Rent(size);
@@ -716,7 +716,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     /// <param name="fill">The octet the digest repeats.</param>
     /// <param name="pool">The memory pool backing the parsed ticket.</param>
     /// <returns>The composed ticket; the caller disposes it.</returns>
-    private static TpmtTkVerified MintFilledTicket(TpmRh hierarchy, byte fill, MemoryPool<byte> pool)
+    private static TpmtTkVerified MintFilledTicket(TpmRh hierarchy, byte fill, BaseMemoryPool pool)
     {
         //Non-secret fixture octets, tiny and bounded, so the stack buffer is safe.
         Span<byte> digest = stackalloc byte[32];
@@ -733,7 +733,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     /// <param name="s">The signature's s component.</param>
     /// <param name="pool">The memory pool backing the returned signature.</param>
     /// <returns>The concatenated, fixed-width P1363 signature as a pooled carrier the caller disposes.</returns>
-    private static Signature ConcatenateP1363(ReadOnlySpan<byte> r, ReadOnlySpan<byte> s, MemoryPool<byte> pool)
+    private static Signature ConcatenateP1363(ReadOnlySpan<byte> r, ReadOnlySpan<byte> s, BaseMemoryPool pool)
     {
         const int P256ComponentSize = 32;
         IMemoryOwner<byte> owner = pool.Rent(2 * P256ComponentSize);
@@ -765,7 +765,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     /// <param name="source">The public area to clone.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>An independent copy of the public area.</returns>
-    private static Tpm2bPublic ClonePublic(Tpm2bPublic source, MemoryPool<byte> pool)
+    private static Tpm2bPublic ClonePublic(Tpm2bPublic source, BaseMemoryPool pool)
     {
         int size = source.GetSerializedSize();
         using IMemoryOwner<byte> owner = pool.Rent(size);
@@ -816,7 +816,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator(
             "tpm-in-house-policyauthorize",
@@ -833,7 +833,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     /// </summary>
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();

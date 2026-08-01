@@ -26,7 +26,7 @@ internal sealed class CtapAuthenticatorGetInfoClientTests
         Guid aaguid = Guid.NewGuid();
         var scriptedResponse = new CtapGetInfoResponse(Versions: [WellKnownCtapVersions.Fido23], Aaguid: aaguid);
 
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             capturedRequest = request.ToArray();
             TaggedMemory<byte> payload = CtapGetInfoResponseCborWriter.Write(scriptedResponse);
@@ -50,7 +50,7 @@ internal sealed class CtapAuthenticatorGetInfoClientTests
     [TestMethod]
     public async Task ThrowsCtapCommandExceptionOnNonSuccessStatus()
     {
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, MemoryPool<byte> pool, CancellationToken cancellationToken) =>
+        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes([WellKnownCtapStatusCodes.InvalidCommand], pool, Fido2BufferTags.CtapResponseEnvelope));
 
         CtapCommandException exception = await Assert.ThrowsExactlyAsync<CtapCommandException>(
@@ -65,7 +65,7 @@ internal sealed class CtapAuthenticatorGetInfoClientTests
     [TestMethod]
     public async Task ThrowsFido2FormatExceptionOnEmptyResponse()
     {
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, MemoryPool<byte> pool, CancellationToken cancellationToken) =>
+        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes(ReadOnlySpan<byte>.Empty, pool, Fido2BufferTags.CtapResponseEnvelope));
 
         await Assert.ThrowsExactlyAsync<Fido2FormatException>(

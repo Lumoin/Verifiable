@@ -81,7 +81,7 @@ public static class TpmSealedStateCustody
         TryFetchSealedSnapshotBlobAsyncDelegate fetchSealedBlobAsync,
         StoreSealedSnapshotBlobAsyncDelegate storeSealedBlobAsync,
         DeleteSealedSnapshotBlobAsyncDelegate deleteSealedBlobAsync,
-        MemoryPool<byte>? pool = null)
+        BaseMemoryPool? pool = null)
     {
         ArgumentNullException.ThrowIfNull(tpm);
         ArgumentNullException.ThrowIfNull(fetchSealedBlobAsync);
@@ -128,7 +128,7 @@ internal sealed class TpmSealedStateCustodyBinding
     private DeleteSealedSnapshotBlobAsyncDelegate DeleteSealedBlobAsync { get; }
 
     /// <summary>The memory pool this binding's own TPM-facing scratch work rents from.</summary>
-    private MemoryPool<byte> Pool { get; }
+    private BaseMemoryPool Pool { get; }
 
 
     /// <summary>
@@ -150,7 +150,7 @@ internal sealed class TpmSealedStateCustodyBinding
         TryFetchSealedSnapshotBlobAsyncDelegate fetchSealedBlobAsync,
         StoreSealedSnapshotBlobAsyncDelegate storeSealedBlobAsync,
         DeleteSealedSnapshotBlobAsyncDelegate deleteSealedBlobAsync,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         Tpm = tpm;
         StorageParentHandle = storageParentHandle;
@@ -175,7 +175,7 @@ internal sealed class TpmSealedStateCustodyBinding
     /// The stored bytes did not parse as a well-formed <see cref="TpmSealedBlob"/>, or the TPM rejected the
     /// unseal (for example a wrong <c>sealAuth</c>) — fails closed, never a partial or empty snapshot.
     /// </exception>
-    internal async ValueTask<PooledMemory?> TryLoadSnapshotAsync(string runId, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    internal async ValueTask<PooledMemory?> TryLoadSnapshotAsync(string runId, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         PooledMemory? sealedBlobBytes = await FetchSealedBlobAsync(runId, Pool, cancellationToken).ConfigureAwait(false);
         if(sealedBlobBytes is null)

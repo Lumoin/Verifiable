@@ -16,7 +16,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.DidComm;
 
 /// <summary>
-/// Unit tests for <see cref="AttachmentDataResolutionExtensions.ResolveAsync(AttachmentData, ExchangeContext, OutboundTransportDelegate, DecodeDelegate, DecodeDelegate, HashFunctionSelector, JsonValueSerializer, MemoryPool{byte}, CancellationToken)"/>
+/// Unit tests for <see cref="AttachmentDataResolutionExtensions.ResolveAsync(AttachmentData, ExchangeContext, OutboundTransportDelegate, DecodeDelegate, DecodeDelegate, HashFunctionSelector, JsonValueSerializer, BaseMemoryPool, CancellationToken)"/>
 /// — the general DIDComm attachment-payload resolver (DIDComm Messaging v2.1 §Attachments). Proves the
 /// access-form precedence, the multihash integrity check, and — load-bearing — that an inline payload never
 /// touches the transport and an SSRF-denied link is never contacted.
@@ -26,7 +26,7 @@ internal sealed class AttachmentDataResolutionTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly MemoryPool<byte> Pool = BaseMemoryPool.Shared;
+    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
 
 
     /// <summary>An inline base64url attachment resolves by value — the transport is never touched.</summary>

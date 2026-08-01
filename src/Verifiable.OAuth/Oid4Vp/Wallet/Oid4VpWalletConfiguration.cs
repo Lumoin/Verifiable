@@ -119,5 +119,5 @@ public sealed record Oid4VpWalletConfiguration
     public SendFormPostDelegate? SendFormPost { get; init; }
 
     /// <summary>Memory pool for transient cryptographic buffers.</summary>
-    public required MemoryPool<byte> MemoryPool { get; init; }
+    public required BaseMemoryPool MemoryPool { get; init; }
 }

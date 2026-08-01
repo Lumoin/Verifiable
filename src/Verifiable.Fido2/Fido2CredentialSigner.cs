@@ -77,7 +77,7 @@ public static class Fido2CredentialSigner
         ReadOnlyMemory<byte> authenticatorData,
         DigestValue clientDataHash,
         int coseAlgorithm,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(credentialKey);
@@ -99,7 +99,7 @@ public static class Fido2CredentialSigner
     /// and packed self-attestation (section 8.2) signature covers.
     /// </summary>
     /// <param name="length">The exact number of meaningful bytes in the returned owner's memory.</param>
-    private static IMemoryOwner<byte> RentToBeSigned(ReadOnlyMemory<byte> authenticatorData, DigestValue clientDataHash, MemoryPool<byte> pool, out int length)
+    private static IMemoryOwner<byte> RentToBeSigned(ReadOnlyMemory<byte> authenticatorData, DigestValue clientDataHash, BaseMemoryPool pool, out int length)
     {
         length = authenticatorData.Length + clientDataHash.Length;
         IMemoryOwner<byte> owner = pool.Rent(length);
@@ -133,7 +133,7 @@ public static class Fido2CredentialSigner
     /// P1363 <c>r ‖ s</c> encoding to the ASN.1 DER <c>Ecdsa-Sig-Value</c> encoding section 6.5.5
     /// requires, disposing the intermediate P1363 signature.
     /// </summary>
-    private static Signature ReencodeToDer(Signature rawSignature, MemoryPool<byte> pool)
+    private static Signature ReencodeToDer(Signature rawSignature, BaseMemoryPool pool)
     {
         using(rawSignature)
         {

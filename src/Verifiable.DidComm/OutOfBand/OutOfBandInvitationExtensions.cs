@@ -222,7 +222,7 @@ public static class OutOfBandInvitationExtensions
         this DidCommMessage invitation,
         string baseUrl,
         DidCommMessageSerializer serializer,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         EncodeDelegate base64UrlEncoder = DefaultCoderSelector.SelectEncoder(WellKnownKeyFormats.PublicKeyJwk);
 
@@ -250,7 +250,7 @@ public static class OutOfBandInvitationExtensions
         string baseUrl,
         DidCommMessageSerializer serializer,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(invitation);
         ArgumentException.ThrowIfNullOrEmpty(baseUrl);
@@ -311,7 +311,7 @@ public static class OutOfBandInvitationExtensions
     public static bool TryParseOutOfBandUrl(
         string url,
         DidCommMessageParser parser,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         out OutOfBandInvitationParseResult result)
     {
         DecodeDelegate base64UrlDecoder = DefaultCoderSelector.SelectDecoder(WellKnownKeyFormats.PublicKeyJwk);
@@ -340,7 +340,7 @@ public static class OutOfBandInvitationExtensions
         string url,
         DidCommMessageParser parser,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         out OutOfBandInvitationParseResult result)
     {
         ArgumentNullException.ThrowIfNull(parser);

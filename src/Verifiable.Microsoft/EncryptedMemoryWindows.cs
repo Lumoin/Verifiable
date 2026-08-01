@@ -34,7 +34,7 @@ namespace Verifiable.Security.Windows
         /// <param name="entropy">The entropy to use in encryption decryption actions.</param>
         /// <param name="protectionScope">The data protection scope.</param>
         /// <param name="protectedMemoryPool">The more pool in which to store the encrypted data.</param>
-        public EncryptedMemoryWindows(byte[] sensitiveMemory, byte[] entropy, DataProtectionScope protectionScope, MemoryPool<byte> protectedMemoryPool): 
+        public EncryptedMemoryWindows(byte[] sensitiveMemory, byte[] entropy, DataProtectionScope protectionScope, BaseMemoryPool protectedMemoryPool): 
             base(TransformToEncryptedMemory(
                 sensitiveMemory ?? throw new ArgumentNullException(nameof(sensitiveMemory)),
                 entropy ?? throw new ArgumentNullException(nameof(entropy)),
@@ -76,7 +76,7 @@ namespace Verifiable.Security.Windows
         /// <param name="protectionScope">The data protection scope.</param>
         /// <param name="protectedMemoryPool">The more pool in which to store the encrypted data.</param>
         /// <returns>The encrypted memory in a buffer.</returns>
-        private static IMemoryOwner<byte> TransformToEncryptedMemory(byte[] sensitiveMemory, byte[] entropy, DataProtectionScope protectionScope, MemoryPool<byte> protectedMemoryPool)
+        private static IMemoryOwner<byte> TransformToEncryptedMemory(byte[] sensitiveMemory, byte[] entropy, DataProtectionScope protectionScope, BaseMemoryPool protectedMemoryPool)
         {
             ArgumentNullException.ThrowIfNull(sensitiveMemory);
             ArgumentNullException.ThrowIfNull(entropy);

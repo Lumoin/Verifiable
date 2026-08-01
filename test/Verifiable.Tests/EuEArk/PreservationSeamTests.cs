@@ -373,12 +373,12 @@ internal sealed class PreservationSeamTests
     [TestMethod]
     public void DisposingAResultReturnsTheResponsesCarriers()
     {
-        using PreservationMessageSource.CountingMemoryPool pool = new();
+        using MeteredHousePool pool = new();
 
         RetrievePreservationObjectResponse response = new()
         {
             Result = PreservationMessageSource.SuccessfulResult(PreservationResultWellKnown.RequestOnlyPartlySuccessful),
-            PreservationObjects = [PreservationMessageSource.Object("payload", pool)]
+            PreservationObjects = [PreservationMessageSource.Object("payload", pool.Pool)]
         };
 
         PreservationOperationResult<RetrievePreservationObjectResponse> result =

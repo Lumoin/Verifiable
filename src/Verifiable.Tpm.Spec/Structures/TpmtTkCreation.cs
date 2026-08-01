@@ -141,7 +141,7 @@ public sealed class TpmtTkCreation: IDisposable, ITpmWireType
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed creation ticket.</returns>
-    public static TpmtTkCreation Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static TpmtTkCreation Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ushort tag = reader.ReadUInt16();

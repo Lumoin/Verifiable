@@ -79,7 +79,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     [TestMethod]
     public async Task RsaSaltedUnboundSessionRoundTripsEncryptedGetRandom()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -116,7 +116,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     [TestMethod]
     public async Task EccSaltedUnboundSessionRoundTripsEncryptedGetRandom()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -161,7 +161,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     {
         const TpmAlgIdConstants MixedSessionAlg = TpmAlgIdConstants.TPM_ALG_SHA384;
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -233,7 +233,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     [TestMethod]
     public async Task SaltedAndBoundSessionIncludesAuthValueWhenAuthorizingADifferentEntity()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -305,7 +305,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     [TestMethod]
     public async Task SaltedAndBoundSessionOmitsAuthValueForTheBoundObjectItself()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -374,7 +374,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     [TestMethod]
     public async Task ShortNonceCallerIsRejectedWithSize()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -389,7 +389,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     [TestMethod]
     public async Task EncryptedSaltWithNullTpmKeyIsRejectedWithValue()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -407,7 +407,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     [TestMethod]
     public async Task CorruptedRsaOaepCiphertextIsRejectedWithValueImmediately()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -454,7 +454,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     [TestMethod]
     public async Task RsaWrongLengthCiphertextThroughAThrowingBackendIsRejectedWithValue()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmRsaSigningBackend throwingRsaBackend = MicrosoftTpmRsaSigningBackend.Create() with { DecryptOaep = ThrowOnWrongLengthCiphertextAsync };
         var simulator = new TpmSimulator(
             "tpm-in-house-salted-session-throwing-rsa", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rsaSigningBackend: throwingRsaBackend);
@@ -505,7 +505,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     /// </summary>
     private static ValueTask<IMemoryOwner<byte>?> ThrowOnWrongLengthCiphertextAsync(
         ReadOnlyMemory<byte> privateKey, ReadOnlyMemory<byte> ciphertext, ReadOnlyMemory<byte> label,
-        TpmAlgIdConstants lhashAlg, TpmAlgIdConstants mgfHashAlg, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        TpmAlgIdConstants lhashAlg, TpmAlgIdConstants mgfHashAlg, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(ciphertext.Length != RsaEndorsementKeyModulusOctets)
         {
@@ -519,7 +519,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     [TestMethod]
     public async Task OffCurveEccPointIsRejectedWithValue()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -576,7 +576,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     [TestMethod]
     public async Task MismatchedYCoordinateLengthOnCurvePointIsRejectedWithValue()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -627,7 +627,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     [TestMethod]
     public async Task SealedObjectAsTpmKeyIsRejectedWithKey()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -672,7 +672,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
             | (TpmaNv)((uint)TpmNt.TPM_NT_PIN_FAIL << TpmaNvFields.TPM_NT_SHIFT);
         const ushort PinCounterParametersSize = 8;
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -704,7 +704,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     [TestMethod]
     public async Task NonCfbAesModeIsRejectedWithMode()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -764,7 +764,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     /// simulator derived different session keys.
     /// </summary>
     private async Task RunSaltedGetRandomRoundTripAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, StartAuthSessionInput startInput,
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, StartAuthSessionInput startInput,
         ReadOnlyMemory<byte> bindAuthValue, ReadOnlyMemory<byte> salt, TpmtSymDef symmetric, TpmAlgIdConstants? sessionAlgOverride = null)
     {
         TpmAlgIdConstants sessionAlg = sessionAlgOverride ?? SessionAlg;
@@ -797,7 +797,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     }
 
     /// <summary>Submits <paramref name="startInput"/> and returns the response code, disposing a successful response (only the negative-path tests use this).</summary>
-    private async Task<TpmRcConstants> AttemptStartAuthSessionAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, StartAuthSessionInput startInput)
+    private async Task<TpmRcConstants> AttemptStartAuthSessionAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, StartAuthSessionInput startInput)
     {
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
             tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -811,7 +811,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     }
 
     /// <summary>Creates the standard RSA endorsement-key-shaped decrypt key (RESTRICTED+DECRYPT, SHA-256 nameAlg) used as a salted session's RSA tpmKey.</summary>
-    private async Task<CreatePrimaryResponse> CreateRsaDecryptKeyAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool)
+    private async Task<CreatePrimaryResponse> CreateRsaDecryptKeyAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
         using CreatePrimaryInput primaryInput = CreatePrimaryInput.ForRsaEndorsementKey(TpmRh.TPM_RH_OWNER, pool);
         using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
@@ -824,7 +824,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     }
 
     /// <summary>Creates an ECC storage-parent-shaped decrypt key (RESTRICTED+DECRYPT, SHA-256 nameAlg) used as a salted session's ECC tpmKey, and doubles as a sealing parent where needed.</summary>
-    private async Task<CreatePrimaryResponse> CreateEccDecryptKeyAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool)
+    private async Task<CreatePrimaryResponse> CreateEccDecryptKeyAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
         using CreatePrimaryInput primaryInput = CreatePrimaryInput.ForEccStorageParent(TpmRh.TPM_RH_OWNER, null, TpmEccCurveConstants.TPM_ECC_NIST_P256, pool, noDa: true);
         using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
@@ -837,7 +837,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     }
 
     /// <summary>Seals <see cref="SecretBytes"/> under <paramref name="userAuth"/>, persists-and-reloads it through wire bytes only, and returns the loaded object's response.</summary>
-    private async Task<LoadResponse> SealAndLoadAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, uint parentHandle, byte[] userAuth, bool noDa)
+    private async Task<LoadResponse> SealAndLoadAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, uint parentHandle, byte[] userAuth, bool noDa)
     {
         using Tpm2bSensitiveCreate inSensitive = Tpm2bSensitiveCreate.ForSealedData(SecretBytes, userAuth, pool);
         using Tpm2bPublic sealTemplate = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, authPolicy: default, noDa: noDa);
@@ -862,7 +862,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     }
 
     /// <summary>Reserializes a public area into a fresh <see cref="Tpm2bPublic"/> (a disk-persisted round trip).</summary>
-    private static Tpm2bPublic ClonePublic(Tpm2bPublic source, MemoryPool<byte> pool)
+    private static Tpm2bPublic ClonePublic(Tpm2bPublic source, BaseMemoryPool pool)
     {
         int size = source.GetSerializedSize();
         using IMemoryOwner<byte> owner = pool.Rent(size);
@@ -911,7 +911,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     /// OAEP) signing backends wired, powers it on, and brings it through <c>TPM2_Startup(CLEAR)</c> into the
     /// operational phase.
     /// </summary>
-    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator(
             "tpm-in-house-salted-session", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
@@ -922,7 +922,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     }
 
     /// <summary>Issues <c>TPM2_Startup(CLEAR)</c> directly against the simulator, mirroring how the executor frames an unauthorized command on the wire.</summary>
-    private async Task IssueStartupClearAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task IssueStartupClearAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();

@@ -54,7 +54,7 @@ internal sealed class TpmInHouseSimulatorSealTests
     [TestMethod]
     public async Task SealedSecretUnsealsAgainstInHouseSimulator()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -127,7 +127,7 @@ internal sealed class TpmInHouseSimulatorSealTests
     [TestMethod]
     public async Task PlainPasswordUnsealRejectsUserWithAuthClearSealedObject()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -184,7 +184,7 @@ internal sealed class TpmInHouseSimulatorSealTests
     [TestMethod]
     public async Task UnsealWithUnknownItemHandleReturnsHandle()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -202,7 +202,7 @@ internal sealed class TpmInHouseSimulatorSealTests
     [TestMethod]
     public async Task SealUnderNonStorageParentReturnsType()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -249,7 +249,7 @@ internal sealed class TpmInHouseSimulatorSealTests
     [TestMethod]
     public async Task LockedOutTpmRejectsPlainPasswordCreateOverDaProtectedParent()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -348,7 +348,7 @@ internal sealed class TpmInHouseSimulatorSealTests
     /// <param name="registry">The response codec registry.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The CreatePrimary response for the storage parent.</returns>
-    private async Task<CreatePrimaryResponse> CreateStorageParentAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool)
+    private async Task<CreatePrimaryResponse> CreateStorageParentAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
         using CreatePrimaryInput parentInput = CreatePrimaryInput.ForEccStorageParent(
             TpmRh.TPM_RH_OWNER, null, TpmEccCurveConstants.TPM_ECC_NIST_P256, pool, noDa: true);
@@ -368,7 +368,7 @@ internal sealed class TpmInHouseSimulatorSealTests
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator("tpm-in-house-seal", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -383,7 +383,7 @@ internal sealed class TpmInHouseSimulatorSealTests
     /// </summary>
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
@@ -442,7 +442,7 @@ internal sealed class TpmInHouseSimulatorSealTests
     /// <param name="source">The public area to clone.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>An independent copy of the public area.</returns>
-    private static Tpm2bPublic ClonePublic(Tpm2bPublic source, MemoryPool<byte> pool)
+    private static Tpm2bPublic ClonePublic(Tpm2bPublic source, BaseMemoryPool pool)
     {
         int size = source.GetSerializedSize();
         using IMemoryOwner<byte> owner = pool.Rent(size);

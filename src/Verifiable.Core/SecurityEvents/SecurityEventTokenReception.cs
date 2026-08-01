@@ -67,7 +67,7 @@ public static class SecurityEventTokenReception
         DecodeDelegate base64UrlDecoder,
         IsSecurityEventTokenJtiSeenDelegate isJtiSeen,
         ExchangeContext context,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         string? expectedVerificationState = null,
         CancellationToken cancellationToken = default)
     {

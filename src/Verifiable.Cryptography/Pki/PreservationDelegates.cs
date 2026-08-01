@@ -198,7 +198,7 @@ public sealed record PreservationOperationResult<TResponse>: IDisposable where T
 /// <returns>The outcome and, on success, the response.</returns>
 public delegate ValueTask<PreservationOperationResult<RetrieveInfoResponse>> RetrieveInfoDelegate(
     PreservationOperationContext<RetrieveInfoRequest> context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 
@@ -223,7 +223,7 @@ public delegate ValueTask<PreservationOperationResult<RetrieveInfoResponse>> Ret
 /// <returns>The outcome and, on success, the response.</returns>
 public delegate ValueTask<PreservationOperationResult<PreservePreservationObjectResponse>> PreservePreservationObjectDelegate(
     PreservationOperationContext<PreservePreservationObjectRequest> context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 
@@ -249,7 +249,7 @@ public delegate ValueTask<PreservationOperationResult<PreservePreservationObject
 /// <returns>The outcome and, on success, the response.</returns>
 public delegate ValueTask<PreservationOperationResult<RetrievePreservationObjectResponse>> RetrievePreservationObjectDelegate(
     PreservationOperationContext<RetrievePreservationObjectRequest> context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 
@@ -275,7 +275,7 @@ public delegate ValueTask<PreservationOperationResult<RetrievePreservationObject
 /// <returns>The outcome and, on success, the response.</returns>
 public delegate ValueTask<PreservationOperationResult<DeletePreservationObjectResponse>> DeletePreservationObjectDelegate(
     PreservationOperationContext<DeletePreservationObjectRequest> context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 
@@ -296,7 +296,7 @@ public delegate ValueTask<PreservationOperationResult<DeletePreservationObjectRe
 /// <returns>The outcome and, on success, the response.</returns>
 public delegate ValueTask<PreservationOperationResult<UpdatePreservationObjectContainerResponse>> UpdatePreservationObjectContainerDelegate(
     PreservationOperationContext<UpdatePreservationObjectContainerRequest> context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 
@@ -316,7 +316,7 @@ public delegate ValueTask<PreservationOperationResult<UpdatePreservationObjectCo
 /// <returns>The outcome and, on success, the response.</returns>
 public delegate ValueTask<PreservationOperationResult<RetrieveTraceResponse>> RetrieveTraceDelegate(
     PreservationOperationContext<RetrieveTraceRequest> context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 
@@ -338,7 +338,7 @@ public delegate ValueTask<PreservationOperationResult<RetrieveTraceResponse>> Re
 /// <returns>The outcome and, on success, the response.</returns>
 public delegate ValueTask<PreservationOperationResult<ValidateEvidenceResponse>> ValidateEvidenceDelegate(
     PreservationOperationContext<ValidateEvidenceRequest> context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 
@@ -359,7 +359,7 @@ public delegate ValueTask<PreservationOperationResult<ValidateEvidenceResponse>>
 /// <returns>The outcome and, on success, the response.</returns>
 public delegate ValueTask<PreservationOperationResult<SearchResponse>> SearchDelegate(
     PreservationOperationContext<SearchRequest> context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 
@@ -520,7 +520,7 @@ public sealed record PreservationMessageEncodeContext
 /// <returns>The encoding result.</returns>
 public delegate ValueTask<PreservationMessageEncodeResult> EncodePreservationMessageDelegate(
     PreservationMessageEncodeContext context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 
@@ -671,5 +671,5 @@ public sealed record PreservationMessageParseContext
 /// <returns>The parse result.</returns>
 public delegate ValueTask<PreservationMessageParseResult> ParsePreservationMessageDelegate(
     PreservationMessageParseContext context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);

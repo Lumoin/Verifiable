@@ -52,7 +52,7 @@ public sealed class CommandApdu: SensitiveMemory
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned CommandApdu, which the caller disposes.")]
     public static CommandApdu BuildCase1(
         byte cla, byte ins, byte p1, byte p2,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -78,7 +78,7 @@ public sealed class CommandApdu: SensitiveMemory
     public static CommandApdu BuildCase2(
         byte cla, byte ins, byte p1, byte p2,
         int le, bool useExtended,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -117,7 +117,7 @@ public sealed class CommandApdu: SensitiveMemory
     public static CommandApdu BuildCase3(
         byte cla, byte ins, byte p1, byte p2,
         ReadOnlySpan<byte> data,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -164,14 +164,14 @@ public sealed class CommandApdu: SensitiveMemory
     /// bytes or <paramref name="le"/> exceeds 256. Callers that need to force extended encoding
     /// independent of that size heuristic (for example, a client that always wants a one-shot
     /// extended response instead of relying on <c>61xx</c> chaining) should use the
-    /// <see cref="BuildCase4(byte, byte, byte, byte, ReadOnlySpan{byte}, int, bool, MemoryPool{byte})"/>
+    /// <see cref="BuildCase4(byte, byte, byte, byte, ReadOnlySpan{byte}, int, bool, BaseMemoryPool)"/>
     /// overload instead.
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned CommandApdu, which the caller disposes.")]
     public static CommandApdu BuildCase4(
         byte cla, byte ins, byte p1, byte p2,
         ReadOnlySpan<byte> data, int le,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return BuildCase4(cla, ins, p1, p2, data, le, data.Length > 255 || le > 256, pool);
     }
@@ -199,7 +199,7 @@ public sealed class CommandApdu: SensitiveMemory
     public static CommandApdu BuildCase4(
         byte cla, byte ins, byte p1, byte p2,
         ReadOnlySpan<byte> data, int le, bool useExtended,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

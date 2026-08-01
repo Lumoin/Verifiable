@@ -82,7 +82,7 @@ public static class JwtSigningExtensions
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(privateKey);
@@ -137,7 +137,7 @@ public static class JwtSigningExtensions
         JwtPayloadSerializer payloadSerializer,
         EncodeDelegate base64UrlEncoder,
         SigningDelegate signingDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {

@@ -28,7 +28,7 @@ internal static class PreservationMessageSource
     /// <returns>The object. The caller, or the message it is put into, disposes it.</returns>
     internal static PreservationObject Object(
         string content,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         string? formatId = "http://uri.etsi.org/ades/CAdES",
         string? mimeType = null,
         PreservationContentForm contentForm = PreservationContentForm.BinaryData) =>
@@ -48,7 +48,7 @@ internal static class PreservationMessageSource
     /// <returns>The evidence. The caller, or the message it is put into, disposes it.</returns>
     internal static PreservationEvidence Evidence(
         string content,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         string? formatId = null) =>
         new()
         {
@@ -63,7 +63,7 @@ internal static class PreservationMessageSource
     /// <param name="pool">The pool the carrier is rented from.</param>
     /// <param name="identifier">What the syntax named it, or <see langword="null"/>.</param>
     /// <returns>The element. The caller, or the message it is put into, disposes it.</returns>
-    internal static PreservationOpaqueElement OpaqueElement(string content, MemoryPool<byte> pool, string? identifier = null) =>
+    internal static PreservationOpaqueElement OpaqueElement(string content, BaseMemoryPool pool, string? identifier = null) =>
         new()
         {
             Content = PooledMemory.FromBytes(Encoding.UTF8.GetBytes(content), pool, PreservationTags.OpaqueElement),
@@ -121,84 +121,4 @@ internal static class PreservationMessageSource
         };
 
 
-    /// <summary>
-    /// A memory pool that counts what it hands out and what comes back, delegating every rental to the house pool
-    /// so that rentals stay exact-length.
-    /// </summary>
-    /// <remarks>
-    /// It exists for one assertion the protocol vocabulary needs and nothing else can make: a message owns a tree
-    /// of payload carriers, and disposing the message has to return every one of them. Counting is the only way
-    /// to see that from outside.
-    /// </remarks>
-    internal sealed class CountingMemoryPool: MemoryPool<byte>
-    {
-        /// <summary>How many carriers have been rented from this pool.</summary>
-        private int rentedCount;
-
-        /// <summary>How many of them have been returned.</summary>
-        private int returnedCount;
-
-
-        /// <summary>How many carriers this pool has handed out.</summary>
-        internal int RentedCount => Volatile.Read(ref rentedCount);
-
-        /// <summary>How many of the handed-out carriers have been disposed.</summary>
-        internal int ReturnedCount => Volatile.Read(ref returnedCount);
-
-        /// <summary>How many carriers are still outstanding.</summary>
-        internal int OutstandingCount => RentedCount - ReturnedCount;
-
-        /// <summary>The largest buffer the underlying house pool serves.</summary>
-        public override int MaxBufferSize => BaseMemoryPool.Shared.MaxBufferSize;
-
-
-        /// <summary>Rents a carrier from the house pool and counts it out.</summary>
-        /// <param name="minBufferSize">The number of octets wanted.</param>
-        /// <returns>The rented carrier, which counts itself back in when it is disposed.</returns>
-        public override IMemoryOwner<byte> Rent(int minBufferSize = -1)
-        {
-            IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(minBufferSize);
-            _ = Interlocked.Increment(ref rentedCount);
-
-            return new CountedOwner(this, owner);
-        }
-
-
-        /// <summary>Releases nothing: this pool owns no resource of its own.</summary>
-        /// <param name="disposing">Whether managed state is being released.</param>
-        protected override void Dispose(bool disposing)
-        {
-        }
-
-
-        /// <summary>Counts one carrier back in when whoever holds it disposes it.</summary>
-        private void Return() => Interlocked.Increment(ref returnedCount);
-
-
-        /// <summary>One rented carrier that tells its pool when it is disposed.</summary>
-        /// <param name="pool">The pool that handed it out.</param>
-        /// <param name="inner">The carrier the house pool rented.</param>
-        private sealed class CountedOwner(CountingMemoryPool pool, IMemoryOwner<byte> inner): IMemoryOwner<byte>
-        {
-            /// <summary>Whether this carrier has already been returned, so a double dispose counts once.</summary>
-            private bool isReturned;
-
-
-            /// <summary>The rented buffer, exactly as the house pool served it.</summary>
-            public Memory<byte> Memory => inner.Memory;
-
-
-            /// <summary>Returns the buffer to the house pool and counts it in.</summary>
-            public void Dispose()
-            {
-                if(!isReturned)
-                {
-                    isReturned = true;
-                    pool.Return();
-                }
-
-                inner.Dispose();
-            }
-        }
-    }
 }

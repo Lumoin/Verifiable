@@ -42,7 +42,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     public async Task ExcludeListHitReturnsCredentialExcluded()
     {
         const string rpId = "negative-a.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-a-authenticator");
@@ -75,7 +75,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     public async Task UnknownAllowListIdReturnsNoCredentials()
     {
         const string rpId = "negative-b.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-b-authenticator");
@@ -104,7 +104,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     [TestMethod]
     public async Task UnsupportedAlgorithmReturnsUnsupportedAlgorithm()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-c-authenticator");
@@ -129,7 +129,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     [TestMethod]
     public async Task UserVerificationTrueOnMakeCredentialReturnsInvalidOption()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-d-authenticator");
@@ -156,7 +156,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     [TestMethod]
     public async Task PinUvAuthParamWithoutProtocolReturnsMissingParameter()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-e-authenticator");
@@ -183,7 +183,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     [TestMethod]
     public async Task ResidentKeyOptionOnGetAssertionReturnsUnsupportedOption()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-f-authenticator");
@@ -213,7 +213,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     public async Task SecondAccountResidentAtCapacityReturnsKeyStoreFull()
     {
         const string rpId = "negative-g.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-g-authenticator", residentCredentialCapacity: 1);
@@ -247,7 +247,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     public async Task UserPresenceFalsePreFlightSucceedsWithUserPresentFlagClear()
     {
         const string rpId = "negative-h.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-h-authenticator");
@@ -280,7 +280,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     [TestMethod]
     public async Task GetNextAssertionWithNoPriorSequenceReturnsNotAllowed()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-i-authenticator");
@@ -303,7 +303,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     public async Task GetNextAssertionAfterInterveningGetInfoReturnsNotAllowed()
     {
         const string rpId = "negative-j.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-j-authenticator");
@@ -341,7 +341,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     {
         const string rpId = "negative-k.example";
         var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-k-authenticator", timeProvider: timeProvider);
@@ -379,7 +379,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     public async Task GetNextAssertionAfterCounterExhaustionReturnsNotAllowed()
     {
         const string rpId = "negative-l.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-l-authenticator");
@@ -422,7 +422,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     public async Task AllowListNamingOverwrittenCredentialIdReturnsNoCredentials()
     {
         const string rpId = "negative-m.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-m-authenticator");
@@ -459,7 +459,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     /// already-registered credential.
     /// </summary>
     private static async Task<CredentialId> RegisterCredentialAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, string rpId, byte[] userId, bool resident, CancellationToken cancellationToken)
+        CtapWave2TransportHarness harness, BaseMemoryPool pool, string rpId, byte[] userId, bool resident, CancellationToken cancellationToken)
     {
         CtapMakeCredentialRequest request = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(
             pool, rpId: rpId, userId: userId, options: new CtapCommandOptions(ResidentKey: resident));

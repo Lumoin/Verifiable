@@ -34,7 +34,7 @@ internal static class EntityStatementJwsReader
         JwtHeaderDeserializer headerDeserializer,
         JwtPayloadDeserializer payloadDeserializer,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         if(string.IsNullOrWhiteSpace(compactJws))
         {

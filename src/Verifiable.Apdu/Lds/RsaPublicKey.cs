@@ -39,7 +39,7 @@ public sealed class RsaPublicKey: SensitiveMemory
     /// <summary>
     /// Copies <paramref name="bytes"/> into a pooled <see cref="RsaPublicKey"/>.
     /// </summary>
-    public static RsaPublicKey FromBytes(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
+    public static RsaPublicKey FromBytes(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

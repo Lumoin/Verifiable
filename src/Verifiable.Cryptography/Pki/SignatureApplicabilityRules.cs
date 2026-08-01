@@ -77,7 +77,7 @@ public static class SignatureApplicabilityRules
         QualifiedCertificateFacts certificateFacts,
         CryptographicConstraints cryptographicConstraints,
         MatchCertificateToTrustServiceAsyncDelegate matchCertificateToService,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(ruleSet);
@@ -185,7 +185,7 @@ public static class SignatureApplicabilityRules
         QualifiedCertificateFacts certificateFacts,
         SignatureValidationConclusion validationConclusion,
         MatchCertificateToTrustServiceAsyncDelegate matchCertificateToService,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(trustedList);

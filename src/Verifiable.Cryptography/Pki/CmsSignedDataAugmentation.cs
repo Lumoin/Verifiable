@@ -168,7 +168,7 @@ public static class CmsSignedDataAugmentation
         CmsSignedData signedData,
         int signerIndex,
         IReadOnlyList<CmsAttribute> attributes,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(signedData);
         ArgumentNullException.ThrowIfNull(attributes);
@@ -229,7 +229,7 @@ public static class CmsSignedDataAugmentation
         int replacedStart,
         int replacedEnd,
         ReadOnlySpan<byte> newMaterial,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         int versionValueOffset = -1)
     {
         //The chain lengths are recomputed from the innermost container outwards, because a container's own
@@ -672,7 +672,7 @@ public static class CmsSignedDataAugmentation
         int attributeIndex,
         int valueIndex,
         ReadOnlySpan<byte> replacementValue,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(signedData);
         ArgumentNullException.ThrowIfNull(pool);
@@ -718,7 +718,7 @@ public static class CmsSignedDataAugmentation
     /// are not re-sorted: re-ordering would change the encoding of components the preservation rule protects,
     /// and clause 5.5.2's hash index is a membership test in which position carries no meaning.
     /// </remarks>
-    public static CmsSignedData AddCertificates(CmsSignedData signedData, IReadOnlyList<ReadOnlyMemory<byte>> certificates, MemoryPool<byte> pool) =>
+    public static CmsSignedData AddCertificates(CmsSignedData signedData, IReadOnlyList<ReadOnlyMemory<byte>> certificates, BaseMemoryPool pool) =>
         AddToOptionalSet(signedData, certificates, ContextConstructed0, pool);
 
 
@@ -739,7 +739,7 @@ public static class CmsSignedDataAugmentation
     /// A candidate whose encoding is already a member of the set is skipped, which is requirement p)'s
     /// "duplication of revocation values should be avoided" applied by construction.
     /// </remarks>
-    public static CmsSignedData AddRevocationInformation(CmsSignedData signedData, IReadOnlyList<ReadOnlyMemory<byte>> revocationInformation, MemoryPool<byte> pool) =>
+    public static CmsSignedData AddRevocationInformation(CmsSignedData signedData, IReadOnlyList<ReadOnlyMemory<byte>> revocationInformation, BaseMemoryPool pool) =>
         AddToOptionalSet(signedData, revocationInformation, ContextConstructed1, pool);
 
 
@@ -795,7 +795,7 @@ public static class CmsSignedDataAugmentation
         CmsSignedData signedData,
         PooledMemory signerInfo,
         IReadOnlyList<ReadOnlyMemory<byte>>? certificates,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(signedData);
         ArgumentNullException.ThrowIfNull(signerInfo);
@@ -936,7 +936,7 @@ public static class CmsSignedDataAugmentation
     /// <param name="algorithmEncoding">The whole <c>AlgorithmIdentifier</c> encoding to union in.</param>
     /// <param name="pool">The memory pool the result is rented from.</param>
     /// <returns>The spliced Signed Data Object, or <see langword="null"/> when the exact octets are already a member. The caller owns and disposes a returned carrier.</returns>
-    private static CmsSignedData? InsertDigestAlgorithmIfAbsent(ReadOnlySpan<byte> source, ReadOnlySpan<byte> algorithmEncoding, MemoryPool<byte> pool)
+    private static CmsSignedData? InsertDigestAlgorithmIfAbsent(ReadOnlySpan<byte> source, ReadOnlySpan<byte> algorithmEncoding, BaseMemoryPool pool)
     {
         SignedDataLayout layout = LocateSignedDataLayout(source);
         List<CmsElement> members = ReadSetMembers(source, layout.DigestAlgorithms, MaximumEmbeddedObjects, "digestAlgorithms");
@@ -977,7 +977,7 @@ public static class CmsSignedDataAugmentation
     /// <returns>The spliced Signed Data Object. The caller owns and disposes it.</returns>
     /// <exception cref="ArgumentException">When the structure already carries the identical <c>SignerInfo</c>.</exception>
     /// <exception cref="AsnContentException">When the set already holds as many members as this walk stays within.</exception>
-    private static CmsSignedData InsertSignerInfoMember(ReadOnlySpan<byte> source, ReadOnlySpan<byte> addition, string parameterName, MemoryPool<byte> pool)
+    private static CmsSignedData InsertSignerInfoMember(ReadOnlySpan<byte> source, ReadOnlySpan<byte> addition, string parameterName, BaseMemoryPool pool)
     {
         SignedDataLayout layout = LocateSignedDataLayout(source);
         List<CmsElement> members = ReadSetMembers(source, layout.SignerInfos, MaximumSignerInfos, "signerInfos");
@@ -1163,7 +1163,7 @@ public static class CmsSignedDataAugmentation
         CmsSignedData signedData,
         IReadOnlyList<ReadOnlyMemory<byte>> members,
         Asn1Tag setTag,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(signedData);
         ArgumentNullException.ThrowIfNull(members);
@@ -1440,7 +1440,7 @@ public static class CmsSignedDataAugmentation
     /// <param name="pool">The memory pool the buffer is rented from.</param>
     /// <returns>The concatenated octets. The caller disposes them.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned carrier, which the caller disposes; the catch disposes it on a partial failure.")]
-    private static PooledMemory ConcatenateEncodings(List<ReadOnlyMemory<byte>> encodings, MemoryPool<byte> pool)
+    private static PooledMemory ConcatenateEncodings(List<ReadOnlyMemory<byte>> encodings, BaseMemoryPool pool)
     {
         int total = 0;
         for(int i = 0; i < encodings.Count; ++i)
@@ -1479,7 +1479,7 @@ public static class CmsSignedDataAugmentation
     /// <param name="pool">The memory pool the buffer is rented from.</param>
     /// <returns>The encoded set. The caller disposes it.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned carrier, which the caller disposes; the catch disposes it on a partial failure.")]
-    private static PooledMemory EncodeImplicitSet(Asn1Tag setTag, List<ReadOnlyMemory<byte>> members, MemoryPool<byte> pool)
+    private static PooledMemory EncodeImplicitSet(Asn1Tag setTag, List<ReadOnlyMemory<byte>> members, BaseMemoryPool pool)
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);
         using(writer.PushSetOf(setTag))
@@ -1811,7 +1811,7 @@ public static class CmsSignedDataAugmentation
     /// <param name="pool">The memory pool the buffer is rented from.</param>
     /// <returns>The concatenated attribute octets. The caller disposes them.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned carrier, which the caller disposes; the catch disposes it on a partial failure.")]
-    private static PooledMemory ConcatenateAttributes(IReadOnlyList<CmsAttribute> attributes, MemoryPool<byte> pool)
+    private static PooledMemory ConcatenateAttributes(IReadOnlyList<CmsAttribute> attributes, BaseMemoryPool pool)
     {
         int total = 0;
         for(int i = 0; i < attributes.Count; ++i)
@@ -1849,7 +1849,7 @@ public static class CmsSignedDataAugmentation
     /// <param name="pool">The memory pool the buffer is rented from.</param>
     /// <returns>The encoded set. The caller disposes it.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned carrier, which the caller disposes; the catch disposes it on a partial failure.")]
-    private static PooledMemory EncodeUnsignedAttributesSet(IReadOnlyList<CmsAttribute> attributes, MemoryPool<byte> pool)
+    private static PooledMemory EncodeUnsignedAttributesSet(IReadOnlyList<CmsAttribute> attributes, BaseMemoryPool pool)
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);
         using(writer.PushSetOf(ContextConstructed1))

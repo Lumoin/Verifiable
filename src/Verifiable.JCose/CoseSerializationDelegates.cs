@@ -43,7 +43,7 @@ public delegate byte[] BuildSigStructureDelegate(
 /// <param name="message">The COSE_Sign1 message to serialize.</param>
 /// <param name="pool">Memory pool the carrier rents its buffer from.</param>
 /// <returns>The encoded message wrapped in a pool-routed carrier.</returns>
-public delegate EncodedCoseSign1 SerializeCoseSign1Delegate(CoseSign1Message message, System.Buffers.MemoryPool<byte> pool);
+public delegate EncodedCoseSign1 SerializeCoseSign1Delegate(CoseSign1Message message, BaseMemoryPool pool);
 
 
 /// <summary>
@@ -59,7 +59,7 @@ public delegate EncodedCoseSign1 SerializeCoseSign1Delegate(CoseSign1Message mes
 /// <param name="coseSign1Bytes">The CBOR-encoded COSE_Sign1 bytes.</param>
 /// <param name="pool">Memory pool the inner carriers rent their buffers from.</param>
 /// <returns>The parsed COSE_Sign1 message.</returns>
-public delegate CoseSign1Message ParseCoseSign1Delegate(ReadOnlyMemory<byte> coseSign1Bytes, System.Buffers.MemoryPool<byte> pool);
+public delegate CoseSign1Message ParseCoseSign1Delegate(ReadOnlyMemory<byte> coseSign1Bytes, BaseMemoryPool pool);
 
 
 /// <summary>

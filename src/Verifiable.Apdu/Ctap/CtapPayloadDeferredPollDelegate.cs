@@ -31,5 +31,5 @@ namespace Verifiable.Apdu.Ctap;
 /// </para>
 /// </remarks>
 public delegate ValueTask<PooledMemory> CtapPayloadDeferredPollDelegate(
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);

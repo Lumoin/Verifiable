@@ -27,4 +27,4 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// </returns>
 public delegate PublicKeyMemory? ExtractSdCwtHolderKeyDelegate(
     SdToken<System.ReadOnlyMemory<byte>> sdCwt,
-    MemoryPool<byte> pool);
+    BaseMemoryPool pool);

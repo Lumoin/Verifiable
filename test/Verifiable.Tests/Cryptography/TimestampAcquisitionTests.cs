@@ -508,7 +508,7 @@ internal sealed class FixedTimestampResponder: IDisposable
     /// <param name="cancellationToken">A cancellation token; unused, as this test double performs no I/O.</param>
     /// <returns>The cloned response, or <see langword="null"/>.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the cloned carrier transfers to the caller via the returned ValueTask.")]
-    internal ValueTask<PkiCertificateMemory?> FetchAsync(TimestampFetchContext context, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    internal ValueTask<PkiCertificateMemory?> FetchAsync(TimestampFetchContext context, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(Response is null)
         {

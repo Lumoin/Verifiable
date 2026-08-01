@@ -59,7 +59,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     [TestMethod]
     public async Task MakeAndActivateCredentialRecoversTheSecret()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -105,7 +105,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     [TestMethod]
     public async Task ActivateWithWrongObjectIsRejected()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -149,7 +149,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     [TestMethod]
     public async Task ActivateCredentialRejectsUndersizedCredentialBlob()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -193,7 +193,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     [TestMethod]
     public async Task StandardEkActivatesCredentialThroughThePolicyAPath()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -265,7 +265,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     [TestMethod]
     public async Task StandardEkRejectsPasswordAuthOnTheKeyHandle()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -311,7 +311,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     [TestMethod]
     public async Task StandardEkRejectsAnUnsatisfiedPolicySession()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -371,7 +371,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     [TestMethod]
     public async Task StandardEkRejectsATrialPolicySession()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -440,7 +440,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     /// <param name="objectName">The Name of the object the credential is bound to (the AK).</param>
     /// <returns>The MakeCredential response (the caller owns it).</returns>
     private async Task<MakeCredentialResponse> MakeCredentialAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmiDhObject keyHandle, byte[] objectName)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmiDhObject keyHandle, byte[] objectName)
     {
         using MakeCredentialInput input = MakeCredentialInput.Create(keyHandle, CredentialSecret, objectName, pool);
 
@@ -461,7 +461,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     /// <param name="hierarchy">The hierarchy under which to create the key.</param>
     /// <returns>The CreatePrimary response (the caller owns it and flushes the handle).</returns>
     private async Task<CreatePrimaryResponse> CreateStoragePrimaryAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmRh hierarchy)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForEccStorageParent(
             hierarchy, null, TpmEccCurveConstants.TPM_ECC_NIST_P256, pool, noDa: true);
@@ -483,7 +483,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     /// <param name="pool">The memory pool.</param>
     /// <returns>The CreatePrimary response (the caller owns it and flushes the handle).</returns>
     private async Task<CreatePrimaryResponse> CreateStandardEndorsementKeyAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForEndorsementKey(TpmRh.TPM_RH_ENDORSEMENT, pool);
         using TpmPasswordSession hierarchyAuth = TpmPasswordSession.CreateEmpty(pool);
@@ -504,7 +504,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     /// <param name="hierarchy">The hierarchy under which to create the key.</param>
     /// <returns>The CreatePrimary response (the caller owns it and flushes the handle).</returns>
     private async Task<CreatePrimaryResponse> CreateSigningPrimaryAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmRh hierarchy)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForEccSigningKey(
             hierarchy,
@@ -529,7 +529,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator("tpm-in-house-credactivation", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -544,7 +544,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     /// </summary>
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
@@ -587,7 +587,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     /// <param name="registry">The response codec registry.</param>
     /// <param name="handle">The handle to flush.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task FlushAsync(TpmDevice tpm, TpmResponseRegistry registry, uint handle, MemoryPool<byte> pool)
+    private async Task FlushAsync(TpmDevice tpm, TpmResponseRegistry registry, uint handle, BaseMemoryPool pool)
     {
         var flush = FlushContextInput.ForHandle(handle);
         _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(

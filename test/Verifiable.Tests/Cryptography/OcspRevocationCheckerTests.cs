@@ -555,7 +555,7 @@ internal sealed class MapBackedOcspResponder: IDisposable
     /// <param name="cancellationToken">A cancellation token; unused, as this test double performs no I/O.</param>
     /// <returns>The cloned response, or <see langword="null"/>.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the cloned carrier transfers to the caller via the returned ValueTask.")]
-    internal ValueTask<PkiCertificateMemory?> FetchAsync(OcspFetchContext context, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    internal ValueTask<PkiCertificateMemory?> FetchAsync(OcspFetchContext context, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(!ResponsesByUri.TryGetValue(context.ResponderUri, out PkiCertificateMemory? stored) || stored is null)
         {

@@ -72,7 +72,7 @@ public static class CredentialJwsExtensions
         CredentialToJsonBytesDelegate credentialSerializer,
         JwtHeaderSerializer headerSerializer,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         string? mediaType = null,
         string? contentType = null,
         CancellationToken cancellationToken = default)
@@ -125,7 +125,7 @@ public static class CredentialJwsExtensions
         JwtHeaderSerializer headerSerializer,
         EncodeDelegate base64UrlEncoder,
         SigningDelegate signingDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         string? mediaType = null,
         string? contentType = null,
         CancellationToken cancellationToken = default)
@@ -204,7 +204,7 @@ public static class CredentialJwsExtensions
         DecodeDelegate base64UrlDecoder,
         JwtHeaderDeserializer headerDeserializer,
         CredentialFromJsonBytesDelegate credentialDeserializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(publicKey);
@@ -250,7 +250,7 @@ public static class CredentialJwsExtensions
         JwtHeaderDeserializer headerDeserializer,
         CredentialFromJsonBytesDelegate credentialDeserializer,
         VerificationDelegate verificationDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(jws);
@@ -342,7 +342,7 @@ public static class CredentialJwsExtensions
         PublicKeyMemory publicKey,
         EncodeDelegate base64UrlEncoder,
         CredentialFromJsonBytesDelegate credentialDeserializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(publicKey);
@@ -385,7 +385,7 @@ public static class CredentialJwsExtensions
         EncodeDelegate base64UrlEncoder,
         CredentialFromJsonBytesDelegate credentialDeserializer,
         VerificationDelegate verificationDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(message);

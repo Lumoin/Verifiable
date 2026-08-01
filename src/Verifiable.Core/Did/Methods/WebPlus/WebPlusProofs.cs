@@ -71,7 +71,7 @@ internal static class WebPlusProofs
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
         DecodeDelegate base58Decoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(selfHash);
@@ -133,7 +133,7 @@ internal static class WebPlusProofs
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
         DecodeDelegate base58Decoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         //WP-PRF-2: a proof is a detached-payload compact JWS — three '.'-separated segments whose middle
@@ -186,7 +186,7 @@ internal static class WebPlusProofs
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
         DecodeDelegate base58Decoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         using IMemoryOwner<byte> headerOwner = base64UrlDecoder(protectedSegment, pool);

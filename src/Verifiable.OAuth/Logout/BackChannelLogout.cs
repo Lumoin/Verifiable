@@ -85,7 +85,7 @@ public static class BackChannelLogout
         EncodeDelegate base64UrlEncoder,
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         string? signingKeyId = null,
         CancellationToken cancellationToken = default)
     {
@@ -191,7 +191,7 @@ public static class BackChannelLogout
         string expectedAudience,
         DecodeDelegate base64UrlDecoder,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>?> payloadDeserializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(logoutToken);

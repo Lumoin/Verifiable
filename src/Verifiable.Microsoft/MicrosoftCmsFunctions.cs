@@ -46,7 +46,7 @@ public static class MicrosoftCmsFunctions
     /// <exception cref="CryptographicException">Thrown when the signature is invalid or the signer certificate is absent.</exception>
     public static ValueTask<CmsVerifiedContent> VerifyCmsSignedDataAsync(
         CmsSignedData signedData,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signedData);
@@ -80,7 +80,7 @@ public static class MicrosoftCmsFunctions
     public static ValueTask<CmsVerifiedContent> VerifyDetachedCmsSignedDataAsync(
         CmsSignedData signedData,
         SignedContentMemory detachedContent,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signedData);
@@ -112,7 +112,7 @@ public static class MicrosoftCmsFunctions
     /// <exception cref="CryptographicException">Thrown when the signature is invalid or the signer certificate is absent.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the content buffer and certificate memories transfers to the returned CmsVerifiedContent, which the caller disposes; the catch disposes them on a partial failure.")]
-    private static ValueTask<CmsVerifiedContent> Verify(SignedCms cms, MemoryPool<byte> pool)
+    private static ValueTask<CmsVerifiedContent> Verify(SignedCms cms, BaseMemoryPool pool)
     {
         //Verify the signature over the encapsulated content, but not the certificate chain — trust is
         //established separately through the certificate-chain seam against the appropriate anchors.
@@ -184,7 +184,7 @@ public static class MicrosoftCmsFunctions
     /// <summary>
     /// Copies a signed attribute's DER value into a pooled <see cref="CmsSignedAttribute"/>.
     /// </summary>
-    private static CmsSignedAttribute ToSignedAttribute(string oid, byte[] der, MemoryPool<byte> pool)
+    private static CmsSignedAttribute ToSignedAttribute(string oid, byte[] der, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(der.Length);
         der.CopyTo(owner.Memory.Span);
@@ -196,7 +196,7 @@ public static class MicrosoftCmsFunctions
     /// <summary>
     /// Copies DER certificate bytes into a pooled <see cref="PkiCertificateMemory"/>.
     /// </summary>
-    private static PkiCertificateMemory ToPkiCertificate(byte[] der, MemoryPool<byte> pool)
+    private static PkiCertificateMemory ToPkiCertificate(byte[] der, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(der.Length);
         der.CopyTo(owner.Memory.Span);

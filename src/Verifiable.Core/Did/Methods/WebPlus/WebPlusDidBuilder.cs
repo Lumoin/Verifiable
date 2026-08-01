@@ -85,7 +85,7 @@ public sealed class WebPlusDidBuilder: Builder<DidDocument, WebPlusDidBuildState
     private EncodeDelegate Base58Encoder { get; }
 
     /// <summary>The pool the transient hash buffers are rented from.</summary>
-    private MemoryPool<byte> Pool { get; }
+    private BaseMemoryPool Pool { get; }
 
 
     /// <summary>
@@ -108,7 +108,7 @@ public sealed class WebPlusDidBuilder: Builder<DidDocument, WebPlusDidBuildState
         int digestLength,
         EncodeDelegate base64UrlEncoder,
         EncodeDelegate base58Encoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(serializer);
         ArgumentNullException.ThrowIfNull(computeDigest);

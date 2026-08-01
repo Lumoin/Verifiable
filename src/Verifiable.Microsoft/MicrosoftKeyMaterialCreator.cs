@@ -36,7 +36,7 @@ public static class MicrosoftKeyMaterialCreator
     /// <summary>Creates a P-256 key pair for signing and verification.</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP256Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP256Keys(BaseMemoryPool memoryPool)
     {
         return CreateEcKeys(ECCurve.NamedCurves.nistP256, memoryPool);
     }
@@ -45,7 +45,7 @@ public static class MicrosoftKeyMaterialCreator
     /// <summary>Creates a P-384 key pair for signing and verification.</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP384Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP384Keys(BaseMemoryPool memoryPool)
     {
         return CreateEcKeys(ECCurve.NamedCurves.nistP384, memoryPool);
     }
@@ -54,7 +54,7 @@ public static class MicrosoftKeyMaterialCreator
     /// <summary>Creates a P-521 key pair for signing and verification.</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP521Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP521Keys(BaseMemoryPool memoryPool)
     {
         return CreateEcKeys(ECCurve.NamedCurves.nistP521, memoryPool);
     }
@@ -63,7 +63,7 @@ public static class MicrosoftKeyMaterialCreator
     /// <summary>Creates a secp256k1 key pair for signing and verification.</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateSecp256k1Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateSecp256k1Keys(BaseMemoryPool memoryPool)
     {
         return CreateEcKeys(ECCurve.CreateFromFriendlyName("secP256k1"), memoryPool);
     }
@@ -72,7 +72,7 @@ public static class MicrosoftKeyMaterialCreator
     /// <summary>Creates an RSA 2048-bit key pair.</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateRsa2048Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateRsa2048Keys(BaseMemoryPool memoryPool)
     {
         return CreateRsaKeys(2048, memoryPool);
     }
@@ -81,7 +81,7 @@ public static class MicrosoftKeyMaterialCreator
     /// <summary>Creates an RSA 4096-bit key pair.</summary>
     /// <param name="memoryPool">The memory pool for key data allocation.</param>
     /// <returns>The public and private key material.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateRsa4096Keys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateRsa4096Keys(BaseMemoryPool memoryPool)
     {
         return CreateRsaKeys(4096, memoryPool);
     }
@@ -107,7 +107,7 @@ public static class MicrosoftKeyMaterialCreator
     /// </remarks>
     /// <param name="memoryPool">Memory pool for key material allocation.</param>
     /// <returns>A new key pair. The caller owns and must dispose each key individually.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP256ExchangeKeys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP256ExchangeKeys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
 
@@ -166,7 +166,7 @@ public static class MicrosoftKeyMaterialCreator
     /// </remarks>
     /// <param name="memoryPool">Memory pool for key material allocation.</param>
     /// <returns>A new key pair. The caller owns and must dispose each key individually.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP384ExchangeKeys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP384ExchangeKeys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateEcExchangeKeys(
@@ -187,7 +187,7 @@ public static class MicrosoftKeyMaterialCreator
     /// </remarks>
     /// <param name="memoryPool">Memory pool for key material allocation.</param>
     /// <returns>A new key pair. The caller owns and must dispose each key individually.</returns>
-    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP521ExchangeKeys(MemoryPool<byte> memoryPool)
+    public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateP521ExchangeKeys(BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
         return CreateEcExchangeKeys(
@@ -205,7 +205,7 @@ public static class MicrosoftKeyMaterialCreator
         ECCurve namedCurve,
         Tag publicKeyTag,
         Tag privateKeyTag,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ProviderOperation operation = new(nameof(CreateEcExchangeKeys));
         using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
@@ -255,7 +255,7 @@ public static class MicrosoftKeyMaterialCreator
 
     private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateEcKeys(
         ECCurve namedCurve,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ProviderOperation operation = new(nameof(CreateEcKeys));
         var (publicKeyTag, privateKeyTag) = GetTags(namedCurve);
@@ -303,7 +303,7 @@ public static class MicrosoftKeyMaterialCreator
 
     private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateRsaKeys(
         int keySizeInBits,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ProviderOperation operation = new(nameof(CreateRsaKeys));
         var (publicKeyTag, privateKeyTag) = GetTags(keySizeInBits);
@@ -365,7 +365,7 @@ public static class MicrosoftKeyMaterialCreator
         PublicPrivateKeyCreationDelegate<PublicKeyMemory, PrivateKeyMemory> creator,
         CryptoAlgorithm algorithm,
         Purpose purpose,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(creator);
         ArgumentNullException.ThrowIfNull(memoryPool);
@@ -377,7 +377,7 @@ public static class MicrosoftKeyMaterialCreator
     }
 
 
-    private static IMemoryOwner<byte> AsPooledMemory(byte[] keyBytes, MemoryPool<byte> memoryPool)
+    private static IMemoryOwner<byte> AsPooledMemory(byte[] keyBytes, BaseMemoryPool memoryPool)
     {
         IMemoryOwner<byte> keyBuffer = memoryPool.Rent(keyBytes.Length);
 

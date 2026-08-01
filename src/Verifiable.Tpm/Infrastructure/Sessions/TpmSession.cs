@@ -104,7 +104,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
         TpmHandle sessionHandle,
         Tpm2bNonce nonceTPM,
         TpmAlgIdConstants sessionAlg,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TpmtSymDef? symmetric = null)
         : this(sessionHandle, nonceTPM, sessionAlg, Tpm2bAuth.CreateEmpty(pool), pool, symmetric)
     {
@@ -115,7 +115,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
         Tpm2bNonce nonceTPM,
         TpmAlgIdConstants sessionAlg,
         Tpm2bAuth sessionKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TpmtSymDef? symmetric)
     {
         this.SessionHandle = sessionHandle;
@@ -185,7 +185,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
         ReadOnlyMemory<byte> startNonceCaller,
         Tpm2bNonce nonceTPM,
         TpmAlgIdConstants sessionAlg,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TpmtSymDef? symmetric = null,
         ReadOnlyMemory<byte> salt = default,
         CancellationToken cancellationToken = default)
@@ -286,7 +286,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     /// Per spec Part 1, Section 17.6.4, trailing zeros should be removed from
     /// password-based authValues before use.
     /// </remarks>
-    public void SetAuthValue(ReadOnlySpan<byte> value, MemoryPool<byte> pool)
+    public void SetAuthValue(ReadOnlySpan<byte> value, BaseMemoryPool pool)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
@@ -313,7 +313,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     /// </remarks>
     public override async ValueTask<Tpm2bAuth?> PrepareAuthHmacAsync(
         ReadOnlyMemory<byte> cpHash,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken,
         ReadOnlyMemory<byte> foldedSessionNonces = default)
     {
@@ -391,7 +391,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     public override async ValueTask<bool> VerifyAndUpdateAsync(
         TpmsAuthResponse response,
         ReadOnlyMemory<byte> rpHash,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
@@ -443,7 +443,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     }
 
     /// <inheritdoc/>
-    public override void RollNonceCaller(MemoryPool<byte> pool)
+    public override void RollNonceCaller(BaseMemoryPool pool)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
@@ -455,7 +455,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     /// <inheritdoc/>
     public override async ValueTask EncryptFirstParameterAsync(
         Memory<byte> firstParameterData,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
@@ -468,7 +468,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     /// <inheritdoc/>
     public override async ValueTask DecryptFirstParameterAsync(
         Memory<byte> firstParameterData,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
@@ -494,7 +494,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
         Tpm2bNonce nonceNewer,
         Tpm2bNonce nonceOlder,
         bool encrypting,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(Symmetric.IsNull)
@@ -553,7 +553,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     /// Builds <c>sessionValue = sessionKey || authValue</c> (TPM 2.0 Part 1, used as both the auth HMAC key and
     /// the parameter-encryption key). Returns an empty value with no owner when both are empty.
     /// </summary>
-    private (IMemoryOwner<byte>? Owner, ReadOnlyMemory<byte> Value) BuildSessionValue(MemoryPool<byte> pool)
+    private (IMemoryOwner<byte>? Owner, ReadOnlyMemory<byte> Value) BuildSessionValue(BaseMemoryPool pool)
     {
         ReadOnlyMemory<byte> sessionKeyMem = sessionKey.AsReadOnlyMemory();
         ReadOnlyMemory<byte> authValueMem = authValue.AsReadOnlyMemory();
@@ -575,7 +575,7 @@ public sealed class TpmSession: TpmSessionBase, IDisposable
     private async ValueTask ComputeSessionHmacAsync(
         ReadOnlyMemory<byte> data,
         Memory<byte> destination,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         //HMAC key = sessionValue = sessionKey || authValue (concatenated without size fields).

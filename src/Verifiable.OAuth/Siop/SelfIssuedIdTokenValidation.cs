@@ -68,7 +68,7 @@ public static class SelfIssuedIdTokenValidation
         ResolveDidVerificationKeyDelegate? resolveDidVerificationKey,
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeSpan? expirationLeeway = null,
         CancellationToken cancellationToken = default)
     {
@@ -278,7 +278,7 @@ public static class SelfIssuedIdTokenValidation
         string idToken,
         Dictionary<string, object> subJwk,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         try

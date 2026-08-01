@@ -622,7 +622,7 @@ public static class AsicContainerCreation
     /// <exception cref="AsicContainerCreationException">When the supplied material is not a container this library builds.</exception>
     public static async ValueTask<AsicContainerSignaturePreparation> PrepareSignatureAsync(
         AsicContainerSignatureContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -677,7 +677,7 @@ public static class AsicContainerCreation
         CryptoAlgorithm signingAlgorithm,
         ReadOnlyMemory<byte> signatureValue,
         IReadOnlyList<PkiCertificateMemory>? additionalCertificates,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(preparation);
         ArgumentNullException.ThrowIfNull(signerCertificate);
@@ -701,7 +701,7 @@ public static class AsicContainerCreation
     /// <exception cref="ArgumentNullException">When an argument is <see langword="null"/>.</exception>
     /// <exception cref="AsicContainerCreationException">When the supplied material is not a container this library builds.</exception>
     /// <remarks>
-    /// The signing itself goes through <see cref="CAdESSignatureCreation.SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, MemoryPool{byte}, CancellationToken, CAdESOptionalSignedAttributes?)"/>,
+    /// The signing itself goes through <see cref="CAdESSignatureCreation.SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken, CAdESOptionalSignedAttributes?)"/>,
     /// which owns the table mapping a signing algorithm to its digest and signature encodings. A
     /// <see cref="AsicContainerSignatureContext.SignatureDigestAlgorithm"/> that is not the one the signer's
     /// profile uses is therefore refused there rather than here — by the layer that owns the rule.
@@ -709,7 +709,7 @@ public static class AsicContainerCreation
     public static async ValueTask<AsicContainerCreationResult> SignAsync(
         AsicContainerSignatureContext context,
         PrivateKeyMemory privateKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -752,7 +752,7 @@ public static class AsicContainerCreation
     /// <exception cref="TimestampAcquisitionException">When the Time-Stamping Authority's answer does not verify against the request; no token is written in that case.</exception>
     public static async ValueTask<AsicContainerCreationResult> CreateTimeAssertionAsync(
         AsicContainerTimeAssertionContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -802,7 +802,7 @@ public static class AsicContainerCreation
     /// </remarks>
     public static async ValueTask<AsicContainerCreationResult> CreateEvidenceRecordAsync(
         AsicContainerEvidenceRecordContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -855,7 +855,7 @@ public static class AsicContainerCreation
     /// <returns>The plan. The caller owns and disposes it.</returns>
     private static async ValueTask<AsicContainerPlan> BuildSignaturePlanAsync(
         AsicContainerSignatureContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context.SignerCertificate);
@@ -932,7 +932,7 @@ public static class AsicContainerCreation
     /// <returns>The plan. The caller owns and disposes it.</returns>
     private static async ValueTask<AsicContainerPlan> BuildTimeAssertionPlanAsync(
         AsicContainerTimeAssertionContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ValidateDataObjects(context.Shape, context.DataObjects);
@@ -1009,7 +1009,7 @@ public static class AsicContainerCreation
     /// <returns>The plan. The caller owns and disposes it.</returns>
     private static async ValueTask<AsicContainerPlan> BuildEvidenceRecordPlanAsync(
         AsicContainerEvidenceRecordContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         List<AsicZipEntrySource> entries = BuildDataObjectEntries(context.DataObjects, context.LastModified);
@@ -1088,7 +1088,7 @@ public static class AsicContainerCreation
         ReadOnlyMemory<byte> metadataObject,
         DateTimeOffset? timestampTime,
         DateTimeOffset? evidenceRecordArchiveTime,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         var entries = new List<AsicZipEntrySource>(plan.DataObjectEntries.Count + 2);
         entries.AddRange(plan.DataObjectEntries);
@@ -1162,7 +1162,7 @@ public static class AsicContainerCreation
         string? referencedMediaType,
         IReadOnlyList<AsicDataObject> dataObjects,
         PkiDigestAlgorithm digestAlgorithm,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(encodeManifest is null)

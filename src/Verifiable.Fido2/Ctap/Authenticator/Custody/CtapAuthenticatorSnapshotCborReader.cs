@@ -50,7 +50,7 @@ public static class CtapAuthenticatorSnapshotCborReader
     /// </exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "currentStoredPin/serializedLargeBlobArray's ownership transfers to the returned CtapAuthenticatorSnapshot on the success path, and the catch block disposes them (plus every already-parsed credential/bio-template record) on any failure path; the analyzer cannot see either transfer through the try/catch.")]
-    public static CtapAuthenticatorSnapshot Read(ReadOnlyMemory<byte> snapshotCbor, MemoryPool<byte> pool)
+    public static CtapAuthenticatorSnapshot Read(ReadOnlyMemory<byte> snapshotCbor, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -192,7 +192,7 @@ public static class CtapAuthenticatorSnapshotCborReader
     /// <returns>The restored credential record.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Every carrier constructed in the try block transfers ownership to the returned CtapCredentialRecord on the success path, and the catch block disposes each one (guarded by null-conditional access) on any failure path; the analyzer cannot see either transfer through the try/catch.")]
-    private static CtapCredentialRecord ReadCredentialEntry(ref CborCursor cursor, MemoryPool<byte> pool)
+    private static CtapCredentialRecord ReadCredentialEntry(ref CborCursor cursor, BaseMemoryPool pool)
     {
         int itemCount = cursor.ReadArrayHeader(CredentialItemCount);
         if(itemCount != CredentialItemCount)
@@ -300,7 +300,7 @@ public static class CtapAuthenticatorSnapshotCborReader
     /// <summary>Parses one bio-enrollment-template entry array into a fully restored, disposable <see cref="CtapBioEnrollmentTemplateRecord"/>.</summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "templateId's ownership transfers to the returned CtapBioEnrollmentTemplateRecord immediately.")]
-    private static CtapBioEnrollmentTemplateRecord ReadBioTemplateEntry(ref CborCursor cursor, MemoryPool<byte> pool)
+    private static CtapBioEnrollmentTemplateRecord ReadBioTemplateEntry(ref CborCursor cursor, BaseMemoryPool pool)
     {
         int itemCount = cursor.ReadArrayHeader(BioTemplateItemCount);
         if(itemCount != BioTemplateItemCount)
@@ -334,7 +334,7 @@ public static class CtapAuthenticatorSnapshotCborReader
     /// </exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "privateKeyMemory's ownership transfers to CryptographicKeyFactory.CreatePrivateKey's returned PrivateKey on the success path; the catch block disposes it on failure.")]
-    private static PrivateKey RestoreCredentialPrivateKey(int coseAlgorithm, string keyId, ReadOnlySpan<byte> rawKeyBytes, MemoryPool<byte> pool)
+    private static PrivateKey RestoreCredentialPrivateKey(int coseAlgorithm, string keyId, ReadOnlySpan<byte> rawKeyBytes, BaseMemoryPool pool)
     {
         Tag tag = coseAlgorithm switch
         {
@@ -356,7 +356,7 @@ public static class CtapAuthenticatorSnapshotCborReader
 
 
     /// <summary>Copies <paramref name="source"/> into a freshly rented buffer, the general-purpose "restore an owned carrier" step every field above shares.</summary>
-    private static IMemoryOwner<byte> RentCopy(ReadOnlySpan<byte> source, MemoryPool<byte> pool)
+    private static IMemoryOwner<byte> RentCopy(ReadOnlySpan<byte> source, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(Math.Max(source.Length, 1));
         try

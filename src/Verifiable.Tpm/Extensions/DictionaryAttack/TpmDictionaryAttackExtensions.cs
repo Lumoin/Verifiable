@@ -32,7 +32,7 @@ public static class TpmDictionaryAttackExtensions
         /// The parsed DA parameters, or the TPM/transport error that prevented reading them.
         /// </returns>
         public ValueTask<TpmResult<TpmDictionaryAttackParameters>> GetDictionaryAttackParametersAsync(
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(device);
@@ -89,7 +89,7 @@ public static class TpmDictionaryAttackExtensions
         ReadOnlyMemory<byte> lockoutAuthSupplied,
         CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_DictionaryAttackLockReset, TpmResponseCodec.DictionaryAttackLockReset);
 
@@ -108,7 +108,7 @@ public static class TpmDictionaryAttackExtensions
         uint newLockoutRecovery,
         CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_DictionaryAttackParameters, TpmResponseCodec.DictionaryAttackParameters);
 
@@ -121,7 +121,7 @@ public static class TpmDictionaryAttackExtensions
 
     private static async ValueTask<TpmResult<TpmDictionaryAttackParameters>> GetDictionaryAttackParametersCoreAsync(
         TpmDevice device,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         var registry = new TpmResponseRegistry();

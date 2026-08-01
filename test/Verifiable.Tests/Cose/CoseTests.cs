@@ -420,7 +420,7 @@ internal sealed class CoseTests
         Justification = "Ownership transfers to the caller which disposes via PrivateKey.")]
     private static ValueTask<PrivateKeyMemory?> ResolvePrivateKeyMaterial(
         CoseKeyContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TestResolverState state,
         CancellationToken cancellationToken)
     {
@@ -434,7 +434,7 @@ internal sealed class CoseTests
         Justification = "Ownership transfers to the caller which disposes via PublicKey.")]
     private static ValueTask<PublicKeyMemory?> ResolvePublicKeyMaterial(
         CoseKeyContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TestResolverState state,
         CancellationToken cancellationToken)
     {

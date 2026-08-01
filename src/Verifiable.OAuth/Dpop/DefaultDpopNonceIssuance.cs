@@ -48,7 +48,7 @@ public static class DefaultDpopNonceIssuance
         TimeProvider timeProvider,
         EncodeDelegate base64UrlEncoder,
         FillEntropyDelegate fillEntropy,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(audience);

@@ -32,7 +32,7 @@ public delegate ValueTask<DataIntegrityProof> CreateProofDelegate(
     ReadOnlyMemory<byte> canonicalProofOptions,
     ProofOptions options,
     PrivateKeyMemory privateKey,
-    MemoryPool<byte> memoryPool,
+    BaseMemoryPool memoryPool,
     CancellationToken cancellationToken = default);
 
 
@@ -57,7 +57,7 @@ public delegate ValueTask<bool> VerifyProofDelegate(
     ReadOnlyMemory<byte> canonicalProofOptions,
     DataIntegrityProof proof,
     PublicKeyMemory publicKey,
-    MemoryPool<byte> memoryPool,
+    BaseMemoryPool memoryPool,
     CancellationToken cancellationToken = default);
 
 

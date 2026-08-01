@@ -66,7 +66,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
     public async Task SectionNineCloseCapstoneOverRealApduTransport()
     {
         const string RpId = "waveclose-capstone-s9.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-capstone-s9");
@@ -250,7 +250,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
     public async Task HmacSecretMcWireFlowLinksToALaterGetAssertionHmacSecretOverRealApduTransport()
     {
         const string RpId = "waveclose-capstone-mc.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         byte[] salt1 = CtapWave2AuthenticatorFixtures.BuildFixedBytes(32, 0x86);
 
@@ -313,7 +313,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
     public async Task CredentialMintedWithoutHmacSecretSurvivesPowerCycleThenIsErasedByFactoryResetOverRealApduTransport()
     {
         const string RpId = "waveclose-capstone-lifecycle.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-capstone-lifecycle");
@@ -364,7 +364,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
 
     /// <summary>Establishes <see cref="Pin"/> as the authenticator's PIN under <paramref name="protocolId"/>, over <paramref name="harness"/>'s real transport.</summary>
     private static async Task EstablishPinAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, CancellationToken cancellationToken)
+        CtapWave2TransportHarness harness, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, protocolId, pool, cancellationToken).ConfigureAwait(false);
@@ -386,7 +386,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
     /// from wire bytes only, over <paramref name="harness"/>'s real transport.
     /// </summary>
     private static async Task<byte[]> IssueTokenAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, int permissions, string rpId,
+        CtapWave2TransportHarness harness, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, int permissions, string rpId,
         CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
@@ -414,7 +414,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
     /// residency.
     /// </summary>
     private static async Task<byte[]> RegisterHmacSecretCredentialAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, string rpId, byte[] userId, CancellationToken cancellationToken)
+        CtapWave2TransportHarness harness, BaseMemoryPool pool, string rpId, byte[] userId, CancellationToken cancellationToken)
     {
         ReadOnlyMemory<byte> extensions = CtapWave2AuthenticatorFixtures.BuildMakeCredentialExtensionsInput(hmacSecret: true);
         CtapMakeCredentialRequest request = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(
@@ -439,7 +439,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
     /// both the decrypted <c>hmac-secret</c> output and its still-encrypted wire ciphertext.
     /// </summary>
     private static async Task<(byte[] Decrypted, byte[] Ciphertext)> SendHmacSecretGetAssertionAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, string rpId, byte[] credentialIdBytes,
+        CtapWave2TransportHarness harness, BaseMemoryPool pool, string rpId, byte[] credentialIdBytes,
         ReadOnlyMemory<byte> extensions, CtapWave5bPlatformPinSession session, CancellationToken cancellationToken,
         byte[]? gaParam = null, CtapPinUvAuthProtocolId? gaProtocolId = null)
     {
@@ -478,7 +478,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
 
     /// <summary>Sends <paramref name="request"/> through <see cref="CtapAuthenticatorGetAssertionClient.GetAssertionAsync"/> over <paramref name="harness"/>'s real transport, disposing the request either way.</summary>
     private static ValueTask<CtapGetAssertionResponse> SendGetAssertionOverWireAsync(
-        CtapWave2TransportHarness harness, CtapGetAssertionRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapWave2TransportHarness harness, CtapGetAssertionRequest request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         try
         {
@@ -494,7 +494,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
 
     /// <summary>Sends <paramref name="request"/> through <see cref="CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync"/> over <paramref name="harness"/>'s real transport, disposing the request either way.</summary>
     private static ValueTask<CtapMakeCredentialResponse> SendMakeCredentialOverWireAsync(
-        CtapWave2TransportHarness harness, CtapMakeCredentialRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapWave2TransportHarness harness, CtapMakeCredentialRequest request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         try
         {

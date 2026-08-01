@@ -89,7 +89,7 @@ public sealed class DataGroup15: IDisposable
     /// <returns>The parsed <see cref="DataGroup15"/>. The caller disposes it.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the structure is not a well-formed DG15 or uses an unsupported key or curve.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the public-key carrier transfers to the returned DataGroup15, which the caller disposes.")]
-    public static DataGroup15 Parse(ReadOnlySpan<byte> dataGroup15, MemoryPool<byte> pool)
+    public static DataGroup15 Parse(ReadOnlySpan<byte> dataGroup15, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -127,7 +127,7 @@ public sealed class DataGroup15: IDisposable
     /// <returns>The EF.DG15 <see cref="ElementaryFile"/>. The caller disposes it.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the public-key tag carries no curve algorithm.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned ElementaryFile, which the caller disposes; the catch disposes it on failure.")]
-    public static ElementaryFile Write(EncodedEcPoint publicKey, MemoryPool<byte> pool)
+    public static ElementaryFile Write(EncodedEcPoint publicKey, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(pool);
@@ -182,7 +182,7 @@ public sealed class DataGroup15: IDisposable
     /// <param name="pool">The memory pool for the file carrier.</param>
     /// <returns>The EF.DG15 <see cref="ElementaryFile"/>. The caller disposes it.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned ElementaryFile, which the caller disposes; the catch disposes it on failure.")]
-    public static ElementaryFile Write(RsaPublicKey publicKey, MemoryPool<byte> pool)
+    public static ElementaryFile Write(RsaPublicKey publicKey, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(pool);

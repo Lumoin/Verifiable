@@ -56,7 +56,7 @@ public static class FederationTrustMarkResolver
         IReadOnlyList<TrustMarkCandidate> candidates,
         VerifyCompactJwsDelegate verifySignature,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeProvider? timeProvider,
         TimeSpan clockSkew,
         CancellationToken cancellationToken = default)
@@ -90,7 +90,7 @@ public static class FederationTrustMarkResolver
         TrustMarkValidator validator,
         VerifyCompactJwsDelegate verifySignature,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         DateTimeOffset now,
         TimeSpan clockSkew,
         CancellationToken cancellationToken)
@@ -148,7 +148,7 @@ public static class FederationTrustMarkResolver
         TrustMarkCandidate candidate,
         VerifyCompactJwsDelegate verifySignature,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         DateTimeOffset now,
         TimeSpan clockSkew,
         CancellationToken cancellationToken)
@@ -179,7 +179,7 @@ public static class FederationTrustMarkResolver
         string compactJws,
         VerifyCompactJwsDelegate verifySignature,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         using PublicKeyMemory? key = await FederationKeyResolver.ResolveInChainKeyAsync(

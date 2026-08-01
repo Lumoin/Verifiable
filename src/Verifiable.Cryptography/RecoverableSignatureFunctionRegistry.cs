@@ -29,7 +29,7 @@ namespace Verifiable.Cryptography;
 public delegate ValueTask<(Signature Signature, CryptoEvent? Event)> RecoverableSigningDelegate(
     ReadOnlyMemory<byte> privateKeyBytes,
     ReadOnlyMemory<byte> nonRecoverableMessage,
-    MemoryPool<byte> signaturePool,
+    BaseMemoryPool signaturePool,
     FrozenDictionary<string, object>? context = null,
     CancellationToken cancellationToken = default);
 

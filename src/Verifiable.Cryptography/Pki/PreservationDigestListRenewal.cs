@@ -212,7 +212,7 @@ public static class PreservationDigestListRenewal
         Justification = "Ownership of the read-back renewed record transfers to the returned result, which the caller disposes; the renewal that produced it is disposed by its own using.")]
     public static async ValueTask<PreservationDigestListRenewalResult> RenewAsync(
         PreservationDigestListRenewalContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -345,7 +345,7 @@ public static class PreservationDigestListRenewal
         IReadOnlyList<DigestValue> digestValues,
         IReadOnlyList<ReadOnlyMemory<byte>> dataObjects,
         PkiDigestAlgorithm algorithm,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         bool[] matched = new bool[digestValues.Count];

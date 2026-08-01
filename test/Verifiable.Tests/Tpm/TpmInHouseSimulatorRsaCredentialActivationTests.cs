@@ -66,7 +66,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialActivationTests
     [TestMethod]
     public async Task StandardRsaEkActivatesCredentialThroughThePolicyAPath()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -138,7 +138,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialActivationTests
     [TestMethod]
     public async Task ActivateWithWrongObjectIsRejected()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -210,7 +210,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialActivationTests
     /// <param name="objectName">The Name of the object the credential is bound to (the AK).</param>
     /// <returns>The MakeCredential response (the caller owns it).</returns>
     private async Task<MakeCredentialResponse> MakeCredentialAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmiDhObject keyHandle, byte[] objectName)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmiDhObject keyHandle, byte[] objectName)
     {
         using MakeCredentialInput input = MakeCredentialInput.Create(keyHandle, CredentialSecret, objectName, pool);
 
@@ -231,7 +231,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialActivationTests
     /// <param name="pool">The memory pool.</param>
     /// <returns>The CreatePrimary response (the caller owns it and flushes the handle).</returns>
     private async Task<CreatePrimaryResponse> CreateStandardRsaEndorsementKeyAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForRsaEndorsementKey(TpmRh.TPM_RH_ENDORSEMENT, pool);
         using TpmPasswordSession hierarchyAuth = TpmPasswordSession.CreateEmpty(pool);
@@ -252,7 +252,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialActivationTests
     /// <param name="hierarchy">The hierarchy under which to create the key.</param>
     /// <returns>The CreatePrimary response (the caller owns it and flushes the handle).</returns>
     private async Task<CreatePrimaryResponse> CreateRsaSigningPrimaryAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmRh hierarchy)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForRsaSigningKey(
             hierarchy, password: null, keyBits: Rsa2048KeyBits, TpmtRsaScheme.Null, pool, noDa: true);
@@ -273,7 +273,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialActivationTests
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator("tpm-in-house-rsa-credactivation", rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -288,7 +288,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialActivationTests
     /// </summary>
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
@@ -331,7 +331,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialActivationTests
     /// <param name="registry">The response codec registry.</param>
     /// <param name="handle">The handle to flush.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task FlushAsync(TpmDevice tpm, TpmResponseRegistry registry, uint handle, MemoryPool<byte> pool)
+    private async Task FlushAsync(TpmDevice tpm, TpmResponseRegistry registry, uint handle, BaseMemoryPool pool)
     {
         var flush = FlushContextInput.ForHandle(handle);
         _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(

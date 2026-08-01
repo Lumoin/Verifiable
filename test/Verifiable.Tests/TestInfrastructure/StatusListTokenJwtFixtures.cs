@@ -30,7 +30,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 internal static class StatusListTokenJwtFixtures
 {
     /// <summary>The shared memory pool backing every pooled carrier this fixture allocates.</summary>
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
     /// <summary>

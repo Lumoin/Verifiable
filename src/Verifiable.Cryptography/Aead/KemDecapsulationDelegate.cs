@@ -36,5 +36,5 @@ namespace Verifiable.Cryptography.Aead;
 public delegate ValueTask<SharedSecret> KemDecapsulationDelegate(
     ReadOnlyMemory<byte> privateKeyBytes,
     ReadOnlyMemory<byte> encapsulatedKey,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);

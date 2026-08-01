@@ -55,7 +55,7 @@ internal sealed class CtapAuthenticatorGetInfoFlowTests
     [TestMethod]
     public async Task RpClientDrivesSimulatorOverRealApduTransportAndDecodesGetInfo()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //A padded, but semantically legitimate, "supported extensions" personalization — this
         //simulator model advertises many extension identifiers, pushing the getInfo response past

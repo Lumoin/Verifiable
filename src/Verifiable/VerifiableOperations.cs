@@ -199,7 +199,7 @@ internal static partial class VerifiableOperations
     //registered Microsoft provider rather than System.Security.Cryptography directly.
     private static async Task RunObservableWorkloadAsync(CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] payload = Encoding.UTF8.GetBytes("Verifiable CBOM observed workload payload.");
 
         //Routes through the CreateKeyPair choke point so the observed CBOM's provenance also carries the

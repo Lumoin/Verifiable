@@ -145,7 +145,7 @@ public static class PreservationEvidenceAttributeWellKnown
 /// attribute of a CAdES digital signature … before an <c>archive-time-stamp-v3</c> attribute is applied". Those
 /// are exactly two extension points this library already ships — the <c>attributes [1]</c> field of an
 /// <c>ArchiveTimeStamp</c>, reached through
-/// <see cref="EvidenceRecords.EncodeArchiveTimeStamp(AlgorithmIdentifier?, IReadOnlyList{CmsAttribute}, IReadOnlyList{EvidenceRecordPartialHashtree}, ReadOnlyMemory{byte}, MemoryPool{byte})"/>
+/// <see cref="EvidenceRecords.EncodeArchiveTimeStamp(AlgorithmIdentifier?, IReadOnlyList{CmsAttribute}, IReadOnlyList{EvidenceRecordPartialHashtree}, ReadOnlyMemory{byte}, BaseMemoryPool)"/>
 /// and surfaced on <see cref="EvidenceRecordArchiveTimeStamp.Attributes"/>, and a <c>SignerInfo</c>'s
 /// <c>unsignedAttrs</c>, reached through
 /// <see cref="CmsSignedDataAugmentation.AppendUnsignedAttributes"/> and located through
@@ -165,7 +165,7 @@ public static class PreservationEvidenceAttributeWellKnown
 /// <see href="https://www.etsi.org/deliver/etsi_ts/119500_119599/119511/01.02.01_60/ts_119511v010201p.pdf">
 /// ETSI TS 119 511 V1.2.1</see>, and these three attributes are those same three identifiers with identifiers
 /// this specification assigns. <see cref="ReadSelfDescription(EvidenceRecord)"/> and
-/// <see cref="ToAttributes(EArkEvidenceSelfDescription, MemoryPool{byte})"/> convert between the two so a package
+/// <see cref="ToAttributes(EArkEvidenceSelfDescription, BaseMemoryPool)"/> convert between the two so a package
 /// may carry the standardised attributes and still be read by the shipped placement rules, and so a package
 /// carrying the house value can be re-stated in the standardised form.
 /// </para>
@@ -205,7 +205,7 @@ public static class PreservationEvidenceAttributes
     /// When the value is longer than <see cref="MaximumValueLength"/> — a value this library would refuse to read
     /// back — or carries a character the <c>IA5String</c> type does not admit.
     /// </exception>
-    public static CmsAttribute Create(PreservationEvidenceAttributeKind kind, string value, MemoryPool<byte> pool)
+    public static CmsAttribute Create(PreservationEvidenceAttributeKind kind, string value, BaseMemoryPool pool)
     {
         ArgumentException.ThrowIfNullOrEmpty(value);
         ArgumentNullException.ThrowIfNull(pool);
@@ -252,7 +252,7 @@ public static class PreservationEvidenceAttributes
     /// A self-description stating nothing produces no attributes, which is a value that says nothing — refused
     /// here for the same reason <see cref="EArkEvidenceSelfDescription.EncodeValue"/> refuses to encode one.
     /// </remarks>
-    public static IReadOnlyList<CmsAttribute> ToAttributes(EArkEvidenceSelfDescription selfDescription, MemoryPool<byte> pool)
+    public static IReadOnlyList<CmsAttribute> ToAttributes(EArkEvidenceSelfDescription selfDescription, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(selfDescription);
         ArgumentNullException.ThrowIfNull(pool);
@@ -284,7 +284,7 @@ public static class PreservationEvidenceAttributes
 
         //One attribute per stated identifier, so an identifier the self-description leaves unstated produces no
         //attribute at all rather than one carrying an empty value.
-        static void Add(List<CmsAttribute> attributes, PreservationEvidenceAttributeKind kind, string? value, MemoryPool<byte> pool)
+        static void Add(List<CmsAttribute> attributes, PreservationEvidenceAttributeKind kind, string? value, BaseMemoryPool pool)
         {
             if(value is not null)
             {

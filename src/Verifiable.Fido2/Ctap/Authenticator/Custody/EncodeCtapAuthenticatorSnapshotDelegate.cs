@@ -38,4 +38,4 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// personalization before parsing anything else (fail closed).
 /// </para>
 /// </remarks>
-public delegate PooledMemory EncodeCtapAuthenticatorSnapshotDelegate(CtapAuthenticatorState state, MemoryPool<byte> pool);
+public delegate PooledMemory EncodeCtapAuthenticatorSnapshotDelegate(CtapAuthenticatorState state, BaseMemoryPool pool);

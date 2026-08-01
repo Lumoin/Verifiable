@@ -16,7 +16,7 @@ namespace Verifiable.Tests.DidComm;
 [TestClass]
 internal sealed class DidCommInboundClassifyTests
 {
-    private static readonly MemoryPool<byte> Pool = BaseMemoryPool.Shared;
+    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
 
 
     [TestMethod]

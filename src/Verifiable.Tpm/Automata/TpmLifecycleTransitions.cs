@@ -3086,7 +3086,7 @@ public static class TpmLifecycleTransitions
     //(all-zero) bank. Synchronous, with its scratch buffer pooled and released before returning.
     private static byte[] ComputeLivePcrDigest(PcrBankState bank, ReadOnlyMemory<byte> selectionBytes)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         const int digestSize = 32;                  //SHA-256 composite width — the bank's (and these sessions') hash.
         ImmutableArray<ReadOnlyMemory<byte>> values = GatherSelectedPcrValues(bank, selectionBytes);
 

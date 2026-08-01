@@ -16,7 +16,7 @@ namespace Verifiable.Tests.Cryptography
     [TestClass]
     internal sealed class EllipticCurveUtilitiesNormalizationTests
     {
-        private static readonly MemoryPool<byte> Pool = BaseMemoryPool.Shared;
+        private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
 
 
         /// <summary>A generated P-256 point round-trips uncompressed -> compress -> normalize back to the original 0x04||X||Y bytes.</summary>
@@ -163,7 +163,7 @@ namespace Verifiable.Tests.Cryptography
         //NormalizeToUncompressed recovers the original 0x04||X||Y bytes byte-for-byte. The curve is resolved
         //via CurveTypeFor so the helper under test selects the decompression parameters from the algorithm.
         private static void AssertCompressedRoundTrip(
-            Func<MemoryPool<byte>, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
+            Func<BaseMemoryPool, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
             CryptoAlgorithm algorithm)
         {
             PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys = createKeys(Pool);

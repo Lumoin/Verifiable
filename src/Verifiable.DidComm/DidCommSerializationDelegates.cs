@@ -16,7 +16,7 @@ namespace Verifiable.DidComm;
 /// <param name="message">The message to serialize.</param>
 /// <param name="memoryPool">The pool the returned artifact's owned buffer is drawn from.</param>
 /// <returns>The serialized plaintext message artifact.</returns>
-public delegate DidCommPlaintextMessage DidCommMessageSerializer(DidCommMessage message, MemoryPool<byte> memoryPool);
+public delegate DidCommPlaintextMessage DidCommMessageSerializer(DidCommMessage message, BaseMemoryPool memoryPool);
 
 
 /// <summary>
@@ -55,7 +55,7 @@ public delegate DidCommSignedMessage JwsMessageSerializer(
     JwsMessage message,
     JoseSerializationFormat format,
     EncodeDelegate base64UrlEncoder,
-    MemoryPool<byte> memoryPool);
+    BaseMemoryPool memoryPool);
 
 
 /// <summary>
@@ -77,4 +77,4 @@ public delegate DidCommSignedMessage JwsMessageSerializer(
 public delegate UnverifiedJwsMessage JwsMessageParser(
     ReadOnlySpan<byte> signedJson,
     DecodeDelegate base64UrlDecoder,
-    MemoryPool<byte> memoryPool);
+    BaseMemoryPool memoryPool);

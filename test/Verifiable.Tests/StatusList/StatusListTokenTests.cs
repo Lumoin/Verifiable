@@ -34,7 +34,7 @@ internal sealed class StatusListTokenTests
     /// </summary>
     /// <remarks>The shared memory pool minimizes memory allocations by reusing buffers. This property is
     /// thread-safe and intended for scenarios where high-performance buffer management is required.</remarks>
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
     [TestMethod]

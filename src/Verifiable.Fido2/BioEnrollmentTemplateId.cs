@@ -67,7 +67,7 @@ public sealed class BioEnrollmentTemplateId: SensitiveMemory, IEquatable<BioEnro
     /// <param name="pool">The memory pool to allocate from.</param>
     /// <returns>A new <see cref="BioEnrollmentTemplateId"/> containing a copy of <paramref name="value"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
-    public static BioEnrollmentTemplateId Create(ReadOnlySpan<byte> value, MemoryPool<byte> pool)
+    public static BioEnrollmentTemplateId Create(ReadOnlySpan<byte> value, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

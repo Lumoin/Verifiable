@@ -30,7 +30,7 @@ internal sealed class CredentialProofValidatorTests
     private const string Audience = "https://credential-issuer.example.com";
     private const string CredentialNonce = "c-nonce-LarRGSbmUPYtRYO6BQ4yn8";
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private FakeTimeProvider TimeProvider { get; } = new(NowInstant);
 

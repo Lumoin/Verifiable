@@ -33,7 +33,7 @@ namespace Verifiable.Tests.Cryptography;
 /// <strong>Every countersignature here is produced by the shipped surfaces</strong> —
 /// <see cref="CAdESSignatureCreation.PrepareCountersignatureAsync"/> /
 /// <see cref="CAdESSignatureCreation.CompleteCountersignature"/> /
-/// <see cref="CAdESSignatureCreation.CountersignAsync(CmsSignedData, int, PkiCertificateMemory, PrivateKeyMemory, DateTimeOffset, CryptographicConstraints?, bool, MemoryPool{byte}, CancellationToken)"/>
+/// <see cref="CAdESSignatureCreation.CountersignAsync(CmsSignedData, int, PkiCertificateMemory, PrivateKeyMemory, DateTimeOffset, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken)"/>
 /// and <see cref="CAdESSignatureAugmentation.AddCountersignatureAsync"/> — over key material from
 /// <see cref="BouncyCastleKeyMaterialCreator"/>, the repository's test-key convention.
 /// </para>

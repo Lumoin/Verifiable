@@ -57,7 +57,7 @@ internal sealed class CtapAuthenticatorDeferralCapstoneTests
     public async Task DeferredMakeCredentialOverRealWireResolvesAfterSeveralPollsMatchingSynchronousResponseStructurally()
     {
         Guid sharedAaguid = Guid.NewGuid();
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         int consultCount = 0;
@@ -141,7 +141,7 @@ internal sealed class CtapAuthenticatorDeferralCapstoneTests
     [TestMethod]
     public async Task CancellingDuringADeferredMakeCredentialSendsCancelP1AndSurfacesOperationCanceled()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using var cancellationSource = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
 
         async ValueTask<CtapUserPresenceDecision> CancelDuringFirstConsultProvider(CancellationToken ct)
@@ -182,7 +182,7 @@ internal sealed class CtapAuthenticatorDeferralCapstoneTests
     public async Task DeferredMakeCredentialTimesOutOverRealWireWhenProviderAdvancesPastThirtySecondsAndSurfacesUserActionTimeoutThroughClient()
     {
         var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         int consultCount = 0;
@@ -226,7 +226,7 @@ internal sealed class CtapAuthenticatorDeferralCapstoneTests
     [TestMethod]
     public async Task MakeCredentialWithoutSupportsGetResponseBitCompletesSynchronouslyAgainstADeferralConfiguredResponderOverRealWire()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CreateSimulator("wave2-capstone-p1gate", simulateUserPresence: AlwaysPending);
@@ -260,7 +260,7 @@ internal sealed class CtapAuthenticatorDeferralCapstoneTests
     [TestMethod]
     public async Task GetInfoAlgorithmsMemberIsPopulatedOverRealWireWhenACredentialSigningBackendIsPresent()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CreateSimulator("wave2-capstone-algorithms");
@@ -290,7 +290,7 @@ internal sealed class CtapAuthenticatorDeferralCapstoneTests
     [TestMethod]
     public async Task AuthenticatorConfigCompletesSynchronouslyOverRealWireEvenAgainstADeferralConfiguredResponder()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CreateSimulator("wave2-capstone-config-sync");
@@ -328,7 +328,7 @@ internal sealed class CtapAuthenticatorDeferralCapstoneTests
     /// since mc mints a fresh per-run keypair the two independent runs cannot match).
     /// </summary>
     private static void AssertMakeCredentialResponsesAreStructurallyIdentical(
-        CtapMakeCredentialResponse expected, CtapMakeCredentialResponse actual, Guid aaguid, MemoryPool<byte> pool)
+        CtapMakeCredentialResponse expected, CtapMakeCredentialResponse actual, Guid aaguid, BaseMemoryPool pool)
     {
         Assert.AreEqual(expected.Fmt, actual.Fmt);
         Assert.AreEqual(expected.AttStmt.HasValue, actual.AttStmt.HasValue);

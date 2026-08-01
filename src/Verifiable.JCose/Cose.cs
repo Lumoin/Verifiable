@@ -57,7 +57,7 @@ public static class Cose
         ReadOnlyMemory<byte> payload,
         BuildSigStructureDelegate buildSigStructure,
         PrivateKeyMemory privateKey,
-        MemoryPool<byte> signaturePool,
+        BaseMemoryPool signaturePool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(privateKey);
@@ -109,7 +109,7 @@ public static class Cose
         BuildSigStructureDelegate buildSigStructure,
         PrivateKeyMemory privateKey,
         SigningDelegate signingDelegate,
-        MemoryPool<byte> signaturePool,
+        BaseMemoryPool signaturePool,
         CryptoEventSink? eventSink = null,
         CancellationToken cancellationToken = default)
     {
@@ -166,7 +166,7 @@ public static class Cose
         BuildSigStructureDelegate buildSigStructure,
         PrivateKeyMemory privateKey,
         SigningFunction<byte, byte, ValueTask<Signature>> signingFunction,
-        MemoryPool<byte> signaturePool,
+        BaseMemoryPool signaturePool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(protectedHeader);
@@ -286,7 +286,7 @@ public static class Cose
         BuildSigStructureDelegate buildSigStructure,
         PublicKeyMemory publicKey,
         VerificationFunction<byte, byte, Signature, ValueTask<bool>> verificationFunction,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -316,7 +316,7 @@ public static class Cose
     /// <see cref="CryptographicKeyEvents.Events"/> — with no <see cref="CryptoEventSink"/> parameter needed
     /// here at all. A caller already holding (or able to cheaply construct) key material uses this route; a
     /// caller that only holds raw, disassembled key material uses the sink-threaded
-    /// <see cref="SignAsync(EncodedCoseProtectedHeader, IReadOnlyDictionary{int, object}?, ReadOnlyMemory{byte}, BuildSigStructureDelegate, PrivateKeyMemory, SigningDelegate, MemoryPool{byte}, CryptoEventSink?, CancellationToken)"/>
+    /// <see cref="SignAsync(EncodedCoseProtectedHeader, IReadOnlyDictionary{int, object}?, ReadOnlyMemory{byte}, BuildSigStructureDelegate, PrivateKeyMemory, SigningDelegate, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>
     /// overload instead. Both routes emit; neither discards.
     /// </remarks>
     /// <typeparam name="TResolverState">The state type for key material resolution.</typeparam>
@@ -341,7 +341,7 @@ public static class Cose
         IReadOnlyDictionary<int, object>? unprotectedHeader,
         ReadOnlyMemory<byte> payload,
         BuildSigStructureDelegate buildSigStructure,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TResolverState resolverState,
         KeyMaterialResolver<PrivateKeyMemory, CoseKeyContext, TResolverState> resolver,
         TBinderState binderState,
@@ -402,7 +402,7 @@ public static class Cose
     public static async ValueTask<bool> VerifyAsync<TResolverState, TBinderState>(
         CoseSign1Message message,
         BuildSigStructureDelegate buildSigStructure,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TResolverState resolverState,
         KeyMaterialResolver<PublicKeyMemory, CoseKeyContext, TResolverState> resolver,
         TBinderState binderState,

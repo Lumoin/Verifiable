@@ -60,7 +60,7 @@ public static class DidCommInbound
     /// <param name="base64UrlDecoder">Decoder for the encrypted envelope's protected header.</param>
     /// <param name="memoryPool">Pool backing the header decode.</param>
     /// <returns>The class the receiver dispatches on; <see cref="DidCommMessageClass.Unknown"/> for an unrecognized media type or an encrypted envelope whose <c>alg</c> is neither ECDH-ES nor ECDH-1PU.</returns>
-    public static DidCommMessageClass Classify(string? mediaType, ReadOnlySpan<byte> wire, DecodeDelegate base64UrlDecoder, MemoryPool<byte> memoryPool)
+    public static DidCommMessageClass Classify(string? mediaType, ReadOnlySpan<byte> wire, DecodeDelegate base64UrlDecoder, BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
         ArgumentNullException.ThrowIfNull(memoryPool);
@@ -87,7 +87,7 @@ public static class DidCommInbound
     //An encrypted envelope shares one media type across anoncrypt and authcrypt, so the protected-header alg
     //selects the path: ECDH-ES is anoncrypt, ECDH-1PU is authcrypt. A protected header that is absent, not
     //decodable, or carries an unrecognized alg is Unknown — the receiver then rejects it rather than guessing.
-    private static DidCommMessageClass ClassifyEncrypted(ReadOnlySpan<byte> wire, DecodeDelegate base64UrlDecoder, MemoryPool<byte> memoryPool)
+    private static DidCommMessageClass ClassifyEncrypted(ReadOnlySpan<byte> wire, DecodeDelegate base64UrlDecoder, BaseMemoryPool memoryPool)
     {
         if(!DidCommEncryptedExtensions.TryReadProtectedAlgorithms(wire, base64UrlDecoder, memoryPool, out string? algorithm, out _, out _, out _, out _)
             || string.IsNullOrEmpty(algorithm))

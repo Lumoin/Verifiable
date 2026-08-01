@@ -84,7 +84,7 @@ public static class PastCertificateValidation
         SignatureValidationSeams seams,
         DateTimeOffset currentTime,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(targetCertificate);

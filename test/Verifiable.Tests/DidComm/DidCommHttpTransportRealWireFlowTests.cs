@@ -42,7 +42,7 @@ internal sealed class DidCommHttpTransportRealWireFlowTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>The shared memory pool backing every pooled carrier this class allocates.</summary>
-    private static MemoryPool<byte> Pool { get; } = BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     /// <summary>The sender DID stamped into the packed message's <c>from</c> field.</summary>
     private const string AliceDid = "did:example:alice";

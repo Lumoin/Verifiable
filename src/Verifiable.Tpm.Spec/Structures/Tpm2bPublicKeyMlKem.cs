@@ -66,7 +66,7 @@ public readonly struct Tpm2bPublicKeyMlKem: IDisposable, IEquatable<Tpm2bPublicK
     /// <param name="publicKey">The public key data.</param>
     /// <param name="pool">The memory pool to allocate from.</param>
     /// <returns>The public key buffer.</returns>
-    public static Tpm2bPublicKeyMlKem Create(ReadOnlySpan<byte> publicKey, MemoryPool<byte>? pool = null)
+    public static Tpm2bPublicKeyMlKem Create(ReadOnlySpan<byte> publicKey, BaseMemoryPool? pool = null)
     {
         if(publicKey.Length > MaxMlKemPubSize)
         {
@@ -110,7 +110,7 @@ public readonly struct Tpm2bPublicKeyMlKem: IDisposable, IEquatable<Tpm2bPublicK
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool to allocate from.</param>
     /// <returns>The parsed public key.</returns>
-    public static Tpm2bPublicKeyMlKem Parse(ref TpmReader reader, MemoryPool<byte>? pool = null)
+    public static Tpm2bPublicKeyMlKem Parse(ref TpmReader reader, BaseMemoryPool? pool = null)
     {
         ushort size = reader.ReadUInt16();
 

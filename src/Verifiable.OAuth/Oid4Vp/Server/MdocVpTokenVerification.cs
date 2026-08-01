@@ -105,7 +105,7 @@ public static class MdocVpTokenVerification
         EncodeDeviceAuthenticationBytesDelegate encodeDeviceAuthenticationBytes,
         BuildSigStructureDelegate buildSigStructure,
         DecodeDelegate decoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(vpToken);

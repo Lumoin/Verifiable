@@ -52,7 +52,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
         Justification = "The canned nonceTPM ownership transfers to the bound TpmSession, disposed by the using statement.")]
     public async Task EncryptedResponseFirstParameterDecryptsToKnownPlaintext()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
 
@@ -72,7 +72,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
 
         ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
-            MemoryPool<byte> handlerPool,
+            BaseMemoryPool handlerPool,
             CancellationToken cancellationToken)
         {
             ReadOnlyMemory<byte> nonceCaller = ExtractCommandNonceCaller(command);
@@ -113,7 +113,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
     {
         //A wrong session key must surface as an HMAC failure (TPM_RC_AUTH_FAIL), never as silently mis-decrypted
         //plaintext: the response HMAC and the XOR mask key off the same session key.
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
 
@@ -134,7 +134,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
 
         ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
-            MemoryPool<byte> handlerPool,
+            BaseMemoryPool handlerPool,
             CancellationToken cancellationToken)
         {
             ReadOnlyMemory<byte> nonceCaller = ExtractCommandNonceCaller(command);
@@ -174,7 +174,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
         //The executor must encrypt the data portion of the first command parameter (decrypt attribute) before
         //sending. A scripted device captures the command and returns an error so execution stops after the send;
         //the test recovers the encrypted data with the independent oracle and asserts it matches the plaintext.
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
 
@@ -196,7 +196,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
         {
             ValueTask<TpmResult<TpmResponse>> Handler(
                 ReadOnlyMemory<byte> command,
-                MemoryPool<byte> handlerPool,
+                BaseMemoryPool handlerPool,
                 CancellationToken cancellationToken)
             {
                 //The borrowed command memory is not valid after the handler returns, so take a pooled copy.
@@ -258,7 +258,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
         Justification = "The canned nonceTPM ownership transfers to the bound TpmSession, disposed by the using statement.")]
     public async Task EncryptedResponseCfbDecryptsToKnownPlaintext()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
 
@@ -279,7 +279,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
 
         ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
-            MemoryPool<byte> handlerPool,
+            BaseMemoryPool handlerPool,
             CancellationToken cancellationToken)
         {
             ReadOnlyMemory<byte> nonceCaller = ExtractCommandNonceCaller(command);
@@ -318,7 +318,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
         Justification = "The TpmResponse ownership transfers to the returned TpmResult and is disposed by the executor under test.")]
     public async Task FirstCommandParameterIsCfbEncryptedOnTheWire()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
 
@@ -341,7 +341,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
         {
             ValueTask<TpmResult<TpmResponse>> Handler(
                 ReadOnlyMemory<byte> command,
-                MemoryPool<byte> handlerPool,
+                BaseMemoryPool handlerPool,
                 CancellationToken cancellationToken)
             {
                 //The borrowed command memory is not valid after the handler returns, so take a pooled copy.
@@ -422,11 +422,11 @@ internal sealed class TpmParameterEncryptionExecutorTests
         Justification = "The canned nonceTPM ownership transfers to the TpmSession, disposed by the using statement.")]
     public async Task EncryptAttributeOnNonEncryptableResponseThrows()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_FlushContext, TpmResponseCodec.FlushContext);
 
-        ValueTask<TpmResult<TpmResponse>> Handler(ReadOnlyMemory<byte> command, MemoryPool<byte> handlerPool, CancellationToken cancellationToken)
+        ValueTask<TpmResult<TpmResponse>> Handler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken)
         {
             Assert.Fail("The device must not be invoked when the encrypt attribute is inadmissible.");
 
@@ -454,11 +454,11 @@ internal sealed class TpmParameterEncryptionExecutorTests
         Justification = "The canned nonceTPM ownership transfers to each TpmSession, disposed by the using statements.")]
     public async Task DuplicateDecryptAttributeThrows()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
 
-        ValueTask<TpmResult<TpmResponse>> Handler(ReadOnlyMemory<byte> command, MemoryPool<byte> handlerPool, CancellationToken cancellationToken)
+        ValueTask<TpmResult<TpmResponse>> Handler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken)
         {
             Assert.Fail("The device must not be invoked when two sessions both set the decrypt attribute.");
 
@@ -489,11 +489,11 @@ internal sealed class TpmParameterEncryptionExecutorTests
         Justification = "The canned nonceTPM ownership transfers to the TpmSession, disposed by the using statement.")]
     private async Task AssertExecuteThrowsAsync(TpmaSession attributes, TpmtSymDef? symmetric, bool useEncryptableInput)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
 
-        ValueTask<TpmResult<TpmResponse>> Handler(ReadOnlyMemory<byte> command, MemoryPool<byte> handlerPool, CancellationToken cancellationToken)
+        ValueTask<TpmResult<TpmResponse>> Handler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken)
         {
             Assert.Fail("The device must not be invoked when parameter encryption is inadmissible.");
 
@@ -540,7 +540,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
         ReadOnlyMemory<byte> bindAuth,
         ReadOnlyMemory<byte> startNonceTpm,
         ReadOnlyMemory<byte> startNonceCaller,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         using IMemoryOwner<byte> derived = await Kdfa.DeriveAsync(
@@ -562,7 +562,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
         ReadOnlyMemory<byte> nonceTpmNew,
         ReadOnlyMemory<byte> plaintext,
         byte attributes,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         //Encrypt the first response parameter with XOR: response direction nonceNewer = nonceTPM, nonceOlder =
@@ -583,7 +583,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
         ReadOnlyMemory<byte> plaintext,
         byte attributes,
         int keyBits,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         //Encrypt the first response parameter with AES-CFB: response direction nonceNewer = nonceTPM, nonceOlder = nonceCaller.
@@ -608,7 +608,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
         ReadOnlyMemory<byte> nonceTpmNew,
         ReadOnlyMemory<byte> encrypted,
         byte attributes,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         int encryptedLength = encrypted.Length;
@@ -681,7 +681,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The frame owner ownership transfers to the returned TpmResponse, disposed by the executor under test.")]
-    private static TpmResult<TpmResponse> ErrorResponse(TpmRcConstants responseCode, MemoryPool<byte> pool)
+    private static TpmResult<TpmResponse> ErrorResponse(TpmRcConstants responseCode, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> frame = pool.Rent(HeaderSize);
         var writer = new TpmWriter(frame.Memory.Span[..HeaderSize]);
@@ -728,7 +728,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
         return TpmResult<TpmResponse>.Success(new TpmResponse(frame, length));
     }
 
-    private static Tpm2bNonce MakeNonce(int length, byte seed, MemoryPool<byte> pool)
+    private static Tpm2bNonce MakeNonce(int length, byte seed, BaseMemoryPool pool)
     {
         Span<byte> b = stackalloc byte[length];
         FillPattern(b, seed);
@@ -753,7 +753,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
     {
         private readonly Tpm2bData payload;
 
-        public EncryptableProbeInput(ReadOnlySpan<byte> data, MemoryPool<byte> pool)
+        public EncryptableProbeInput(ReadOnlySpan<byte> data, BaseMemoryPool pool)
         {
             payload = Tpm2bData.Create(data, pool);
         }

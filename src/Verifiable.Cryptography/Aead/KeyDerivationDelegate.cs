@@ -52,4 +52,4 @@ public delegate ContentEncryptionKey KeyDerivationDelegate(
     ReadOnlySpan<byte> partyUInfo,
     ReadOnlySpan<byte> partyVInfo,
     int keydataLenBits,
-    MemoryPool<byte> pool);
+    BaseMemoryPool pool);

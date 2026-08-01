@@ -576,7 +576,7 @@ public static class AsicContainerValidation
     /// <exception cref="ArgumentNullException">When an argument is <see langword="null"/>.</exception>
     public static async ValueTask<AsicContainerValidationResult> ValidateAsync(
         AsicContainerValidationContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -644,7 +644,7 @@ public static class AsicContainerValidation
         private readonly List<IDisposable> owned;
 
         /// <summary>The memory pool every allocation is rented from.</summary>
-        private readonly MemoryPool<byte> pool;
+        private readonly BaseMemoryPool pool;
 
         /// <summary>The per-manifest conclusions, in container order.</summary>
         private readonly List<AsicManifestValidation> manifests = [];
@@ -680,7 +680,7 @@ public static class AsicContainerValidation
             AsicContainerValidationContext context,
             AsicContainerFacts facts,
             List<IDisposable> owned,
-            MemoryPool<byte> pool)
+            BaseMemoryPool pool)
         {
             this.context = context;
             this.facts = facts;

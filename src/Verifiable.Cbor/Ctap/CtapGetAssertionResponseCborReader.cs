@@ -39,7 +39,7 @@ public static class CtapGetAssertionResponseCborReader
     /// <paramref name="payload"/> is not valid CTAP2 canonical CBOR, or omits a Required member
     /// (<c>credential</c>, <c>authData</c>, or <c>signature</c>).
     /// </exception>
-    public static CtapGetAssertionResponse Read(ReadOnlyMemory<byte> payload, MemoryPool<byte> pool)
+    public static CtapGetAssertionResponse Read(ReadOnlyMemory<byte> payload, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

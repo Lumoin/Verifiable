@@ -41,7 +41,7 @@ public static class TpmDeviceExtensions
         TpmDevice device,
         CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_GetCapability, TpmResponseCodec.GetCapability);
@@ -121,7 +121,7 @@ public static class TpmDeviceExtensions
 
     private static async ValueTask<TpmResult<(PcrBank Bank, uint UpdateCounter, bool IsConsistent)>> ReadBankWithPaginationAsync(
         TpmDevice device,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TpmResponseRegistry registry,
         TpmAlgIdConstants hashAlgorithm,
         List<int> allocatedPcrs,

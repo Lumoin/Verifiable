@@ -68,7 +68,7 @@ internal sealed class CtapWave2TransportHarness: IDisposable
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The composed harness. The caller owns it and must dispose it.</returns>
     public static async Task<CtapWave2TransportHarness> CreateAsync(
-        CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         CtapNfcResponder responder = CtapNfcResponder.Create(simulator.TransceiveAsync);
         ApduDevice device = ApduDevice.Create(responder.TransceiveAsync);
@@ -96,7 +96,7 @@ internal sealed class CtapWave2TransportHarness: IDisposable
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The composed harness. The caller owns it and must dispose it.</returns>
     public static async Task<CtapWave2TransportHarness> CreateWithDeferralAsync(
-        CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         CtapNfcResponder responder = CtapNfcResponder.Create(
             simulator.TransceiveAsync, simulator.BeginDeferredTransceiveAsync, simulator.PollDeferredTransceiveAsync, simulator.CancelDeferredTransceiveAsync);

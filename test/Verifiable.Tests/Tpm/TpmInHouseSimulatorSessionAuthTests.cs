@@ -65,7 +65,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
     [TestMethod]
     public async Task TamperedGetRandomHmacIsRejectedWithSessionEncodedBadAuth()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateGetRandomRegistry();
@@ -91,7 +91,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
                     //tail) is corrupted before it reaches the simulator, proving the mechanism actually gates
                     //something rather than accepting anything.
                     byte[]? lastCommand = null;
-                    async ValueTask<TpmResult<TpmResponse>> TamperLastHmacByteAsync(ReadOnlyMemory<byte> command, MemoryPool<byte> commandPool, System.Threading.CancellationToken ct)
+                    async ValueTask<TpmResult<TpmResponse>> TamperLastHmacByteAsync(ReadOnlyMemory<byte> command, BaseMemoryPool commandPool, System.Threading.CancellationToken ct)
                     {
                         byte[] mutable = command.ToArray();
                         lastCommand = mutable;
@@ -129,7 +129,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
     [TestMethod]
     public async Task ZeroLengthHmacOnABoundSessionIsRejected()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateGetRandomRegistry();
@@ -151,7 +151,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
                 {
                     //A submit wrapper applied ONLY to this final GetRandom command, zeroing its hmac TPM2B's size
                     //field (navigated to from the front, since its offset depends on nonceCaller's actual size).
-                    async ValueTask<TpmResult<TpmResponse>> ZeroTheHmacAsync(ReadOnlyMemory<byte> command, MemoryPool<byte> commandPool, System.Threading.CancellationToken ct)
+                    async ValueTask<TpmResult<TpmResponse>> ZeroTheHmacAsync(ReadOnlyMemory<byte> command, BaseMemoryPool commandPool, System.Threading.CancellationToken ct)
                     {
                         byte[] mutable = command.ToArray();
 
@@ -220,7 +220,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
     [TestMethod]
     public async Task GetRandomOverALoneAttributelessSessionIsRejectedWithSessionEncodedAttributes()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateGetRandomRegistry();
@@ -266,11 +266,11 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
     [TestMethod]
     public async Task IndependentlyTranscribedCommandHmacMatchesWhatTheSimulatorAccepted()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
 
         byte[]? capturedCommand = null;
-        async ValueTask<TpmResult<TpmResponse>> CaptureAsync(ReadOnlyMemory<byte> command, MemoryPool<byte> commandPool, System.Threading.CancellationToken ct)
+        async ValueTask<TpmResult<TpmResponse>> CaptureAsync(ReadOnlyMemory<byte> command, BaseMemoryPool commandPool, System.Threading.CancellationToken ct)
         {
             capturedCommand = command.ToArray();
             return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
@@ -314,7 +314,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
                         capturedCommand!, out ReadOnlyMemory<byte> nonceCaller, out byte sessionAttributes,
                         out ReadOnlyMemory<byte> suppliedHmac, out ReadOnlyMemory<byte> rawBytesRequested);
 
-                    MemoryPool<byte> oraclePool = BaseMemoryPool.Shared;
+                    BaseMemoryPool oraclePool = BaseMemoryPool.Shared;
 
                     //Independent oracle: KDFa (Part 1, clause 11.4.10.2) via the project's own Kdfa, keyed on the
                     //bind object's authValue (empty for this test's signing key) — the session-key derivation the
@@ -373,7 +373,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
     [TestMethod]
     public async Task UnsealOverHmacSessionWithCorrectUserAuthReturnsPlaintext()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateSealRegistry();
@@ -416,7 +416,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
     [TestMethod]
     public async Task UnsealOverHmacSessionWithAnAuditOnlySecondSessionReturnsPlaintextUnencrypted()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateSealRegistry();
@@ -471,7 +471,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
     [TestMethod]
     public async Task UnsealOverHmacSessionWithWrongUserAuthCountsAuthFailOnDaProtectedObject()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateSealRegistry();
@@ -520,7 +520,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
     [TestMethod]
     public async Task UnsealOverHmacSessionWithWrongUserAuthOnNoDaObjectIsBadAuthWithoutCountingFailedTries()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateSealRegistry();
@@ -568,7 +568,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
     [TestMethod]
     public async Task UnsealOverHmacSessionAlreadyLockedOutRejectsWithoutTouchingFailedTries()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateSealRegistry();
@@ -632,7 +632,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
     [TestMethod]
     public async Task PasswordUnsealWithWrongPasswordCountsAuthFail()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateSealRegistry();
@@ -670,7 +670,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
     [TestMethod]
     public async Task PasswordUnsealAcceptsAPasswordDifferingOnlyInTrailingZeros()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateSealRegistry();
@@ -707,7 +707,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
     [TestMethod]
     public async Task ReplayedCommandBytesAfterTheSessionAdvancedAreRejected()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateSealRegistry();
@@ -723,7 +723,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
             itemHandle = loaded.ObjectHandle.Value;
 
             byte[]? firstCommand = null;
-            async ValueTask<TpmResult<TpmResponse>> CaptureAsync(ReadOnlyMemory<byte> command, MemoryPool<byte> commandPool, System.Threading.CancellationToken ct)
+            async ValueTask<TpmResult<TpmResponse>> CaptureAsync(ReadOnlyMemory<byte> command, BaseMemoryPool commandPool, System.Threading.CancellationToken ct)
             {
                 firstCommand ??= command.ToArray();
                 return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
@@ -776,7 +776,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
     [TestMethod]
     public async Task ResetClearsHmacSessions()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateGetRandomRegistry();
@@ -869,7 +869,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
     /// own authValue is empty; the object exists only to give <c>StartAuthSession</c>'s <c>bind</c> handle
     /// something real to resolve).
     /// </summary>
-    private async Task<CreatePrimaryResponse> CreateSigningBindObjectAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool)
+    private async Task<CreatePrimaryResponse> CreateSigningBindObjectAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
         using CreatePrimaryInput primaryInput = CreatePrimaryInput.ForEccSigningKey(
             TpmRh.TPM_RH_OWNER, null, TpmEccCurveConstants.TPM_ECC_NIST_P256, TpmtEccScheme.Ecdsa(TpmAlgIdConstants.TPM_ALG_SHA256), pool, noDa: true);
@@ -885,7 +885,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
     /// <summary>
     /// Creates the deterministic ECC storage parent under the owner hierarchy.
     /// </summary>
-    private async Task<CreatePrimaryResponse> CreateStorageParentAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool)
+    private async Task<CreatePrimaryResponse> CreateStorageParentAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
         using CreatePrimaryInput parentInput = CreatePrimaryInput.ForEccStorageParent(
             TpmRh.TPM_RH_OWNER, null, TpmEccCurveConstants.TPM_ECC_NIST_P256, pool, noDa: true);
@@ -902,7 +902,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
     /// Seals <see cref="SecretBytes"/> under <paramref name="userAuth"/>, persists-and-reloads it through wire
     /// bytes only, and returns the loaded object's response.
     /// </summary>
-    private async Task<LoadResponse> SealAndLoadAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, uint parentHandle, byte[] userAuth, bool noDa)
+    private async Task<LoadResponse> SealAndLoadAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, uint parentHandle, byte[] userAuth, bool noDa)
     {
         using Tpm2bSensitiveCreate inSensitive = Tpm2bSensitiveCreate.ForSealedData(SecretBytes, userAuth, pool);
         using Tpm2bPublic sealTemplate = Tpm2bPublic.CreateSealedDataTemplate(SessionAlg, pool, authPolicy: default, noDa: noDa);
@@ -933,7 +933,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
     /// KDFa's own context, needed by the independent-oracle test.
     /// </summary>
     private async Task<(uint SessionHandle, TpmSession Session, byte[] InitialNonceCaller, byte[] InitialNonceTpm)> StartBoundHmacSessionAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, uint bindHandle, TpmtSymDef symmetric)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, uint bindHandle, TpmtSymDef symmetric)
     {
         StartAuthSessionInput startInput = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(bindHandle, SessionAlg, symmetric);
 
@@ -974,7 +974,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
     }
 
     /// <summary>Reserializes a public area into a fresh <see cref="Tpm2bPublic"/> (a disk-persisted round trip).</summary>
-    private static Tpm2bPublic ClonePublic(Tpm2bPublic source, MemoryPool<byte> pool)
+    private static Tpm2bPublic ClonePublic(Tpm2bPublic source, BaseMemoryPool pool)
     {
         int size = source.GetSerializedSize();
         using IMemoryOwner<byte> owner = pool.Rent(size);
@@ -1017,7 +1017,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
     /// Creates a simulator with the ECC (BouncyCastle) signing backend wired, powers it on, and brings it through
     /// <c>TPM2_Startup(CLEAR)</c> into the operational phase.
     /// </summary>
-    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator("tpm-in-house-session-auth", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -1030,7 +1030,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
     /// Issues <c>TPM2_Startup(CLEAR)</c> directly against the simulator, mirroring how the executor frames an
     /// unauthorized command on the wire.
     /// </summary>
-    private async Task IssueStartupClearAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task IssueStartupClearAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();

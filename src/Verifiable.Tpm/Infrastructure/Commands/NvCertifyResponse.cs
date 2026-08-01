@@ -58,7 +58,7 @@ public sealed class NvCertifyResponse: IDisposable, ITpmWireType
     /// <param name="reader">The reader positioned at the response parameters.</param>
     /// <param name="pool">The memory pool for parameter buffer allocation.</param>
     /// <returns>The parsed NV-certify response.</returns>
-    public static NvCertifyResponse Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static NvCertifyResponse Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         Tpm2bAttest certifyInfo = Tpm2bAttest.Parse(ref reader, pool);

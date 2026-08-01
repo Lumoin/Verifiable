@@ -81,7 +81,7 @@ public delegate ValueTask<ReadOnlyMemory<byte>> SignPayloadDelegate(
     string mediaType,
     PrivateKeyMemory privateKey,
     string keyId,
-    MemoryPool<byte> memoryPool,
+    BaseMemoryPool memoryPool,
     CancellationToken cancellationToken);
 
 
@@ -184,7 +184,7 @@ public static class SdIssuance
         GenerateDisclosureSaltDelegate generateSalt,
         PrivateKeyMemory privateKey,
         string keyId,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         SigningDelegate signingDelegate,
         string? hashAlgorithm = null,
         string? mediaType = null,
@@ -235,7 +235,7 @@ public static class SdIssuance
         GenerateDisclosureSaltDelegate generateSalt,
         PrivateKeyMemory privateKey,
         string keyId,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         SigningDelegate signingDelegate,
         string? hashAlgorithm = null,
         string? mediaType = null,

@@ -21,7 +21,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </exception>
 public delegate IReadOnlyList<PkiCertificateMemory> ParseX5cDelegate(
     IReadOnlyList<string> x5cValues,
-    MemoryPool<byte> pool);
+    BaseMemoryPool pool);
 
 
 /// <summary>
@@ -76,7 +76,7 @@ public delegate ValueTask<PublicKeyMemory> ValidateCertificateChainAsyncDelegate
     IReadOnlyList<PkiCertificateMemory> chain,
     IReadOnlyList<PkiCertificateMemory> trustAnchors,
     DateTimeOffset validationTime,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CheckCertificateRevocationStatusAsyncDelegate? checkRevocation = null,
     CancellationToken cancellationToken = default);
 
@@ -117,7 +117,7 @@ public delegate ValueTask<PublicKeyMemory> ValidateCertificateChainAsyncDelegate
 public delegate ValueTask<IReadOnlyList<PkiCertificateMemory>> CompleteCertificateChainAsyncDelegate(
     IReadOnlyList<PkiCertificateMemory> partialChain,
     IReadOnlyList<PkiCertificateMemory> trustAnchors,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);
 
 
@@ -424,7 +424,7 @@ public delegate ValueTask<CertificateRevocationStatus> CheckCertificateRevocatio
     PkiCertificateMemory certificate,
     IReadOnlyList<PkiCertificateMemory> issuerCandidates,
     DateTimeOffset validationTime,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);
 
 

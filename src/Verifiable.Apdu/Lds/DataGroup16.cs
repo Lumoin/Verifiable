@@ -121,7 +121,7 @@ public sealed class DataGroup16
     /// <returns>The EF.DG16 <see cref="ElementaryFile"/>. The caller disposes it.</returns>
     /// <exception cref="ArgumentException">Thrown when more than 255 persons are supplied (the single-octet count cannot encode them).</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned ElementaryFile, which the caller disposes; the catch disposes it on failure.")]
-    public static ElementaryFile Write(IReadOnlyList<PersonToNotify> personsToNotify, MemoryPool<byte> pool)
+    public static ElementaryFile Write(IReadOnlyList<PersonToNotify> personsToNotify, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(personsToNotify);
         ArgumentNullException.ThrowIfNull(pool);

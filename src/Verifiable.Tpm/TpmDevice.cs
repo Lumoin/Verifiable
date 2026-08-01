@@ -29,7 +29,7 @@ namespace Verifiable.Tpm;
 /// </remarks>
 public delegate ValueTask<TpmResult<TpmResponse>> TpmSubmitHandler(
     ReadOnlyMemory<byte> command,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);
 
 /// <summary>
@@ -331,7 +331,7 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     /// </remarks>
     public async ValueTask<TpmResult<TpmResponse>> SubmitAsync(
         ReadOnlyMemory<byte> command,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -551,7 +551,7 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
         Justification = "The platform submit paths run only when the Platform property is Windows or Linux; a browser device is always constructed via Create(handler), so customHandler short-circuits before any platform dispatch.")]
     private ValueTask<TpmResult<TpmResponse>> SubmitCoreAsync(
         ReadOnlyMemory<byte> command,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(CustomHandler is not null)
@@ -578,7 +578,7 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
         Justification = "TpmResponse takes ownership of responseOwner. The caller is responsible for disposing the returned TpmResult.")]
     private async ValueTask<TpmResult<TpmResponse>> SubmitLinuxAsync(
         ReadOnlyMemory<byte> command,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(linuxStream is null)
@@ -622,7 +622,7 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
         Justification = "TpmResponse takes ownership of responseOwner. The caller is responsible for disposing the returned TpmResult.")]
     private ValueTask<TpmResult<TpmResponse>> SubmitWindowsAsync(
         ReadOnlyMemory<byte> command,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();

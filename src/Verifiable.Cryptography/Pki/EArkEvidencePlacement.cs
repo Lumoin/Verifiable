@@ -328,7 +328,7 @@ public static class EArkEvidencePlacement
         Justification = "Ownership of both fixity carriers transfers to the returned result, which the caller disposes; the catch disposes what was built on a partial failure.")]
     public static async ValueTask<EArkEvidencePlacementResult> StatePlacementAsync(
         EArkEvidencePlacementContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -652,7 +652,7 @@ public static class EArkEvidencePlacement
         string? selfDescriptionText,
         string entryName,
         IReadOnlyList<string> coveredEntryNames,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         bool isManifestProtected = false,
         string? representationLabel = null,
         EvidenceRecord? evidence = null)
@@ -689,7 +689,7 @@ public static class EArkEvidencePlacement
     /// <returns>The fixity. The caller owns and disposes it.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the rented buffer transfers to the DigestValue and from it to the returned fixity, which the caller disposes; the catch disposes it on a partial failure.")]
-    private static EArkRecomputableFixity CopyFixity(DigestValue computed, PkiDigestAlgorithm algorithm, MemoryPool<byte> pool)
+    private static EArkRecomputableFixity CopyFixity(DigestValue computed, PkiDigestAlgorithm algorithm, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(algorithm.OutputByteLength);
         try

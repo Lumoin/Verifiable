@@ -37,7 +37,7 @@ public sealed class EncodedCoseProtectedHeader(IMemoryOwner<byte> sensitiveMemor
     /// <see cref="CryptoTags.CoseEncodedProtectedHeader"/>. Caller takes
     /// ownership of the returned carrier.
     /// </summary>
-    public static EncodedCoseProtectedHeader FromBytes(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
+    public static EncodedCoseProtectedHeader FromBytes(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

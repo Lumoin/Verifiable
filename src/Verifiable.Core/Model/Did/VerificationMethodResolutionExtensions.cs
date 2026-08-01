@@ -461,7 +461,7 @@ public static class VerificationMethodResolutionExtensions
     /// The returned memory should be disposed after use.
     /// </remarks>
     public static (IMemoryOwner<byte> keyMaterial, CryptoAlgorithm Algorithm, Purpose Purpose, EncodingScheme Scheme)
-        ExtractKeyMaterial(this VerificationMethod verificationMethod, MemoryPool<byte> memoryPool)
+        ExtractKeyMaterial(this VerificationMethod verificationMethod, BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(verificationMethod);
         ArgumentNullException.ThrowIfNull(memoryPool);
@@ -490,7 +490,7 @@ public static class VerificationMethodResolutionExtensions
     /// The returned PublicKeyMemory should be disposed after use to return memory to the pool.
     /// The Tag property of the returned instance contains algorithm, purpose, and encoding scheme information.
     /// </remarks>
-    public static PublicKeyMemory ToPublicKeyMemory(this VerificationMethod verificationMethod, MemoryPool<byte> memoryPool)
+    public static PublicKeyMemory ToPublicKeyMemory(this VerificationMethod verificationMethod, BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(verificationMethod);
         ArgumentNullException.ThrowIfNull(memoryPool);
@@ -519,7 +519,7 @@ public static class VerificationMethodResolutionExtensions
     /// to a usable PublicKey. It handles all the necessary conversions and factory calls internally.
     /// The returned PublicKey should be disposed after use.
     /// </remarks>
-    public static PublicKey ToPublicKey(this VerificationMethod verificationMethod, MemoryPool<byte> memoryPool)
+    public static PublicKey ToPublicKey(this VerificationMethod verificationMethod, BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(verificationMethod);
         ArgumentNullException.ThrowIfNull(memoryPool);

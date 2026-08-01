@@ -71,7 +71,7 @@ public delegate string SerializeBbsDerivedProofDelegate(
 public delegate Bbs2023BaseProofValue ParseBbsBaseProofDelegate(
     string proofValue,
     DecodeDelegate decoder,
-    MemoryPool<byte> memoryPool);
+    BaseMemoryPool memoryPool);
 
 
 /// <summary>
@@ -90,7 +90,7 @@ public delegate Bbs2023BaseProofValue ParseBbsBaseProofDelegate(
 public delegate Bbs2023DerivedProofValue ParseBbsDerivedProofDelegate(
     string proofValue,
     DecodeDelegate decoder,
-    MemoryPool<byte> memoryPool);
+    BaseMemoryPool memoryPool);
 
 
 /// <summary>
@@ -114,7 +114,7 @@ public delegate Bbs2023DerivedProofValue ParseBbsDerivedProofDelegate(
 public delegate byte[] BbsSignDelegate(
     ReadOnlyMemory<byte> bbsHeader,
     IReadOnlyList<byte[]> messages,
-    MemoryPool<byte> memoryPool);
+    BaseMemoryPool memoryPool);
 
 
 /// <summary>
@@ -139,7 +139,7 @@ public delegate bool BbsVerifySignatureDelegate(
     ReadOnlyMemory<byte> bbsSignature,
     ReadOnlyMemory<byte> bbsHeader,
     IReadOnlyList<byte[]> messages,
-    MemoryPool<byte> memoryPool);
+    BaseMemoryPool memoryPool);
 
 
 /// <summary>
@@ -169,7 +169,7 @@ public delegate byte[] BbsProofGenDelegate(
     ReadOnlyMemory<byte> presentationHeader,
     IReadOnlyList<byte[]> messages,
     IReadOnlyList<int> disclosedIndexes,
-    MemoryPool<byte> memoryPool);
+    BaseMemoryPool memoryPool);
 
 
 /// <summary>
@@ -198,4 +198,4 @@ public delegate bool BbsProofVerifyDelegate(
     ReadOnlyMemory<byte> presentationHeader,
     IReadOnlyList<byte[]> disclosedMessages,
     IReadOnlyList<int> disclosedIndexes,
-    MemoryPool<byte> memoryPool);
+    BaseMemoryPool memoryPool);

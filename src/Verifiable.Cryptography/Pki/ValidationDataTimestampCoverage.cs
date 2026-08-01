@@ -80,7 +80,7 @@ public static class ValidationDataTimestampCoverage
         CmsSignedData signedData,
         int signerIndex,
         string attributeOid,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(signedData);
         ArgumentNullException.ThrowIfNull(attributeOid);
@@ -205,7 +205,7 @@ public static class ValidationDataTimestampCoverage
     /// <param name="parts">The parts, in the order the clause lists them.</param>
     /// <param name="pool">The memory pool the carrier is rented from.</param>
     /// <returns>The carrier. The caller owns and disposes it.</returns>
-    private static SignedContentMemory Concatenate(List<ReadOnlyMemory<byte>> parts, MemoryPool<byte> pool)
+    private static SignedContentMemory Concatenate(List<ReadOnlyMemory<byte>> parts, BaseMemoryPool pool)
     {
         int total = 0;
         for(int i = 0; i < parts.Count; ++i)

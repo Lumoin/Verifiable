@@ -99,7 +99,7 @@ public sealed class CtapNfcTransport
     /// </exception>
     public async ValueTask<PooledMemory> TransceiveAsync(
         ReadOnlyMemory<byte> request,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -150,7 +150,7 @@ public sealed class CtapNfcTransport
         //loop above) so the single command-build-then-execute shape stays simple regardless of which
         //loop iteration calls it. p1 selects the normal poll (0x00) or cancel (0x11) variant.
         static async ValueTask<ApduResult<ApduResponse>> IssueGetResponseAsync(
-            ApduDevice device, byte p1, MemoryPool<byte> pool, CancellationToken cancellationToken)
+            ApduDevice device, byte p1, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             using CommandApdu getResponseCommand = CommandApdu.BuildCase2(
                 WellKnownCtapCommandParameters.ClassByte, WellKnownCtapInstructionCodes.NfcCtapGetResponse.Code,

@@ -65,7 +65,7 @@ public sealed class Tpm2bSensitiveData: SensitiveMemory, ITpmWireType
     /// <param name="reader">The reader positioned at the sensitive data.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed sensitive data.</returns>
-    public static Tpm2bSensitiveData Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static Tpm2bSensitiveData Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ushort length = reader.ReadUInt16();
@@ -107,7 +107,7 @@ public sealed class Tpm2bSensitiveData: SensitiveMemory, ITpmWireType
     /// <param name="bytes">The sensitive bytes.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The created sensitive data.</returns>
-    public static Tpm2bSensitiveData Create(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
+    public static Tpm2bSensitiveData Create(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         if(bytes.IsEmpty)

@@ -70,7 +70,7 @@ public sealed class SignedContentMemory(IMemoryOwner<byte> content): SensitiveMe
     /// <param name="bytes">The content octets.</param>
     /// <param name="pool">The memory pool the buffer is rented from.</param>
     /// <returns>The carrier; the caller takes ownership.</returns>
-    public static SignedContentMemory FromBytes(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
+    public static SignedContentMemory FromBytes(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -573,7 +573,7 @@ public sealed record SignatureFactsExtractionContext
 /// </returns>
 public delegate ValueTask<SignatureFacts> ExtractSignatureFactsAsyncDelegate(
     SignatureFactsExtractionContext context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);
 
 
@@ -667,7 +667,7 @@ public sealed record SignatureCryptographicVerificationContext
 /// </returns>
 public delegate ValueTask<SignatureCryptographicVerification> VerifySignatureCryptographyAsyncDelegate(
     SignatureCryptographicVerificationContext context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);
 
 
@@ -707,7 +707,7 @@ public sealed record TimestampCoverageContext
 /// </returns>
 public delegate ValueTask<SignedContentMemory?> StateTimestampCoverageAsyncDelegate(
     TimestampCoverageContext context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);
 
 
@@ -761,7 +761,7 @@ public sealed record TimestampProtectedObjectContext
 /// </remarks>
 public delegate ValueTask<bool> StateTimestampProtectsObjectAsyncDelegate(
     TimestampProtectedObjectContext context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);
 
 
@@ -846,5 +846,5 @@ public sealed record TimestampTokenValidationContext
 /// </remarks>
 public delegate ValueTask<BuildingBlockConclusion> ValidateTimestampTokenAsyncDelegate(
     TimestampTokenValidationContext context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);

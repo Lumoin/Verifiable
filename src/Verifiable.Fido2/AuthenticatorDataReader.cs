@@ -83,7 +83,7 @@ public static class AuthenticatorDataReader
     /// WebAuthn L3 section 6.5.1 / 5.8.5 conformance clauses (a duplicate, missing, or disallowed COSE_Key
     /// label; an algorithm/curve mismatch; or a forbidden compressed EC point encoding).
     /// </exception>
-    public static AuthenticatorData Read(ReadOnlyMemory<byte> authenticatorData, ReadCredentialPublicKeyDelegate readCredentialPublicKey, MemoryPool<byte> pool)
+    public static AuthenticatorData Read(ReadOnlyMemory<byte> authenticatorData, ReadCredentialPublicKeyDelegate readCredentialPublicKey, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(readCredentialPublicKey);
         ArgumentNullException.ThrowIfNull(pool);
@@ -118,7 +118,7 @@ public static class AuthenticatorDataReader
         }
 
         //Copies the wire rpIdHash slice into a pooled SHA-256-tagged carrier.
-        static DigestValue CopyRpIdHash(ReadOnlySpan<byte> rpIdHash, MemoryPool<byte> pool)
+        static DigestValue CopyRpIdHash(ReadOnlySpan<byte> rpIdHash, BaseMemoryPool pool)
         {
             IMemoryOwner<byte> owner = pool.Rent(rpIdHash.Length);
             try
@@ -136,7 +136,7 @@ public static class AuthenticatorDataReader
 
         //Parses the attested credential data structure at the start of `remaining` and advances
         //it past the consumed bytes, including the trailing COSE_Key the supplied delegate reads.
-        static AttestedCredentialData ReadAttestedCredentialData(ref ReadOnlyMemory<byte> remaining, ReadCredentialPublicKeyDelegate readCredentialPublicKey, MemoryPool<byte> pool)
+        static AttestedCredentialData ReadAttestedCredentialData(ref ReadOnlyMemory<byte> remaining, ReadCredentialPublicKeyDelegate readCredentialPublicKey, BaseMemoryPool pool)
         {
             if(remaining.Length < AttestedCredentialDataHeaderLength)
             {

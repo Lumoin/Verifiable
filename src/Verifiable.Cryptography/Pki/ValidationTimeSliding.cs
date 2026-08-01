@@ -85,7 +85,7 @@ public static class ValidationTimeSliding
         X509ValidationConstraints x509Constraints,
         DateTimeOffset currentTime,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(prospectiveChain);
@@ -291,7 +291,7 @@ public static class ValidationTimeSliding
         PkiCertificateMemory revocationData,
         DateTimeOffset controlTime,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ValidationObjectIdentity certificateIdentity = await ProofOfExistenceExtraction.CreateIdentityAsync(

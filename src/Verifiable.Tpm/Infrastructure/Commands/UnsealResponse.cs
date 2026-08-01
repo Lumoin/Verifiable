@@ -42,7 +42,7 @@ public sealed class UnsealResponse: ITpmWireType, IDisposable
     /// <param name="reader">The reader positioned at the response parameters.</param>
     /// <param name="pool">The memory pool for parameter buffer allocation.</param>
     /// <returns>The parsed unseal response.</returns>
-    public static UnsealResponse Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static UnsealResponse Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         Tpm2bSensitiveData outData = Tpm2bSensitiveData.Parse(ref reader, pool);

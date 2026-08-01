@@ -121,7 +121,7 @@ public sealed class Tpm2bPrivate: IDisposable, ITpmWireType
     /// <param name="reader">The reader positioned at the blob.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed private blob.</returns>
-    public static Tpm2bPrivate Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static Tpm2bPrivate Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ushort size = reader.ReadUInt16();
@@ -160,7 +160,7 @@ public sealed class Tpm2bPrivate: IDisposable, ITpmWireType
     /// <param name="bytes">The blob octets (for example the <c>outPrivate</c> of a prior <c>TPM2_Create()</c>).</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The created private blob.</returns>
-    public static Tpm2bPrivate Create(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
+    public static Tpm2bPrivate Create(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         if(bytes.IsEmpty)

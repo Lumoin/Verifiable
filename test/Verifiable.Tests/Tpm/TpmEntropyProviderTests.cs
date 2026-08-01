@@ -156,7 +156,7 @@ internal sealed class TpmEntropyProviderTests
     {
         //A device whose TPM2_SelfTest reports TPM_RC_TESTING (tests in progress, not failed). The
         //in-process simulator never emits this, so a scripted device exercises the mapping.
-        ValueTask<TpmResult<TpmResponse>> TestingHandler(ReadOnlyMemory<byte> command, MemoryPool<byte> handlerPool, CancellationToken cancellationToken) =>
+        ValueTask<TpmResult<TpmResponse>> TestingHandler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(HeaderOnlyResponse(TpmRcConstants.TPM_RC_TESTING, handlerPool));
 
         using TpmDevice device = TpmDevice.Create(TestingHandler);
@@ -175,7 +175,7 @@ internal sealed class TpmEntropyProviderTests
         const uint TransportCode = 0x8028400Au;
 
         //A device whose self-test round-trip fails at the transport layer (no self-test verdict).
-        ValueTask<TpmResult<TpmResponse>> TransportFailHandler(ReadOnlyMemory<byte> command, MemoryPool<byte> handlerPool, CancellationToken cancellationToken) =>
+        ValueTask<TpmResult<TpmResponse>> TransportFailHandler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(TpmResult<TpmResponse>.TransportError(TransportCode));
 
         using TpmDevice device = TpmDevice.Create(TransportFailHandler);
@@ -194,7 +194,7 @@ internal sealed class TpmEntropyProviderTests
         var simulator = new TpmSimulator(tpmId, selfTest);
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using IMemoryOwner<byte> owner = FrameCommand(new StartupInput(TpmSuConstants.TPM_SU_CLEAR), pool, out int length);
         TpmResult<TpmResponse> startup = await simulator.SubmitAsync(owner.Memory[..length], pool, TestContext.CancellationToken).ConfigureAwait(false);
         startup.Value.Dispose();
@@ -206,7 +206,7 @@ internal sealed class TpmEntropyProviderTests
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the rented command buffer transfers to the caller, which disposes it.")]
-    private static IMemoryOwner<byte> FrameCommand<TInput>(TInput input, MemoryPool<byte> pool, out int length)
+    private static IMemoryOwner<byte> FrameCommand<TInput>(TInput input, BaseMemoryPool pool, out int length)
         where TInput: ITpmCommandInput
     {
         length = TpmHeader.HeaderSize + input.GetSerializedSize();
@@ -223,7 +223,7 @@ internal sealed class TpmEntropyProviderTests
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The TpmResponse takes ownership of the rented buffer and is owned by the returned TpmResult, which the caller under test disposes.")]
-    private static TpmResult<TpmResponse> HeaderOnlyResponse(TpmRcConstants responseCode, MemoryPool<byte> pool)
+    private static TpmResult<TpmResponse> HeaderOnlyResponse(TpmRcConstants responseCode, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(TpmHeader.HeaderSize);
         var writer = new TpmWriter(owner.Memory.Span);

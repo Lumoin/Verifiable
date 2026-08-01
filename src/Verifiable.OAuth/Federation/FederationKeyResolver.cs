@@ -53,7 +53,7 @@ public static class FederationKeyResolver
     /// </param>
     public static ResolveEntityKeyDelegate BuildInChainResolver(
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
         ArgumentNullException.ThrowIfNull(memoryPool);
@@ -115,7 +115,7 @@ public static class FederationKeyResolver
         string issuerEntityId,
         string? kid,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(chain);

@@ -59,7 +59,7 @@ public static class SecurityEventTokenVerification
         DecodeDelegate base64UrlDecoder,
         IsSecurityEventTokenJtiSeenDelegate isJtiSeen,
         ExchangeContext context,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(compactSet);
@@ -169,7 +169,7 @@ public static class SecurityEventTokenVerification
         string[] parts,
         PublicKeyMemory publicKey,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         CryptoAlgorithm algorithm = publicKey.Tag.Get<CryptoAlgorithm>();

@@ -50,7 +50,7 @@ internal static class Fido2TestVectors
     /// <param name="rpIdHash">The bytes to copy.</param>
     /// <param name="pool">The memory pool the returned carrier rents from.</param>
     /// <returns>A new <see cref="DigestValue"/> containing a copy of <paramref name="rpIdHash"/>.</returns>
-    public static DigestValue WrapRpIdHash(ReadOnlySpan<byte> rpIdHash, MemoryPool<byte> pool)
+    public static DigestValue WrapRpIdHash(ReadOnlySpan<byte> rpIdHash, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(rpIdHash.Length);
         rpIdHash.CopyTo(owner.Memory.Span);

@@ -39,7 +39,7 @@ internal sealed class Oid4VpX509HashResolverTests
 
     private FakeTimeProvider Time { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
     private static EncodeDelegate Encoder => TestSetup.Base64UrlEncoder;
     private static DecodeDelegate Decoder => TestSetup.Base64UrlDecoder;
 

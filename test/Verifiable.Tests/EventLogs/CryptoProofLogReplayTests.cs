@@ -27,7 +27,7 @@ internal sealed class CryptoProofLogReplayTests
     [TestMethod]
     public async Task SoftwareSignedCryptoProofEntryReplaysSuccessfully()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PublicKeyMemory publicKey = keys.PublicKey;
         using PrivateKeyMemory privateKey = keys.PrivateKey;
@@ -61,7 +61,7 @@ internal sealed class CryptoProofLogReplayTests
     [TestMethod]
     public async Task ProofOverDifferentBytesFailsClosed()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PublicKeyMemory publicKey = keys.PublicKey;
         using PrivateKeyMemory privateKey = keys.PrivateKey;

@@ -83,7 +83,7 @@ public static class TpmCommandExecutor
         ITpmCommandInput input,
         IReadOnlyList<TpmSessionBase> sessions,
         IReadOnlyList<ReadOnlyMemory<byte>>? handleNames,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TpmResponseRegistry registry,
         CancellationToken cancellationToken = default)
         where TResponse : ITpmWireType
@@ -668,7 +668,7 @@ public static class TpmCommandExecutor
         ReadOnlyMemory<byte> handlesMemory,
         int handleCount,
         IReadOnlyList<ReadOnlyMemory<byte>>? handleNames,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         out IMemoryOwner<byte>? namesOwner)
     {
         namesOwner = null;
@@ -904,7 +904,7 @@ public static class TpmCommandExecutor
         ReadOnlyMemory<byte> handleNames,
         ReadOnlyMemory<byte> parameters,
         Memory<byte> destination,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         using IMemoryOwner<byte> ccOwner = pool.Rent(sizeof(uint));
@@ -944,7 +944,7 @@ public static class TpmCommandExecutor
         TpmCcConstants commandCode,
         ReadOnlyMemory<byte> parameters,
         Memory<byte> destination,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         using IMemoryOwner<byte> rcOwner = pool.Rent(sizeof(uint));

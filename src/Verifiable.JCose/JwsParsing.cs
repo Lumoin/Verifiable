@@ -24,7 +24,7 @@ public static class JwsParsing
         string compact,
         DecodeDelegate base64UrlDecoder,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(compact);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
@@ -91,7 +91,7 @@ public static class JwsParsing
         DecodeDelegate base64UrlDecoder,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
         Func<ReadOnlySpan<byte>, Dictionary<string, object>> jsonDeserializer,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
         ArgumentNullException.ThrowIfNull(headerDeserializer);
@@ -159,7 +159,7 @@ public static class JwsParsing
         DecodeDelegate base64UrlDecoder,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
         Func<ReadOnlySpan<byte>, Dictionary<string, object>> jsonDeserializer,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
         ArgumentNullException.ThrowIfNull(headerDeserializer);
@@ -252,7 +252,7 @@ public static class JwsParsing
         DecodeDelegate base64UrlDecoder,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
         Func<ReadOnlySpan<byte>, Dictionary<string, object>> jsonDeserializer,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         out UnverifiedJwsMessage? message,
         out JoseSerializationFormat format)
     {

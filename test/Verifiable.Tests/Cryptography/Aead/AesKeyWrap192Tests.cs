@@ -20,7 +20,7 @@ internal sealed class AesKeyWrap192Tests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     //RFC 3394 §4.2: 128-bit key data wrapped with a 192-bit KEK.
     private const string Kek192 = "000102030405060708090A0B0C0D0E0F1011121314151617";

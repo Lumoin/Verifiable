@@ -53,7 +53,7 @@ internal sealed class AuthorizationServerFeatureTests
 
     private const string IssuerId = "https://issuer.example.com";
     private const string IssuerKeyId = "did:web:issuer.example.com#key-1";
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private static ImmutableHashSet<CapabilityIdentifier> Oid4VpCapabilities { get; } =
         ImmutableHashSet.Create(

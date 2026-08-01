@@ -41,7 +41,7 @@ public sealed record Oid4VpPresentationContext
     public required EncodeDelegate Base64UrlEncoder { get; init; }
 
     /// <summary>Memory pool for the application's transient cryptographic buffers.</summary>
-    public required MemoryPool<byte> MemoryPool { get; init; }
+    public required BaseMemoryPool MemoryPool { get; init; }
 
     /// <summary>
     /// The threaded per-operation <see cref="ExchangeContext"/> the wallet

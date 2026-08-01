@@ -55,5 +55,5 @@ public sealed record OcspFetchContext
 /// </remarks>
 public delegate ValueTask<PkiCertificateMemory?> FetchOcspResponseAsyncDelegate(
     OcspFetchContext context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);

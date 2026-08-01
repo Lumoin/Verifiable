@@ -36,7 +36,7 @@ public static class TpmCryptographicProjections
     /// <returns>The neutral signature; the caller owns it and must dispose it.</returns>
     /// <exception cref="NotSupportedException">The signature algorithm is not one this projection supports.</exception>
     [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned Signature transfers to the caller.")]
-    public static Signature ToSignature(this TpmuSignature signature, int ecdsaComponentSize, Tag tag, MemoryPool<byte> pool)
+    public static Signature ToSignature(this TpmuSignature signature, int ecdsaComponentSize, Tag tag, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(signature);
         ArgumentNullException.ThrowIfNull(tag);
@@ -81,7 +81,7 @@ public static class TpmCryptographicProjections
     /// <param name="pool">The memory pool backing the returned key.</param>
     /// <returns>The neutral public key; the caller owns it and must dispose it.</returns>
     [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned PublicKeyMemory transfers to the caller.")]
-    public static PublicKeyMemory ToCompressedPublicKeyMemory(this TpmsEccPoint point, int componentSize, Tag tag, MemoryPool<byte> pool)
+    public static PublicKeyMemory ToCompressedPublicKeyMemory(this TpmsEccPoint point, int componentSize, Tag tag, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(point);
         ArgumentNullException.ThrowIfNull(tag);

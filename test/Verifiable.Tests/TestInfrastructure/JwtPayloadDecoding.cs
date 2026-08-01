@@ -17,7 +17,7 @@ internal static class JwtPayloadDecoding
     /// it. Does not verify the signature — this is a wire-inspection helper for asserting what the
     /// AS actually emitted, not a validator.
     /// </summary>
-    public static JsonDocument DecodePayload(string compactJws, MemoryPool<byte> pool)
+    public static JsonDocument DecodePayload(string compactJws, BaseMemoryPool pool)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(compactJws);
         ArgumentNullException.ThrowIfNull(pool);

@@ -100,7 +100,7 @@ internal sealed class AgenticFlowCapstoneTests
     private static readonly string Step3ScopeRequest =
         $"{WellKnownScopes.OpenId} {Rs1RequiredScope} {Rs2RequiredScope}";
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     /// <summary>Serialises a JWT protected header to UTF-8 JSON bytes for client-side signing.</summary>
     private static readonly JwtHeaderSerializer CapstoneHeaderSerializer =

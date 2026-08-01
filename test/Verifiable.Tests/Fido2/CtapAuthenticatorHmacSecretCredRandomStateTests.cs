@@ -51,7 +51,7 @@ internal sealed class CtapAuthenticatorHmacSecretCredRandomStateTests
     public async Task MakeCredentialWithoutHmacSecretExtensionStillMintsDistinctCredRandomPair()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("waveclose-credrandom-unconditional-mint");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var trace = new TestObserver<TraceEntry<CtapAuthenticatorState, CtapAuthenticatorInput>>();
         byte[] credentialIdBytes;
@@ -87,7 +87,7 @@ internal sealed class CtapAuthenticatorHmacSecretCredRandomStateTests
     public async Task MakeCredentialMintsDistinctCredRandomPairsAcrossTwoCredentials()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("waveclose-credrandom-distinct-per-credential");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var trace = new TestObserver<TraceEntry<CtapAuthenticatorState, CtapAuthenticatorInput>>();
         byte[] firstCredentialIdBytes;

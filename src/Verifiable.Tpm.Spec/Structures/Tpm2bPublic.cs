@@ -116,7 +116,7 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed public buffer.</returns>
-    public static Tpm2bPublic Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static Tpm2bPublic Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ushort size = reader.ReadUInt16();
@@ -197,7 +197,7 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
         TpmEccCurveConstants curve,
         TpmtEccScheme scheme,
         TpmsEccPoint unique,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         ReadOnlySpan<byte> authPolicy = default)
     {
         return FromTemplate(TpmtPublic.CreateEccSigningKey(nameAlg, objectAttributes, curve, scheme, unique, pool, authPolicy));
@@ -239,7 +239,7 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
         ushort keyBits,
         TpmtRsaScheme scheme,
         ReadOnlySpan<byte> modulus,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         ReadOnlySpan<byte> authPolicy = default)
     {
         return FromTemplate(TpmtPublic.CreateRsaSigningKey(nameAlg, objectAttributes, keyBits, scheme, modulus, pool, authPolicy));
@@ -287,7 +287,7 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     public static Tpm2bPublic CreateEccEndorsementKeyTemplate(
         TpmAlgIdConstants nameAlg,
         TpmEccCurveConstants curve,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         ReadOnlySpan<byte> authPolicy)
     {
         return FromTemplate(TpmtPublic.CreateEccEndorsementKeyTemplate(nameAlg, curve, pool, authPolicy));
@@ -312,7 +312,7 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
         TpmaObject objectAttributes,
         TpmEccCurveConstants curve,
         TpmsEccPoint unique,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         ReadOnlySpan<byte> authPolicy = default)
     {
         return FromTemplate(TpmtPublic.CreateEccStorageParent(nameAlg, objectAttributes, curve, unique, pool, authPolicy));
@@ -330,7 +330,7 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     public static Tpm2bPublic CreateRsaEndorsementKeyTemplate(
         TpmAlgIdConstants nameAlg,
         ushort keyBits,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         ReadOnlySpan<byte> authPolicy)
     {
         return FromTemplate(TpmtPublic.CreateRsaEndorsementKeyTemplate(nameAlg, keyBits, pool, authPolicy));
@@ -355,7 +355,7 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
         TpmaObject objectAttributes,
         ushort keyBits,
         ReadOnlySpan<byte> modulus,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         ReadOnlySpan<byte> authPolicy = default)
     {
         return FromTemplate(TpmtPublic.CreateRsaStorageParent(nameAlg, objectAttributes, keyBits, modulus, pool, authPolicy));
@@ -378,7 +378,7 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
     /// <returns>The sized public buffer.</returns>
     public static Tpm2bPublic CreateSealedDataTemplate(
         TpmAlgIdConstants nameAlg,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         ReadOnlySpan<byte> authPolicy = default,
         bool noDa = false,
         bool userWithAuth = true)

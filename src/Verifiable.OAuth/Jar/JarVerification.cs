@@ -42,7 +42,7 @@ public static class JarVerification
         DecodeDelegate base64UrlDecoder,
         JwtHeaderDeserializer headerDeserializer,
         JwtPayloadDeserializer payloadDeserializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(compactJar);

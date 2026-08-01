@@ -41,7 +41,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
     [TestMethod]
     public async Task SerializeParseRoundTripPreservesEveryMaximallyPopulatedPersistentField()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         (CtapAuthenticatorState state, CtapCredentialRecord credential, CtapBioEnrollmentTemplateRecord bioTemplate) =
             await BuildMaximallyPopulatedStateAsync(pool, TestContext.CancellationToken);
 
@@ -123,7 +123,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
     [TestMethod]
     public async Task UnrecognizedFormatVersionFailsClosed()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var (state, _, _) = await BuildMaximallyPopulatedStateAsync(pool, TestContext.CancellationToken);
 
         try
@@ -161,7 +161,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
     [TestMethod]
     public void OutOfRangeIntegerFieldFailsClosedAsSnapshotExceptionNotRawOverflow()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //A valid snapshot prefix up to the firmwareVersion field, then firmwareVersion encoded as the
         //maximal 8-byte unsigned value (0x1B followed by eight 0xFF) — which overflows the reader's
@@ -195,7 +195,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
     [TestMethod]
     public async Task DuplicateCredentialIdInSnapshotFailsClosed()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] sharedIdBytes = BuildFixedBytes(16, 0x5A);
         CtapAuthenticatorState state = await BuildTwoCredentialStateSharingIdAsync(sharedIdBytes, pool, TestContext.CancellationToken);
 
@@ -296,7 +296,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
     [TestMethod]
     public void VolatileFieldsNeverInfluenceEncodedBytes()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         Guid aaguid = Guid.NewGuid();
         DateTimeOffset epoch = TestClock.CanonicalEpoch;
 
@@ -346,7 +346,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
     [TestMethod]
     public async Task KillAndRehydrateThroughDictionaryBackedCustodyPreservesCredentialAndPinState()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         var store = new DictionaryBackedCtapStateCustodyStore();
         Guid aaguid = Guid.NewGuid();
@@ -430,7 +430,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
     [TestMethod]
     public async Task PersistCompletesBeforeResponseIsReturned()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         var store = new DictionaryBackedCtapStateCustodyStore();
         Guid aaguid = Guid.NewGuid();
@@ -484,7 +484,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Every carrier minted here transfers ownership into the returned CtapAuthenticatorState (directly, or via the CtapCredentialRecord/CtapBioEnrollmentTemplateRecord installed on it); the caller disposes the returned state via DisposeState.")]
     private static async Task<(CtapAuthenticatorState State, CtapCredentialRecord Credential, CtapBioEnrollmentTemplateRecord BioTemplate)> BuildMaximallyPopulatedStateAsync(
-        MemoryPool<byte> pool, CancellationToken cancellationToken)
+        BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         Guid aaguid = Guid.NewGuid();
         DateTimeOffset now = TestClock.CanonicalEpoch;
@@ -553,7 +553,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Every carrier minted here transfers ownership into the returned state via its two CtapCredentialRecord entries; the caller disposes the returned state via DisposeState.")]
     private static async Task<CtapAuthenticatorState> BuildTwoCredentialStateSharingIdAsync(
-        byte[] sharedIdBytes, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        byte[] sharedIdBytes, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         CtapCredentialRecord first = await BuildCredentialWithSharedIdAsync(sharedIdBytes, seed: 0x10, signCount: 1, pool, cancellationToken);
         CtapCredentialRecord second = await BuildCredentialWithSharedIdAsync(sharedIdBytes, seed: 0x20, signCount: 2, pool, cancellationToken);
@@ -577,7 +577,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Every carrier minted here transfers ownership into the returned CtapCredentialRecord, which the caller disposes via DisposeState.")]
     private static async Task<CtapCredentialRecord> BuildCredentialWithSharedIdAsync(
-        byte[] idBytes, byte seed, uint signCount, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        byte[] idBytes, byte seed, uint signCount, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         CtapCredentialSigningBackend backend = CtapCredentialSigningBackend.CreateEs256Default();
         CtapCredentialKeyPair keyPair = await backend.GenerateCredentialKeyPair(WellKnownCoseAlgorithms.Es256, pool, cancellationToken);
@@ -596,7 +596,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
 
 
     /// <summary>Rents a buffer from <paramref name="pool"/> and copies <paramref name="bytes"/> into it.</summary>
-    private static IMemoryOwner<byte> RentAndCopy(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
+    private static IMemoryOwner<byte> RentAndCopy(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(bytes.Length);
         bytes.CopyTo(owner.Memory.Span);
@@ -635,7 +635,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
 
 
     /// <summary>Establishes <paramref name="pin"/> directly against <paramref name="simulator"/>'s public API (no transport harness).</summary>
-    private static async Task EstablishPinDirectAsync(CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, string pin, CtapPinUvAuthProtocolId protocolId)
+    private static async Task EstablishPinDirectAsync(CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, string pin, CtapPinUvAuthProtocolId protocolId)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(simulator.TransceiveAsync, protocolId, pool, CancellationToken.None);
         (byte[] newPinEnc, byte[] pinUvAuthParam) = await session.BuildSetPinMessagesAsync(pin, CancellationToken.None);
@@ -651,7 +651,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
 
     /// <summary>Issues a permissions-scoped <c>pinUvAuthToken</c> via <c>getPinUvAuthTokenUsingPinWithPermissions</c> directly against <paramref name="simulator"/>'s public API.</summary>
     private static async Task<byte[]> IssueTokenDirectAsync(
-        CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string pin, int permissions, string? rpId, CancellationToken cancellationToken)
+        CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string pin, int permissions, string? rpId, CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(simulator.TransceiveAsync, protocolId, pool, cancellationToken);
         byte[] pinHashEnc = await session.BuildPinHashEncAsync(pin, cancellationToken);
@@ -668,7 +668,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
 
 
     /// <summary>Attempts <c>getPinToken</c> with a deliberately wrong PIN directly against <paramref name="simulator"/>'s public API, asserting the call fails.</summary>
-    private static async Task AttemptWrongPinDirectAsync(CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, CancellationToken cancellationToken)
+    private static async Task AttemptWrongPinDirectAsync(CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(simulator.TransceiveAsync, protocolId, pool, cancellationToken);
         byte[] wrongPinHashEnc = await session.BuildWrongPinHashEncAsync(cancellationToken);
@@ -683,7 +683,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
 
 
     /// <summary>Reads the current <c>pinRetries</c> value directly against <paramref name="simulator"/>'s public API.</summary>
-    private static async Task<int> GetPinRetriesDirectAsync(CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<int> GetPinRetriesDirectAsync(CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.GetPinRetries);
         CtapClientPinResponse response = await CtapAuthenticatorClientPinClient.ClientPinAsync(
@@ -694,7 +694,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
 
 
     /// <summary>Reads a protocol's current key-agreement public key directly against <paramref name="simulator"/>'s public API.</summary>
-    private static async Task<CoseKey> GetKeyAgreementDirectAsync(CtapAuthenticatorSimulator simulator, CtapPinUvAuthProtocolId protocolId, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<CoseKey> GetKeyAgreementDirectAsync(CtapAuthenticatorSimulator simulator, CtapPinUvAuthProtocolId protocolId, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.GetKeyAgreement, PinUvAuthProtocol: (int)protocolId);
         CtapClientPinResponse response = await CtapAuthenticatorClientPinClient.ClientPinAsync(

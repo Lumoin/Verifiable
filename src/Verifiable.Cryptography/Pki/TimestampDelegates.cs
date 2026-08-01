@@ -56,5 +56,5 @@ public sealed record TimestampFetchContext
 /// </remarks>
 public delegate ValueTask<PkiCertificateMemory?> FetchTimestampResponseAsyncDelegate(
     TimestampFetchContext context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);

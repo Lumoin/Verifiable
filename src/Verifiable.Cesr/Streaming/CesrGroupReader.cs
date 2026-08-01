@@ -1,3 +1,4 @@
+using Lumoin.Base;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Text;
@@ -29,13 +30,13 @@ public static class CesrGroupReader
     /// <param name="pool">The memory pool the recovered raw values are rented from.</param>
     /// <returns>The primitives in order. Each <see cref="CesrParsedPrimitive"/> MUST be disposed by the consumer.</returns>
     /// <exception cref="CesrFormatException">The body does not divide cleanly into primitives.</exception>
-    public static IEnumerable<CesrParsedPrimitive> ReadPrimitives(ReadOnlyMemory<byte> body, MemoryPool<byte> pool)
+    public static IEnumerable<CesrParsedPrimitive> ReadPrimitives(ReadOnlyMemory<byte> body, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
         return Iterate(body, pool);
 
-        static IEnumerable<CesrParsedPrimitive> Iterate(ReadOnlyMemory<byte> body, MemoryPool<byte> pool)
+        static IEnumerable<CesrParsedPrimitive> Iterate(ReadOnlyMemory<byte> body, BaseMemoryPool pool)
         {
             int offset = 0;
             while(offset < body.Length)
@@ -55,13 +56,13 @@ public static class CesrGroupReader
     /// <param name="pool">The memory pool the recovered raw signatures are rented from.</param>
     /// <returns>The indexed signatures in order. Each <see cref="CesrParsedIndexedSignature"/> MUST be disposed by the consumer.</returns>
     /// <exception cref="CesrFormatException">The body does not divide cleanly into indexed signatures.</exception>
-    public static IEnumerable<CesrParsedIndexedSignature> ReadIndexedSignatures(ReadOnlyMemory<byte> body, MemoryPool<byte> pool)
+    public static IEnumerable<CesrParsedIndexedSignature> ReadIndexedSignatures(ReadOnlyMemory<byte> body, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
         return Iterate(body, pool);
 
-        static IEnumerable<CesrParsedIndexedSignature> Iterate(ReadOnlyMemory<byte> body, MemoryPool<byte> pool)
+        static IEnumerable<CesrParsedIndexedSignature> Iterate(ReadOnlyMemory<byte> body, BaseMemoryPool pool)
         {
             int offset = 0;
             while(offset < body.Length)
@@ -81,13 +82,13 @@ public static class CesrGroupReader
     /// <param name="pool">The memory pool the recovered raw values are rented from.</param>
     /// <returns>The primitives in order. Each <see cref="CesrParsedPrimitive"/> MUST be disposed by the consumer.</returns>
     /// <exception cref="CesrFormatException">The body does not divide cleanly into primitives.</exception>
-    public static IEnumerable<CesrParsedPrimitive> ReadPrimitivesText(ReadOnlyMemory<byte> body, MemoryPool<byte> pool)
+    public static IEnumerable<CesrParsedPrimitive> ReadPrimitivesText(ReadOnlyMemory<byte> body, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
         return Iterate(body, pool);
 
-        static IEnumerable<CesrParsedPrimitive> Iterate(ReadOnlyMemory<byte> body, MemoryPool<byte> pool)
+        static IEnumerable<CesrParsedPrimitive> Iterate(ReadOnlyMemory<byte> body, BaseMemoryPool pool)
         {
             char[] rented = ArrayPool<char>.Shared.Rent(Math.Max(body.Length, 1));
             try
@@ -116,13 +117,13 @@ public static class CesrGroupReader
     /// <param name="pool">The memory pool the recovered raw signatures are rented from.</param>
     /// <returns>The indexed signatures in order. Each <see cref="CesrParsedIndexedSignature"/> MUST be disposed by the consumer.</returns>
     /// <exception cref="CesrFormatException">The body does not divide cleanly into indexed signatures.</exception>
-    public static IEnumerable<CesrParsedIndexedSignature> ReadIndexedSignaturesText(ReadOnlyMemory<byte> body, MemoryPool<byte> pool)
+    public static IEnumerable<CesrParsedIndexedSignature> ReadIndexedSignaturesText(ReadOnlyMemory<byte> body, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
         return Iterate(body, pool);
 
-        static IEnumerable<CesrParsedIndexedSignature> Iterate(ReadOnlyMemory<byte> body, MemoryPool<byte> pool)
+        static IEnumerable<CesrParsedIndexedSignature> Iterate(ReadOnlyMemory<byte> body, BaseMemoryPool pool)
         {
             char[] rented = ArrayPool<char>.Shared.Rent(Math.Max(body.Length, 1));
             try

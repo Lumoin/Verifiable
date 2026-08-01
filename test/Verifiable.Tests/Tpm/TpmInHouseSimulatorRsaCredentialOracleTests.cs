@@ -38,7 +38,7 @@ namespace Verifiable.Tests.Tpm;
 /// exists to avoid; there is no independent OAEP-with-custom-label seam to route through instead (a documented
 /// finding, not an oversight). The underlying <c>lHash</c>/MGF1 SHA-256 calls, however, DO have a library seam
 /// and go through it: <see cref="EncodeEmeOaep"/> and <see cref="Mgf1Sha256"/> compute their digests via
-/// <see cref="CryptographicKeyEvents.ComputeDigest(ReadOnlySpan{byte}, int, Tag, MemoryPool{byte}, string?)"/>
+/// <see cref="CryptographicKeyEvents.ComputeDigest(ReadOnlySpan{byte}, int, Tag, BaseMemoryPool, string?)"/>
 /// (the registered, sync-by-nature digest seam), never a bare <see cref="SHA256"/> call. The shared inner wrap
 /// mirrors the ECC oracle: KDFa and the outer HMAC (<see cref="BuildCredentialBlobAsync"/>) compose the spec
 /// message by hand but compute it through the project's own <see cref="Kdfa"/> and the registered HMAC seam;
@@ -125,7 +125,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     [TestMethod]
     public async Task ChallengerBuiltRsaCredentialActivatesThroughTheProductionExecutor()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -177,7 +177,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     [TestMethod]
     public async Task ChallengerBuiltRsaCredentialWithATamperedOuterHmacIsRejectedWithIntegrityError()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -232,7 +232,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     [TestMethod]
     public async Task ChallengerBuiltRsaCredentialWithATamperedOaepCiphertextIsRejectedWithIntegrityError()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -297,7 +297,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     [TestMethod]
     public async Task ForgedCredentialUnderTheZeroSubstituteSeedIsRejectedWithIntegrityError()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -365,7 +365,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     /// <param name="cancellationToken">A token observed across the KDF/HMAC computations.</param>
     /// <returns>The credential blob and encrypted secret, each with its written length; the caller disposes both owners.</returns>
     private static async Task<(IMemoryOwner<byte> Blob, int BlobLength, IMemoryOwner<byte> Secret, int SecretLength)> BuildChallengerRsaCredentialAsync(
-        ReadOnlyMemory<byte> credential, ReadOnlyMemory<byte> objectName, ReadOnlyMemory<byte> ekModulus, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> credential, ReadOnlyMemory<byte> objectName, ReadOnlyMemory<byte> ekModulus, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using IMemoryOwner<byte> seedOwner = pool.Rent(Sha256DigestSize);
         using IMemoryOwner<byte> emOwner = pool.Rent(RsaModulusBytes);
@@ -411,7 +411,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     /// <param name="seed">The 32-octet credential-protection seed — OAEP's message <c>M</c> (not to be confused with OAEP's own internal random "seed", <c>seedOaep</c> below).</param>
     /// <param name="em">The 256-octet destination for the encoded message <c>EM</c>.</param>
     /// <param name="pool">The memory pool for the digest/entropy computations.</param>
-    private static void EncodeEmeOaep(ReadOnlySpan<byte> seed, Span<byte> em, MemoryPool<byte> pool)
+    private static void EncodeEmeOaep(ReadOnlySpan<byte> seed, Span<byte> em, BaseMemoryPool pool)
     {
         int hLen = Sha256DigestSize;
         int k = em.Length;
@@ -486,7 +486,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     /// <param name="seed">The MGF1 seed octets.</param>
     /// <param name="mask">The destination for the generated mask.</param>
     /// <param name="pool">The memory pool for the digest computations.</param>
-    private static void Mgf1Sha256(ReadOnlySpan<byte> seed, Span<byte> mask, MemoryPool<byte> pool)
+    private static void Mgf1Sha256(ReadOnlySpan<byte> seed, Span<byte> mask, BaseMemoryPool pool)
     {
         int hLen = Sha256DigestSize;
         Span<byte> counterInput = stackalloc byte[seed.Length + sizeof(uint)];
@@ -568,7 +568,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     /// <param name="cancellationToken">A token observed across the KDF/HMAC computations.</param>
     /// <returns>The credential blob owner and its written length; the caller disposes the owner.</returns>
     private static async Task<(IMemoryOwner<byte> Owner, int Length)> BuildCredentialBlobAsync(
-        ReadOnlyMemory<byte> seed, ReadOnlyMemory<byte> credential, ReadOnlyMemory<byte> objectName, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> seed, ReadOnlyMemory<byte> credential, ReadOnlyMemory<byte> objectName, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         int innerLength = sizeof(ushort) + credential.Length;
 
@@ -673,7 +673,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     /// <param name="ciphertext">The OAEP ciphertext.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The secret owner and its written length; the caller disposes the owner.</returns>
-    private static (IMemoryOwner<byte> Owner, int Length) FrameRsaSecret(ReadOnlySpan<byte> ciphertext, MemoryPool<byte> pool)
+    private static (IMemoryOwner<byte> Owner, int Length) FrameRsaSecret(ReadOnlySpan<byte> ciphertext, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(ciphertext.Length);
         try
@@ -708,7 +708,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     private async Task<TpmResult<ActivateCredentialResponse>> ActivateOverPolicyAsync(
         TpmDevice tpm,
         TpmResponseRegistry registry,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TpmiDhObject activateHandle,
         TpmiDhObject keyHandle,
         ReadOnlyMemory<byte> credentialBlob,
@@ -744,7 +744,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     /// <param name="registry">The response codec registry.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The CreatePrimary response (the caller owns it and flushes the handle).</returns>
-    private async Task<CreatePrimaryResponse> CreateRsaEndorsementKeyAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool)
+    private async Task<CreatePrimaryResponse> CreateRsaEndorsementKeyAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForRsaEndorsementKey(TpmRh.TPM_RH_ENDORSEMENT, pool);
         using TpmPasswordSession hierarchyAuth = TpmPasswordSession.CreateEmpty(pool);
@@ -765,7 +765,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     /// <param name="hierarchy">The hierarchy under which to create the key.</param>
     /// <returns>The CreatePrimary response (the caller owns it and flushes the handle).</returns>
     private async Task<CreatePrimaryResponse> CreateRsaSigningPrimaryAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmRh hierarchy)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForRsaSigningKey(
             hierarchy, password: null, keyBits: Rsa2048KeyBits, TpmtRsaScheme.Null, pool, noDa: true);
@@ -785,7 +785,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator("tpm-in-house-rsa-credoracle", rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create());
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -800,7 +800,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     /// </summary>
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
@@ -843,7 +843,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     /// <param name="registry">The response codec registry.</param>
     /// <param name="handle">The handle to flush.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task FlushAsync(TpmDevice tpm, TpmResponseRegistry registry, uint handle, MemoryPool<byte> pool)
+    private async Task FlushAsync(TpmDevice tpm, TpmResponseRegistry registry, uint handle, BaseMemoryPool pool)
     {
         var flush = FlushContextInput.ForHandle(handle);
         _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(

@@ -62,7 +62,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
     [TestMethod]
     public async Task NvReadBruteForceIncrementsFailedTriesAndLocksOutAtMaxTries()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -104,7 +104,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
     [TestMethod]
     public async Task NvReadOnNoDaExemptIndexDoesNotIncrementFailedTries()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -146,7 +146,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
         const ulong QuantumMs = 1000UL;
         const uint RecoveryTimeSeconds = 3u;
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(QuantumMs).ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -189,7 +189,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
         const ulong QuantumMs = 1000UL;
         const uint LockoutRecoverySeconds = 2u;
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(QuantumMs).ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry readClockRegistry = CreateReadClockRegistry();
@@ -225,7 +225,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
     [TestMethod]
     public async Task DictionaryAttackLockResetClearsFailedTriesAndReArmsAfterLockout()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -271,7 +271,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
         const uint NewRecoveryTimeSeconds = 100u;
         const uint NewLockoutRecoverySeconds = 200u;
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -306,7 +306,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
     [TestMethod]
     public async Task DictionaryAttackParametersLoweringMaxTriesAtOrBelowCurrentCountLocksOutImmediately()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -346,7 +346,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
     [TestMethod]
     public async Task DictionaryAttackParametersSettingMaxTriesToZeroLocksOutPermanentlyUntilMaxTriesIsRaisedAgain()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -399,7 +399,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
     [TestMethod]
     public async Task GetCapabilityReflectsLiveFailedTriesMaxTriesAndLockoutState()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -449,7 +449,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
     /// <param name="device">The TPM device.</param>
     /// <param name="pool">The memory pool.</param>
     /// <param name="registry">The response codec registry.</param>
-    private async Task DefineDaIndexAsync(TpmDevice device, MemoryPool<byte> pool, TpmResponseRegistry registry)
+    private async Task DefineDaIndexAsync(TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry)
     {
         using TpmPasswordSession ownerSession = TpmPasswordSession.CreateEmpty(pool);
         TpmResult<NvDefineSpaceResponse> result = await DefineSpaceAsync(
@@ -469,7 +469,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
     /// <param name="ownerSession">The owner-hierarchy authorization session.</param>
     /// <returns>The define-space result.</returns>
     private async Task<TpmResult<NvDefineSpaceResponse>> DefineSpaceAsync(
-        TpmDevice device, MemoryPool<byte> pool, TpmResponseRegistry registry, TpmaNv attributes, TpmPasswordSession ownerSession)
+        TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry, TpmaNv attributes, TpmPasswordSession ownerSession)
     {
         //The input takes ownership of the auth value and public area and disposes them; the redundant using
         //locals satisfy CA2000 and are safe because both types have idempotent disposal.
@@ -490,7 +490,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
     /// <param name="suppliedAuth">The authValue the caller supplies for the Index.</param>
     /// <returns>The read result.</returns>
     private async Task<TpmResult<NvReadResponse>> ReadIndexAsync(
-        TpmDevice device, MemoryPool<byte> pool, TpmResponseRegistry registry, ReadOnlyMemory<byte> suppliedAuth)
+        TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry, ReadOnlyMemory<byte> suppliedAuth)
     {
         using TpmPasswordSession session = TpmPasswordSession.Create(suppliedAuth.Span, pool);
 
@@ -509,7 +509,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
     /// <param name="device">The TPM device.</param>
     /// <param name="pool">The memory pool.</param>
     /// <param name="registry">The response codec registry.</param>
-    private async Task SubmitReadClockAsync(TpmDevice device, MemoryPool<byte> pool, TpmResponseRegistry registry)
+    private async Task SubmitReadClockAsync(TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry)
     {
         TpmResult<ReadClockResponse> result = await TpmCommandExecutor.ExecuteAsync<ReadClockResponse>(
             device, new ReadClockInput(), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -556,7 +556,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
     /// <param name="simulator">The simulator to bring operational.</param>
     private async Task BringOperationalAsync(TpmSimulator simulator)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
         using IMemoryOwner<byte> owner = pool.Rent(length);

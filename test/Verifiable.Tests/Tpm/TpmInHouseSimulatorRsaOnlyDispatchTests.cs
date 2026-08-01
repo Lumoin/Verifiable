@@ -64,7 +64,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     [TestMethod]
     public async Task RsaOnlySimulatorCompletesCertifyAndQuoteEndToEnd()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateRsaOnlyOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -101,7 +101,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     [TestMethod]
     public async Task RsaOnlySimulatorStillRejectsEccCreatePrimaryWithCommandCode()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateRsaOnlyOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -130,7 +130,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     [TestMethod]
     public async Task RsaOnlySimulatorCompletesMakeAndActivateCredentialEndToEnd()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateRsaOnlyOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -184,7 +184,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     [TestMethod]
     public async Task RsaOnlySimulatorRejectsRsaSigningKeyAsCredentialKeyWithType()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateRsaOnlyOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -213,7 +213,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     /// <param name="registry">The response codec registry.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The CreatePrimary response (the caller owns it).</returns>
-    private async Task<CreatePrimaryResponse> CreateRsaEndorsementKeyAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool)
+    private async Task<CreatePrimaryResponse> CreateRsaEndorsementKeyAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForRsaEndorsementKey(TpmRh.TPM_RH_ENDORSEMENT, pool);
         using TpmPasswordSession hierarchyAuth = TpmPasswordSession.CreateEmpty(pool);
@@ -235,7 +235,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     /// <param name="hierarchy">The hierarchy under which to create the key.</param>
     /// <returns>The CreatePrimary response.</returns>
     private async Task<CreatePrimaryResponse> CreateRsaSigningPrimaryAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmRh hierarchy)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForRsaSigningKey(
             hierarchy, password: null, keyBits: Rsa2048KeyBits, TpmtRsaScheme.Null, pool, noDa: true);
@@ -254,7 +254,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational, RSA-only simulator.</returns>
-    private async Task<TpmSimulator> CreateRsaOnlyOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateRsaOnlyOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator(
             "tpm-in-house-rsa-only-dispatch",
@@ -272,7 +272,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     /// </summary>
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();

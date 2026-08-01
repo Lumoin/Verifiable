@@ -206,7 +206,7 @@ public static class HaipProfile
         JarClaimSerializer<DcqlQuery> dcqlQuerySerializer,
         JarClaimSerializer<VerifierClientMetadata> clientMetadataSerializer,
         EncodeDelegate encoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         IReadOnlyList<string>? transactionData = null,
         string? walletNonce = null,
         JwtHeader? additionalHeaderClaims = null,
@@ -464,7 +464,7 @@ public static class HaipProfile
         AeadEncryptDelegate aeadEncryptDelegate,
         EncodeDelegate encoder,
         DecodeDelegate decoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         string? agreementPartyUInfo = null,
         CancellationToken cancellationToken = default)
     {
@@ -526,7 +526,7 @@ public static class HaipProfile
 
     /// <summary>
     /// Pre-resolved-key overload of
-    /// <see cref="EncryptResponseAsync(AuthorizationRequestObject, ReadOnlyMemory{byte}, JwtHeaderSerializer, TagToEpkCrvDelegate, KeyAgreementEncryptDelegate, KeyDerivationDelegate, AeadEncryptDelegate, EncodeDelegate, DecodeDelegate, MemoryPool{byte}, CancellationToken)"/>.
+    /// <see cref="EncryptResponseAsync(AuthorizationRequestObject, ReadOnlyMemory{byte}, JwtHeaderSerializer, TagToEpkCrvDelegate, KeyAgreementEncryptDelegate, KeyDerivationDelegate, AeadEncryptDelegate, EncodeDelegate, DecodeDelegate, BaseMemoryPool, CancellationToken)"/>.
     /// Skips the <c>client_metadata.jwks</c> extraction path — useful for
     /// the OID4VP <c>openid_federation:</c> client_id prefix, where per
     /// §5.9.3 <c>client_metadata</c> MUST be ignored and the Verifier's
@@ -562,7 +562,7 @@ public static class HaipProfile
         KeyDerivationDelegate keyDerivationDelegate,
         AeadEncryptDelegate aeadEncryptDelegate,
         EncodeDelegate encoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         string? agreementPartyUInfo = null,
         string? keyManagementAlgorithm = null,
         string? keyId = null,
@@ -658,7 +658,7 @@ public static class HaipProfile
         KeyAgreementDecryptDelegate keyAgreementDecryptDelegate,
         KeyDerivationDelegate keyDerivationDelegate,
         AeadDecryptDelegate aeadDecryptDelegate,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(compactJwe);

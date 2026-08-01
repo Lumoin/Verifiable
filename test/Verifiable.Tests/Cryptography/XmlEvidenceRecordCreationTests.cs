@@ -224,9 +224,10 @@ internal sealed class XmlEvidenceRecordCreationTests
 
     /// <summary>
     /// The review's exception-path regression: a build failing mid-level — after earlier pairs of the same
-    /// level already combined — releases every carrier it rented. The failing pool counts rents against
-    /// disposals, so a combined node stranded outside the lists the catch releases would show as an
-    /// unreturned rental.
+    /// level already combined — releases every carrier it rented. The metered house pool's rent hook
+    /// refuses the Nth rent from inside the pool's own counter publication, and its accounting counts
+    /// rents against returns, so a combined node stranded outside the lists the catch releases would show
+    /// as an unreturned rental.
     /// </summary>
     [TestMethod]
     public async Task ABuildFailingMidLevelReleasesEveryCarrierItRented()
@@ -241,7 +242,15 @@ internal sealed class XmlEvidenceRecordCreationTests
         //walk unwinds.
         for(int failAt = 6; failAt <= 10; ++failAt)
         {
-            using var pool = new CountingFailingPool(failAt);
+            int refuseAt = failAt;
+            using var pool = new MeteredHousePool();
+            pool.OnRent = rentTotal =>
+            {
+                if(rentTotal == refuseAt)
+                {
+                    throw new InvalidOperationException($"The pool refuses rent {refuseAt}, mid-walk by construction.");
+                }
+            };
             try
             {
                 using XmlEvidenceRecordHashTreeBuild _ = await XmlEvidenceRecordHashTrees.BuildAsync(
@@ -250,7 +259,7 @@ internal sealed class XmlEvidenceRecordCreationTests
                         DataObjectDigestGroups = [[first], [second], [third], [fourth]],
                         DigestAlgorithm = PkiDigestAlgorithm.Sha256
                     },
-                    pool,
+                    pool.Pool,
                     TestContext.CancellationToken).ConfigureAwait(false);
             }
             catch(InvalidOperationException)
@@ -258,8 +267,8 @@ internal sealed class XmlEvidenceRecordCreationTests
                 //The injected refusal; what matters is the accounting below.
             }
 
-            Assert.AreEqual(pool.RentCount, pool.DisposalCount,
-                $"Every carrier rented before the refusal at rent {failAt} is released on the unwind; a difference is the stranded-combination leak.");
+            Assert.AreEqual(pool.RentedCount - 1, pool.ReturnedCount,
+                $"Every carrier rented before the refusal at rent {failAt} is released on the unwind (the refused rent itself was counted but never handed out); a further difference is the stranded-combination leak.");
         }
     }
 
@@ -271,81 +280,6 @@ internal sealed class XmlEvidenceRecordCreationTests
         await CryptographicKeyEvents.ComputeDigestAsync(
             content, PkiDigestAlgorithm.Sha256.OutputByteLength, PkiDigestAlgorithm.Sha256.DigestTag,
             BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-
-
-    /// <summary>
-    /// A pool that counts rents against disposals and refuses the Nth rent — the accounting oracle for the
-    /// exception-path regression.
-    /// </summary>
-    private sealed class CountingFailingPool: MemoryPool<byte>
-    {
-        /// <summary>The rent ordinal to refuse.</summary>
-        private readonly int failAtRent;
-
-
-        /// <summary>Initialises the pool.</summary>
-        /// <param name="failAtRent">The one-based rent ordinal to refuse.</param>
-        internal CountingFailingPool(int failAtRent)
-        {
-            this.failAtRent = failAtRent;
-        }
-
-
-        /// <summary>Gets how many rentals were handed out.</summary>
-        internal int RentCount { get; private set; }
-
-        /// <summary>Gets how many handed-out rentals were disposed.</summary>
-        internal int DisposalCount { get; private set; }
-
-        /// <inheritdoc/>
-        public override int MaxBufferSize => BaseMemoryPool.Shared.MaxBufferSize;
-
-
-        /// <inheritdoc/>
-        public override IMemoryOwner<byte> Rent(int minBufferSize = -1)
-        {
-            if(RentCount + 1 == failAtRent)
-            {
-                throw new InvalidOperationException($"The pool refuses rent {failAtRent}, mid-walk by construction.");
-            }
-
-            ++RentCount;
-
-            return new CountingOwner(BaseMemoryPool.Shared.Rent(minBufferSize), this);
-        }
-
-
-        /// <inheritdoc/>
-        protected override void Dispose(bool disposing)
-        {
-        }
-
-
-        /// <summary>One handed-out rental, reporting its disposal back to the pool's count.</summary>
-        /// <param name="inner">The wrapped rental.</param>
-        /// <param name="pool">The pool whose count the disposal raises.</param>
-        private sealed class CountingOwner(IMemoryOwner<byte> inner, CountingFailingPool pool): IMemoryOwner<byte>
-        {
-            /// <summary>Whether disposal already ran, so a double-dispose does not double-count.</summary>
-            private bool disposed;
-
-
-            /// <inheritdoc/>
-            public Memory<byte> Memory => inner.Memory;
-
-
-            /// <inheritdoc/>
-            public void Dispose()
-            {
-                if(!disposed)
-                {
-                    disposed = true;
-                    ++pool.DisposalCount;
-                    inner.Dispose();
-                }
-            }
-        }
-    }
 
 
     /// <summary>Creates records over <paramref name="groups"/> through the shipped surface and the staged writer, with a genuine minted time-stamp.</summary>

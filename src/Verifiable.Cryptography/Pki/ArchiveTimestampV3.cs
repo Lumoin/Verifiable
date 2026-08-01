@@ -343,7 +343,7 @@ public static class ArchiveTimestampV3
         CmsSignedData signedData,
         int signerIndex,
         PkiDigestAlgorithm hashIndexAlgorithm,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signedData);
@@ -391,7 +391,7 @@ public static class ArchiveTimestampV3
     /// </remarks>
     public static async ValueTask<SignedContentMemory> BuildMessageImprintInputAsync(
         ArchiveTimestampImprintContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -442,7 +442,7 @@ public static class ArchiveTimestampV3
         Justification = "Ownership of the assembled imprint input transfers to the returned result, which the caller disposes; every failure path returns a result that owns nothing.")]
     public static async ValueTask<ArchiveTimestampCoverage> StateCoverageAsync(
         ArchiveTimestampCoverageContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -553,7 +553,7 @@ public static class ArchiveTimestampV3
     /// <see cref="StateCoverageAsync"/> distinguishes the two in its status, while a caller that only wants the
     /// index has the same thing to do in either case.
     /// </remarks>
-    public static AtsHashIndexV3? ReadHashIndexFromToken(PkiCertificateMemory archiveTimestampToken, MemoryPool<byte> pool)
+    public static AtsHashIndexV3? ReadHashIndexFromToken(PkiCertificateMemory archiveTimestampToken, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(archiveTimestampToken);
         ArgumentNullException.ThrowIfNull(pool);
@@ -579,7 +579,7 @@ public static class ArchiveTimestampV3
     /// <param name="pool">The memory pool the decoded index is rented from.</param>
     /// <param name="hashIndex">Receives the decoded index, or <see langword="null"/> when there is none to decode.</param>
     /// <returns><see cref="ArchiveTimestampCoverageStatus.Stated"/> when an index was decoded, otherwise the status naming why not.</returns>
-    private static ArchiveTimestampCoverageStatus TryReadHashIndex(CmsArchiveMaterial tokenMaterial, MemoryPool<byte> pool, out AtsHashIndexV3? hashIndex)
+    private static ArchiveTimestampCoverageStatus TryReadHashIndex(CmsArchiveMaterial tokenMaterial, BaseMemoryPool pool, out AtsHashIndexV3? hashIndex)
     {
         hashIndex = null;
         ReadOnlyMemory<byte> encodedValue = default;
@@ -632,7 +632,7 @@ public static class ArchiveTimestampV3
     private static async ValueTask<MaterialDigests> ComputeMaterialDigestsAsync(
         CmsArchiveMaterial material,
         PkiDigestAlgorithm algorithm,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         var digests = new MaterialDigests();
@@ -685,7 +685,7 @@ public static class ArchiveTimestampV3
         ReadOnlyMemory<byte> first,
         ReadOnlyMemory<byte> second,
         PkiDigestAlgorithm algorithm,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         int total = first.Length + second.Length;
@@ -714,7 +714,7 @@ public static class ArchiveTimestampV3
         SignedContentMemory? detachedContent,
         DigestValue? detachedDigest,
         PkiDigestAlgorithm algorithm,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(material.HasEncapsulatedContent)
@@ -741,7 +741,7 @@ public static class ArchiveTimestampV3
 
         //Copies a digest the caller owns into one this computation owns, so every path out of here returns a
         //carrier with the same, single owner.
-        static DigestValue CopySuppliedDigest(ReadOnlySpan<byte> digest, Tag tag, MemoryPool<byte> pool)
+        static DigestValue CopySuppliedDigest(ReadOnlySpan<byte> digest, Tag tag, BaseMemoryPool pool)
         {
             IMemoryOwner<byte> owner = pool.Rent(digest.Length);
             try
@@ -775,7 +775,7 @@ public static class ArchiveTimestampV3
         CmsArchiveMaterial material,
         ReadOnlySpan<byte> signedContentDigest,
         ReadOnlySpan<byte> hashIndex,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         int total = material.EncapsulatedContentTypeEncoding.Length + signedContentDigest.Length + hashIndex.Length;
         for(int i = 0; i < material.SignerInfoFields.Count; ++i)

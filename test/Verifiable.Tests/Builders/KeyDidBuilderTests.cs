@@ -187,7 +187,7 @@ namespace Verifiable.Tests.Builders
         private static async ValueTask<IMemoryOwner<byte>> DeriveSharedSecretAsync(
             VerificationMethod verificationMethod,
             PrivateKeyMemory otherPartyPrivateKey,
-            MemoryPool<byte> memoryPool)
+            BaseMemoryPool memoryPool)
         {
             var (algorithm, purpose, scheme, publicKeyOwner) = VerificationMethodCryptoConversions.DefaultConverter(verificationMethod, memoryPool);
             using(publicKeyOwner)

@@ -39,7 +39,7 @@ namespace Verifiable.OAuth.Federation;
 /// </para>
 /// <para>
 /// <strong>Signing.</strong> The EC is signed via
-/// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, System.Buffers.MemoryPool{byte}, System.Threading.CancellationToken)"/>'s
+/// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, System.Buffers.BaseMemoryPool, System.Threading.CancellationToken)"/>'s
 /// registry-based overload, so the wire <c>alg</c> derives entirely from
 /// the private key's tag through the registered
 /// <see cref="SigningDelegate"/>. No signing algorithm is hardcoded
@@ -155,7 +155,7 @@ public static class FederationEndpoints
     /// <para>
     /// Stateless: <see cref="ServerEndpoint.BuildInputAsync"/> assembles
     /// the EC payload, signs it via the registry-based
-    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, System.Buffers.MemoryPool{byte}, System.Threading.CancellationToken)"/>,
+    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, System.Buffers.BaseMemoryPool, System.Threading.CancellationToken)"/>,
     /// and short-circuits the dispatcher with an early
     /// <see cref="ServerHttpResponse.Ok(string, string)"/>. The
     /// <see cref="ServerEndpoint.BuildResponse"/> hook is never reached.

@@ -92,7 +92,7 @@ public static class PreservationMessageXmlJsonBinding
     /// <exception cref="ArgumentNullException">When <paramref name="context"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
     public static ValueTask<PreservationMessageEncodeResult> EncodeAsync(
         PreservationMessageEncodeContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -139,7 +139,7 @@ public static class PreservationMessageXmlJsonBinding
         Justification = "Ownership of every payload carrier transfers to the returned message, which the result owns and the caller disposes; a refusal returns before any carrier is rented.")]
     public static ValueTask<PreservationMessageParseResult> ParseAsync(
         PreservationMessageParseContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -505,7 +505,7 @@ public static class PreservationMessageXmlJsonBinding
     private static PreservationMessage? ReadMessage(
         MessageReader reader,
         PreservationMessageKind kind,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         out string? missing)
     {
         missing = null;
@@ -807,7 +807,7 @@ public static class PreservationMessageXmlJsonBinding
     /// <param name="name">The name the objects are carried under.</param>
     /// <param name="pool">The memory pool payload carriers are rented from.</param>
     /// <returns>The objects, whose carriers the message that receives them owns.</returns>
-    private static List<PreservationObject> ReadObjects(MessageReader reader, PreservationName name, MemoryPool<byte> pool)
+    private static List<PreservationObject> ReadObjects(MessageReader reader, PreservationName name, BaseMemoryPool pool)
     {
         var objects = new List<PreservationObject>();
         foreach(MessageReader child in reader.Children(name))
@@ -823,7 +823,7 @@ public static class PreservationMessageXmlJsonBinding
     /// <param name="reader">The component's reader.</param>
     /// <param name="pool">The memory pool the payload carrier is rented from.</param>
     /// <returns>The object, whose carrier the message that receives it owns.</returns>
-    private static PreservationObject ReadObject(MessageReader reader, MemoryPool<byte> pool) =>
+    private static PreservationObject ReadObject(MessageReader reader, BaseMemoryPool pool) =>
         new()
         {
             Content = PooledMemory.FromBytes(
@@ -841,7 +841,7 @@ public static class PreservationMessageXmlJsonBinding
     /// <param name="reader">The component's reader.</param>
     /// <param name="pool">The memory pool the payload carrier is rented from.</param>
     /// <returns>The evidence, or <see langword="null"/> when it states no format identifier.</returns>
-    private static PreservationEvidence? ReadEvidence(MessageReader reader, MemoryPool<byte> pool)
+    private static PreservationEvidence? ReadEvidence(MessageReader reader, BaseMemoryPool pool)
     {
         string? formatId = reader.Text(PreservationEvidenceParameterNames.FormatId);
 

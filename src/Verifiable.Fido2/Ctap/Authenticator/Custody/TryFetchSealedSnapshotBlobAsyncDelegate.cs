@@ -29,4 +29,4 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// than throwing; a genuine I/O failure should still propagate as an exception, distinct from "nothing was
 /// ever stored."
 /// </remarks>
-public delegate ValueTask<PooledMemory?> TryFetchSealedSnapshotBlobAsyncDelegate(string runId, MemoryPool<byte> pool, CancellationToken cancellationToken);
+public delegate ValueTask<PooledMemory?> TryFetchSealedSnapshotBlobAsyncDelegate(string runId, BaseMemoryPool pool, CancellationToken cancellationToken);

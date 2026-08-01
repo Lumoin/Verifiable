@@ -42,7 +42,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
     [TestMethod]
     public void PowerCyclePreservesPinConfigurationClearsTheLatchAndRefreshesKeyMaterial()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         Guid aaguid = Guid.NewGuid();
         DateTimeOffset now = TestClock.CanonicalEpoch;
         DigestValue storedPin = BuildFixedDigest(0x77, 16, pool);
@@ -123,7 +123,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
         Justification = "Ownership of the credential ID and user handle carriers transfers to the CtapCredentialRecord constructed immediately afterward; record.Dispose() releases both once the assertions complete.")]
     public async Task PowerCyclePreservesCredRandomWithUvAndWithoutUvByReference()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         Guid aaguid = Guid.NewGuid();
         DateTimeOffset now = TestClock.CanonicalEpoch;
 
@@ -172,7 +172,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
     [TestMethod]
     public void PowerCyclePreservesEnterpriseAttestationProvisioningAndEnabledFlag()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         Guid aaguid = Guid.NewGuid();
         DateTimeOffset now = TestClock.CanonicalEpoch;
         CtapEnterpriseAttestationProvisioning provisioning = CtapWaveEpFixtures.BuildProvisioning(pool);
@@ -209,7 +209,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
         Justification = "Ownership of the DigestValue transfers into the CtapRememberedGetAssertionState installed on the state below, which CtapAuthenticatorState.PowerCycle disposes via its own RememberedGetAssertion?.Dispose() call; the analyzer cannot see this transfer through the with-expression and the method call.")]
     public void PowerCycleDiscardsAllThreeRememberedStatefulSequences()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         DateTimeOffset now = TestClock.CanonicalEpoch;
         DigestValue clientDataHash = BuildFixedDigest(0xA1, 32, pool);
         var rememberedGetAssertion = new CtapRememberedGetAssertionState([], clientDataHash, true, true, 1, now, CtapPinUvAuthProtocolId.Two, LargeBlobKeyRequested: false);
@@ -250,7 +250,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
         Justification = "Ownership of the in-progress capture's template identifier transfers into the CtapRememberedBioEnrollmentState installed on `before`, which CtapAuthenticatorState.PowerCycle disposes via its own RememberedBioEnrollment?.Dispose() call; the provisioned template's identifier transfers into `before`'s BioEnrollmentTemplatesByTemplateId, disposed explicitly below since PowerCycle leaves the store untouched.")]
     public void PowerCyclePreservesProvisionedTemplatesButDiscardsInProgressCapture()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         DateTimeOffset now = TestClock.CanonicalEpoch;
 
         BioEnrollmentTemplateId provisionedTemplateId = BioEnrollmentTemplateId.Create(BuildFixedBytes(16, 0x60), pool);
@@ -292,7 +292,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
     public async Task SimulatorPowerCycleKeepsCredentialsUsableAndRefreshesBothProtocolsKeyAgreement()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulatorWithClientPinAndCredentials("power-cycle-sim");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         Guid aaguidBefore = simulator.Aaguid;
 
         byte[] credentialIdBytes = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x90), TestContext.CancellationToken);
@@ -352,7 +352,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
 
 
     /// <summary>Sends a <c>getKeyAgreement</c> request for <paramref name="id"/> and returns the reported COSE_Key.</summary>
-    private async Task<CoseKey> GetKeyAgreementAsync(CtapAuthenticatorSimulator simulator, CtapPinUvAuthProtocolId id, MemoryPool<byte> pool)
+    private async Task<CoseKey> GetKeyAgreementAsync(CtapAuthenticatorSimulator simulator, CtapPinUvAuthProtocolId id, BaseMemoryPool pool)
     {
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.GetKeyAgreement, PinUvAuthProtocol: (int)id);
         CtapClientPinResponse response = await CtapAuthenticatorClientPinClient.ClientPinAsync(
@@ -374,13 +374,13 @@ internal sealed class CtapAuthenticatorPowerCycleTests
     public void StoredPinHashCarrierZeroesOnDispose()
     {
         const int PinHashLength = 16;
-        using var trackingPool = new ZeroOnDisposeTrackingMemoryPool(PinHashLength);
+        using var trackingPool = new MeteredHousePool();
 
-        DigestValue storedPin = BuildFixedDigest(0x99, PinHashLength, trackingPool);
+        DigestValue storedPin = BuildFixedDigest(0x99, PinHashLength, trackingPool.Pool);
         storedPin.Dispose();
 
-        Assert.AreEqual(1, trackingPool.TrackedDisposalCount);
-        Assert.IsTrue(trackingPool.AllTrackedDisposalsWereZero, "The stored PIN hash carrier must be zeroed before its buffer returns to the pool.");
+        Assert.AreEqual(1, trackingPool.RentedCountOfSize(PinHashLength));
+        Assert.AreEqual(0, trackingPool.OutstandingCount, "Disposing the stored PIN hash carrier returns its buffer; zeroing on return is the house pool's own dispose-time contract.");
     }
 
 
@@ -390,7 +390,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
     /// <see cref="CtapAuthenticatorState.CurrentStoredPin"/>'s chosen carrier type directly rather than
     /// through a full <c>setPIN</c> round trip.
     /// </summary>
-    private static DigestValue BuildFixedDigest(byte seed, int length, MemoryPool<byte> pool)
+    private static DigestValue BuildFixedDigest(byte seed, int length, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(length);
         for(int i = 0; i < length; i++)

@@ -112,7 +112,7 @@ public sealed class PolicySignedInput: ITpmCommandInput, IDisposable
         int expiration,
         ReadOnlySpan<byte> signature,
         TpmAlgIdConstants schemeHashAlg,
-        MemoryPool<byte> pool) =>
+        BaseMemoryPool pool) =>
         Create(authObject, policySession, nonceTpm, cpHashA, policyRef, expiration, signature, TpmAlgIdConstants.TPM_ALG_ECDSA, schemeHashAlg, pool);
 
     /// <summary>
@@ -137,7 +137,7 @@ public sealed class PolicySignedInput: ITpmCommandInput, IDisposable
         int expiration,
         ReadOnlySpan<byte> signature,
         TpmAlgIdConstants schemeHashAlg,
-        MemoryPool<byte> pool) =>
+        BaseMemoryPool pool) =>
         Create(authObject, policySession, nonceTpm, cpHashA, policyRef, expiration, signature, TpmAlgIdConstants.TPM_ALG_RSASSA, schemeHashAlg, pool);
 
     /// <summary>
@@ -162,7 +162,7 @@ public sealed class PolicySignedInput: ITpmCommandInput, IDisposable
         int expiration,
         ReadOnlySpan<byte> signature,
         TpmAlgIdConstants schemeHashAlg,
-        MemoryPool<byte> pool) =>
+        BaseMemoryPool pool) =>
         Create(authObject, policySession, nonceTpm, cpHashA, policyRef, expiration, signature, TpmAlgIdConstants.TPM_ALG_RSAPSS, schemeHashAlg, pool);
 
     /// <summary>
@@ -189,7 +189,7 @@ public sealed class PolicySignedInput: ITpmCommandInput, IDisposable
         ReadOnlySpan<byte> signature,
         TpmAlgIdConstants signatureScheme,
         TpmAlgIdConstants schemeHashAlg,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

@@ -84,7 +84,7 @@ namespace Verifiable.Cryptography
         /// parameter instead, reaching the same <see cref="CryptographicKeyEvents.Events"/> stream
         /// by default — see <see cref="CryptoEventSink"/> for the two-route rationale.
         /// </remarks>
-        public async ValueTask<Signature> SignAsync(ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
+        public async ValueTask<Signature> SignAsync(ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context = null)
         {
             (Signature signature, CryptoEvent? evt) = await KeyMaterial.WithKeyBytesAsync(
                 (privateKeyBytes, dataToSign, signaturePool) =>

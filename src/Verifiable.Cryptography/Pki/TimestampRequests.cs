@@ -96,7 +96,7 @@ public sealed class TimestampRequestContent: IDisposable
 /// value (<see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31912201/01.03.01_60/en_31912201v010301p.pdf">
 /// ETSI EN 319 122-1 V1.3.1 clause 5.3</see>), an archive-time-stamp-v3 hashes the <c>ats-hash-index-v3</c>-driven
 /// concatenation (clause 5.5.3). That decision belongs to the creation surface composing this builder, so the
-/// caller computes the digest through the registered <see cref="CryptographicKeyEvents.ComputeDigestAsync(ReadOnlyMemory{byte}, int, Tag, MemoryPool{byte}, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>
+/// caller computes the digest through the registered <see cref="CryptographicKeyEvents.ComputeDigestAsync(ReadOnlyMemory{byte}, int, Tag, BaseMemoryPool, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>
 /// seam over whatever octets its level requires, then hands the resulting bytes and their
 /// <see cref="PkiDigestAlgorithm"/> here.
 /// </para>
@@ -149,7 +149,7 @@ public static class TimestampRequests
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the built request (and, when drawn, the nonce) transfers to the returned carrier, which the caller disposes; the nested catch blocks dispose them on a partial failure. The ValueTask.FromResult wrapper this method returns through is what defeats the analyzer's own escape analysis here.")]
     public static ValueTask<TimestampRequestContent> CreateAsync(
         DigestValue messageImprint,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         string? reqPolicyOid = null,
         int nonceByteLength = 32,
         bool includeNonce = true,

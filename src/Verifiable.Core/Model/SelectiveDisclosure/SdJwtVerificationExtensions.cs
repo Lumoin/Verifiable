@@ -81,7 +81,7 @@ public static class SdJwtVerificationExtensions
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The returned SdJwtVerificationContext takes ownership of the decoded payload buffer; the caller disposes the context.")]
         public async ValueTask<(SdVerificationResult Result, SdJwtVerificationContext? Context)> VerifyVerboseAsync(
             PublicKeyMemory issuerVerificationKey,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             VerificationDelegate verificationDelegate,
             ExtractSdJwtPathsDelegate extractPaths,
             string hashAlgorithm = WellKnownHashAlgorithms.Sha256Iana,
@@ -166,7 +166,7 @@ public static class SdJwtVerificationExtensions
         /// </returns>
         public async ValueTask<SdVerificationResult> VerifyAsync(
             PublicKeyMemory issuerVerificationKey,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             VerificationDelegate verificationDelegate,
             ExtractSdJwtPathsDelegate extractPaths,
             string hashAlgorithm = WellKnownHashAlgorithms.Sha256Iana,
@@ -196,7 +196,7 @@ public static class SdJwtVerificationExtensions
         /// <returns>The verification result and, once past the signature check, the context.</returns>
         public ValueTask<(SdVerificationResult Result, SdJwtVerificationContext? Context)> VerifyVerboseAsync(
             PublicKeyMemory issuerVerificationKey,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             ExtractSdJwtPathsDelegate extractPaths,
             string hashAlgorithm = WellKnownHashAlgorithms.Sha256Iana,
             CancellationToken cancellationToken = default)
@@ -229,7 +229,7 @@ public static class SdJwtVerificationExtensions
         /// <returns>A per-claim <see cref="SdVerificationResult"/>.</returns>
         public ValueTask<SdVerificationResult> VerifyAsync(
             PublicKeyMemory issuerVerificationKey,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             ExtractSdJwtPathsDelegate extractPaths,
             string hashAlgorithm = WellKnownHashAlgorithms.Sha256Iana,
             CancellationToken cancellationToken = default)

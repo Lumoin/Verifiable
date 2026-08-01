@@ -358,7 +358,7 @@ internal sealed class CAdESRequirementsMatrixTests
 
 
     /// <summary>
-    /// Mints a CAdES-B-LTA signature through the shipped surface end to end: <see cref="CAdESSignatureCreation.SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, MemoryPool{byte}, CancellationToken)"/>
+    /// Mints a CAdES-B-LTA signature through the shipped surface end to end: <see cref="CAdESSignatureCreation.SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken)"/>
     /// for B-B, <see cref="CAdESSignatureAugmentation.AddSignatureTimestampAsync"/> for B-T, and
     /// <see cref="CAdESSignatureAugmentation.AddArchiveTimestampAsync"/> for B-LTA, mirroring
     /// <see cref="CAdESSignatureTestFactory.AttachArchiveTimestampAsync"/>'s "no explicit B-LT step needed"

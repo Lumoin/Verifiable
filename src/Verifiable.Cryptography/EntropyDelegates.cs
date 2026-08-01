@@ -10,7 +10,7 @@ namespace Verifiable.Cryptography;
 public delegate (Nonce Result, CryptoEvent? Event) GenerateNonceDelegate(
     int byteLength,
     Tag tag,
-    MemoryPool<byte> pool);
+    BaseMemoryPool pool);
 
 
 /// <summary>
@@ -20,7 +20,7 @@ public delegate (Nonce Result, CryptoEvent? Event) GenerateNonceDelegate(
 public delegate (Salt Result, CryptoEvent? Event) GenerateSaltDelegate(
     int byteLength,
     Tag tag,
-    MemoryPool<byte> pool);
+    BaseMemoryPool pool);
 
 
 /// <summary>
@@ -46,7 +46,7 @@ public delegate (Salt Result, CryptoEvent? Event) GenerateSaltDelegate(
 /// async verification pipeline (SAID, KERI/ACDC, did:webvh/peer/webplus). Hashes that are sync by nature — a hash
 /// of public or local data with no async backend, such as a JWK thumbprint, a PKCE S256 challenge, or a Concat KDF
 /// round — use the synchronous <see cref="HashFunctionDelegate"/> seam via
-/// <see cref="CryptographicKeyEvents.ComputeDigest(System.ReadOnlySpan{byte}, int, Tag, MemoryPool{byte}, string?)"/>
+/// <see cref="CryptographicKeyEvents.ComputeDigest(System.ReadOnlySpan{byte}, int, Tag, BaseMemoryPool, string?)"/>
 /// instead, so no async colouring propagates into otherwise-synchronous code.
 /// </para>
 /// </remarks>
@@ -54,6 +54,6 @@ public delegate ValueTask<(DigestValue Result, CryptoEvent? Event)> ComputeDiges
     ReadOnlySequence<byte> input,
     int outputByteLength,
     Tag tag,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     FrozenDictionary<string, object>? context = null,
     CancellationToken cancellationToken = default);

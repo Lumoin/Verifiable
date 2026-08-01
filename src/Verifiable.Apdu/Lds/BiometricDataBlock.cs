@@ -57,7 +57,7 @@ public sealed class BiometricDataBlock: SensitiveMemory
     /// <summary>
     /// Copies <paramref name="bytes"/> into a pooled <see cref="BiometricDataBlock"/>.
     /// </summary>
-    public static BiometricDataBlock FromBytes(ReadOnlySpan<byte> bytes, BiometricModality modality, MemoryPool<byte> pool)
+    public static BiometricDataBlock FromBytes(ReadOnlySpan<byte> bytes, BiometricModality modality, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

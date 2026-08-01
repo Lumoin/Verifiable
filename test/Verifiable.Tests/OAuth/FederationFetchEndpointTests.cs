@@ -27,7 +27,7 @@ internal sealed class FederationFetchEndpointTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string AnchorEntityId = "https://anchor.example.com";
     private const string SubordinateEntityId = "https://subordinate.example.com";

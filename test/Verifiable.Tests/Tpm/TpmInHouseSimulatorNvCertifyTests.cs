@@ -80,7 +80,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     [TestMethod]
     public async Task EcdsaP256NvCertifyVerifiesAgainstInHouseSimulator()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -133,7 +133,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     [TestMethod]
     public async Task RsaNvCertifyVerifiesAgainstInHouseSimulator()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -158,7 +158,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     [TestMethod]
     public async Task NvCertifyOfPartialWindowAttestsRequestedOffsetAndSize()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -191,7 +191,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     [TestMethod]
     public async Task NvCertifyOfUnwrittenIndexReturnsNvUninitialized()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -217,7 +217,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     [TestMethod]
     public async Task NvCertifyWithWrongIndexAuthReturnsAuthFail()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -244,7 +244,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     [TestMethod]
     public async Task NvCertifyWithNonSigningKeyReturnsKey()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -271,7 +271,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     [TestMethod]
     public async Task NvCertifyWithDigestFormSelectedReturnsCommandCode()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -302,7 +302,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// <param name="rsaParameters">The public key reconstructed from the AK's exported modulus.</param>
     /// <param name="usePss">When <see langword="true"/>, certifies and verifies RSAPSS; otherwise RSASSA (PKCS#1 v1.5).</param>
     private async Task NvCertifyAndVerifyRsaAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, CreatePrimaryResponse ak, RSAParameters rsaParameters, bool usePss)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, CreatePrimaryResponse ak, RSAParameters rsaParameters, bool usePss)
     {
         using TpmPasswordSession signAuth = TpmPasswordSession.CreateEmpty(pool);
         using TpmPasswordSession indexAuth = TpmPasswordSession.Create(IndexAuth, pool);
@@ -340,7 +340,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// <param name="offset">The expected attested offset.</param>
     /// <param name="ak">The attestation key's CreatePrimary response.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task AssertNvCertifyAttestationAsync(NvCertifyResponse nvCertify, byte[] expectedWindow, ushort offset, CreatePrimaryResponse ak, MemoryPool<byte> pool)
+    private async Task AssertNvCertifyAttestationAsync(NvCertifyResponse nvCertify, byte[] expectedWindow, ushort offset, CreatePrimaryResponse ak, BaseMemoryPool pool)
     {
         TpmsAttest attest = nvCertify.CertifyInfo.AttestationData;
         Assert.AreEqual(TpmConstants32.TPM_GENERATED_VALUE, attest.Magic, "A genuine TPM attestation is stamped with TPM_GENERATED_VALUE.");
@@ -381,7 +381,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// <param name="registry">The response codec registry.</param>
     /// <param name="pool">The memory pool.</param>
     /// <param name="attributes">The Index attributes.</param>
-    private async Task DefineNvIndexAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmaNv attributes)
+    private async Task DefineNvIndexAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmaNv attributes)
     {
         using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
         using Tpm2bAuth auth = Tpm2bAuth.Create(IndexAuth, pool);
@@ -401,7 +401,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// <param name="registry">The response codec registry.</param>
     /// <param name="pool">The memory pool.</param>
     /// <param name="attributes">The Index attributes.</param>
-    private async Task DefineAndWriteNvIndexAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmaNv attributes)
+    private async Task DefineAndWriteNvIndexAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmaNv attributes)
     {
         await DefineNvIndexAsync(tpm, registry, pool, attributes).ConfigureAwait(false);
 
@@ -423,7 +423,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// <param name="hierarchy">The hierarchy under which to create the key.</param>
     /// <returns>The CreatePrimary response.</returns>
     private async Task<CreatePrimaryResponse> CreateSigningPrimaryAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmRh hierarchy)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForEccSigningKey(
             hierarchy,
@@ -451,7 +451,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// <param name="hierarchy">The hierarchy under which to create the key.</param>
     /// <returns>The CreatePrimary response.</returns>
     private async Task<CreatePrimaryResponse> CreateRsaSigningPrimaryAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmRh hierarchy)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForRsaSigningKey(
             hierarchy, password: null, keyBits: Rsa2048KeyBits, TpmtRsaScheme.Null, pool, noDa: true);
@@ -474,7 +474,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// <param name="hierarchy">The hierarchy under which to create the parent.</param>
     /// <returns>The CreatePrimary response.</returns>
     private async Task<CreatePrimaryResponse> CreateStorageParentAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmRh hierarchy)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForEccStorageParent(
             hierarchy, authPassword: null, TpmEccCurveConstants.TPM_ECC_NIST_P256, pool, noDa: true);
@@ -499,7 +499,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The recomputed Name (2-byte nameAlg prefix + digest).</returns>
-    private static async Task<byte[]> ComputeNvIndexNameAsync(uint nvIndex, TpmaNv attributes, ushort dataSize, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<byte[]> ComputeNvIndexNameAsync(uint nvIndex, TpmaNv attributes, ushort dataSize, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] marshaled = new byte[sizeof(uint) + sizeof(ushort) + sizeof(uint) + sizeof(ushort) + sizeof(ushort)];
         int offset = 0;
@@ -534,7 +534,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The recomputed Qualified Name.</returns>
-    private static async Task<byte[]> ComputeQualifiedNameAsync(uint hierarchy, ReadOnlyMemory<byte> name, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<byte[]> ComputeQualifiedNameAsync(uint hierarchy, ReadOnlyMemory<byte> name, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ushort nameAlg = BinaryPrimitives.ReadUInt16BigEndian(name.Span[..sizeof(ushort)]);
         Assert.AreEqual((ushort)TpmAlgIdConstants.TPM_ALG_SHA256, nameAlg, "This test assumes a SHA-256 nameAlg.");
@@ -558,7 +558,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator(
             "tpm-in-house-nv-certify",
@@ -576,7 +576,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// </summary>
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
@@ -617,7 +617,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The 32-byte digest.</returns>
-    private static async Task<byte[]> ComputeSha256Async(ReadOnlyMemory<byte> message, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<byte[]> ComputeSha256Async(ReadOnlyMemory<byte> message, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         Tag tag = Tag.Create(HashAlgorithmName.SHA256)
             .With(Purpose.Digest)

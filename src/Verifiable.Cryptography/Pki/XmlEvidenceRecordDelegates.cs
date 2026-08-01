@@ -216,7 +216,7 @@ public sealed record XmlEvidenceRecordParseContext
 /// <returns>The parse result.</returns>
 public delegate ValueTask<XmlEvidenceRecordParseResult> ParseEvidenceRecordXmlDelegate(
     XmlEvidenceRecordParseContext context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 
@@ -415,7 +415,7 @@ public sealed record XmlEvidenceRecordCanonicalizationContext
 /// <returns>The canonicalization result.</returns>
 public delegate ValueTask<XmlEvidenceRecordCanonicalizationResult> CanonicalizeXmlEvidenceRecordDelegate(
     XmlEvidenceRecordCanonicalizationContext context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 
@@ -564,5 +564,5 @@ public sealed record XmlEvidenceRecordWriteContext
 /// <returns>The write result.</returns>
 public delegate ValueTask<XmlEvidenceRecordWriteResult> WriteEvidenceRecordXmlDelegate(
     XmlEvidenceRecordWriteContext context,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);

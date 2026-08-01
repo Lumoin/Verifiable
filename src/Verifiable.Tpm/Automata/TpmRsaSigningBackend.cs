@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Automata;
 /// <returns>The generated key. The caller owns and disposes it.</returns>
 public delegate ValueTask<TpmGeneratedRsaKey> TpmRsaKeyGenerationDelegate(
     ushort keyBits,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);
 
 /// <summary>
@@ -46,7 +46,7 @@ public delegate ValueTask<Signature> TpmRsaDigestSignDelegate(
     ReadOnlyMemory<byte> digest,
     TpmAlgIdConstants scheme,
     TpmAlgIdConstants hashAlg,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);
 
 /// <summary>
@@ -78,7 +78,7 @@ public delegate ValueTask<IMemoryOwner<byte>> TpmRsaOaepEncryptDelegate(
     ReadOnlyMemory<byte> label,
     TpmAlgIdConstants lhashAlg,
     TpmAlgIdConstants mgfHashAlg,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);
 
 /// <summary>
@@ -112,7 +112,7 @@ public delegate ValueTask<IMemoryOwner<byte>?> TpmRsaOaepDecryptDelegate(
     ReadOnlyMemory<byte> label,
     TpmAlgIdConstants lhashAlg,
     TpmAlgIdConstants mgfHashAlg,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);
 
 /// <summary>

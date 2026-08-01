@@ -34,7 +34,7 @@ namespace Verifiable.OAuth.Federation;
 /// The companion <see cref="EncodeJwtPart"/> wraps the UTF-8 bytes in a
 /// <see cref="TaggedMemory{T}"/> tagged with
 /// <see cref="BufferTags.Json"/> so callers can pass it directly to
-/// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, Cryptography.PrivateKeyMemory, MemoryPool{byte}, CancellationToken)"/>
+/// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, Cryptography.PrivateKeyMemory, BaseMemoryPool, CancellationToken)"/>
 /// as the <see cref="JwtPartEncoder{TJwtPart}"/> argument.
 /// </para>
 /// </remarks>
@@ -515,7 +515,7 @@ public static class EntityStatementJsonBuilder
     /// Encodes a dictionary into UTF-8 JSON bytes tagged with
     /// <see cref="BufferTags.Json"/>. Suitable for passing as the
     /// <see cref="JwtPartEncoder{TJwtPart}"/> argument to
-    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, Cryptography.PrivateKeyMemory, MemoryPool{byte}, CancellationToken)"/>.
+    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, Cryptography.PrivateKeyMemory, BaseMemoryPool, CancellationToken)"/>.
     /// </summary>
     public static TaggedMemory<byte> EncodeJwtPart(Dictionary<string, object> part)
     {

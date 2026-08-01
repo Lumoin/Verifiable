@@ -61,7 +61,7 @@ internal sealed class WebAuthnRpHttpCeremonyRequiredUserVerificationTests
     [TestMethod]
     public async Task RegistrationThenAssertionSucceedUnderRequiredUserVerificationWithPinUvAuthTokenAndObserveUvOneOnThePostedWireBytes()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         var skin = new WebAuthnRelyingPartyCeremonySkin(
@@ -98,7 +98,7 @@ internal sealed class WebAuthnRpHttpCeremonyRequiredUserVerificationTests
     [TestMethod]
     public async Task RegistrationAndAssertionWithoutAPinUvAuthTokenFailWithTheSkinsUnauthorizedShapeUnderRequiredUserVerification()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         var skin = new WebAuthnRelyingPartyCeremonySkin(
@@ -143,7 +143,7 @@ internal sealed class WebAuthnRpHttpCeremonyRequiredUserVerificationTests
     /// POSTed bytes with the shipped reader to report the observed <c>uv</c> bit.
     /// </summary>
     private static async Task<bool> RegisterOverRealTransportsWithTokenAsync(
-        HttpClient httpClient, CtapWave2TransportHarness harness, MemoryPool<byte> pool, byte[] token, CancellationToken cancellationToken)
+        HttpClient httpClient, CtapWave2TransportHarness harness, BaseMemoryPool pool, byte[] token, CancellationToken cancellationToken)
     {
         using HttpResponseMessage optionsResponse = await PostAsync(
             httpClient, WebAuthnRelyingPartyCeremonySkin.AttestationOptionsPath, jsonBody: null, cancellationToken).ConfigureAwait(false);
@@ -193,7 +193,7 @@ internal sealed class WebAuthnRpHttpCeremonyRequiredUserVerificationTests
     /// shape for <c>authenticatorGetAssertion</c>.
     /// </summary>
     private static async Task<bool> AssertOverRealTransportsWithTokenAsync(
-        HttpClient httpClient, CtapWave2TransportHarness harness, MemoryPool<byte> pool, byte[] token, CancellationToken cancellationToken)
+        HttpClient httpClient, CtapWave2TransportHarness harness, BaseMemoryPool pool, byte[] token, CancellationToken cancellationToken)
     {
         using HttpResponseMessage optionsResponse = await PostAsync(
             httpClient, WebAuthnRelyingPartyCeremonySkin.AssertionOptionsPath, jsonBody: null, cancellationToken).ConfigureAwait(false);
@@ -243,7 +243,7 @@ internal sealed class WebAuthnRpHttpCeremonyRequiredUserVerificationTests
     /// response for the caller to assert the RP's rejection shape on.
     /// </summary>
     private static async Task<HttpResponseMessage> RegisterOverRealTransportsWithoutTokenAsync(
-        HttpClient httpClient, CtapWave2TransportHarness harness, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        HttpClient httpClient, CtapWave2TransportHarness harness, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using HttpResponseMessage optionsResponse = await PostAsync(
             httpClient, WebAuthnRelyingPartyCeremonySkin.AttestationOptionsPath, jsonBody: null, cancellationToken).ConfigureAwait(false);
@@ -279,7 +279,7 @@ internal sealed class WebAuthnRpHttpCeremonyRequiredUserVerificationTests
     /// response for the caller to assert the RP's rejection shape on.
     /// </summary>
     private static async Task<HttpResponseMessage> AssertOverRealTransportsWithoutTokenAsync(
-        HttpClient httpClient, CtapWave2TransportHarness harness, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        HttpClient httpClient, CtapWave2TransportHarness harness, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using HttpResponseMessage optionsResponse = await PostAsync(
             httpClient, WebAuthnRelyingPartyCeremonySkin.AssertionOptionsPath, jsonBody: null, cancellationToken).ConfigureAwait(false);
@@ -317,7 +317,7 @@ internal sealed class WebAuthnRpHttpCeremonyRequiredUserVerificationTests
     /// Establishes a PIN on the simulator behind <paramref name="harness"/>'s real APDU transport, driven
     /// entirely over the wire via <see cref="CtapWave5bPinCryptoFixtures"/>.
     /// </summary>
-    private static async Task EstablishPinAsync(CtapWave2TransportHarness harness, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task EstablishPinAsync(CtapWave2TransportHarness harness, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.Two, pool, cancellationToken).ConfigureAwait(false);
@@ -338,7 +338,7 @@ internal sealed class WebAuthnRpHttpCeremonyRequiredUserVerificationTests
     /// only, over <paramref name="harness"/>'s real APDU transport.
     /// </summary>
     private static async Task<byte[]> IssueTokenBoundToRpIdAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, string rpId, CancellationToken cancellationToken)
+        CtapWave2TransportHarness harness, BaseMemoryPool pool, string rpId, CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.Two, pool, cancellationToken).ConfigureAwait(false);
@@ -357,7 +357,7 @@ internal sealed class WebAuthnRpHttpCeremonyRequiredUserVerificationTests
 
 
     /// <summary>Computes <c>authenticate(token, message)</c> under PIN/UV auth protocol TWO's own truncation rule — the platform-side computation <c>verify</c> checks a presented <c>pinUvAuthParam</c> against.</summary>
-    private static async Task<byte[]> SignWithTokenAsync(byte[] token, ReadOnlyMemory<byte> message, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<byte[]> SignWithTokenAsync(byte[] token, ReadOnlyMemory<byte> message, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         CtapPinUvAuthProtocol protocol = CtapPinUvAuthProtocol.CreateDefault(CtapPinUvAuthProtocolId.Two);
         using IMemoryOwner<byte> signature = await protocol.AuthenticateAsync(token, message, pool, cancellationToken).ConfigureAwait(false);

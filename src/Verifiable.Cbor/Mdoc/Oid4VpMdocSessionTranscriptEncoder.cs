@@ -137,7 +137,7 @@ public static class Oid4VpMdocSessionTranscriptEncoder
     /// <returns>The freshly-generated nonce. Caller owns and must dispose.</returns>
     public static System.Buffers.IMemoryOwner<byte> GenerateMdocGeneratedNonce(
         Verifiable.Cryptography.FillEntropyDelegate fillEntropy,
-        System.Buffers.MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         int byteLength = MinimumMdocGeneratedNonceLength)
     {
         ArgumentNullException.ThrowIfNull(fillEntropy);

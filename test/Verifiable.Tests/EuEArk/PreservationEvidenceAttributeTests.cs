@@ -22,7 +22,7 @@ namespace Verifiable.Tests.EuEArk;
 /// <para>
 /// <strong>Everything is attached through the shipped splice primitives.</strong> An Evidence Record is minted by
 /// the shipped creation surface and re-encoded through
-/// <see cref="EvidenceRecords.EncodeArchiveTimeStamp(AlgorithmIdentifier?, IReadOnlyList{CmsAttribute}, IReadOnlyList{EvidenceRecordPartialHashtree}, ReadOnlyMemory{byte}, MemoryPool{byte})"/>,
+/// <see cref="EvidenceRecords.EncodeArchiveTimeStamp(AlgorithmIdentifier?, IReadOnlyList{CmsAttribute}, IReadOnlyList{EvidenceRecordPartialHashtree}, ReadOnlyMemory{byte}, BaseMemoryPool)"/>,
 /// and a Signed Data Object is augmented through
 /// <see cref="CmsSignedDataAugmentation.AppendUnsignedAttributes"/> — the same extension points every other
 /// unsigned attribute of this repository rides in. Nothing new is spliced for these three.

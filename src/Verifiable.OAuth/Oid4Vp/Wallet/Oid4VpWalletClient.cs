@@ -356,7 +356,7 @@ public sealed class Oid4VpWalletClient
     private static string? PeekJarAlgHeader(
         string compactJar,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         int firstDot = compactJar.IndexOf('.', StringComparison.Ordinal);
         if(firstDot <= 0)

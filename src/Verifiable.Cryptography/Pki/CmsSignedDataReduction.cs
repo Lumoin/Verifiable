@@ -95,7 +95,7 @@ public static class CmsSignedDataReduction
         CmsSignedData signedData,
         int signerIndex,
         IReadOnlyList<CmsUnsignedAttributeValueLocation> locations,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(signedData);
         ArgumentNullException.ThrowIfNull(locations);
@@ -257,7 +257,7 @@ public static class CmsSignedDataReduction
     /// </para>
     /// </remarks>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned carrier, which the caller disposes; the write pass disposes it on a partial failure.")]
-    public static CmsSignedData SelectSigner(CmsSignedData signedData, int signerIndex, MemoryPool<byte> pool)
+    public static CmsSignedData SelectSigner(CmsSignedData signedData, int signerIndex, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(signedData);
         ArgumentNullException.ThrowIfNull(pool);
@@ -330,7 +330,7 @@ public static class CmsSignedDataReduction
         CmsElement[] chain,
         int chainLength,
         int shrink,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         int growth = -shrink;
         for(int i = chainLength - 1; i >= 0; --i)

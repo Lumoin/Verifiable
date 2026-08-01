@@ -132,7 +132,7 @@ public sealed record TrustedListParseResult : IDisposable
 /// <returns>The parse result.</returns>
 public delegate ValueTask<TrustedListParseResult> ParseTrustedListDelegate(
     PooledMemory document,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 
@@ -233,5 +233,5 @@ public sealed record TrustedListSignatureVerificationResult
 public delegate ValueTask<TrustedListSignatureVerificationResult> VerifyTrustedListSignatureDelegate(
     PooledMemory document,
     IReadOnlyList<PkiCertificateMemory> trustAnchors,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);

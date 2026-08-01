@@ -342,7 +342,7 @@ public static class PreservationContainerProfile
     /// </remarks>
     public static ValueTask<AsicContainerCreationResult> CreateAsync(
         AsicContainerEvidenceRecordContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);

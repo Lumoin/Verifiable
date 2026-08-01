@@ -78,7 +78,7 @@ public static class SignatureWithTimeValidation
         SignatureValidationSeams seams,
         DateTimeOffset currentTime,
         SignatureValidationResources resources,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(inputs);
@@ -415,7 +415,7 @@ public static class SignatureWithTimeValidation
     private static async ValueTask<IReadOnlyList<PkiCertificateMemory>> FindIncoherentTimestampsAsync(
         SignatureFacts signature,
         IReadOnlyList<TimestampOrderFacts> signatureTimestamps,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         IReadOnlyList<EmbeddedTimestamp> contentTimestamps = signature.TimestampsOfClass(SignatureTimestampClass.ContentTimestamp);
@@ -456,7 +456,7 @@ public static class SignatureWithTimeValidation
     /// <returns>The facts, or <see langword="null"/> when the token cannot be opened or read.</returns>
     private static async ValueTask<TimestampOrderFacts?> ReadOrderFactsAsync(
         PkiCertificateMemory token,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         try
@@ -633,7 +633,7 @@ public static class SignatureWithTimeValidation
         /// <returns>What the time-stamp validation building block concluded.</returns>
         public async ValueTask<BuildingBlockConclusion> ValidateAsync(
             TimestampTokenValidationContext context,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(context);

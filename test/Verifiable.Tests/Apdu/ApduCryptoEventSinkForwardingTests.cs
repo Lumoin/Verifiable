@@ -85,7 +85,7 @@ internal sealed class ApduCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="TerminalAuthenticationSignature.SignAsync(ReadOnlyMemory{byte}, Tag, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, MemoryPool{byte}, CryptoEventSink?, CancellationToken)"/>
+    /// <see cref="TerminalAuthenticationSignature.SignAsync(ReadOnlyMemory{byte}, Tag, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>
     /// (the raw-bytes overload) forwards the <see cref="SignatureProducedEvent"/> to an explicit sink.
     /// </summary>
     [TestMethod]
@@ -109,7 +109,7 @@ internal sealed class ApduCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="TerminalAuthenticationSignature.VerifyAsync(EncodedEcPoint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, MemoryPool{byte}, CryptoEventSink?, CancellationToken)"/>
+    /// <see cref="TerminalAuthenticationSignature.VerifyAsync(EncodedEcPoint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>
     /// forwards the <see cref="VerificationCompletedEvent"/> to an explicit sink.
     /// </summary>
     [TestMethod]

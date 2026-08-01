@@ -34,7 +34,7 @@ public sealed class VerifySignatureResponse: IDisposable, ITpmWireType
     /// <param name="reader">The reader positioned at the response parameters.</param>
     /// <param name="pool">The memory pool for parameter buffer allocation.</param>
     /// <returns>The parsed verify-signature response.</returns>
-    public static VerifySignatureResponse Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static VerifySignatureResponse Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         TpmtTkVerified validation = TpmtTkVerified.Parse(ref reader, pool);

@@ -51,7 +51,7 @@ internal static class WebPlusSelfHash
         ComputeDigestDelegate computeDigest,
         Tag digestTag,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(computeDigest);
@@ -103,7 +103,7 @@ internal static class WebPlusSelfHash
         ReadOnlySpan<byte> multihashCode,
         int digestLength,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         out IMemoryOwner<byte> owner,
         out int length)
     {

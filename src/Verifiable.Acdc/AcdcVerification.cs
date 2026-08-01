@@ -1,3 +1,4 @@
+using Lumoin.Base;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
@@ -62,7 +63,7 @@ public static class AcdcVerification
         AcdcMessage message,
         IEnumerable<KeriSeal> issuerAnchors,
         ComputeDigestDelegate computeDigest,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(message);

@@ -28,7 +28,7 @@ internal static class PeerDid4
     public static ValueTask<DidResolutionResult> Resolve(
         string longFormDid,
         string afterNumalgo,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         PeerDidDocumentDeserializer didDocumentDeserializer,
         ComputeDigestDelegate computeDigest,
         CancellationToken cancellationToken)
@@ -43,7 +43,7 @@ internal static class PeerDid4
     public static ValueTask<DidResolutionResult> ResolveShort(
         string longFormDid,
         string afterNumalgo,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         PeerDidDocumentDeserializer didDocumentDeserializer,
         ComputeDigestDelegate computeDigest,
         CancellationToken cancellationToken)
@@ -53,7 +53,7 @@ internal static class PeerDid4
     private static async ValueTask<DidResolutionResult> ResolveCoreAsync(
         string longFormDid,
         string afterNumalgo,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         PeerDidDocumentDeserializer didDocumentDeserializer,
         ComputeDigestDelegate computeDigest,
         bool asShortForm,
@@ -144,7 +144,7 @@ internal static class PeerDid4
 
     //Recreates the SHA2-256 multihash over the encoded-document string and compares it against the
     //hash embedded in the DID. Any decode failure of the hash portion is a non-conforming DID.
-    private static async ValueTask<bool> IsHashValidAsync(string hashPortion, string encodedDocument, DecodeDelegate base58Decoder, ComputeDigestDelegate computeDigest, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async ValueTask<bool> IsHashValidAsync(string hashPortion, string encodedDocument, DecodeDelegate base58Decoder, ComputeDigestDelegate computeDigest, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         //did:peer:4 fixes the hash to SHA2-256, validated against the multihash code below. The digest is taken
         //through the supplied ComputeDigestDelegate (telemetry, CBOM stamping, event emission) by awaiting the

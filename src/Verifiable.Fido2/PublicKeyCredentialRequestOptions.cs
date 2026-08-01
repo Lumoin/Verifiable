@@ -34,7 +34,7 @@ public sealed record PublicKeyCredentialRequestOptions
     /// The base64url-encoded challenge the authenticator signs over. Required by the CR.
     /// </summary>
     /// <remarks>
-    /// Already base64url-encoded — <see cref="Fido2ChallengeGeneration.Generate(System.Buffers.MemoryPool{byte})"/>
+    /// Already base64url-encoded — <see cref="Fido2ChallengeGeneration.Generate(System.Buffers.BaseMemoryPool)"/>
     /// returns this exact shape, matching <c>AssertionCeremonyInput.ExpectedChallenge</c>'s own
     /// plain-<see cref="string"/> modeling.
     /// </remarks>

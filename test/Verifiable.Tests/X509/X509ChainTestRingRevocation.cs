@@ -176,7 +176,7 @@ internal static class X509ChainTestRingRevocation
     internal static async ValueTask<OcspRequestContent> CreateOcspRequestAsync(
         X509ChainTestRingNode subject,
         X509ChainTestRingNode issuer,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         bool includeNonce = true,
         CancellationToken cancellationToken = default)
     {
@@ -225,7 +225,7 @@ internal static class X509ChainTestRingRevocation
         DateTimeOffset nextUpdate,
         DateTimeOffset? revocationTime,
         int? revocationReason,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(certificateRevocationList);
@@ -275,7 +275,7 @@ internal static class X509ChainTestRingRevocation
         PkiCertificateMemory subject,
         PkiCertificateMemory issuer,
         DateTimeOffset validationTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(response);

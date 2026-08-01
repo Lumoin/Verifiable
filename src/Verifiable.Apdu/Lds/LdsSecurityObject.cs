@@ -63,7 +63,7 @@ public sealed class LdsSecurityObject: IDisposable
     /// <returns>The parsed <see cref="LdsSecurityObject"/>. The caller disposes it.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the structure is malformed or uses an unsupported hash algorithm.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the DigestValue carriers transfers to the returned LdsSecurityObject; the catch disposes them on a partial parse failure.")]
-    public static LdsSecurityObject Parse(ReadOnlyMemory<byte> content, MemoryPool<byte> pool)
+    public static LdsSecurityObject Parse(ReadOnlyMemory<byte> content, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -135,7 +135,7 @@ public sealed class LdsSecurityObject: IDisposable
     /// <summary>
     /// Copies a hash value into a pooled <see cref="DigestValue"/> carrying the digest algorithm tag.
     /// </summary>
-    private static DigestValue ToDigest(ReadOnlySpan<byte> hash, Tag digestTag, MemoryPool<byte> pool)
+    private static DigestValue ToDigest(ReadOnlySpan<byte> hash, Tag digestTag, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(hash.Length);
         try

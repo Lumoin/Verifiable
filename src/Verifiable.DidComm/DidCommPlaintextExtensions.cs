@@ -26,7 +26,7 @@ public static class DidCommPlaintextExtensions
     /// <param name="memoryPool">The pool the returned artifact's owned buffer is drawn from.</param>
     /// <returns>The validated <see cref="DidCommPlaintextMessage"/> wire artifact.</returns>
     /// <exception cref="FormatException">Thrown when the message violates a structural requirement.</exception>
-    public static DidCommPlaintextMessage PackPlaintext(this DidCommMessage message, DidCommMessageSerializer serializer, MemoryPool<byte> memoryPool)
+    public static DidCommPlaintextMessage PackPlaintext(this DidCommMessage message, DidCommMessageSerializer serializer, BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(message);
         ArgumentNullException.ThrowIfNull(serializer);

@@ -51,7 +51,7 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
     public async Task FullHappyPathBothExtensionsOverRealApduTransport()
     {
         const string RpId = "waveext-capstone-happy.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveext-capstone-happy");
@@ -104,7 +104,7 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
         const string Level3RpId = "waveext-capstone-l3.example";
         const string Level2RpId = "waveext-capstone-l2.example";
         const string ExcludeRpId = "waveext-capstone-excl.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveext-capstone-enforcement");
@@ -188,7 +188,7 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
     public async Task UnauthorizedRpMinPinLengthRequestGetsOkWithNoExtensionsOutputOverRealApduTransport()
     {
         const string RpId = "waveext-capstone-unauthorized.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveext-capstone-unauthorized");
@@ -216,7 +216,7 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
     public async Task ResetClearsMinPinLengthRpIdsOverRealApduTransport()
     {
         const string RpId = "waveext-capstone-reset.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveext-capstone-reset");
@@ -269,7 +269,7 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
     [TestMethod]
     public async Task HmacSecretMcAnnotationOverRealApduTransport()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-hmac-secret-mc-annotation");
@@ -287,7 +287,7 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
     /// whether the <c>"hmac-secret"</c> authData annotation appears, per <paramref name="expectAnnotation"/>.
     /// </summary>
     private static async Task AssertHmacSecretAnnotationAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, string rpId, bool? hmacSecret, bool expectAnnotation, CancellationToken cancellationToken)
+        CtapWave2TransportHarness harness, BaseMemoryPool pool, string rpId, bool? hmacSecret, bool expectAnnotation, CancellationToken cancellationToken)
     {
         ReadOnlyMemory<byte> extensions = CtapWave2AuthenticatorFixtures.BuildMakeCredentialExtensionsInput(hmacSecret: hmacSecret);
         CtapMakeCredentialRequest request = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(pool, rpId: rpId, extensions: extensions);
@@ -321,7 +321,7 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
     /// and returns the minted credential ID's own bytes.
     /// </summary>
     private static async Task<byte[]> RegisterCredentialOverRealTransportAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, string rpId, byte[] userId, int? credProtect, CancellationToken cancellationToken)
+        CtapWave2TransportHarness harness, BaseMemoryPool pool, string rpId, byte[] userId, int? credProtect, CancellationToken cancellationToken)
     {
         //Explicit if/else, not a ternary: CtapWave2AuthenticatorFixtures.BuildMakeCredentialExtensionsInput
         //returns a non-nullable ReadOnlyMemory<byte>, so a ternary against the null literal infers the
@@ -366,7 +366,7 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
 
 
     /// <summary>Establishes <see cref="Pin"/> as the authenticator's PIN over <paramref name="harness"/>'s real transport.</summary>
-    private static async Task EstablishPinAsync(CtapWave2TransportHarness harness, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task EstablishPinAsync(CtapWave2TransportHarness harness, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
             .ConfigureAwait(false);
@@ -388,7 +388,7 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
     /// it from wire bytes only, over <paramref name="harness"/>'s real transport.
     /// </summary>
     private static async Task<byte[]> IssueTokenAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, int permissions, string? rpId, CancellationToken cancellationToken)
+        CtapWave2TransportHarness harness, BaseMemoryPool pool, int permissions, string? rpId, CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
             .ConfigureAwait(false);
@@ -412,7 +412,7 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
     /// <see cref="CtapCommandException"/> for a non-success status.
     /// </summary>
     private static async Task SendSetMinPinLengthRpIdsAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, byte[] token, IReadOnlyList<string> rpIds, CancellationToken cancellationToken)
+        CtapWave2TransportHarness harness, BaseMemoryPool pool, byte[] token, IReadOnlyList<string> rpIds, CancellationToken cancellationToken)
     {
         byte[] subCommandParams = CtapWaveConfigFixtures.BuildSubCommandParams(minPinLengthRpIds: rpIds);
         byte[] message = CtapWaveConfigFixtures.BuildMessage(WellKnownCtapAuthenticatorConfigSubCommands.SetMinPinLength, subCommandParams);

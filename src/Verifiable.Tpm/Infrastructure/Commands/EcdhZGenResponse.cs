@@ -46,7 +46,7 @@ public sealed class EcdhZGenResponse: IDisposable, ITpmWireType
     /// <param name="reader">The reader positioned at the response parameters.</param>
     /// <param name="pool">The memory pool for coordinate buffer allocation.</param>
     /// <returns>The parsed response.</returns>
-    public static EcdhZGenResponse Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static EcdhZGenResponse Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         //outPoint is TPM2B_ECC_POINT: consume the outer size field before parsing the coordinates.

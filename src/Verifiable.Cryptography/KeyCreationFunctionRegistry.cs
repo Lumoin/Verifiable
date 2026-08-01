@@ -30,7 +30,7 @@ namespace Verifiable.Cryptography;
 /// operation. A creator that does not support observability returns <see langword="null"/> for the event.
 /// </returns>
 public delegate (PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> Keys, CryptoEvent? Event) KeyCreationDelegate(
-    MemoryPool<byte> pool);
+    BaseMemoryPool pool);
 
 
 /// <summary>

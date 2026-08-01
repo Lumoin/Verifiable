@@ -45,5 +45,5 @@ namespace Verifiable.Cryptography.Aead;
 public delegate ValueTask<SharedSecret> KeyAgreementDecryptDelegate(
     ReadOnlyMemory<byte> privateKeyBytes,
     PublicKeyMemory epk,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);

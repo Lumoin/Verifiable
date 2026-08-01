@@ -30,7 +30,7 @@ internal static class CtapWaveConfigFixtures
     /// <param name="pool">The memory pool for the request and response buffers.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The decoded <c>authenticatorGetInfo</c> response.</returns>
-    public static async Task<CtapGetInfoResponse> GetInfoAsync(CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public static async Task<CtapGetInfoResponse> GetInfoAsync(CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] request = [WellKnownCtapCommands.GetInfo];
         using PooledMemory response = await simulator.TransceiveAsync(request, pool, cancellationToken).ConfigureAwait(false);
@@ -46,7 +46,7 @@ internal static class CtapWaveConfigFixtures
     /// <param name="pin">The plaintext PIN to set.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     public static async Task EstablishPinAsync(
-        CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string pin, CancellationToken cancellationToken)
+        CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string pin, CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
             simulator.TransceiveAsync, protocolId, pool, cancellationToken).ConfigureAwait(false);
@@ -72,7 +72,7 @@ internal static class CtapWaveConfigFixtures
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The decrypted, plaintext token bytes.</returns>
     public static async Task<byte[]> IssueTokenAsync(
-        CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string pin, int permissions, string? rpId,
+        CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string pin, int permissions, string? rpId,
         CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
@@ -106,7 +106,7 @@ internal static class CtapWaveConfigFixtures
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The decrypted, plaintext token bytes.</returns>
     public static async Task<byte[]> IssueUvTokenAsync(
-        CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, int permissions, string? rpId,
+        CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, int permissions, string? rpId,
         CancellationToken cancellationToken)
     {
         using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
@@ -136,7 +136,7 @@ internal static class CtapWaveConfigFixtures
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The CTAP2 status byte.</returns>
     public static async Task<byte> SendClientPinExpectingErrorAsync(
-        CtapAuthenticatorSimulator simulator, CtapClientPinRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapAuthenticatorSimulator simulator, CtapClientPinRequest request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         CtapCommandException exception = await Assert.ThrowsExactlyAsync<CtapCommandException>(async () =>
             await CtapAuthenticatorClientPinClient.ClientPinAsync(
@@ -154,7 +154,7 @@ internal static class CtapWaveConfigFixtures
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The raw response envelope. The caller owns it and must dispose it.</returns>
     public static async Task<PooledMemory> SendAuthenticatorConfigAsync(
-        CtapAuthenticatorSimulator simulator, CtapAuthenticatorConfigRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapAuthenticatorSimulator simulator, CtapAuthenticatorConfigRequest request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] envelope = BuildAuthenticatorConfigEnvelope(request);
 
@@ -225,7 +225,7 @@ internal static class CtapWaveConfigFixtures
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The computed <c>pinUvAuthParam</c> bytes.</returns>
     public static async Task<byte[]> ComputeSignatureAsync(
-        byte[] token, CtapPinUvAuthProtocolId protocolId, byte[] message, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        byte[] token, CtapPinUvAuthProtocolId protocolId, byte[] message, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         CtapPinUvAuthProtocol protocol = CtapPinUvAuthProtocol.CreateDefault(protocolId);
         using IMemoryOwner<byte> signature = await protocol.AuthenticateAsync(token, message, pool, cancellationToken).ConfigureAwait(false);

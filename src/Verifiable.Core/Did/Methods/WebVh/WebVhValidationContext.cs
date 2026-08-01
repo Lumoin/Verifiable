@@ -29,7 +29,7 @@ public sealed record WebVhValidationContext
     public required DecodeDelegate Base58Decoder { get; init; }
 
     /// <summary>The memory pool for the transient hash, key and signature buffers.</summary>
-    public required MemoryPool<byte> MemoryPool { get; init; }
+    public required BaseMemoryPool MemoryPool { get; init; }
 
     /// <summary>The clock used to reject entries whose <c>versionTime</c> is in the future.</summary>
     public required TimeProvider TimeProvider { get; init; }

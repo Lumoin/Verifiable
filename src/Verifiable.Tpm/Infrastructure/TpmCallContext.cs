@@ -137,7 +137,7 @@ public ref struct TpmCallContext
     /// <summary>
     /// Gets the memory pool for buffer allocation.
     /// </summary>
-    public MemoryPool<byte> Pool { get; init; }
+    public BaseMemoryPool Pool { get; init; }
 
     /// <summary>
     /// Gets the cpHash bytes from the buffer.

@@ -44,12 +44,11 @@ public static class KeyExtensions
     /// This extension is used internally by <see cref="PrivateKey.SignAsync"/> and can also be used
     /// directly when you need to combine different signing functions with the same key material.
     /// </remarks>
-    public static ValueTask<Signature> SignAsync(this PrivateKeyMemory privateKey, ReadOnlyMemory<byte> dataToSign, SigningFunction<byte, byte, ValueTask<Signature>> signingFunction, MemoryPool<byte> signaturePool)
+    public static ValueTask<Signature> SignAsync(this PrivateKeyMemory privateKey, ReadOnlyMemory<byte> dataToSign, SigningFunction<byte, byte, ValueTask<Signature>> signingFunction, BaseMemoryPool signaturePool)
     {
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(signingFunction);
         ArgumentNullException.ThrowIfNull(signaturePool);
-        AssertHousePool(signaturePool);
 
         return privateKey.WithKeyBytesAsync((privateKeyBytes, dataToSign, signaturePool) => signingFunction(privateKeyBytes, dataToSign, signaturePool), dataToSign, signaturePool);
     }
@@ -72,12 +71,11 @@ public static class KeyExtensions
     /// constructs and emits it through <see cref="CryptographicKeyEvents.Events"/> when non-null,
     /// exactly as <see cref="PrivateKey.SignAsync"/> does.
     /// </remarks>
-    public static async ValueTask<Signature> SignAsync(this PrivateKeyMemory privateKey, ReadOnlyMemory<byte> dataToSign, SigningDelegate signingDelegate, MemoryPool<byte> signaturePool, FrozenDictionary<string, object>? context = null)
+    public static async ValueTask<Signature> SignAsync(this PrivateKeyMemory privateKey, ReadOnlyMemory<byte> dataToSign, SigningDelegate signingDelegate, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context = null)
     {
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(signingDelegate);
         ArgumentNullException.ThrowIfNull(signaturePool);
-        AssertHousePool(signaturePool);
 
         (Signature signature, CryptoEvent? evt) = await privateKey.WithKeyBytesAsync(
             (privateKeyBytes, dataToSign, signaturePool) =>
@@ -94,7 +92,7 @@ public static class KeyExtensions
     /// <summary>
     /// Signs data using the signing delegate resolved from the key's Tag via CryptoFunctionRegistry.
     /// </summary>
-    public static async ValueTask<Signature> SignAsync(this PrivateKeyMemory privateKey, ReadOnlyMemory<byte> dataToSign, MemoryPool<byte> signaturePool)
+    public static async ValueTask<Signature> SignAsync(this PrivateKeyMemory privateKey, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool)
     {
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(signaturePool);
@@ -179,14 +177,13 @@ public static class KeyExtensions
         System.Buffers.ReadOnlySequence<byte> message,
         int outputByteLength,
         ComputeHmacDelegate hmacDelegate,
-        System.Buffers.MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(hmacDelegate);
         ArgumentNullException.ThrowIfNull(pool);
-        AssertHousePool(pool);
 
         (HmacValue result, CryptoEvent? _) = await key.WithKeyBytesAsync(
             (keyBytes, args) => args.HmacDelegate(
@@ -204,7 +201,7 @@ public static class KeyExtensions
         ReadOnlyMemory<byte> message,
         int outputByteLength,
         ComputeHmacDelegate hmacDelegate,
-        System.Buffers.MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default) =>
         key.ComputeHmacAsync(new System.Buffers.ReadOnlySequence<byte>(message), outputByteLength, hmacDelegate, pool, context, cancellationToken);
@@ -220,7 +217,7 @@ public static class KeyExtensions
         System.Buffers.ReadOnlySequence<byte> message,
         HmacValue expectedMac,
         VerifyHmacDelegate verifyDelegate,
-        System.Buffers.MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
@@ -239,14 +236,13 @@ public static class KeyExtensions
         System.Buffers.ReadOnlySequence<byte> message,
         ReadOnlyMemory<byte> expectedMacBytes,
         VerifyHmacDelegate verifyDelegate,
-        System.Buffers.MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(verifyDelegate);
         ArgumentNullException.ThrowIfNull(pool);
-        AssertHousePool(pool);
 
         (bool isValid, CryptoEvent? _) = await key.WithKeyBytesAsync(
             (keyBytes, args) => args.VerifyDelegate(
@@ -264,7 +260,7 @@ public static class KeyExtensions
         ReadOnlyMemory<byte> message,
         HmacValue expectedMac,
         VerifyHmacDelegate verifyDelegate,
-        System.Buffers.MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default) =>
         key.VerifyHmacAsync(new System.Buffers.ReadOnlySequence<byte>(message), expectedMac, verifyDelegate, pool, context, cancellationToken);
@@ -276,33 +272,9 @@ public static class KeyExtensions
         ReadOnlyMemory<byte> message,
         ReadOnlyMemory<byte> expectedMacBytes,
         VerifyHmacDelegate verifyDelegate,
-        System.Buffers.MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default) =>
         key.VerifyHmacAsync(new System.Buffers.ReadOnlySequence<byte>(message), expectedMacBytes, verifyDelegate, pool, context, cancellationToken);
 
-
-    /// <summary>
-    /// Asserts, in DEBUG builds only, that <paramref name="candidate"/> returns exact-length rentals.
-    /// <see cref="Signature"/> and <see cref="HmacValue"/> derive their <c>Length</c> from the rented
-    /// owner's <c>Memory.Length</c> without slicing, so a pool whose rentals are not exact-length
-    /// (e.g. <see cref="MemoryPool{T}.Shared"/>, which rounds up to a power-of-two bucket) silently produces
-    /// an over-long carrier. Probing a rental checks that invariant directly rather than the pool's concrete
-    /// type, so an exact-length delegating pool (for example a test pool observing dispose-time zeroing over
-    /// <see cref="BaseMemoryPool.Shared"/>) remains usable while a bucketing pool arriving as a
-    /// caller-supplied parameter — the one case the <c>BannedSymbols.txt</c> compile-time ban cannot see —
-    /// still fails at debug time instead of producing a wire-visible defect. Compiled out in Release builds.
-    /// </summary>
-    /// <param name="candidate">The pool passed by the caller at one of this class's public entry points.</param>
-    [Conditional("DEBUG")]
-    private static void AssertHousePool(MemoryPool<byte> candidate)
-    {
-        //An odd, non-bucket probe length: any power-of-two-bucketing pool must round it up and fail.
-        const int ProbeLength = 3;
-        using IMemoryOwner<byte> probe = candidate.Rent(ProbeLength);
-        Debug.Assert(probe.Memory.Length == ProbeLength,
-            "The memory pool must return exact-length rentals (BaseMemoryPool.Shared, a custom " +
-            "house-configured instance, or a pool delegating to one), which Signature and HmacValue " +
-            "depend on for their lengths.");
-    }
 }

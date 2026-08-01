@@ -495,7 +495,7 @@ internal sealed class SignatureValidationLongTermBlockTests
         IReadOnlyList<PkiCertificateMemory> chain,
         IReadOnlyList<PkiCertificateMemory> trustAnchors,
         DateTimeOffset validationTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CheckCertificateRevocationStatusAsyncDelegate? checkRevocation,
         CancellationToken cancellationToken) =>
         throw new SecurityException("the path validation seam is configured to always fail, for a CERTIFICATE_CHAIN_GENERAL_FAILURE fixture.");

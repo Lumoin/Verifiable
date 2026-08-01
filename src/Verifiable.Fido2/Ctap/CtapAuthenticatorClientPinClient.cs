@@ -47,7 +47,7 @@ public static class CtapAuthenticatorClientPinClient
         EncodeCtapClientPinRequestDelegate encodeRequest,
         CtapClientPinRequest request,
         DecodeCtapClientPinResponseDelegate decodeResponse,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(transceive);

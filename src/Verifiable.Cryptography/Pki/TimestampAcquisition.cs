@@ -265,7 +265,7 @@ public static class TimestampAcquisition
         DigestValue messageImprint,
         Nonce? requestNonce,
         string? requestedPolicyOid,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(response);
@@ -443,7 +443,7 @@ public static class TimestampAcquisition
 
 
         //Copies a TimeStampToken's octets into a pooled carrier tagged for TimestampTokenInfo.ReadFromTokenAsync.
-        static PkiCertificateMemory ToTimestampTokenCarrier(ReadOnlySpan<byte> tokenDer, MemoryPool<byte> pool)
+        static PkiCertificateMemory ToTimestampTokenCarrier(ReadOnlySpan<byte> tokenDer, BaseMemoryPool pool)
         {
             IMemoryOwner<byte> owner = pool.Rent(tokenDer.Length);
             try
@@ -507,7 +507,7 @@ public static class TimestampAcquisition
         DigestValue messageImprint,
         string tsaUri,
         FetchTimestampResponseAsyncDelegate fetchResponse,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         string? reqPolicyOid = null,
         int nonceByteLength = 32,
         bool includeNonce = true,

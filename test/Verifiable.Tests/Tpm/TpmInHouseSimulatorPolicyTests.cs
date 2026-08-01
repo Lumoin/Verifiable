@@ -47,7 +47,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     [TestMethod]
     public async Task PolicyCommandCodeDrivesTheSessionPolicyDigestAsPredicted()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         const TpmAlgIdConstants PolicyHash = TpmAlgIdConstants.TPM_ALG_SHA256;
@@ -87,7 +87,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     [TestMethod]
     public async Task StartPolicySessionRejectsUnsupportedSha1PolicyHash()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
@@ -103,7 +103,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     [TestMethod]
     public async Task PolicySecretRejectsNonPermanentAuthHandle()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
@@ -134,7 +134,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     [TestMethod]
     public async Task PolicySecretNullTicketTagSatisfiesIsPolicySecret()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
@@ -170,7 +170,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     [TestMethod]
     public async Task PolicyOrRejectsBranchCountBelowTwo()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
@@ -200,7 +200,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     [TestMethod]
     public async Task PolicyAuthValueThenPolicyCommandCodeComposeAsPredicted()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         const TpmAlgIdConstants PolicyHash = TpmAlgIdConstants.TPM_ALG_SHA256;
@@ -241,7 +241,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     [TestMethod]
     public async Task PolicyPcrDrivesTheSessionPolicyDigestAsPredicted()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         const TpmAlgIdConstants PolicyHash = TpmAlgIdConstants.TPM_ALG_SHA256;
@@ -286,7 +286,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     [TestMethod]
     public async Task PolicySecretBindsToTheEndorsementKeyPolicy()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         const TpmAlgIdConstants PolicyHash = TpmAlgIdConstants.TPM_ALG_SHA256;
@@ -366,7 +366,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     [TestMethod]
     public async Task PolicyOrAuthorizesAMatchingBranchAndCollapsesToTheOrDigest()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         const TpmAlgIdConstants PolicyHash = TpmAlgIdConstants.TPM_ALG_SHA256;
@@ -423,7 +423,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     [TestMethod]
     public async Task PolicyNvDrivesTheSessionPolicyDigestAsPredicted()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         const TpmAlgIdConstants PolicyHash = TpmAlgIdConstants.TPM_ALG_SHA256;
@@ -493,7 +493,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     [TestMethod]
     public async Task PolicyNvLiveComparisonAcceptsATrueOperandOnAWrittenIndex()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         const TpmAlgIdConstants PolicyHash = TpmAlgIdConstants.TPM_ALG_SHA256;
@@ -565,7 +565,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     [TestMethod]
     public async Task PolicyNvLiveComparisonRejectsAFalseOperand()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         const TpmAlgIdConstants PolicyHash = TpmAlgIdConstants.TPM_ALG_SHA256;
@@ -621,7 +621,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     [TestMethod]
     public async Task PolicyNvWithAnUndefinedOperationReturnsValueOnARealSession()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         const TpmAlgIdConstants PolicyHash = TpmAlgIdConstants.TPM_ALG_SHA256;
@@ -677,7 +677,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     [TestMethod]
     public async Task PolicyNvWithAnUndefinedOperationReturnsValueOnATrialSessionToo()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         const TpmAlgIdConstants PolicyHash = TpmAlgIdConstants.TPM_ALG_SHA256;
@@ -732,7 +732,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="nvIndex">The NV Index handle.</param>
     /// <param name="data">The data to write.</param>
-    private async Task WriteNvAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, uint nvIndex, byte[] data)
+    private async Task WriteNvAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, uint nvIndex, byte[] data)
     {
         using TpmPasswordSession writeAuth = TpmPasswordSession.CreateEmpty(pool);
         var writeInput = new NvWriteInput(nvIndex, nvIndex, new Tpm2bMaxBuffer(data), Offset: 0);
@@ -753,7 +753,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     /// <param name="dataSize">The data area size.</param>
     /// <returns>The NV_DefineSpace result.</returns>
     private async Task<TpmResult<NvDefineSpaceResponse>> DefineNvAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, uint nvIndex, TpmaNv attributes, ushort dataSize)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, uint nvIndex, TpmaNv attributes, ushort dataSize)
     {
         using Tpm2bAuth indexAuth = Tpm2bAuth.CreateEmpty(pool);
         using var publicInfo = new TpmsNvPublic(nvIndex, TpmAlgIdConstants.TPM_ALG_SHA256, attributes, Tpm2bDigest.Empty, dataSize);
@@ -773,7 +773,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     /// <param name="nvIndex">The NV Index handle.</param>
     /// <returns>The NV_UndefineSpace result.</returns>
     private async Task<TpmResult<NvUndefineSpaceResponse>> UndefineNvAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, uint nvIndex)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, uint nvIndex)
     {
         using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
         var input = new NvUndefineSpaceInput(TpmRh.TPM_RH_OWNER, nvIndex);
@@ -793,7 +793,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The Name bytes.</returns>
-    private static async Task<byte[]> ComputeNvNameAsync(uint nvIndex, TpmAlgIdConstants nameAlg, TpmaNv attributes, ushort dataSize, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<byte[]> ComputeNvNameAsync(uint nvIndex, TpmAlgIdConstants nameAlg, TpmaNv attributes, ushort dataSize, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using var nvPublic = new TpmsNvPublic(nvIndex, nameAlg, attributes, Tpm2bDigest.Empty, dataSize);
         int publicSize = nvPublic.SerializedSize;
@@ -892,7 +892,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator("tpm-in-house-policy", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -907,7 +907,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
     /// </summary>
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();

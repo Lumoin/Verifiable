@@ -51,7 +51,7 @@ public static class SsfFrameworkSetIssuance
         EncodeDelegate base64UrlEncoder,
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         string? signingKeyId = null,
         CancellationToken cancellationToken = default)
     {
@@ -114,7 +114,7 @@ public static class SsfFrameworkSetIssuance
         EncodeDelegate base64UrlEncoder,
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         string? signingKeyId = null,
         CancellationToken cancellationToken = default)
     {

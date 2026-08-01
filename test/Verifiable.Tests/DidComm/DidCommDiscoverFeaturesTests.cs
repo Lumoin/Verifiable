@@ -20,7 +20,7 @@ namespace Verifiable.Tests.DidComm;
 [TestClass]
 internal sealed class DidCommDiscoverFeaturesTests
 {
-    private static readonly MemoryPool<byte> Pool = BaseMemoryPool.Shared;
+    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
 
     private const string Alice = "did:example:alice";
     private const string TicTacToe10 = "https://didcomm.org/tictactoe/1.0";
