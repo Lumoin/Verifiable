@@ -171,50 +171,46 @@ internal sealed class CAdESParallelSignatureTests
 
         using CAdESSignaturePreparation firstPreparation = await PrepareAsync(scenario.FirstCertificate, PkiDigestAlgorithm.Sha256, SigningTime).ConfigureAwait(false);
         using CAdESSignaturePreparation secondPreparation = await PrepareAsync(scenario.SecondCertificate, PkiDigestAlgorithm.Sha384, ParallelSigningTime).ConfigureAwait(false);
-        (IMemoryOwner<byte> firstSignature, int firstLength) = await SignPreparationAsync(scenario.FirstPrivateKey, firstPreparation, TestContext.CancellationToken).ConfigureAwait(false);
-        (IMemoryOwner<byte> secondSignature, int secondLength) = await SignPreparationAsync(scenario.SecondPrivateKey, secondPreparation, TestContext.CancellationToken).ConfigureAwait(false);
+        using PooledMemory firstSignature = await SignPreparationAsync(scenario.FirstPrivateKey, firstPreparation, TestContext.CancellationToken).ConfigureAwait(false);
+        using PooledMemory secondSignature = await SignPreparationAsync(scenario.SecondPrivateKey, secondPreparation, TestContext.CancellationToken).ConfigureAwait(false);
 
-        using(firstSignature)
-        using(secondSignature)
+        using CmsSignedData signedData = CAdESSignatureCreation.Complete(
+            [
+                new CAdESSignerCompletion(firstPreparation, scenario.FirstCertificate, CryptoAlgorithm.P256, firstSignature.AsReadOnlyMemory()),
+                new CAdESSignerCompletion(secondPreparation, scenario.SecondCertificate, CryptoAlgorithm.P384, secondSignature.AsReadOnlyMemory())
+            ],
+            additionalCertificates: null,
+            BaseMemoryPool.Shared);
+
+        byte[] octets = signedData.AsReadOnlySpan().ToArray();
+        var platformReader = new SignedCms();
+        platformReader.Decode(octets);
+        platformReader.CheckSignature(verifySignatureOnly: true);
+        Assert.HasCount(2, platformReader.SignerInfos, "Both prepared signers stand in the completed structure.");
+
+        SignedDataStructure structure = ReadStructure(octets);
+        Assert.HasCount(2, structure.DigestAlgorithmOids, "Each distinct digest algorithm is listed once.");
+        Assert.Contains(PkiDigestAlgorithm.Sha256.Identifier.Oid, structure.DigestAlgorithmOids, "The first signer's SHA-256 is listed.");
+        Assert.Contains(PkiDigestAlgorithm.Sha384.Identifier.Oid, structure.DigestAlgorithmOids, "The second signer's SHA-384 is listed.");
+
+        for(int signerIndex = 0; signerIndex < 2; ++signerIndex)
         {
-            using CmsSignedData signedData = CAdESSignatureCreation.Complete(
-                [
-                    new CAdESSignerCompletion(firstPreparation, scenario.FirstCertificate, CryptoAlgorithm.P256, firstSignature.Memory[..firstLength]),
-                    new CAdESSignerCompletion(secondPreparation, scenario.SecondCertificate, CryptoAlgorithm.P384, secondSignature.Memory[..secondLength])
-                ],
-                additionalCertificates: null,
-                BaseMemoryPool.Shared);
-
-            byte[] octets = signedData.AsReadOnlySpan().ToArray();
-            var platformReader = new SignedCms();
-            platformReader.Decode(octets);
-            platformReader.CheckSignature(verifySignatureOnly: true);
-            Assert.HasCount(2, platformReader.SignerInfos, "Both prepared signers stand in the completed structure.");
-
-            SignedDataStructure structure = ReadStructure(octets);
-            Assert.HasCount(2, structure.DigestAlgorithmOids, "Each distinct digest algorithm is listed once.");
-            Assert.Contains(PkiDigestAlgorithm.Sha256.Identifier.Oid, structure.DigestAlgorithmOids, "The first signer's SHA-256 is listed.");
-            Assert.Contains(PkiDigestAlgorithm.Sha384.Identifier.Oid, structure.DigestAlgorithmOids, "The second signer's SHA-384 is listed.");
-
-            for(int signerIndex = 0; signerIndex < 2; ++signerIndex)
-            {
-                using CmsSignedData projection = CmsSignedDataReduction.SelectSigner(signedData, signerIndex, BaseMemoryPool.Shared);
-                using CAdESVerificationResult result = await CAdESVerification.VerifyAsync(
-                    projection, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
-                Assert.IsTrue(result.IsValid, $"The shipped path must accept the completed signer at index {signerIndex} (status: {result.Status}).");
-            }
-
-            //The single-signer completion is the multi-signer surface over one entry: the same preparation and
-            //signature value produce identical octets through both entry points.
-            using CmsSignedData throughSingle = CAdESSignatureCreation.Complete(
-                firstPreparation, scenario.FirstCertificate, CryptoAlgorithm.P256, firstSignature.Memory[..firstLength],
-                additionalCertificates: null, BaseMemoryPool.Shared);
-            using CmsSignedData throughList = CAdESSignatureCreation.Complete(
-                [new CAdESSignerCompletion(firstPreparation, scenario.FirstCertificate, CryptoAlgorithm.P256, firstSignature.Memory[..firstLength])],
-                additionalCertificates: null, BaseMemoryPool.Shared);
-            Assert.IsTrue(throughSingle.AsReadOnlySpan().SequenceEqual(throughList.AsReadOnlySpan()),
-                "One signer through the single-signer form and through the list form is the same structure, octet for octet.");
+            using CmsSignedData projection = CmsSignedDataReduction.SelectSigner(signedData, signerIndex, BaseMemoryPool.Shared);
+            using CAdESVerificationResult result = await CAdESVerification.VerifyAsync(
+                projection, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(result.IsValid, $"The shipped path must accept the completed signer at index {signerIndex} (status: {result.Status}).");
         }
+
+        //The single-signer completion is the multi-signer surface over one entry: the same preparation and
+        //signature value produce identical octets through both entry points.
+        using CmsSignedData throughSingle = CAdESSignatureCreation.Complete(
+            firstPreparation, scenario.FirstCertificate, CryptoAlgorithm.P256, firstSignature.AsReadOnlyMemory(),
+            additionalCertificates: null, BaseMemoryPool.Shared);
+        using CmsSignedData throughList = CAdESSignatureCreation.Complete(
+            [new CAdESSignerCompletion(firstPreparation, scenario.FirstCertificate, CryptoAlgorithm.P256, firstSignature.AsReadOnlyMemory())],
+            additionalCertificates: null, BaseMemoryPool.Shared);
+        Assert.IsTrue(throughSingle.AsReadOnlySpan().SequenceEqual(throughList.AsReadOnlySpan()),
+            "One signer through the single-signer form and through the list form is the same structure, octet for octet.");
     }
 
 
@@ -325,20 +321,16 @@ internal sealed class CAdESParallelSignatureTests
             ParallelSigningTime, algorithmConstraints: null, cmsAlgorithmProtectionSignatureAlgorithmOid: null,
             BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
-        (IMemoryOwner<byte> attachedSignature, int attachedLength) = await SignPreparationAsync(scenario.FirstPrivateKey, attached, TestContext.CancellationToken).ConfigureAwait(false);
-        (IMemoryOwner<byte> detachedSignature, int detachedLength) = await SignPreparationAsync(scenario.SecondPrivateKey, detached, TestContext.CancellationToken).ConfigureAwait(false);
-        using(attachedSignature)
-        using(detachedSignature)
-        {
-            _ = Assert.ThrowsExactly<ArgumentException>(
-                () => CAdESSignatureCreation.Complete(
-                    [
-                        new CAdESSignerCompletion(attached, scenario.FirstCertificate, CryptoAlgorithm.P256, attachedSignature.Memory[..attachedLength]),
-                        new CAdESSignerCompletion(detached, scenario.SecondCertificate, CryptoAlgorithm.P384, detachedSignature.Memory[..detachedLength])
-                    ],
-                    additionalCertificates: null, BaseMemoryPool.Shared),
-                "An attached preparation and a detached one cannot share one encapContentInfo.");
-        }
+        using PooledMemory attachedSignature = await SignPreparationAsync(scenario.FirstPrivateKey, attached, TestContext.CancellationToken).ConfigureAwait(false);
+        using PooledMemory detachedSignature = await SignPreparationAsync(scenario.SecondPrivateKey, detached, TestContext.CancellationToken).ConfigureAwait(false);
+        _ = Assert.ThrowsExactly<ArgumentException>(
+            () => CAdESSignatureCreation.Complete(
+                [
+                    new CAdESSignerCompletion(attached, scenario.FirstCertificate, CryptoAlgorithm.P256, attachedSignature.AsReadOnlyMemory()),
+                    new CAdESSignerCompletion(detached, scenario.SecondCertificate, CryptoAlgorithm.P384, detachedSignature.AsReadOnlyMemory())
+                ],
+                additionalCertificates: null, BaseMemoryPool.Shared),
+            "An attached preparation and a detached one cannot share one encapContentInfo.");
 
         ReadOnlyMemory<byte> otherContent = new("a different content the second signer prepared over"u8.ToArray());
         using CAdESSignaturePreparation first = await PrepareAsync(scenario.FirstCertificate, PkiDigestAlgorithm.Sha256, SigningTime).ConfigureAwait(false);
@@ -347,20 +339,16 @@ internal sealed class CAdESParallelSignatureTests
             ParallelSigningTime, algorithmConstraints: null, cmsAlgorithmProtectionSignatureAlgorithmOid: null,
             BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
-        (IMemoryOwner<byte> firstSignature, int firstLength) = await SignPreparationAsync(scenario.FirstPrivateKey, first, TestContext.CancellationToken).ConfigureAwait(false);
-        (IMemoryOwner<byte> otherSignature, int otherLength) = await SignPreparationAsync(scenario.SecondPrivateKey, other, TestContext.CancellationToken).ConfigureAwait(false);
-        using(firstSignature)
-        using(otherSignature)
-        {
-            _ = Assert.ThrowsExactly<ArgumentException>(
-                () => CAdESSignatureCreation.Complete(
-                    [
-                        new CAdESSignerCompletion(first, scenario.FirstCertificate, CryptoAlgorithm.P256, firstSignature.Memory[..firstLength]),
-                        new CAdESSignerCompletion(other, scenario.SecondCertificate, CryptoAlgorithm.P384, otherSignature.Memory[..otherLength])
-                    ],
-                    additionalCertificates: null, BaseMemoryPool.Shared),
-                "Two attached preparations over different octets cannot share one eContent.");
-        }
+        using PooledMemory firstSignature = await SignPreparationAsync(scenario.FirstPrivateKey, first, TestContext.CancellationToken).ConfigureAwait(false);
+        using PooledMemory otherSignature = await SignPreparationAsync(scenario.SecondPrivateKey, other, TestContext.CancellationToken).ConfigureAwait(false);
+        _ = Assert.ThrowsExactly<ArgumentException>(
+            () => CAdESSignatureCreation.Complete(
+                [
+                    new CAdESSignerCompletion(first, scenario.FirstCertificate, CryptoAlgorithm.P256, firstSignature.AsReadOnlyMemory()),
+                    new CAdESSignerCompletion(other, scenario.SecondCertificate, CryptoAlgorithm.P384, otherSignature.AsReadOnlyMemory())
+                ],
+                additionalCertificates: null, BaseMemoryPool.Shared),
+            "Two attached preparations over different octets cannot share one eContent.");
     }
 
 
@@ -481,43 +469,35 @@ internal sealed class CAdESParallelSignatureTests
             scenario.ThirdCertificate, content: null, otherDigest.AsReadOnlyMemory(), PkiDigestAlgorithm.Sha256,
             ParallelSigningTime, algorithmConstraints: null, cmsAlgorithmProtectionSignatureAlgorithmOid: null,
             BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
-        (IMemoryOwner<byte> firstSignature, int firstLength) = await SignPreparationAsync(scenario.FirstPrivateKey, overContent, TestContext.CancellationToken).ConfigureAwait(false);
-        (IMemoryOwner<byte> otherSignature, int otherLength) = await SignPreparationAsync(scenario.ThirdPrivateKey, overOther, TestContext.CancellationToken).ConfigureAwait(false);
-        using(firstSignature)
-        using(otherSignature)
-        {
-            _ = Assert.ThrowsExactly<ArgumentException>(
-                () => CAdESSignatureCreation.Complete(
-                    [
-                        new CAdESSignerCompletion(overContent, scenario.FirstCertificate, CryptoAlgorithm.P256, firstSignature.Memory[..firstLength]),
-                        new CAdESSignerCompletion(overOther, scenario.ThirdCertificate, CryptoAlgorithm.P256, otherSignature.Memory[..otherLength])
-                    ],
-                    additionalCertificates: null, BaseMemoryPool.Shared),
-                "Two same-algorithm detached preparations over different digests cannot claim one shared content.");
-        }
+        using PooledMemory overContentSignature = await SignPreparationAsync(scenario.FirstPrivateKey, overContent, TestContext.CancellationToken).ConfigureAwait(false);
+        using PooledMemory overOtherSignature = await SignPreparationAsync(scenario.ThirdPrivateKey, overOther, TestContext.CancellationToken).ConfigureAwait(false);
+        _ = Assert.ThrowsExactly<ArgumentException>(
+            () => CAdESSignatureCreation.Complete(
+                [
+                    new CAdESSignerCompletion(overContent, scenario.FirstCertificate, CryptoAlgorithm.P256, overContentSignature.AsReadOnlyMemory()),
+                    new CAdESSignerCompletion(overOther, scenario.ThirdCertificate, CryptoAlgorithm.P256, overOtherSignature.AsReadOnlyMemory())
+                ],
+                additionalCertificates: null, BaseMemoryPool.Shared),
+            "Two same-algorithm detached preparations over different digests cannot claim one shared content.");
 
         //...while an agreeing pair completes and both signers verify against the shared external content.
         using CAdESSignaturePreparation agreeing = await CAdESSignatureCreation.PrepareAsync(
             scenario.ThirdCertificate, content: null, contentDigest.AsReadOnlyMemory(), PkiDigestAlgorithm.Sha256,
             ParallelSigningTime, algorithmConstraints: null, cmsAlgorithmProtectionSignatureAlgorithmOid: null,
             BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
-        (IMemoryOwner<byte> anchorSignature, int anchorLength) = await SignPreparationAsync(scenario.FirstPrivateKey, overContent, TestContext.CancellationToken).ConfigureAwait(false);
-        (IMemoryOwner<byte> agreeingSignature, int agreeingLength) = await SignPreparationAsync(scenario.ThirdPrivateKey, agreeing, TestContext.CancellationToken).ConfigureAwait(false);
-        using(anchorSignature)
-        using(agreeingSignature)
-        {
-            using CmsSignedData completed = CAdESSignatureCreation.Complete(
-                [
-                    new CAdESSignerCompletion(overContent, scenario.FirstCertificate, CryptoAlgorithm.P256, anchorSignature.Memory[..anchorLength]),
-                    new CAdESSignerCompletion(agreeing, scenario.ThirdCertificate, CryptoAlgorithm.P256, agreeingSignature.Memory[..agreeingLength])
-                ],
-                additionalCertificates: null, BaseMemoryPool.Shared);
+        using PooledMemory anchorSignature = await SignPreparationAsync(scenario.FirstPrivateKey, overContent, TestContext.CancellationToken).ConfigureAwait(false);
+        using PooledMemory agreeingSignature = await SignPreparationAsync(scenario.ThirdPrivateKey, agreeing, TestContext.CancellationToken).ConfigureAwait(false);
+        using CmsSignedData completed = CAdESSignatureCreation.Complete(
+            [
+                new CAdESSignerCompletion(overContent, scenario.FirstCertificate, CryptoAlgorithm.P256, anchorSignature.AsReadOnlyMemory()),
+                new CAdESSignerCompletion(agreeing, scenario.ThirdCertificate, CryptoAlgorithm.P256, agreeingSignature.AsReadOnlyMemory())
+            ],
+            additionalCertificates: null, BaseMemoryPool.Shared);
 
-            var platformReader = new SignedCms(new ContentInfo(Content.ToArray()), detached: true);
-            platformReader.Decode(completed.AsReadOnlySpan().ToArray());
-            platformReader.CheckSignature(verifySignatureOnly: true);
-            Assert.HasCount(2, platformReader.SignerInfos, "Two agreeing detached signers complete one structure and both verify against the shared content.");
-        }
+        var platformReader = new SignedCms(new ContentInfo(Content.ToArray()), detached: true);
+        platformReader.Decode(completed.AsReadOnlySpan().ToArray());
+        platformReader.CheckSignature(verifySignatureOnly: true);
+        Assert.HasCount(2, platformReader.SignerInfos, "Two agreeing detached signers complete one structure and both verify against the shared content.");
     }
 
 
@@ -672,13 +652,14 @@ internal sealed class CAdESParallelSignatureTests
 
     /// <summary>
     /// Signs a preparation's <c>SigningInput</c> through the registered signing seam and converts the
-    /// fixed-width IEEE P1363 result to the DER <c>Ecdsa-Sig-Value</c> the wire encoding takes.
+    /// fixed-width IEEE P1363 result to the DER <c>Ecdsa-Sig-Value</c> the wire encoding takes, carried as
+    /// the tagged, length-tracked <see cref="PooledMemory"/> rather than a naked buffer-and-length pair.
     /// </summary>
     /// <param name="privateKey">The signing key material.</param>
     /// <param name="preparation">The preparation whose signing input is signed.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>The rented buffer holding the DER signature and the number of valid octets in it; the caller disposes the buffer.</returns>
-    private static async ValueTask<(IMemoryOwner<byte> Buffer, int Length)> SignPreparationAsync(
+    /// <returns>The DER signature value, tagged <see cref="CryptoTags.DerEncodedSignatureValue"/>. The caller owns and disposes it.</returns>
+    private static async ValueTask<PooledMemory> SignPreparationAsync(
         PrivateKeyMemory privateKey, CAdESSignaturePreparation preparation, CancellationToken cancellationToken)
     {
         CryptoAlgorithm algorithm = privateKey.Tag.Get<CryptoAlgorithm>();
@@ -698,7 +679,7 @@ internal sealed class CAdESParallelSignatureTests
             IMemoryOwner<byte> buffer = EcdsaSignatureEncoding.ConvertP1363ToDer(
                 signature.AsReadOnlySpan(), BaseMemoryPool.Shared, out int length);
 
-            return (buffer, length);
+            return new PooledMemory(buffer, length, CryptoTags.DerEncodedSignatureValue);
         }
     }
 

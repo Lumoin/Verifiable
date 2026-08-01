@@ -122,32 +122,29 @@ internal sealed class CAdESCountersignaturePropertyTests
             baseline, countersignedSignerIndex: 0, scenario.CountersignerCertificate, PkiDigestAlgorithm.Sha256,
             TestClock.CanonicalEpoch.AddMinutes(30), algorithmConstraints: null, cmsAlgorithmProtectionSignatureAlgorithmOid: null,
             BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
-        (IMemoryOwner<byte> signatureBuffer, int signatureLength) = await scenario.SignPreparationAsync(
+        using PooledMemory signatureCarrier = await scenario.SignPreparationAsync(
             preparation, TestContext.CancellationToken).ConfigureAwait(false);
 
-        using(signatureBuffer)
-        {
-            ReadOnlyMemory<byte> signatureValue = signatureBuffer.Memory[..signatureLength];
-            using PooledMemory original = CAdESSignatureCreation.CompleteCountersignature(
-                preparation, scenario.CountersignerCertificate, CryptoAlgorithm.P256, signatureValue, unsignedAttributes: null, BaseMemoryPool.Shared);
-            using CmsAttribute originalAttribute = CmsAttribute.Create(
-                CAdESSignatureFacts.CountersignatureAttributeOid, original.AsReadOnlySpan(), BaseMemoryPool.Shared);
-            using CmsSignedData countersigned = CmsSignedDataAugmentation.AppendUnsignedAttributes(
-                baseline, signerIndex: 0, [originalAttribute], BaseMemoryPool.Shared);
-            using CmsSignedData archived = await scenario.AddArchiveTimestampAsync(
-                countersigned, scenario.SignerCertificate, TestContext.CancellationToken).ConfigureAwait(false);
+        ReadOnlyMemory<byte> signatureValue = signatureCarrier.AsReadOnlyMemory();
+        using PooledMemory original = CAdESSignatureCreation.CompleteCountersignature(
+            preparation, scenario.CountersignerCertificate, CryptoAlgorithm.P256, signatureValue, unsignedAttributes: null, BaseMemoryPool.Shared);
+        using CmsAttribute originalAttribute = CmsAttribute.Create(
+            CAdESSignatureFacts.CountersignatureAttributeOid, original.AsReadOnlySpan(), BaseMemoryPool.Shared);
+        using CmsSignedData countersigned = CmsSignedDataAugmentation.AppendUnsignedAttributes(
+            baseline, signerIndex: 0, [originalAttribute], BaseMemoryPool.Shared);
+        using CmsSignedData archived = await scenario.AddArchiveTimestampAsync(
+            countersigned, scenario.SignerCertificate, TestContext.CancellationToken).ConfigureAwait(false);
 
-            using ArchiveTimestampCoverage before = await CAdESCountersignatureTests.StateArchiveCoverageAsync(
-                archived, TestContext.CancellationToken).ConfigureAwait(false);
-            Assert.AreEqual(ArchiveTimestampCoverageStatus.Stated, before.Status, "The world every sample mutates starts from a valid archive time-stamp.");
-            Assert.IsTrue(CAdESCountersignatureTests.CountersignatureValuesAreCovered(before), "And from a countersignature the index actually names.");
+        using ArchiveTimestampCoverage before = await CAdESCountersignatureTests.StateArchiveCoverageAsync(
+            archived, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(ArchiveTimestampCoverageStatus.Stated, before.Status, "The world every sample mutates starts from a valid archive time-stamp.");
+        Assert.IsTrue(CAdESCountersignatureTests.CountersignatureValuesAreCovered(before), "And from a countersignature the index actually names.");
 
-            (from typeIndex in Gen.Int[0, InnerAttributeTypes.Length - 1]
-             from valueLength in Gen.Int[0, 300]
-             select (typeIndex, valueLength))
-            .Sample(sample => TheArchiveTimestampBreaksOnTheInnerAttribute(
-                archived, preparation, scenario, signatureValue, sample.typeIndex, sample.valueLength, TestContext.CancellationToken));
-        }
+        (from typeIndex in Gen.Int[0, InnerAttributeTypes.Length - 1]
+         from valueLength in Gen.Int[0, 300]
+         select (typeIndex, valueLength))
+        .Sample(sample => TheArchiveTimestampBreaksOnTheInnerAttribute(
+            archived, preparation, scenario, signatureValue, sample.typeIndex, sample.valueLength, TestContext.CancellationToken));
     }
 
 

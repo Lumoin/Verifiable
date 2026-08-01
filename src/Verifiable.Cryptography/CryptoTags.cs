@@ -629,6 +629,17 @@ public static class CryptoTags
 
 
     /// <summary>
+    /// Tag for the DER wire form of one signature value standing alone — a DER <c>Ecdsa-Sig-Value</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc3279#section-2.2.3">RFC 3279 §2.2.3</see>) as
+    /// <see cref="EcdsaSignatureEncoding.ConvertP1363ToDer"/> produces it, ready to occupy a
+    /// <c>SignerInfo.signature</c> OCTET STRING. Distinct from the per-algorithm raw-encoding signature tags
+    /// (for example <see cref="P256Signature"/>), which tag the fixed-width IEEE P1363 form the signing seams
+    /// emit.
+    /// </summary>
+    public static Tag DerEncodedSignatureValue { get; } = Tag.Create(Purpose.Signature).With(EncodingScheme.Der);
+
+
+    /// <summary>
     /// Tag for P-384 public keys used in ECDH key agreement.
     /// Uncompressed encoding: <c>0x04 || X || Y</c>.
     /// </summary>
@@ -787,7 +798,7 @@ public static class CryptoTags
         MdocIssuerSignedItemRandom, WireDecodedDisclosureSalt, X509CertificateSerialNumber,
         CoseEncodedSign1, AlgorithmAgnosticSignature, CoseEncodedMac0, CoseEncodedProtectedHeader,
         CmsEncodedSignedData, CmsSignedAttributeValue, CmsEncodedAttribute, CmsEncodedSignedAttributes,
-        CmsEncodedSignerInfo,
+        CmsEncodedSignerInfo, DerEncodedSignatureValue,
         Sha256Digest, Sha384Digest, Sha512Digest, Blake3Digest,
         HmacSha256Key, HmacSha384Key, HmacSha512Key,
         HmacSha256Value, HmacSha384Value, HmacSha512Value,

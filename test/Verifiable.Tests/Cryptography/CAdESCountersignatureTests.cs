@@ -361,52 +361,49 @@ internal sealed class CAdESCountersignatureTests
             baseline, countersignedSignerIndex: 0, scenario.CountersignerCertificate, PkiDigestAlgorithm.Sha256,
             CountersigningTime, algorithmConstraints: null, cmsAlgorithmProtectionSignatureAlgorithmOid: null,
             BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
-        (IMemoryOwner<byte> signatureBuffer, int signatureLength) = await scenario.SignPreparationAsync(
+        using PooledMemory signatureCarrier = await scenario.SignPreparationAsync(
             preparation, TestContext.CancellationToken).ConfigureAwait(false);
 
-        using(signatureBuffer)
-        {
-            ReadOnlyMemory<byte> signatureValue = signatureBuffer.Memory[..signatureLength];
-            using PooledMemory original = CAdESSignatureCreation.CompleteCountersignature(
-                preparation, scenario.CountersignerCertificate, CryptoAlgorithm.P256, signatureValue, unsignedAttributes: null, BaseMemoryPool.Shared);
-            using CmsAttribute originalAttribute = CmsAttribute.Create(
-                CAdESSignatureFacts.CountersignatureAttributeOid, original.AsReadOnlySpan(), BaseMemoryPool.Shared);
-            using CmsSignedData countersigned = CmsSignedDataAugmentation.AppendUnsignedAttributes(
-                baseline, signerIndex: 0, [originalAttribute], BaseMemoryPool.Shared);
-            using CmsSignedData withCountersignerCertificate = CmsSignedDataAugmentation.AddCertificates(
-                countersigned, [scenario.CountersignerCertificate.AsReadOnlyMemory()], BaseMemoryPool.Shared);
-            using CmsSignedData archived = await scenario.AddArchiveTimestampAsync(
-                withCountersignerCertificate, scenario.SignerCertificate, TestContext.CancellationToken).ConfigureAwait(false);
+        ReadOnlyMemory<byte> signatureValue = signatureCarrier.AsReadOnlyMemory();
+        using PooledMemory original = CAdESSignatureCreation.CompleteCountersignature(
+            preparation, scenario.CountersignerCertificate, CryptoAlgorithm.P256, signatureValue, unsignedAttributes: null, BaseMemoryPool.Shared);
+        using CmsAttribute originalAttribute = CmsAttribute.Create(
+            CAdESSignatureFacts.CountersignatureAttributeOid, original.AsReadOnlySpan(), BaseMemoryPool.Shared);
+        using CmsSignedData countersigned = CmsSignedDataAugmentation.AppendUnsignedAttributes(
+            baseline, signerIndex: 0, [originalAttribute], BaseMemoryPool.Shared);
+        using CmsSignedData withCountersignerCertificate = CmsSignedDataAugmentation.AddCertificates(
+            countersigned, [scenario.CountersignerCertificate.AsReadOnlyMemory()], BaseMemoryPool.Shared);
+        using CmsSignedData archived = await scenario.AddArchiveTimestampAsync(
+            withCountersignerCertificate, scenario.SignerCertificate, TestContext.CancellationToken).ConfigureAwait(false);
 
-            using ArchiveTimestampCoverage before = await StateArchiveCoverageAsync(archived, TestContext.CancellationToken).ConfigureAwait(false);
-            Assert.AreEqual(ArchiveTimestampCoverageStatus.Stated, before.Status, "The archive time-stamp protects the countersignature that was present when its index was computed.");
-            Assert.IsTrue(CountersignatureValuesAreCovered(before), "The countersignature attribute value has an index entry of its own.");
+        using ArchiveTimestampCoverage before = await StateArchiveCoverageAsync(archived, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(ArchiveTimestampCoverageStatus.Stated, before.Status, "The archive time-stamp protects the countersignature that was present when its index was computed.");
+        Assert.IsTrue(CountersignatureValuesAreCovered(before), "The countersignature attribute value has an index entry of its own.");
 
-            //The same countersignature, byte for byte, except for one unsigned attribute inside its own SignerInfo:
-            //a signature-time-stamp over the countersignature's own signature value (clause 5.3's raw-value
-            //imprint), which is the realistic act NOTE 6 warns about — raising a countersignature to B-T after the
-            //signature carrying it was archive-time-stamped. RFC 5652 §11.3 rules out an attribute like
-            //signing-time here, since that one MUST be signed; the independent reader enforces exactly that.
-            using PkiCertificateMemory countersignatureTimestamp = await X509ChainTestRingTimestamping.MintTimestampTokenAsync(
-                scenario.Authority, [scenario.Authority], CountersignatureSignatureValue(original.AsReadOnlySpan().ToArray()),
-                CountersigningTime.AddHours(1), BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-            using CmsAttribute innerAttribute = CmsAttribute.Create(
-                CAdESSignatureFacts.SignatureTimestampAttributeOid, countersignatureTimestamp.AsReadOnlySpan(), BaseMemoryPool.Shared);
-            using PooledMemory mutated = CAdESSignatureCreation.CompleteCountersignature(
-                preparation, scenario.CountersignerCertificate, CryptoAlgorithm.P256, signatureValue, [innerAttribute], BaseMemoryPool.Shared);
-            using CmsSignedData tampered = ReplaceCountersignatureValue(archived, mutated.AsReadOnlySpan());
+        //The same countersignature, byte for byte, except for one unsigned attribute inside its own SignerInfo:
+        //a signature-time-stamp over the countersignature's own signature value (clause 5.3's raw-value
+        //imprint), which is the realistic act NOTE 6 warns about — raising a countersignature to B-T after the
+        //signature carrying it was archive-time-stamped. RFC 5652 §11.3 rules out an attribute like
+        //signing-time here, since that one MUST be signed; the independent reader enforces exactly that.
+        using PkiCertificateMemory countersignatureTimestamp = await X509ChainTestRingTimestamping.MintTimestampTokenAsync(
+            scenario.Authority, [scenario.Authority], CountersignatureSignatureValue(original.AsReadOnlySpan().ToArray()),
+            CountersigningTime.AddHours(1), BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        using CmsAttribute innerAttribute = CmsAttribute.Create(
+            CAdESSignatureFacts.SignatureTimestampAttributeOid, countersignatureTimestamp.AsReadOnlySpan(), BaseMemoryPool.Shared);
+        using PooledMemory mutated = CAdESSignatureCreation.CompleteCountersignature(
+            preparation, scenario.CountersignerCertificate, CryptoAlgorithm.P256, signatureValue, [innerAttribute], BaseMemoryPool.Shared);
+        using CmsSignedData tampered = ReplaceCountersignatureValue(archived, mutated.AsReadOnlySpan());
 
-            using ArchiveTimestampCoverage after = await StateArchiveCoverageAsync(tampered, TestContext.CancellationToken).ConfigureAwait(false);
-            Assert.AreEqual(ArchiveTimestampCoverageStatus.HashIndexInvalid, after.Status,
-                "NOTE 6: the countersignature attribute value's octets changed, so the index entry naming the original matches nothing and clause 5.5.2 makes the index invalid.");
-            Assert.IsFalse(after.ProtectedObjects!.EveryIndexEntryMatched, "The asymmetric check fails in the one direction that is an error: an entry with no matching material.");
-            Assert.IsNull(after.MessageImprintInput, "An invalid index states no imprint input, so no proof of existence can be derived.");
+        using ArchiveTimestampCoverage after = await StateArchiveCoverageAsync(tampered, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(ArchiveTimestampCoverageStatus.HashIndexInvalid, after.Status,
+            "NOTE 6: the countersignature attribute value's octets changed, so the index entry naming the original matches nothing and clause 5.5.2 makes the index invalid.");
+        Assert.IsFalse(after.ProtectedObjects!.EveryIndexEntryMatched, "The asymmetric check fails in the one direction that is an error: an entry with no matching material.");
+        Assert.IsNull(after.MessageImprintInput, "An invalid index states no imprint input, so no proof of existence can be derived.");
 
-            //The break is the archive time-stamp's alone: the countersignature's own signature covers its
-            //signedAttrs, which did not change, so both independent readers still accept it.
-            Assert.AreEqual(1, CountBouncyCastleCountersignaturesThatVerify(tampered.AsReadOnlySpan().ToArray()),
-                "The countersignature itself still verifies — which is exactly why NOTE 6 has to warn about this at all.");
-        }
+        //The break is the archive time-stamp's alone: the countersignature's own signature covers its
+        //signedAttrs, which did not change, so both independent readers still accept it.
+        Assert.AreEqual(1, CountBouncyCastleCountersignaturesThatVerify(tampered.AsReadOnlySpan().ToArray()),
+            "The countersignature itself still verifies — which is exactly why NOTE 6 has to warn about this at all.");
     }
 
 
@@ -831,26 +828,24 @@ internal sealed class CAdESCountersignatureTests
                 signature, countersignedSignerIndex: 0, CountersignerCertificate, PkiDigestAlgorithm.Sha256,
                 CountersigningTime, algorithmConstraints: null, cmsAlgorithmProtectionSignatureAlgorithmOid: null,
                 BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
-            (IMemoryOwner<byte> buffer, int length) = await SignPreparationAsync(preparation, cancellationToken).ConfigureAwait(false);
+            using PooledMemory signatureCarrier = await SignPreparationAsync(preparation, cancellationToken).ConfigureAwait(false);
 
-            using(buffer)
-            {
-                return CAdESSignatureCreation.CompleteCountersignature(
-                    preparation, CountersignerCertificate, CryptoAlgorithm.P256, buffer.Memory[..length],
-                    unsignedAttributes: null, BaseMemoryPool.Shared);
-            }
+            return CAdESSignatureCreation.CompleteCountersignature(
+                preparation, CountersignerCertificate, CryptoAlgorithm.P256, signatureCarrier.AsReadOnlyMemory(),
+                unsignedAttributes: null, BaseMemoryPool.Shared);
         }
 
 
         /// <summary>
         /// Signs a preparation's <c>SigningInput</c> with the counter signer's key through the registered signing
         /// seam and converts the fixed-width IEEE P1363 result to the DER <c>Ecdsa-Sig-Value</c> the wire encoding
-        /// takes, through the shipped converter.
+        /// takes, carried as the tagged, length-tracked <see cref="PooledMemory"/> rather than a naked
+        /// buffer-and-length pair.
         /// </summary>
         /// <param name="preparation">The preparation whose signing input is signed.</param>
         /// <param name="cancellationToken">A cancellation token.</param>
-        /// <returns>The rented buffer holding the DER signature and the number of valid octets in it; the caller disposes the buffer.</returns>
-        internal async ValueTask<(IMemoryOwner<byte> Buffer, int Length)> SignPreparationAsync(
+        /// <returns>The DER signature value, tagged <see cref="CryptoTags.DerEncodedSignatureValue"/>. The caller owns and disposes it.</returns>
+        internal async ValueTask<PooledMemory> SignPreparationAsync(
             CAdESSignaturePreparation preparation, CancellationToken cancellationToken)
         {
             CryptoAlgorithm algorithm = CountersignerPrivateKey.Tag.Get<CryptoAlgorithm>();
@@ -870,7 +865,7 @@ internal sealed class CAdESCountersignatureTests
                 IMemoryOwner<byte> buffer = EcdsaSignatureEncoding.ConvertP1363ToDer(
                     signature.AsReadOnlySpan(), BaseMemoryPool.Shared, out int length);
 
-                return (buffer, length);
+                return new PooledMemory(buffer, length, CryptoTags.DerEncodedSignatureValue);
             }
         }
 
