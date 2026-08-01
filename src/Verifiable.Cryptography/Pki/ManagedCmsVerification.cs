@@ -28,9 +28,11 @@ namespace Verifiable.Cryptography.Pki;
 /// signed attributes — so eMRTD Passive Authentication and CAdES verify over it unchanged.
 /// </para>
 /// <para>
-/// This verifies elliptic-curve (ECDSA) signers, the modern eMRTD and eID case, and RSASSA-PKCS1-v1_5 RSA
+/// This verifies elliptic-curve (ECDSA) signers, the modern eMRTD and eID case; RSASSA-PKCS1-v1_5 RSA
 /// signers under SHA-256, SHA-384 or SHA-512 (see <c>VerifyRsaAsync</c> for the exact RSA profile and its
-/// key-length band). The signer's signature covers the signed attributes (RFC 5652 §5.4), so the signature is
+/// key-length band); and ML-DSA signers (NIST FIPS 204, see <c>VerifyMlDsaAsync</c>), the quantum-resistant
+/// family, each through its registered verification delegate — so a host's own providers carry every
+/// primitive. The signer's signature covers the signed attributes (RFC 5652 §5.4), so the signature is
 /// checked over the DER re-encoding of the SignedAttributes (the implicit <c>[0]</c> tag replaced by the
 /// universal <c>SET OF</c> tag), and the <c>message-digest</c> attribute is checked to equal the hash of the
 /// encapsulated content. As with the other backends, trust in the signer certificate is the separate
@@ -70,6 +72,15 @@ public static class ManagedCmsVerification
     /// </summary>
     private static int MaximumRsaModulusBitLength => 16384;
 
+    /// <summary>The ML-DSA-44 public key length in octets (NIST FIPS 204 Table 2).</summary>
+    private static int MlDsa44PublicKeyLength => 1312;
+
+    /// <summary>The ML-DSA-65 public key length in octets (NIST FIPS 204 Table 2).</summary>
+    private static int MlDsa65PublicKeyLength => 1952;
+
+    /// <summary>The ML-DSA-87 public key length in octets (NIST FIPS 204 Table 2).</summary>
+    private static int MlDsa87PublicKeyLength => 2592;
+
 
     /// <summary>
     /// Implements <see cref="VerifyCmsSignedDataDelegate"/> with managed parsing and the registered
@@ -79,7 +90,7 @@ public static class ManagedCmsVerification
     /// <param name="pool">The memory pool for the content, certificate, and signed-attribute allocations.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The verified content and embedded certificates. The caller disposes it.</returns>
-    /// <exception cref="CryptographicException">Thrown when the structure is malformed, the signer is not elliptic-curve, the content digest does not match, or the signature does not verify.</exception>
+    /// <exception cref="CryptographicException">Thrown when the structure is malformed, the signer's key family or parameters are outside the supported profile, the content digest does not match, or the signature does not verify.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the content buffer, certificate memories, and signed-attribute carriers transfers to the returned CmsVerifiedContent, which the caller disposes; the catch disposes them on a partial failure.")]
     public static async ValueTask<CmsVerifiedContent> VerifyCmsSignedDataAsync(
@@ -213,7 +224,7 @@ public static class ManagedCmsVerification
     /// <summary>
     /// Verifies the signer's signature over the DER re-encoding of its signed attributes (the universal
     /// <c>SET OF</c> tag in place of the implicit <c>[0]</c>, RFC 5652 §5.4) against the signer certificate's
-    /// public key, through the registered verification function — elliptic-curve or RSA.
+    /// public key, through the registered verification function — elliptic-curve, RSA or ML-DSA.
     /// </summary>
     private static async ValueTask VerifySignatureAsync(SignerInfo signer, ManagedCertificate signerCertificate, MemoryPool<byte> pool, CancellationToken cancellationToken)
     {
@@ -223,7 +234,9 @@ public static class ManagedCmsVerification
             ? await VerifyEllipticCurveAsync(signer, signerCertificate, signedMessage.Memory[..messageLength], pool, cancellationToken).ConfigureAwait(false)
             : signerCertificate.RsaModulus.Length > 0
                 ? await VerifyRsaAsync(signer, signerCertificate, signedMessage.Memory[..messageLength], cancellationToken).ConfigureAwait(false)
-                : throw new CryptographicException("The managed CMS verifier supports only elliptic-curve and RSA signers.");
+                : signerCertificate.MlDsaPublicKey.Length > 0
+                    ? await VerifyMlDsaAsync(signer, signerCertificate, signedMessage.Memory[..messageLength], cancellationToken).ConfigureAwait(false)
+                    : throw new CryptographicException("The managed CMS verifier supports only elliptic-curve, RSA and ML-DSA signers.");
 
         if(!verified)
         {
@@ -311,6 +324,49 @@ public static class ManagedCmsVerification
         //The registered RSA seam takes the raw modulus and the RSA signature as-is (no re-encoding).
         (bool isVerified, CryptoEvent? evt) = await verify(
             signedMessage, signer.Signature, signerCertificate.RsaModulus, null, cancellationToken).ConfigureAwait(false);
+
+        CryptographicKeyEvents.Emit(evt);
+
+        return isVerified;
+    }
+
+
+    /// <summary>
+    /// Verifies an ML-DSA (NIST FIPS 204) signature against the certificate's raw ML-DSA public key through
+    /// the registered ML-DSA verification seam. The <c>SignerInfo</c> signature algorithm must state the same
+    /// parameter-set identifier the certificate's <c>SubjectPublicKeyInfo</c> pins — a signature claimed under
+    /// a different set names a computation the key does not perform, the substitution shape — and the pure
+    /// (non-pre-hashed) signature covers the DER re-encoding of the signed attributes exactly as the other
+    /// signer families' do.
+    /// </summary>
+    private static async ValueTask<bool> VerifyMlDsaAsync(SignerInfo signer, ManagedCertificate signerCertificate, ReadOnlyMemory<byte> signedMessage, CancellationToken cancellationToken)
+    {
+        if(!string.Equals(signer.SignatureAlgorithmOid, signerCertificate.MlDsaAlgorithmOid, StringComparison.Ordinal))
+        {
+            throw new CryptographicException($"The managed CMS verifier requires an ML-DSA signature algorithm equal to the certificate key's parameter set (signature '{signer.SignatureAlgorithmOid}', key '{signerCertificate.MlDsaAlgorithmOid}').");
+        }
+
+        (CryptoAlgorithm Algorithm, int PublicKeyLength) resolved = signerCertificate.MlDsaAlgorithmOid switch
+        {
+            WellKnownOids.MlDsa44 => (CryptoAlgorithm.MlDsa44, MlDsa44PublicKeyLength),
+            WellKnownOids.MlDsa65 => (CryptoAlgorithm.MlDsa65, MlDsa65PublicKeyLength),
+            WellKnownOids.MlDsa87 => (CryptoAlgorithm.MlDsa87, MlDsa87PublicKeyLength),
+            _ => throw new CryptographicException($"The ML-DSA parameter set '{signerCertificate.MlDsaAlgorithmOid}' has no verification algorithm.")
+        };
+
+        //An ML-DSA public key has one exact length per parameter set, so any other length is a malformed key
+        //refused here rather than handed to the registered backend, whose own malformed-encoding failure would
+        //surface as an undocumented exception type on attacker-controlled certificate bytes.
+        if(signerCertificate.MlDsaPublicKey.Length != resolved.PublicKeyLength)
+        {
+            throw new CryptographicException($"An ML-DSA public key of the parameter set '{signerCertificate.MlDsaAlgorithmOid}' is exactly {resolved.PublicKeyLength} octets (FIPS 204 Table 2).");
+        }
+
+        VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(resolved.Algorithm, Purpose.Verification);
+
+        //The registered ML-DSA seam takes the raw FIPS 204 public key and signature as-is (no re-encoding).
+        (bool isVerified, CryptoEvent? evt) = await verify(
+            signedMessage, signer.Signature, signerCertificate.MlDsaPublicKey, null, cancellationToken).ConfigureAwait(false);
 
         CryptographicKeyEvents.Emit(evt);
 

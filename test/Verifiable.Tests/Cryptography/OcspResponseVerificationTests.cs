@@ -553,6 +553,73 @@ internal sealed class OcspResponseVerificationTests
 
 
     /// <summary>
+    /// An ML-DSA responder — the quantum-resistant signature family of NIST FIPS 204 — verifies through the
+    /// registered ML-DSA delegate under its own parameter-set identifier, for each of the three parameter
+    /// sets, exactly as the managed CMS verifier's ML-DSA arm accepts a signer.
+    /// </summary>
+    /// <param name="parameterSetOid">The ML-DSA parameter set the responder's key is minted under.</param>
+    [TestMethod]
+    [DataRow(WellKnownOids.MlDsa44)]
+    [DataRow(WellKnownOids.MlDsa65)]
+    [DataRow(WellKnownOids.MlDsa87)]
+    public async Task MlDsaResponderSignatureVerifies(string parameterSetOid)
+    {
+        using MlDsaCmsTestFactory.MlDsaSigningAuthority authority = MlDsaCmsTestFactory.MintSelfSignedAuthority(parameterSetOid, NotBefore, NotAfter);
+        using MintedCertificate leaf = OcspTestFixtures.MintRootCa("OCSP Verify ML-DSA Leaf Stand-In", NotBefore, NotAfter);
+        using PkiCertificateMemory leafCarrier = OcspTestFixtures.ToCertificateCarrier(leaf.Certificate);
+        using OcspRequestContent request = await OcspRequests.CreateAsync(
+            leafCarrier, authority.Certificate, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared, includeNonce: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        using PkiCertificateMemory response = OcspTestFixtures.MintOcspResponseMlDsaSigned(
+            leaf.Certificate, authority, OcspCertificateStatus.Good, ThisUpdate, NextUpdate);
+
+        OcspResponseVerificationResult result = await OcspResponseVerification.VerifyAsync(
+            response, request, authority.Certificate, ValidationTime, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(OcspResponseVerificationOutcome.Verified, result.Outcome,
+            "An ML-DSA responder signature under the key's own parameter set must verify through the registered delegate.");
+    }
+
+
+    /// <summary>
+    /// The responder arm's parameter-set binding fails closed exactly as the managed CMS verifier's does: a
+    /// genuine ML-DSA-65 response whose stated signature algorithm octets are patched to ML-DSA-87 claims a
+    /// computation the key does not perform, and is <see cref="OcspResponseVerificationOutcome.SignatureInvalid"/>
+    /// rather than verified under the key's own set. Deleting the binding would let the patched response
+    /// verify, since the signature is genuinely valid under the certificate's set.
+    /// </summary>
+    [TestMethod]
+    public async Task MlDsaResponderWithASubstitutedParameterSetIsSignatureInvalid()
+    {
+        using MlDsaCmsTestFactory.MlDsaSigningAuthority authority = MlDsaCmsTestFactory.MintSelfSignedAuthority(WellKnownOids.MlDsa65, NotBefore, NotAfter);
+        using MintedCertificate leaf = OcspTestFixtures.MintRootCa("OCSP Verify ML-DSA Substitution Leaf Stand-In", NotBefore, NotAfter);
+        using PkiCertificateMemory leafCarrier = OcspTestFixtures.ToCertificateCarrier(leaf.Certificate);
+        using OcspRequestContent request = await OcspRequests.CreateAsync(
+            leafCarrier, authority.Certificate, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared, includeNonce: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        using PkiCertificateMemory minted = OcspTestFixtures.MintOcspResponseMlDsaSigned(
+            leaf.Certificate, authority, OcspCertificateStatus.Good, ThisUpdate, NextUpdate);
+
+        //The response embeds no certificates, so the one ML-DSA arc it carries is the BasicOCSPResponse's own
+        //signatureAlgorithm; patching its last octet turns the stated set into ML-DSA-87 while the issuer
+        //certificate's key stays ML-DSA-65.
+        ReadOnlySpan<byte> mlDsa65OidValue = WellKnownOids.MlDsa65DerValue;
+        ReadOnlySpan<byte> encoded = minted.AsReadOnlySpan();
+        int index = encoded.IndexOf(mlDsa65OidValue);
+        Assert.IsGreaterThan(0, index, "The parameter-set arc must occur in the response for the patch to have a target.");
+        Assert.AreEqual(-1, encoded[(index + 1)..].IndexOf(mlDsa65OidValue), "The response must carry exactly one parameter-set arc for an unambiguous patch.");
+
+        byte[] patched = encoded.ToArray();
+        patched[index + mlDsa65OidValue.Length - 1] = WellKnownOids.MlDsa87DerValue[^1];
+        using PkiCertificateMemory substituted = OcspTestFixtures.ToResponseCarrier(patched);
+
+        OcspResponseVerificationResult result = await OcspResponseVerification.VerifyAsync(
+            substituted, request, authority.Certificate, ValidationTime, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(OcspResponseVerificationOutcome.SignatureInvalid, result.Outcome,
+            "A response claiming a different parameter set than the responder key's must fail closed, never verify under the key's own set.");
+    }
+
+
+    /// <summary>
     /// The band's floor holds on the responder arm exactly as on the managed CMS verifier: a sub-2048-bit
     /// responder key fails closed to <see cref="OcspResponseVerificationOutcome.SignatureInvalid"/> rather than
     /// being verified at a strength ETSI TS 119 312 V1.4.3 no longer lists.

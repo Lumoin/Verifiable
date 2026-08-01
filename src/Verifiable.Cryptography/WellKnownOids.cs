@@ -269,6 +269,21 @@ namespace Verifiable.Cryptography
         /// <summary>OID for the sha512WithRSAEncryption signature algorithm (<see href="https://www.rfc-editor.org/rfc/rfc8017#appendix-A.2.4">RFC 8017 Appendix A.2.4</see>).</summary>
         public const string Sha512WithRsaEncryption = "1.2.840.113549.1.1.13";
 
+        /// <summary>
+        /// OID for the ML-DSA-44 signature algorithm (NIST FIPS 204, security category 2), from the
+        /// <see href="https://csrc.nist.gov/projects/computer-security-objects-register/algorithm-registration">
+        /// NIST Computer Security Objects Register</see> <c>sigAlgs</c> arc. In X.509 and CMS the one
+        /// identifier names both the <c>SubjectPublicKeyInfo</c> key algorithm and the signature algorithm,
+        /// with absent parameters.
+        /// </summary>
+        public const string MlDsa44 = "2.16.840.1.101.3.4.3.17";
+
+        /// <summary>OID for the ML-DSA-65 signature algorithm (NIST FIPS 204, security category 3); see <see cref="MlDsa44"/> for the registration and its X.509/CMS use.</summary>
+        public const string MlDsa65 = "2.16.840.1.101.3.4.3.18";
+
+        /// <summary>OID for the ML-DSA-87 signature algorithm (NIST FIPS 204, security category 5); see <see cref="MlDsa44"/> for the registration and its X.509/CMS use.</summary>
+        public const string MlDsa87 = "2.16.840.1.101.3.4.3.19";
+
 
         //The DER value bytes (the content after the 0x06 OBJECT IDENTIFIER tag and length) of the OIDs
         //above, for callers that compare against an OID parsed from a DER structure (e.g. a
@@ -286,6 +301,15 @@ namespace Verifiable.Cryptography
 
         /// <summary>DER value bytes of <see cref="Sha512WithRsaEncryption"/>.</summary>
         public static ReadOnlySpan<byte> Sha512WithRsaEncryptionDerValue => [0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x0D];
+
+        /// <summary>DER value bytes of <see cref="MlDsa44"/>.</summary>
+        public static ReadOnlySpan<byte> MlDsa44DerValue => [0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x03, 0x11];
+
+        /// <summary>DER value bytes of <see cref="MlDsa65"/>.</summary>
+        public static ReadOnlySpan<byte> MlDsa65DerValue => [0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x03, 0x12];
+
+        /// <summary>DER value bytes of <see cref="MlDsa87"/>.</summary>
+        public static ReadOnlySpan<byte> MlDsa87DerValue => [0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x03, 0x13];
 
         /// <summary>DER value bytes of <see cref="EcP256"/>.</summary>
         public static ReadOnlySpan<byte> EcP256DerValue => [0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07];

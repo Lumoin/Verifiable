@@ -899,6 +899,48 @@ internal static class OcspTestFixtures
 
 
     /// <summary>
+    /// Mints a <c>BasicOCSPResponse</c>-carrying <c>OCSPResponse</c> signed with an ML-DSA key under its own
+    /// parameter set, directly by the issuer (no delegated responder) — the quantum-resistant sibling of
+    /// <see cref="MintOcspResponseRsaSigned"/>, carrying only what its fixture needs: a <c>Good</c> status, no
+    /// nonce, no embedded certs.
+    /// </summary>
+    /// <param name="targetCertificate">The certificate the single response answers for.</param>
+    /// <param name="authority">The ML-DSA authority whose certificate is the target's stated issuer and whose key signs the response.</param>
+    /// <param name="status">The <c>CertStatus</c> to report.</param>
+    /// <param name="thisUpdate">The <c>thisUpdate</c> instant.</param>
+    /// <param name="nextUpdate">The optional <c>nextUpdate</c> instant.</param>
+    /// <returns>The pooled response carrier; the caller disposes it.</returns>
+    internal static PkiCertificateMemory MintOcspResponseMlDsaSigned(
+        X509Certificate2 targetCertificate,
+        MlDsaCmsTestFactory.MlDsaSigningAuthority authority,
+        OcspCertificateStatus status,
+        DateTimeOffset thisUpdate,
+        DateTimeOffset? nextUpdate)
+    {
+        BcX509Certificate bcTarget = ToBouncyCastleCertificate(targetCertificate);
+
+        var certId = new CertificateID(CertIdHashAlgorithmIdentifier(OcspCertIdDigestAlgorithm.Sha256), authority.BouncyCastleCertificate, bcTarget.SerialNumber);
+        var responderId = new RespID(authority.BouncyCastleCertificate.SubjectDN);
+        var generator = new BasicOcspRespGenerator(responderId);
+
+        CertificateStatus certStatus = status switch
+        {
+            OcspCertificateStatus.Good => CertificateStatus.Good,
+            _ => throw new ArgumentOutOfRangeException(nameof(status), status, "This ML-DSA fixture supports only the Good status.")
+        };
+
+        generator.AddResponse(certId, certStatus, thisUpdate.UtcDateTime, nextUpdate?.UtcDateTime, singleExtensions: null);
+
+        BasicOcspResp basicResponse = generator.Generate(authority.AlgorithmName, authority.SigningKey, null, thisUpdate.UtcDateTime);
+
+        var responseGenerator = new OCSPRespGenerator();
+        OcspResp response = responseGenerator.Generate(OcspRespStatus.Successful, basicResponse);
+
+        return ToResponseCarrier(response.GetEncoded());
+    }
+
+
+    /// <summary>
     /// Takes a well-formed, genuinely signed response and appends one byte to the content of
     /// <c>BasicOCSPResponse.signature</c>'s BIT STRING, past the <c>ECDSA-Sig-Value</c> SEQUENCE it wraps — a
     /// malformation <see cref="MintOcspResponse"/> cannot itself produce (BouncyCastle only ever emits

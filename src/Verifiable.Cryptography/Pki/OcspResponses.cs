@@ -185,6 +185,15 @@ public static class OcspResponseVerification
     /// <summary>The largest RSA modulus bit length a responder key is verified at, the same band <see cref="ManagedCmsVerification"/> verifies under for the same reason.</summary>
     private static int MaximumRsaModulusBitLength => 16384;
 
+    /// <summary>The ML-DSA-44 public key length in octets (NIST FIPS 204 Table 2), enforced exactly as <see cref="ManagedCmsVerification"/> enforces it.</summary>
+    private static int MlDsa44PublicKeyLength => 1312;
+
+    /// <summary>The ML-DSA-65 public key length in octets (NIST FIPS 204 Table 2), enforced exactly as <see cref="ManagedCmsVerification"/> enforces it.</summary>
+    private static int MlDsa65PublicKeyLength => 1952;
+
+    /// <summary>The ML-DSA-87 public key length in octets (NIST FIPS 204 Table 2), enforced exactly as <see cref="ManagedCmsVerification"/> enforces it.</summary>
+    private static int MlDsa87PublicKeyLength => 2592;
+
     /// <summary>
     /// The SHA-1 digest tag — composed inline because the convenience digest tags in <see cref="CryptoTags"/>
     /// omit SHA-1 by design. Carries no qualifier: the registered <see cref="ComputeDigestDelegate"/> default
@@ -883,8 +892,9 @@ public static class OcspResponseVerification
     /// Verifies <paramref name="signatureValue"/> over <paramref name="message"/> under <paramref name="signer"/>'s
     /// public key, dispatching on the key's algorithm exactly as <see cref="ManagedCmsVerification"/> does: an
     /// elliptic-curve key by its own curve (rejecting an <paramref name="signatureAlgorithmOid"/> that does
-    /// not name that curve's canonical signature algorithm), or an RSA key restricted to
-    /// RSASSA-PKCS1-v1_5 with SHA-256, SHA-384 or SHA-512. Any other key form fails closed to <see langword="false"/>.
+    /// not name that curve's canonical signature algorithm), an RSA key restricted to
+    /// RSASSA-PKCS1-v1_5 with SHA-256, SHA-384 or SHA-512, or an ML-DSA key under its own parameter-set
+    /// identifier. Any other key form fails closed to <see langword="false"/>.
     /// </summary>
     private static async ValueTask<bool> VerifySignatureAsync(
         ReadOnlyMemory<byte> message, string signatureAlgorithmOid, ReadOnlyMemory<byte> signatureValue, ManagedCertificate signer, MemoryPool<byte> pool, CancellationToken cancellationToken)
@@ -899,7 +909,55 @@ public static class OcspResponseVerification
             return await VerifyRsaAsync(message, signatureAlgorithmOid, signatureValue, signer, cancellationToken).ConfigureAwait(false);
         }
 
+        if(signer.MlDsaPublicKey.Length > 0)
+        {
+            return await VerifyMlDsaAsync(message, signatureAlgorithmOid, signatureValue, signer, cancellationToken).ConfigureAwait(false);
+        }
+
         return false;
+    }
+
+
+    /// <summary>
+    /// Verifies an ML-DSA (NIST FIPS 204) signature against the signer's raw ML-DSA public key, exactly as
+    /// <see cref="ManagedCmsVerification"/>'s ML-DSA arm does: the stated signature algorithm must equal the
+    /// certificate key's own parameter-set identifier — a signature claimed under a different set is the
+    /// substitution shape and fails closed — and the pure signature is verified through the registered seam.
+    /// </summary>
+    private static async ValueTask<bool> VerifyMlDsaAsync(
+        ReadOnlyMemory<byte> message, string signatureAlgorithmOid, ReadOnlyMemory<byte> signatureValue, ManagedCertificate signer, CancellationToken cancellationToken)
+    {
+        if(!string.Equals(signatureAlgorithmOid, signer.MlDsaAlgorithmOid, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        (CryptoAlgorithm Algorithm, int PublicKeyLength)? resolved = signer.MlDsaAlgorithmOid switch
+        {
+            WellKnownOids.MlDsa44 => (CryptoAlgorithm.MlDsa44, MlDsa44PublicKeyLength),
+            WellKnownOids.MlDsa65 => (CryptoAlgorithm.MlDsa65, MlDsa65PublicKeyLength),
+            WellKnownOids.MlDsa87 => (CryptoAlgorithm.MlDsa87, MlDsa87PublicKeyLength),
+            _ => ((CryptoAlgorithm, int)?)null
+        };
+
+        if(resolved is null)
+        {
+            return false;
+        }
+
+        //An ML-DSA public key has one exact length per parameter set, so any other length fails closed here
+        //rather than reaching the registered backend, whose own malformed-encoding failure would escape this
+        //file's no-raw-exception seam on attacker-controlled responder bytes.
+        if(signer.MlDsaPublicKey.Length != resolved.Value.PublicKeyLength)
+        {
+            return false;
+        }
+
+        VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(resolved.Value.Algorithm, Purpose.Verification);
+        (bool isVerified, CryptoEvent? evt) = await verify(message, signatureValue, signer.MlDsaPublicKey, null, cancellationToken).ConfigureAwait(false);
+        CryptographicKeyEvents.Emit(evt);
+
+        return isVerified;
     }
 
 

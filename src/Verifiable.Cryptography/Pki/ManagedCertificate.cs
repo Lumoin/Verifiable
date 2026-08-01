@@ -45,6 +45,8 @@ internal sealed class ManagedCertificate
         ReadOnlyMemory<byte> publicPoint,
         ReadOnlyMemory<byte> rsaModulus,
         ReadOnlyMemory<byte> rsaExponent,
+        string mlDsaAlgorithmOid,
+        ReadOnlyMemory<byte> mlDsaPublicKey,
         ReadOnlyMemory<byte> subjectPublicKeyBitStringContent,
         ReadOnlyMemory<byte> subjectKeyIdentifier,
         IReadOnlyList<string> extendedKeyUsageOids,
@@ -62,6 +64,8 @@ internal sealed class ManagedCertificate
         PublicPoint = publicPoint;
         RsaModulus = rsaModulus;
         RsaExponent = rsaExponent;
+        MlDsaAlgorithmOid = mlDsaAlgorithmOid;
+        MlDsaPublicKey = mlDsaPublicKey;
         SubjectPublicKeyBitStringContent = subjectPublicKeyBitStringContent;
         SubjectKeyIdentifier = subjectKeyIdentifier;
         ExtendedKeyUsageOids = extendedKeyUsageOids;
@@ -102,6 +106,18 @@ internal sealed class ManagedCertificate
 
     /// <summary>Gets the RSA public exponent as unsigned big-endian bytes; empty when the key is not RSA.</summary>
     public ReadOnlyMemory<byte> RsaExponent { get; }
+
+    /// <summary>
+    /// Gets the ML-DSA parameter-set object identifier the <c>SubjectPublicKeyInfo</c> names
+    /// (<see cref="WellKnownOids.MlDsa44"/>, <see cref="WellKnownOids.MlDsa65"/> or
+    /// <see cref="WellKnownOids.MlDsa87"/>), or the empty string when the key is not ML-DSA. In X.509 the one
+    /// identifier binds the key to its parameter set, so a signature stated under a different set is a
+    /// substitution rather than a variant.
+    /// </summary>
+    public string MlDsaAlgorithmOid { get; }
+
+    /// <summary>Gets the raw ML-DSA public key bytes (FIPS 204 encoding, the <c>subjectPublicKey</c> BIT STRING content); empty when the key is not ML-DSA.</summary>
+    public ReadOnlyMemory<byte> MlDsaPublicKey { get; }
 
     /// <summary>
     /// Gets the <c>subjectPublicKey</c> BIT STRING content bytes exactly as encoded — excluding the BIT
@@ -193,7 +209,8 @@ internal sealed class ManagedCertificate
 
         return new ManagedCertificate(
             encoded, tbsCertificateDer, issuer, serialNumber, subject, notBefore, notAfter,
-            publicKey.Curve, publicKey.Point, publicKey.RsaModulus, publicKey.RsaExponent, publicKey.RawBitStringContent,
+            publicKey.Curve, publicKey.Point, publicKey.RsaModulus, publicKey.RsaExponent,
+            publicKey.MlDsaAlgorithmOid, publicKey.MlDsaPublicKey, publicKey.RawBitStringContent,
             subjectKeyIdentifier, extendedKeyUsageOids, signatureAlgorithmOid, signatureValue);
     }
 
@@ -221,8 +238,8 @@ internal sealed class ManagedCertificate
 
     /// <summary>
     /// Parses the subject public key info: for an elliptic-curve key, the curve and the uncompressed public
-    /// point; for an RSA key, the modulus and exponent; the raw BIT STRING content is captured regardless of
-    /// the key algorithm.
+    /// point; for an RSA key, the modulus and exponent; for an ML-DSA key, the parameter-set identifier and
+    /// the raw key; the raw BIT STRING content is captured regardless of the key algorithm.
     /// </summary>
     private static ParsedPublicKey ParseSubjectPublicKeyInfo(AsnReader subjectPublicKeyInfo)
     {
@@ -234,7 +251,7 @@ internal sealed class ManagedCertificate
             string curveOid = algorithm.ReadObjectIdentifier();
             byte[] point = subjectPublicKeyInfo.ReadBitString(out _);
 
-            return new ParsedPublicKey(CurveFromOid(curveOid), point, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, point);
+            return new ParsedPublicKey(CurveFromOid(curveOid), point, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, string.Empty, ReadOnlyMemory<byte>.Empty, point);
         }
 
         if(string.Equals(algorithmOid, RsaEncryptionOid, StringComparison.Ordinal))
@@ -245,13 +262,31 @@ internal sealed class ManagedCertificate
             ReadOnlyMemory<byte> modulus = StripLeadingZero(rsa.ReadIntegerBytes());
             ReadOnlyMemory<byte> exponent = StripLeadingZero(rsa.ReadIntegerBytes());
 
-            return new ParsedPublicKey(EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, modulus, exponent, rsaPublicKey);
+            return new ParsedPublicKey(EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, modulus, exponent, string.Empty, ReadOnlyMemory<byte>.Empty, rsaPublicKey);
+        }
+
+        if(IsMlDsaOid(algorithmOid))
+        {
+            //An ML-DSA SubjectPublicKeyInfo carries the raw FIPS 204 public key directly in the BIT STRING,
+            //with absent AlgorithmIdentifier parameters; the identifier itself pins the parameter set.
+            byte[] mlDsaPublicKey = subjectPublicKeyInfo.ReadBitString(out _);
+
+            return new ParsedPublicKey(EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, algorithmOid, mlDsaPublicKey, mlDsaPublicKey);
         }
 
         byte[] unrecognisedKeyBits = subjectPublicKeyInfo.ReadBitString(out _);
 
-        return new ParsedPublicKey(EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, unrecognisedKeyBits);
+        return new ParsedPublicKey(EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, string.Empty, ReadOnlyMemory<byte>.Empty, unrecognisedKeyBits);
     }
+
+
+    /// <summary>Reports whether an object identifier names one of the three ML-DSA parameter sets.</summary>
+    /// <param name="algorithmOid">The dotted-decimal identifier to classify.</param>
+    /// <returns><see langword="true"/> when it is an ML-DSA identifier.</returns>
+    private static bool IsMlDsaOid(string algorithmOid) =>
+        string.Equals(algorithmOid, WellKnownOids.MlDsa44, StringComparison.Ordinal)
+        || string.Equals(algorithmOid, WellKnownOids.MlDsa65, StringComparison.Ordinal)
+        || string.Equals(algorithmOid, WellKnownOids.MlDsa87, StringComparison.Ordinal);
 
 
     /// <summary>
@@ -343,11 +378,13 @@ internal sealed class ManagedCertificate
     };
 
 
-    /// <summary>A parsed subject public key: an elliptic-curve point, or RSA modulus and exponent, plus the raw BIT STRING content.</summary>
+    /// <summary>A parsed subject public key: an elliptic-curve point, RSA modulus and exponent, or an ML-DSA parameter-set identifier and raw key, plus the raw BIT STRING content.</summary>
     private readonly record struct ParsedPublicKey(
         EllipticCurveTypes Curve,
         ReadOnlyMemory<byte> Point,
         ReadOnlyMemory<byte> RsaModulus,
         ReadOnlyMemory<byte> RsaExponent,
+        string MlDsaAlgorithmOid,
+        ReadOnlyMemory<byte> MlDsaPublicKey,
         ReadOnlyMemory<byte> RawBitStringContent);
 }
