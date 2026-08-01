@@ -467,6 +467,16 @@ internal sealed class SsfStreamManagementEndpointTests
 
         app.Server.OAuth().UseDefaultSsfJsonParsing();
 
+        //A profile-conformant transmitter declares its delivery methods: CAEP
+        //Interoperability Profile 1.0 §2.3.2 makes delivery_methods_supported a
+        //MUST-include member the library cannot derive, so the discovery document
+        //is refused without it. A deployment supplies the methods it operates.
+        app.Server.OAuth().ContributeSsfTransmitterMetadataAsync = static (_, _, _) =>
+            ValueTask.FromResult(new SsfTransmitterMetadataContribution
+            {
+                DeliveryMethodsSupported = [SsfDeliveryMethods.PushHttp, SsfDeliveryMethods.PollHttp]
+            });
+
         app.Server.OAuth().CreateSsfStreamAsync = (request, registration, context, ct) =>
         {
             if(store.Count > 0)

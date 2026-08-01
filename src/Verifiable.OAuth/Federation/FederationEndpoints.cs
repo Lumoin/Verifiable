@@ -62,7 +62,7 @@ public static class FederationEndpoints
     /// The endpoint builder delegate. Pass this to
     /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
-    public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
+    public static EndpointBuilderDelegate Builder { get; } = static (registration, context, ct) =>
     {
         List<EndpointCandidate> candidates = [];
 
@@ -1179,7 +1179,7 @@ public static class FederationEndpoints
 
     /// <summary>
     /// Builds the <c>federation_registration_endpoint</c> per
-    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-12.2">Federation §12.2</see>.
+    /// <see href="https://openid.net/specs/openid-federation-connect-1_1-final.html#section-12.2">Connect-1.1 §12.2</see>.
     /// Stateless: the RP <c>POST</c>s its signed Entity Configuration in the
     /// request body, the application processes it via
     /// <see cref="AuthorizationServerIntegration.ResolveExplicitRegistrationAsync"/>,

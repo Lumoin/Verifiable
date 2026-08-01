@@ -36,8 +36,11 @@ public static class FederationKeyResolver
     /// Builds a <see cref="ResolveEntityKeyDelegate"/> that resolves the
     /// verification key for a statement from the issuer statement's
     /// <c>jwks</c> claim. The returned delegate matches on the
-    /// to-be-verified statement's <c>kid</c> header; absent kid selects
-    /// the first key in the issuer's jwks.
+    /// to-be-verified statement's <c>kid</c> header; an absent <c>kid</c> is
+    /// a resolution miss (<see langword="null"/>), never a silent
+    /// first-key selection, because
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-3.1">Federation §3.1</see>
+    /// makes the <c>kid</c> header a MUST on Entity Statement JWTs.
     /// </summary>
     /// <param name="base64UrlDecoder">
     /// Base64url decoder used by <see cref="CryptoFormatConversions.DefaultJwkToAlgorithmConverter"/>
@@ -85,11 +88,14 @@ public static class FederationKeyResolver
     /// Entity Configuration) or a subordinate whose keys a superior attests — and in both shapes the entity's
     /// <c>jwks</c> rides on the statement whose <c>sub</c> is that entity. The first statement whose
     /// <see cref="EntityStatement.Subject"/> equals <paramref name="issuerEntityId"/> and that carries a key
-    /// matching <paramref name="kid"/> wins; absent <paramref name="kid"/> selects that statement's first key.
+    /// matching <paramref name="kid"/> wins; an absent <paramref name="kid"/> is a resolution miss
+    /// (<see langword="null"/>), never a silent first-key selection —
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-7">Federation §7</see> (and §8.4.2
+    /// for the Trust Mark Status Response) makes the <c>kid</c> header a MUST on Trust Mark JWTs.
     /// </summary>
     /// <param name="chain">The resolved trust chain carrying the candidate statements.</param>
     /// <param name="issuerEntityId">The Entity Identifier whose key is sought (a trust mark's <c>iss</c>).</param>
-    /// <param name="kid">The key id to match, or <see langword="null"/> to select the first key.</param>
+    /// <param name="kid">The key id to match. A <see langword="null"/> value is a resolution miss, not a wildcard.</param>
     /// <param name="base64UrlDecoder">
     /// Base64url decoder used by <see cref="CryptoFormatConversions.DefaultJwkToAlgorithmConverter"/> when
     /// reconstructing key bytes from the JWK's encoded coordinates.
@@ -163,16 +169,27 @@ public static class FederationKeyResolver
 
 
     /// <summary>
-    /// Selects the JWK from <paramref name="issuerStatement"/>'s <c>jwks</c> claim matching
-    /// <paramref name="targetKid"/> (or the first key when <paramref name="targetKid"/> is <see langword="null"/>),
-    /// returned as the mutable dictionary <see cref="CryptoFormatConversions.DefaultJwkToAlgorithmConverter"/>
-    /// expects. <see langword="null"/> when the statement carries no <c>jwks</c> or no key matches.
+    /// Selects the JWK from <paramref name="issuerStatement"/>'s <c>jwks</c> claim whose <c>kid</c> equals
+    /// <paramref name="targetKid"/>, returned as the mutable dictionary
+    /// <see cref="CryptoFormatConversions.DefaultJwkToAlgorithmConverter"/> expects. <see langword="null"/> when
+    /// <paramref name="targetKid"/> is <see langword="null"/> (an absent <c>kid</c> header is malformed input per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-3.1">Federation §3.1</see>, not a
+    /// wildcard), or when the statement carries no <c>jwks</c>, or when no key matches.
     /// </summary>
     /// <param name="issuerStatement">The statement whose <c>jwks</c> claim supplies the candidate keys.</param>
-    /// <param name="targetKid">The <c>kid</c> to match, or <see langword="null"/> to select the first key.</param>
+    /// <param name="targetKid">The <c>kid</c> to match. A <see langword="null"/> value never matches — it is a resolution miss.</param>
     /// <returns>The matched JWK as a mutable dictionary, or <see langword="null"/> when no key matches.</returns>
     private static Dictionary<string, object>? TryMatchJwk(EntityStatement issuerStatement, string? targetKid)
     {
+        //Federation §3.1 makes the kid header a MUST on Entity Statement JWTs (§7 / §8.4.2 for Trust Mark and
+        //Trust Mark Status Response JWTs). An absent kid is therefore malformed input, not a wildcard: silently
+        //returning the first published key would defeat kid-pinning and let a stripped kid — or a rotated-away
+        //key that happens to sit first in the set — be mis-selected. A resolution miss is the secure answer.
+        if(targetKid is null)
+        {
+            return null;
+        }
+
         if(!issuerStatement.Payload.TryGetValue(WellKnownFederationClaimNames.Jwks, out object? jwksObj)
             || jwksObj is not IReadOnlyDictionary<string, object> jwksDict
             || !jwksDict.TryGetValue("keys", out object? keysObj)
@@ -186,11 +203,6 @@ public static class FederationKeyResolver
             if(item is not IReadOnlyDictionary<string, object> jwk)
             {
                 continue;
-            }
-
-            if(targetKid is null)
-            {
-                return CopyJwk(jwk);
             }
 
             if(jwk.TryGetValue("kid", out object? jwkKidObj)

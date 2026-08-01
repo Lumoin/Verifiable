@@ -163,7 +163,11 @@ internal sealed class SsfJsonWritingPropertyTests
         Gen<(Uri Issuer, IReadOnlyList<KeyValuePair<string, string>> Members, SsfTransmitterMetadataContribution Contribution)> caseGen =
             from issuer in issuerGen
             from members in endpointMembersGen
-            from deliveryMethods in GenOption(StringListGen)
+            //delivery_methods_supported is always supplied: CAEP Interoperability
+            //Profile 1.0 §2.3.2 makes it MUST-include and the writer refuses a
+            //contribution that omits it, so an omitting generator would only
+            //exercise the refusal path pinned in SsfTransmitterMetadataProfileTests.
+            from deliveryMethods in StringListGen
             from criticalMembers in GenOption(StringListGen)
             from specUrns in GenOption(StringListGen)
             from defaultSubjects in defaultSubjectsGen
@@ -200,8 +204,13 @@ internal sealed class SsfJsonWritingPropertyTests
 
             AssertListsEqual(testCase.Contribution.DeliveryMethodsSupported, parsed.DeliveryMethodsSupported);
             AssertListsEqual(testCase.Contribution.CriticalSubjectMembers, parsed.CriticalSubjectMembers);
+
+            //A contribution silent on authorization_schemes gets the value CAEP
+            //Interoperability Profile 1.0 §2.3.7 fixes, not an omission.
+            IReadOnlyList<string> expectedSpecUrns = testCase.Contribution.AuthorizationSchemeSpecUrns
+                ?? [SsfMetadataParameterNames.AuthorizationSchemeSpecUrnOAuth2];
             AssertListsEqual(
-                testCase.Contribution.AuthorizationSchemeSpecUrns,
+                expectedSpecUrns,
                 parsed.AuthorizationSchemes?.Select(static scheme => scheme.SpecUrn).ToArray());
             Assert.AreEqual(testCase.Contribution.DefaultSubjects, parsed.DefaultSubjects);
         });

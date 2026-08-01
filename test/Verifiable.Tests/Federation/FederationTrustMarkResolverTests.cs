@@ -172,6 +172,56 @@ internal sealed class FederationTrustMarkResolverTests
     }
 
 
+    /// <summary>
+    /// Exploit regression (F2, trust-mark path mirror): Federation §7 makes the <c>kid</c> header a MUST on
+    /// Trust Mark JWTs. A <c>kid</c>-less mark cannot be key-pinned — post-fix the in-chain resolver returns no
+    /// key for it (no silent first-key fallback) so its signature does not verify — and
+    /// <c>CheckTrustMarkKidPresent</c> names the missing <c>kid</c> as a shape failure. Pre-fix the resolver
+    /// selected the anchor's first published key, the signature verified, and an authorized kid-less mark was
+    /// wrongly admitted.
+    /// </summary>
+    [TestMethod]
+    public async Task KidlessMarkIsRejected()
+    {
+        DateTimeOffset now = TimeProvider.System.GetUtcNow();
+        using FederationTestRingNode subject = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/subject"));
+        using FederationTestRingNode anchor = FederationTestRing.CreateNode(new EntityIdentifier("https://example.test/anchor"));
+
+        //The Trust Anchor issues the mark and authorizes itself — so only the missing kid stands between the
+        //mark and admission, isolating the F2 fix.
+        Dictionary<string, object> anchorExtra = new(StringComparer.Ordinal)
+        {
+            [WellKnownFederationClaimNames.TrustMarkIssuers] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [MarkId] = new List<object> { anchor.Identifier.Value },
+            },
+        };
+
+        TrustChain chain = await BuildChainAsync(subject, anchor, anchorExtra, now, TestContext.CancellationToken).ConfigureAwait(false);
+
+        //A mark whose header omits the kid entirely.
+        MintedTrustMark minted = await FederationTestRing.MintTrustMarkAsync(
+            anchor, subject, MarkId, now, now.AddHours(1),
+            includeKid: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        TrustMarkCandidate candidate = new() { Mark = minted.Mark, Header = minted.Header, CompactJws = minted.CompactJws };
+
+        IReadOnlyList<TrustMarkVerdict> verdicts = await FederationTrustMarkResolver.ResolveVerifiedAsync(
+            chain, [candidate], VerifyAgainst(anchor), TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared,
+            timeProvider: null, ClockSkew, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(verdicts[0].SignatureVerified,
+            "A kid-less mark must not resolve a key from the chain (no silent first-key fallback) per §7.");
+
+        Claim kidClaim = verdicts[0].Shape.Claims.Single(
+            c => c.Id.Code == WellKnownFederationClaimIds.TrustMarkKidPresent.Code);
+        Assert.AreEqual(ClaimOutcome.Failure, kidClaim.Outcome,
+            "A kid-less mark must fail TrustMarkKidPresent — Trust Mark JWTs MUST carry a kid per §7.");
+
+        Assert.IsFalse(verdicts[0].Admitted, "A kid-less mark must be rejected.");
+    }
+
+
     /// <summary>Builds a subject → anchor chain, optionally adding extra claims to the anchor's Entity Configuration.</summary>
     private static async Task<TrustChain> BuildChainAsync(
         FederationTestRingNode subject,

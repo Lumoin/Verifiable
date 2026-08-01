@@ -30,7 +30,7 @@ public static class FederationEndpointParameterNames
     /// <c>sub</c> — the Entity Identifier the requester is asking about at
     /// the <c>federation_fetch_endpoint</c> per Federation §8.1.
     /// </summary>
-    public static readonly string Sub = Utf8Constants.ToInternedString(SubUtf8);
+    public static string Sub { get; } = Utf8Constants.ToInternedString(SubUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="EntityType"/>.</summary>
     public static ReadOnlySpan<byte> EntityTypeUtf8 => "entity_type"u8;
@@ -40,7 +40,7 @@ public static class FederationEndpointParameterNames
     /// response to subordinates declaring this Entity Type per
     /// Federation §8.2.
     /// </summary>
-    public static readonly string EntityType = Utf8Constants.ToInternedString(EntityTypeUtf8);
+    public static string EntityType { get; } = Utf8Constants.ToInternedString(EntityTypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Anchor"/>.</summary>
     public static ReadOnlySpan<byte> AnchorUtf8 => "anchor"u8;
@@ -50,7 +50,7 @@ public static class FederationEndpointParameterNames
     /// a <c>federation_resolve_endpoint</c> resolves the subject's chain per
     /// Federation §8.3.
     /// </summary>
-    public static readonly string Anchor = Utf8Constants.ToInternedString(AnchorUtf8);
+    public static string Anchor { get; } = Utf8Constants.ToInternedString(AnchorUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Type"/>.</summary>
     public static ReadOnlySpan<byte> TypeUtf8 => "type"u8;
@@ -62,7 +62,7 @@ public static class FederationEndpointParameterNames
     /// <see cref="EntityType"/> parameter — the two endpoints spell the
     /// entity-type filter differently on the wire.
     /// </summary>
-    public static readonly string Type = Utf8Constants.ToInternedString(TypeUtf8);
+    public static string Type { get; } = Utf8Constants.ToInternedString(TypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="TrustMarked"/>.</summary>
     public static ReadOnlySpan<byte> TrustMarkedUtf8 => "trust_marked"u8;
@@ -72,7 +72,7 @@ public static class FederationEndpointParameterNames
     /// response to subordinates holding at least one Trust Mark per
     /// Federation §8.2.
     /// </summary>
-    public static readonly string TrustMarked = Utf8Constants.ToInternedString(TrustMarkedUtf8);
+    public static string TrustMarked { get; } = Utf8Constants.ToInternedString(TrustMarkedUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="TrustMarkType"/>.</summary>
     public static ReadOnlySpan<byte> TrustMarkTypeUtf8 => "trust_mark_type"u8;
@@ -82,7 +82,7 @@ public static class FederationEndpointParameterNames
     /// response to subordinates holding a Trust Mark of this type per
     /// Federation §8.2.
     /// </summary>
-    public static readonly string TrustMarkType = Utf8Constants.ToInternedString(TrustMarkTypeUtf8);
+    public static string TrustMarkType { get; } = Utf8Constants.ToInternedString(TrustMarkTypeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="TrustMark"/>.</summary>
     public static ReadOnlySpan<byte> TrustMarkUtf8 => "trust_mark"u8;
@@ -92,7 +92,7 @@ public static class FederationEndpointParameterNames
     /// the <c>federation_trust_mark_status_endpoint</c> per Federation §8.4. The
     /// REQUIRED form parameter of that endpoint's POST request.
     /// </summary>
-    public static readonly string TrustMark = Utf8Constants.ToInternedString(TrustMarkUtf8);
+    public static string TrustMark { get; } = Utf8Constants.ToInternedString(TrustMarkUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Intermediate"/>.</summary>
     public static ReadOnlySpan<byte> IntermediateUtf8 => "intermediate"u8;
@@ -102,5 +102,5 @@ public static class FederationEndpointParameterNames
     /// response to subordinates that are (or are not) Intermediate Entities
     /// per Federation §8.2.
     /// </summary>
-    public static readonly string Intermediate = Utf8Constants.ToInternedString(IntermediateUtf8);
+    public static string Intermediate { get; } = Utf8Constants.ToInternedString(IntermediateUtf8);
 }

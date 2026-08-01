@@ -2,6 +2,9 @@ using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
+using System.Security.Cryptography;
+using System.Security.Cryptography.Pkcs;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -54,7 +57,7 @@ internal sealed class TimestampAcquisitionTests
         using PkiCertificateMemory response = WriteTimeStampResp(PkiStatusGranted, token.AsReadOnlySpan());
 
         using AcquiredTimestampToken acquired = await TimestampAcquisition.VerifyResponseAsync(
-            response, digest, algorithm, request.RequestNonce, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+            response, digest, algorithm, request.RequestNonce, request.RequestedPolicyOid, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(acquired.Token.IsTimestampToken, "The acquired token must carry the TimestampToken tag.");
         Assert.IsTrue(acquired.Info.IsRead, "The already-read TSTInfo facts must report Read.");
@@ -80,7 +83,7 @@ internal sealed class TimestampAcquisitionTests
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.VerifyResponseAsync(
-                response, digest, algorithm, request.RequestNonce, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
+                response, digest, algorithm, request.RequestNonce, request.RequestedPolicyOid, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
             "A request nonce with no matching token nonce must fail closed.").ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.NonceMismatch, exception.FailureKind);
@@ -103,7 +106,7 @@ internal sealed class TimestampAcquisitionTests
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.VerifyResponseAsync(
-                response, requestDigest, algorithm, requestNonce: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
+                response, requestDigest, algorithm, requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
             "A token minted over different octets than the request's digest names must fail closed.").ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.MessageImprintMismatch, exception.FailureKind);
@@ -120,7 +123,7 @@ internal sealed class TimestampAcquisitionTests
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.VerifyResponseAsync(
-                response, digest, algorithm, requestNonce: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
+                response, digest, algorithm, requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
             "A rejection status must fail closed.").ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.ResponseRejected, exception.FailureKind);
@@ -138,7 +141,7 @@ internal sealed class TimestampAcquisitionTests
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.VerifyResponseAsync(
-                response, digest, algorithm, requestNonce: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                response, digest, algorithm, requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.ResponseMalformed, exception.FailureKind);
     }
@@ -156,7 +159,7 @@ internal sealed class TimestampAcquisitionTests
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.VerifyResponseAsync(
-                response, digest, algorithm, requestNonce: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                response, digest, algorithm, requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.ResponseMalformed, exception.FailureKind);
     }
@@ -180,7 +183,7 @@ internal sealed class TimestampAcquisitionTests
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.VerifyResponseAsync(
-                response, digest, algorithm, requestNonce: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
+                response, digest, algorithm, requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
             "A tampered signature must not verify.").ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.TokenNotVerified, exception.FailureKind);
@@ -223,6 +226,149 @@ internal sealed class TimestampAcquisitionTests
                 includeNonce: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.TransportFailure, exception.FailureKind);
+    }
+
+
+    /// <summary>An arbitrary TSA policy object identifier the D2 policy-binding tests ask a request for.</summary>
+    private const string RequestedPolicyOid = "1.3.6.1.4.1.99999.7.1";
+
+    /// <summary>The id-data content type (RFC 5652 §4), used as a stand-in for a NON-<c>id-ct-TSTInfo</c> eContentType.</summary>
+    private const string IdDataContentTypeOid = "1.2.840.113549.1.7.1";
+
+
+    /// <summary>
+    /// D3 (RFC 3161 §2.4.2): a CMS <c>SignedData</c> whose signature verifies but whose <c>eContentType</c> is
+    /// not <c>id-ct-TSTInfo</c> is not a time-stamp token. Reading its encapsulated content as a <c>TSTInfo</c>
+    /// because the signature verified would trust arbitrary bytes; the reader refuses (not <c>Read</c>).
+    /// </summary>
+    [TestMethod]
+    public async Task RejectsATokenWhoseEContentTypeIsNotTstInfo()
+    {
+        using ECDsa key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using X509Certificate2 signer = CmsSignedDataTestFactory.MintSelfSignedCertificate(
+            key, TestClock.CanonicalEpoch, TestClock.CanonicalEpoch.AddYears(1));
+
+        //A genuinely-signed SignedData whose encapsulated content type is id-data, not id-ct-TSTInfo, with the
+        //signer certificate embedded so the default CMS backend verifies its signature.
+        var contentInfo = new ContentInfo(new Oid(IdDataContentTypeOid), Encoding.UTF8.GetBytes("not a TSTInfo"));
+        var signedCms = new SignedCms(contentInfo, detached: false);
+        signedCms.ComputeSignature(new CmsSigner(signer) { IncludeOption = X509IncludeOption.EndCertOnly });
+        byte[] der = signedCms.Encode();
+
+        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(der.Length);
+        der.CopyTo(owner.Memory.Span);
+        using var carrier = new PkiCertificateMemory(owner, PkiCertificateTags.TimestampToken);
+
+        using TimestampTokenInfo info = await TimestampTokenInfo.ReadFromTokenAsync(
+            carrier, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(info.IsRead,
+            "A SignedData whose eContentType is not id-ct-TSTInfo must not read as a TSTInfo.");
+        Assert.AreEqual(TimestampTokenInfoStatus.TokenNotVerified, info.Status,
+            "A non-TSTInfo eContentType must yield TokenNotVerified, not a parsed TSTInfo.");
+    }
+
+
+    /// <summary>
+    /// D2 (RFC 3161 §2.4.2 / EN 319 422 clause 4.1.2): a request that names a <c>reqPolicy</c>, answered by a
+    /// conforming authority that issues under it, is accepted — and the acquired token states that same policy.
+    /// Proves both halves: the responder honours the requested policy, and the client binds the response to it.
+    /// </summary>
+    [TestMethod]
+    public async Task AcquireAsyncAcceptsATokenWhosePolicyMatchesTheRequestedPolicy()
+    {
+        using TsaScenario scenario = BuildScenario();
+        byte[] timestampedOctets = Encoding.UTF8.GetBytes("timestamp acquisition policy match fixture");
+        (byte[] digest, PkiDigestAlgorithm algorithm) = await ComputeSha256Async(timestampedOctets, TestContext.CancellationToken).ConfigureAwait(false);
+
+        //A responder with no override honours the request's reqPolicy.
+        var responder = new MintingTimestampResponder(scenario.Authority, [scenario.Authority], TestClock.CanonicalEpoch);
+
+        using AcquiredTimestampToken acquired = await TimestampAcquisition.AcquireAsync(
+            digest, algorithm, "https://tsa.example.test/", responder.FetchAsync, BaseMemoryPool.Shared,
+            reqPolicyOid: RequestedPolicyOid, includeNonce: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(RequestedPolicyOid, acquired.Info.PolicyOid,
+            "The acquired token must state the policy the request asked for.");
+    }
+
+
+    /// <summary>
+    /// D2 exploit regression (RFC 3161 §2.4.2 / EN 319 422 clause 4.1.2): a Time-Stamping Authority that issues
+    /// under a policy other than the one the request asked for must be refused, not accepted. Before the fix the
+    /// requested policy was written to the request but never checked against the token's <c>policy</c>, so a
+    /// mismatched policy passed silently (fail-open).
+    /// </summary>
+    [TestMethod]
+    public async Task AcquireAsyncRefusesATokenWhosePolicyDiffersFromTheRequestedPolicy()
+    {
+        using TsaScenario scenario = BuildScenario();
+        byte[] timestampedOctets = Encoding.UTF8.GetBytes("timestamp acquisition policy mismatch fixture");
+        (byte[] digest, PkiDigestAlgorithm algorithm) = await ComputeSha256Async(timestampedOctets, TestContext.CancellationToken).ConfigureAwait(false);
+
+        //A non-conforming responder that ignores reqPolicy and issues under a different policy.
+        var responder = new MintingTimestampResponder(
+            scenario.Authority, [scenario.Authority], TestClock.CanonicalEpoch, policyOverride: "1.3.6.1.4.1.99999.7.2");
+
+        TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
+            async () => await TimestampAcquisition.AcquireAsync(
+                digest, algorithm, "https://tsa.example.test/", responder.FetchAsync, BaseMemoryPool.Shared,
+                reqPolicyOid: RequestedPolicyOid, includeNonce: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false),
+            "A token issued under a policy other than the requested one must fail closed.").ConfigureAwait(false);
+
+        Assert.AreEqual(TimestampAcquisitionFailureKind.PolicyMismatch, exception.FailureKind);
+    }
+
+
+    /// <summary>
+    /// D5 (RFC 3161 §2.4.2): a granted response that nonetheless carries a <c>PKIFailureInfo</c> with a set bit
+    /// is self-contradictory and must be refused, not silently accepted with the failure bit discarded.
+    /// </summary>
+    [TestMethod]
+    public async Task RejectsAGrantedResponseCarryingAFailInfoWithSetBits()
+    {
+        using TsaScenario scenario = BuildScenario();
+        byte[] timestampedOctets = Encoding.UTF8.GetBytes("timestamp acquisition failinfo fixture");
+        (byte[] digest, PkiDigestAlgorithm algorithm) = await ComputeSha256Async(timestampedOctets, TestContext.CancellationToken).ConfigureAwait(false);
+
+        using PkiCertificateMemory token = await X509ChainTestRingTimestamping.MintTimestampTokenAsync(
+            scenario.Authority, [scenario.Authority], timestampedOctets, TestClock.CanonicalEpoch, BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        using PkiCertificateMemory response = WriteTimeStampRespWithFailInfo(PkiStatusGranted, token.AsReadOnlySpan());
+
+        TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
+            async () => await TimestampAcquisition.VerifyResponseAsync(
+                response, digest, algorithm, requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
+            "A granted response carrying a set PKIFailureInfo bit must fail closed.").ConfigureAwait(false);
+
+        Assert.AreEqual(TimestampAcquisitionFailureKind.ResponseMalformed, exception.FailureKind);
+    }
+
+
+    /// <summary>
+    /// Assembles a granted <c>TimeStampResp</c> whose <c>PKIStatusInfo</c> carries a <c>failInfo</c> BIT STRING
+    /// with the <c>badAlg</c> bit (bit 0) set — a contradictory response an independent writer produces so the
+    /// reader's failInfo interpretation is exercised against real octets.
+    /// </summary>
+    private static PkiCertificateMemory WriteTimeStampRespWithFailInfo(int pkiStatus, ReadOnlySpan<byte> tokenDer)
+    {
+        var writer = new AsnWriter(AsnEncodingRules.DER);
+        using(writer.PushSequence())
+        {
+            using(writer.PushSequence()) //PKIStatusInfo — status plus a failInfo BIT STRING (statusString omitted).
+            {
+                writer.WriteInteger(pkiStatus);
+                writer.WriteBitString([0x80], unusedBitCount: 7); //bit 0 set (badAlg).
+            }
+
+            writer.WriteEncodedValue(tokenDer);
+        }
+
+        int encodedLength = writer.GetEncodedLength();
+        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(encodedLength);
+        _ = writer.TryEncode(owner.Memory.Span, out _);
+
+        return new PkiCertificateMemory(owner, PkiCertificateTags.TimestampResponse);
     }
 
 

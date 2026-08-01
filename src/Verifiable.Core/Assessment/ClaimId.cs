@@ -5,6 +5,11 @@ using System.Threading;
 
 namespace Verifiable.Core.Assessment
 {
+    /// <summary>
+    /// Reserved for <c>did:web</c>-specific claim identifiers that do not belong on <see cref="ClaimId"/> itself.
+    /// Currently holds a single commented-out historical allocation, kept for provenance rather than deleted; the
+    /// identifier it once declared now lives on <see cref="ClaimId.WebDidIdEncoding"/>.
+    /// </summary>
     public static class WebDidClaims
     {
         /// <summary>
@@ -13,6 +18,7 @@ namespace Verifiable.Core.Assessment
         //public static ClaimId WebDidIdEncoding { get; } = ClaimId.Create(600, "WebDidIdEncoding");
     }
 
+#pragma warning disable CA1815 // Override equals and operator equals on value types
     /// <summary>
     /// Represents a unique identifier for a claim generated from a specific check that either succeeds or fails.
     /// <see cref="ClaimId"/> acts as a bridge between code and operational aspects like Security Development Operations (SecDevOps)
@@ -28,7 +34,7 @@ namespace Verifiable.Core.Assessment
     /// <description>Binding claim checks to code via <see cref="ClaimIssuer{TInput}"/>, which holds delegates to issue claims in <see cref="ClaimIssueResult"/>. Claims are then assessed by <see cref="ClaimAssessor{TInput}"/> to determine the overall case success or failure.</description>
     /// </item>
     /// <item>
-    /// <description>Mapping claim identifiers to monitoring and SecDevOps tools, aligning with Forrester-recommended practices for a comprehensive view of system security and reliability.</description>
+    /// <description>Mapping claim identifiers to monitoring and SecDevOps tools, giving a comprehensive view of system security and reliability.</description>
     /// </item>
     /// </list>
     /// This struct is lightweight and optimized for performance, minimizing overhead in collections or other data structures.
@@ -37,11 +43,10 @@ namespace Verifiable.Core.Assessment
     /// <example>
     /// Creating a new <see cref="ClaimId"/>:
     /// <code>
-    /// var newClaimId = ClaimId2.Create(509);
+    /// ClaimId newClaimId = ClaimId.Create(509, "MyNewClaim");
     /// </code>
     /// </example>
     [DebuggerDisplay("{DebuggerDisplay,nq}")]
-#pragma warning disable CA1815 // Override equals and operator equals on value types
     public readonly struct ClaimId
 #pragma warning restore CA1815 // Override equals and operator equals on value types
     {
@@ -296,6 +301,13 @@ namespace Verifiable.Core.Assessment
         }
 
 
+        /// <summary>
+        /// Initializes a new claim identifier carrying <paramref name="code"/>, and registers
+        /// <paramref name="description"/> for it in <see cref="CodeDescriptions"/>. Only reachable through
+        /// <see cref="Create"/>, which validates both arguments before calling this constructor.
+        /// </summary>
+        /// <param name="code">The code representing the claim identifier.</param>
+        /// <param name="description">The description of the claim.</param>
         private ClaimId(int code, string description)
         {
             Code = code;
@@ -314,6 +326,11 @@ namespace Verifiable.Core.Assessment
         /// </summary>
         private static class CodeDescriptions
         {
+            /// <summary>
+            /// Guards <see cref="Descriptions"/> so the duplicate check and the insertion it guards in
+            /// <see cref="AddDescription"/> happen as one atomic step, and so <see cref="GetDescription"/> never
+            /// reads the dictionary while another thread is writing it.
+            /// </summary>
             private static readonly Lock descriptionsLock = new();
 
             /// <summary>

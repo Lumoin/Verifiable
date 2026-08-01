@@ -167,7 +167,7 @@ public static class WellKnownScopes
     /// </summary>
     public static readonly string CredentialIssuance = Utf8Constants.ToInternedString(CredentialIssuanceUtf8);
 
-    //OpenID Shared Signals Framework scopes — CAEP Interoperability Profile §2.7.2.
+    //OpenID Shared Signals Framework scopes — CAEP Interoperability Profile §2.7.3.
 
     /// <summary>The UTF-8 source literal of <see cref="SsfRead"/>.</summary>
     public static ReadOnlySpan<byte> SsfReadUtf8 => "ssf.read"u8;
@@ -175,13 +175,25 @@ public static class WellKnownScopes
     /// <summary>
     /// Grants the SSF stream-configuration Read API operations (Read Stream
     /// Configuration, Get Stream Status) on a Shared Signals Transmitter, per
-    /// CAEP Interoperability Profile 1.0 §2.7.2.
+    /// <see href="https://openid.net/specs/openid-caep-interoperability-profile-1_0-01.html">OpenID
+    /// CAEP Interoperability Profile 1.0, draft 01, section 2.7.3</see> (no Final text exists;
+    /// draft 01 is the document under public review).
     /// </summary>
     /// <remarks>
-    /// These fixed scopes are the fallback: when the Transmitter (as a Resource
-    /// Server) publishes OAuth Protected Resource Metadata (RFC 9728), the client
-    /// MUST discover the required scopes from it instead. An authorization server
-    /// MAY postfix more granular operations (for example <c>ssf.manage.create</c>).
+    /// These fixed scopes are the fallback for a Transmitter that publishes no
+    /// scope discovery: where the Transmitter (as a Resource Server) publishes
+    /// OAuth 2.0 Protected Resource Metadata, its RECOMMENDED
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728.html#section-2">RFC 9728 §2</see>
+    /// <c>scopes_supported</c> names the scope values used in authorization requests
+    /// for that resource, and those advertised values govern.
+    /// <para>
+    /// Splitting a scope into more granular per-operation values by postfixing it
+    /// (for example <c>ssf.manage.create</c>) is this library's own convention, not a
+    /// rule of the profile: profile §2.7.3 defines exactly the two scopes here and
+    /// says nothing about granular values. <see cref="SsfScopeSatisfies"/> implements
+    /// the convention so a deployment that mints such scopes can still be gated
+    /// against the two profile scopes.
+    /// </para>
     /// </remarks>
     public static readonly string SsfRead = Utf8Constants.ToInternedString(SsfReadUtf8);
 
@@ -191,11 +203,13 @@ public static class WellKnownScopes
     /// <summary>
     /// Grants all SSF stream-configuration management API operations on a Shared
     /// Signals Transmitter and includes all <see cref="SsfRead"/> permissions, per
-    /// CAEP Interoperability Profile 1.0 §2.7.2.
+    /// <see href="https://openid.net/specs/openid-caep-interoperability-profile-1_0-01.html">OpenID
+    /// CAEP Interoperability Profile 1.0, draft 01, section 2.7.3</see> (no Final text exists;
+    /// draft 01 is the document under public review).
     /// </summary>
     /// <remarks>
-    /// Subject to the same RFC 9728 discovery-first rule and granular-postfix
-    /// convention as <see cref="SsfRead"/>.
+    /// Subject to the same RFC 9728 scope-discovery precedence, and to the same
+    /// library-own granular-postfix convention, as <see cref="SsfRead"/>.
     /// </remarks>
     public static readonly string SsfManage = Utf8Constants.ToInternedString(SsfManageUtf8);
 
@@ -241,15 +255,22 @@ public static class WellKnownScopes
 
 
     /// <summary>
-    /// Whether a granted SSF scope satisfies a required one per CAEP Interoperability
-    /// Profile 1.0 §2.7.2: an exact match always satisfies; a granted
-    /// <see cref="SsfManage"/> satisfies a required <see cref="SsfRead"/> because
-    /// <c>ssf.manage</c> includes all <c>ssf.read</c> permissions; and a granted
-    /// <see cref="SsfManage"/> satisfies a granular <c>ssf.manage.*</c> requirement
-    /// (for example <c>ssf.manage.create</c>), because every management API operation
-    /// MUST accept <c>ssf.manage</c>. A granular grant never satisfies a broader
-    /// requirement.
+    /// Whether a granted SSF scope satisfies a required one: an exact match always
+    /// satisfies; a granted <see cref="SsfManage"/> satisfies a required
+    /// <see cref="SsfRead"/> because <c>ssf.manage</c> includes all <c>ssf.read</c>
+    /// permissions; and a granted <see cref="SsfManage"/> satisfies a granular
+    /// <c>ssf.manage.*</c> requirement (for example <c>ssf.manage.create</c>). A
+    /// granular grant never satisfies a broader requirement.
     /// </summary>
+    /// <remarks>
+    /// The manage-includes-read lattice is the profile's:
+    /// <see href="https://openid.net/specs/openid-caep-interoperability-profile-1_0-01.html">OpenID
+    /// CAEP Interoperability Profile 1.0, draft 01, section 2.7.3</see> (no Final text exists;
+    /// draft 01 is the document under public review). The granular <c>ssf.manage.*</c> arm is
+    /// this library's own convention — the profile defines only the two scopes and no granular
+    /// form — and it is one-directional so that widening a requirement can never be satisfied
+    /// by a narrower grant.
+    /// </remarks>
     public static bool SsfScopeSatisfies(string grantedScope, string requiredScope)
     {
         ArgumentNullException.ThrowIfNull(grantedScope);

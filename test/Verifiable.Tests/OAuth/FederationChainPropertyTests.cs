@@ -212,12 +212,15 @@ internal sealed class FederationChainPropertyTests
         Assert.IsTrue(outcome.IsValid, outcome.FailureReason);
         Assert.IsNotNull(outcome.Chain);
 
-        //The anchor issues a mark about the verifier, signed with its real federation key. The mark omits the
-        //kid (a single-key issuer), so the resolver selects the anchor's one published key from the verified chain.
+        //The anchor issues a mark about the verifier, signed with its real federation key. Federation §7 makes
+        //the kid header a MUST on Trust Mark JWTs and the in-chain resolver key-pins on it (no first-key
+        //fallback), so the mark references the kid the anchor actually published in its Entity Configuration —
+        //read here from the wire-fetched, verified chain, exactly as a deployment's resolver would match it.
         DateTimeOffset now = TestClock.CanonicalEpoch;
+        string anchorPublishedKid = ReadFirstPublishedKid(outcome.Chain!.Statements[^1]);
         MintedTrustMark minted = await FederationTestRing.MintTrustMarkAsync(
             Fixture.AnchorNode, Fixture.VerifierNode, FederationTopologyFixture.TrustMarkId, now, now.AddHours(1),
-            includeKid: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            kidOverride: anchorPublishedKid, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         TrustMarkCandidate candidate = new() { Mark = minted.Mark, Header = minted.Header, CompactJws = minted.CompactJws };
 
@@ -235,6 +238,23 @@ internal sealed class FederationChainPropertyTests
         Assert.AreEqual(ClaimOutcome.Success, verdicts[0].IssuerAuthorization.Outcome);
         Assert.IsTrue(verdicts[0].Admitted,
             "A mark the anchor signs and authorizes must be admitted over the multi-server fetched chain.");
+    }
+
+
+    /// <summary>
+    /// Reads the <c>kid</c> of the first key an entity statement publishes in its <c>jwks</c> claim — the id a
+    /// deployment's in-chain resolver key-pins on when matching a statement or mark header.
+    /// </summary>
+    /// <param name="statement">The entity statement whose published jwks is read.</param>
+    /// <returns>The first published key's <c>kid</c>.</returns>
+    private static string ReadFirstPublishedKid(EntityStatement statement)
+    {
+        Assert.IsTrue(statement.Payload.TryGetValue(WellKnownFederationClaimNames.Jwks, out object? jwksObj),
+            "The anchor's Entity Configuration must publish a jwks.");
+        IReadOnlyDictionary<string, object> jwks = (IReadOnlyDictionary<string, object>)jwksObj!;
+        IEnumerable<object> keys = (IEnumerable<object>)jwks[WellKnownJwkMemberNames.Keys];
+        IReadOnlyDictionary<string, object> firstKey = (IReadOnlyDictionary<string, object>)keys.First();
+        return (string)firstKey[WellKnownJwkMemberNames.Kid];
     }
 }
 

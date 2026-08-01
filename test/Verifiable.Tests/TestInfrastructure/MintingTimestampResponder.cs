@@ -43,6 +43,14 @@ internal sealed class MintingTimestampResponder
     /// <summary>The <c>genTime</c> every minted token states.</summary>
     private DateTimeOffset GenerationTime { get; }
 
+    /// <summary>
+    /// A policy object identifier this responder mints every token under regardless of the request's
+    /// <c>reqPolicy</c>, or <see langword="null"/> to honour the request. When set it models a non-conforming
+    /// Time-Stamping Authority that issues under a policy other than the one asked for — the case RFC 3161
+    /// §2.4.2's <c>TSTInfo.policy</c>-equals-<c>reqPolicy</c> rule exists to catch.
+    /// </summary>
+    private string? PolicyOverride { get; }
+
 
     /// <summary>
     /// Initializes a new <see cref="MintingTimestampResponder"/>.
@@ -50,10 +58,12 @@ internal sealed class MintingTimestampResponder
     /// <param name="authority">The Time-Stamping Authority node whose key signs the tokens.</param>
     /// <param name="embeddedCertificates">The certificates the tokens carry.</param>
     /// <param name="generationTime">The <c>genTime</c> the tokens state.</param>
+    /// <param name="policyOverride">When non-<see langword="null"/>, the policy every token states regardless of the request's <c>reqPolicy</c> (a non-conforming TSA); when <see langword="null"/>, the responder honours the request's <c>reqPolicy</c>.</param>
     internal MintingTimestampResponder(
         X509ChainTestRingNode authority,
         IReadOnlyList<X509ChainTestRingNode> embeddedCertificates,
-        DateTimeOffset generationTime)
+        DateTimeOffset generationTime,
+        string? policyOverride = null)
     {
         ArgumentNullException.ThrowIfNull(authority);
         ArgumentNullException.ThrowIfNull(embeddedCertificates);
@@ -61,6 +71,7 @@ internal sealed class MintingTimestampResponder
         Authority = authority;
         EmbeddedCertificates = embeddedCertificates;
         GenerationTime = generationTime;
+        PolicyOverride = policyOverride;
     }
 
 
@@ -78,15 +89,18 @@ internal sealed class MintingTimestampResponder
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(pool);
 
-        (byte[] messageImprint, string algorithmOid, byte[] nonce) = ReadRequest(context.Request.AsReadOnlyMemory());
+        (byte[] messageImprint, string algorithmOid, byte[] nonce, string? reqPolicyOid) = ReadRequest(context.Request.AsReadOnlyMemory());
         PkiDigestAlgorithm? algorithm = PkiDigestAlgorithm.FromOid(algorithmOid);
         if(algorithm is null)
         {
             throw new ArgumentException($"The request states a message imprint algorithm this responder does not mint under: {algorithmOid}.", nameof(context));
         }
 
+        //A conforming authority answers under the request's reqPolicy; an override models one that does not.
+        string? effectivePolicy = PolicyOverride ?? reqPolicyOid;
+
         using PkiCertificateMemory token = X509ChainTestRingTimestamping.MintTimestampTokenOverImprint(
-            Authority, EmbeddedCertificates, messageImprint, GenerationTime, nonce, messageImprintAlgorithm: algorithm.Value);
+            Authority, EmbeddedCertificates, messageImprint, GenerationTime, nonce, messageImprintAlgorithm: algorithm.Value, policyOid: effectivePolicy);
 
         return ValueTask.FromResult<PkiCertificateMemory?>(BuildResponse(token.AsReadOnlySpan(), pool));
     }
@@ -96,13 +110,14 @@ internal sealed class MintingTimestampResponder
     /// Decodes the fields of a <c>TimeStampReq</c> this responder answers from (RFC 3161 §2.4.1).
     /// </summary>
     /// <param name="request">The DER-encoded request.</param>
-    /// <returns>The message imprint's hashed message, the algorithm it names, and the nonce when the request carried one.</returns>
+    /// <returns>The message imprint's hashed message, the algorithm it names, the nonce when the request carried one, and the <c>reqPolicy</c> when the request stated one.</returns>
     /// <remarks>
     /// The algorithm is read rather than assumed, because an authority answers under the algorithm the request
     /// states: a caller renewing an archive under a new hash algorithm asks this responder for a token under
-    /// that algorithm, and a responder that always answered under one would make the renewal untestable.
+    /// that algorithm, and a responder that always answered under one would make the renewal untestable. The
+    /// <c>reqPolicy</c> is likewise read so the responder can honour it (RFC 3161 §2.4.2), rather than discarded.
     /// </remarks>
-    private static (byte[] MessageImprint, string AlgorithmOid, byte[] Nonce) ReadRequest(ReadOnlyMemory<byte> request)
+    private static (byte[] MessageImprint, string AlgorithmOid, byte[] Nonce, string? ReqPolicyOid) ReadRequest(ReadOnlyMemory<byte> request)
     {
         var outer = new AsnReader(request, AsnEncodingRules.DER);
         AsnReader timeStampReq = outer.ReadSequence();
@@ -115,9 +130,10 @@ internal sealed class MintingTimestampResponder
         byte[] hashedMessage = messageImprint.ReadOctetString();
         messageImprint.ThrowIfNotEmpty();
 
+        string? reqPolicyOid = null;
         if(timeStampReq.HasData && timeStampReq.PeekTag() == Asn1Tag.ObjectIdentifier)
         {
-            _ = timeStampReq.ReadObjectIdentifier();                        //reqPolicy.
+            reqPolicyOid = timeStampReq.ReadObjectIdentifier();             //reqPolicy.
         }
 
         byte[] nonce = [];
@@ -126,7 +142,7 @@ internal sealed class MintingTimestampResponder
             nonce = timeStampReq.ReadIntegerBytes().ToArray();
         }
 
-        return (hashedMessage, algorithmOid, nonce);
+        return (hashedMessage, algorithmOid, nonce, reqPolicyOid);
     }
 
 

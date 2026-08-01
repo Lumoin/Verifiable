@@ -5,6 +5,10 @@ using Verifiable.Core.Assessment;
 
 namespace Verifiable.Tests.Assertion
 {
+    /// <summary>
+    /// Tests for <see cref="ClaimId"/>: the library-defined static instances, its <see cref="ClaimId.Create"/>
+    /// factory, its refusal of the default constructor, and the thread-safety of its code-description registry.
+    /// </summary>
     [TestClass]
     internal sealed class ClaimIdTests
     {
@@ -115,6 +119,10 @@ namespace Verifiable.Tests.Assertion
         }
 
 
+        /// <summary>
+        /// Verifies that <see cref="ClaimId.Create"/> refuses a second allocation under a code it has already
+        /// registered a description for.
+        /// </summary>
         [TestMethod]
         public void NotPossibleToSaveDuplicateId()
         {
@@ -257,6 +265,10 @@ namespace Verifiable.Tests.Assertion
         }
 
 
+        /// <summary>
+        /// Verifies that the parameterless <see cref="ClaimId"/> constructor throws rather than yielding an
+        /// uninitialized instance, and that its message names <see cref="ClaimId.Create"/> as the alternative.
+        /// </summary>
         [TestMethod]
         public void NotPossibleToUseDefaultConstructor()
         {
@@ -265,6 +277,11 @@ namespace Verifiable.Tests.Assertion
         }
 
 
+        /// <summary>
+        /// Verifies that <see cref="ClaimId.Create"/> throws <see cref="ArgumentOutOfRangeException"/>, naming
+        /// the offending code, for zero and negative <paramref name="code"/> values.
+        /// </summary>
+        /// <param name="code">A non-positive code that <see cref="ClaimId.Create"/> must refuse.</param>
         [TestMethod]
         [DataRow(0)]
         [DataRow(-1)]
@@ -280,6 +297,10 @@ namespace Verifiable.Tests.Assertion
         }
 
 
+        /// <summary>
+        /// Verifies that <see cref="ClaimId.Create"/> throws <see cref="ArgumentException"/>, naming the
+        /// <c>description</c> parameter, when the description is an empty string.
+        /// </summary>
         [TestMethod]
         public void CreateThrowsArgumentExceptionForEmptyDescription()
         {
@@ -291,6 +312,11 @@ namespace Verifiable.Tests.Assertion
         }
 
 
+        /// <summary>
+        /// Verifies that <see cref="ClaimId.Create"/> returns a <see cref="ClaimId"/> whose <see cref="ClaimId.Code"/>
+        /// and <see cref="ClaimId.ToString"/> match the arguments, for freshly generated, previously unused
+        /// code/description pairs.
+        /// </summary>
         [TestMethod]
         [SuppressMessage("Security", "CA5394:Do not use insecure randomness", Justification = "This is some test data without needing cryptographic security.")]
         public void CreateReturnsClaimIdForValidInput()
@@ -319,6 +345,10 @@ namespace Verifiable.Tests.Assertion
         }
 
 
+        /// <summary>
+        /// Verifies that a library-defined static <see cref="ClaimId"/> instance (<see cref="ClaimId.OctKeyType"/>)
+        /// carries its documented code.
+        /// </summary>
         [TestMethod]
         public void CanRetrieveLibraryDefinedClaimId()
         {

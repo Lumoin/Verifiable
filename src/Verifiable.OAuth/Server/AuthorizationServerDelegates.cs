@@ -410,7 +410,7 @@ public delegate ValueTask<Federation.HistoricalKeysContribution?> ResolveHistori
 /// <summary>
 /// Processes a Relying Party's explicit client registration request at the
 /// <c>federation_registration_endpoint</c> per
-/// <see href="https://openid.net/specs/openid-federation-1_0.html#section-12.2">Federation §12.2</see>.
+/// <see href="https://openid.net/specs/openid-federation-connect-1_1-final.html#section-12.2">Connect-1.1 §12.2</see>.
 /// The RP POSTs its signed Entity Configuration; the library hands the raw
 /// compact JWS to this delegate, assembles the §12.2 Explicit Registration
 /// Response from the returned contribution, and signs it with the OP's

@@ -43,7 +43,16 @@ public enum TimestampAcquisitionFailureKind
     NonceMismatch,
 
     /// <summary>The token's message imprint does not match the digest the request carried.</summary>
-    MessageImprintMismatch
+    MessageImprintMismatch,
+
+    /// <summary>
+    /// The request asked for a specific TSA policy (<c>reqPolicy</c>) but the token was issued under a different
+    /// one. <see href="https://www.rfc-editor.org/rfc/rfc3161#section-2.4.2">RFC 3161 §2.4.2</see> requires
+    /// <c>TSTInfo.policy</c> to equal the request's <c>reqPolicy</c> when one was present (or the authority to
+    /// return <c>unacceptedPolicy</c>); a TSA that silently issues under another policy is refused rather than
+    /// accepted — the fail-open EN 319 422 clause 4.1.2 / Annex A defect this closes.
+    /// </summary>
+    PolicyMismatch
 }
 
 
@@ -238,6 +247,7 @@ public static class TimestampAcquisition
     /// <param name="messageImprintDigest">The same digest bytes the originating request carried.</param>
     /// <param name="messageImprintAlgorithm">The digest algorithm <paramref name="messageImprintDigest"/> was computed under.</param>
     /// <param name="requestNonce">The originating request's nonce, or <see langword="null"/> when the request sent none.</param>
+    /// <param name="requestedPolicyOid">The TSA policy the originating request asked for (<c>reqPolicy</c>), or <see langword="null"/> when it named none. When non-<see langword="null"/>, the token's <c>policy</c> MUST equal it (RFC 3161 §2.4.2) or acquisition fails <see cref="TimestampAcquisitionFailureKind.PolicyMismatch"/>.</param>
     /// <param name="pool">The memory pool for every allocation this call performs.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The verified token, ready to attach. The caller owns and disposes it.</returns>
@@ -245,13 +255,15 @@ public static class TimestampAcquisition
     /// <exception cref="ArgumentException">When <paramref name="response"/> does not carry a <c>TimeStampResp</c>, or <paramref name="messageImprintDigest"/>'s length does not match <paramref name="messageImprintAlgorithm"/>'s <see cref="PkiDigestAlgorithm.OutputByteLength"/>.</exception>
     /// <exception cref="TimestampAcquisitionException">
     /// When the response is malformed, was not granted, or the token it carries does not verify, does not
-    /// match the message imprint, or does not match the nonce.
+    /// match the message imprint, does not match the nonce, or was issued under a different policy than the
+    /// request asked for.
     /// </exception>
     public static async ValueTask<AcquiredTimestampToken> VerifyResponseAsync(
         PkiCertificateMemory response,
         ReadOnlyMemory<byte> messageImprintDigest,
         PkiDigestAlgorithm messageImprintAlgorithm,
         Nonce? requestNonce,
+        string? requestedPolicyOid,
         MemoryPool<byte> pool,
         CancellationToken cancellationToken = default)
     {
@@ -269,7 +281,7 @@ public static class TimestampAcquisition
                 nameof(messageImprintDigest));
         }
 
-        (int status, ReadOnlyMemory<byte>? tokenDer) parsed;
+        (int status, ReadOnlyMemory<byte>? tokenDer, bool failInfoHasSetBits) parsed;
         try
         {
             parsed = ReadTimeStampResp(response.AsReadOnlyMemory());
@@ -288,6 +300,16 @@ public static class TimestampAcquisition
                 TimestampAcquisitionFailureKind.ResponseRejected,
                 $"The Time-Stamping Authority did not grant the request (PKIStatus {parsed.status}, RFC 3161 §2.4.2).",
                 parsed.status);
+        }
+
+        //RFC 3161 §2.4.2: failInfo carries a failure indication and belongs to a rejection. A granted or
+        //grantedWithMods response carrying a PKIFailureInfo with any set bit is self-contradictory — a
+        //compliant client (RFC 3161 §2.4.2) must not silently accept a failure bit it did not otherwise act on.
+        if(parsed.failInfoHasSetBits)
+        {
+            throw new TimestampAcquisitionException(
+                TimestampAcquisitionFailureKind.ResponseMalformed,
+                "A granted TimeStampResp carried a PKIFailureInfo with set bits, which contradicts the granted status (RFC 3161 §2.4.2).");
         }
 
         if(parsed.tokenDer is not { } tokenDer)
@@ -324,6 +346,18 @@ public static class TimestampAcquisition
                     "The token's nonce does not match the request's nonce (RFC 3161 §2.4.2).");
             }
 
+            //RFC 3161 §2.4.2: when the request named a reqPolicy, TSTInfo.policy MUST equal it (otherwise the
+            //authority is required to return unacceptedPolicy). A request that named no policy imposes no check.
+            //Without this the client is fail-open: a TSA that silently issues under a different policy — an
+            //EN 319 422 clause 4.1.2 / Annex A concern — is accepted. Fail closed instead.
+            if(requestedPolicyOid is not null
+                && !string.Equals(info.PolicyOid, requestedPolicyOid, StringComparison.Ordinal))
+            {
+                throw new TimestampAcquisitionException(
+                    TimestampAcquisitionFailureKind.PolicyMismatch,
+                    $"The token was issued under policy '{info.PolicyOid}' but the request asked for '{requestedPolicyOid}' (RFC 3161 §2.4.2).");
+            }
+
             return new AcquiredTimestampToken(tokenCarrier, info);
         }
         catch
@@ -336,10 +370,10 @@ public static class TimestampAcquisition
 
         //Reads TimeStampResp ::= SEQUENCE { status PKIStatusInfo, timeStampToken TimeStampToken OPTIONAL },
         //PKIStatusInfo ::= SEQUENCE { status PKIStatus, statusString PKIFreeText OPTIONAL,
-        //failInfo PKIFailureInfo OPTIONAL } (RFC 3161 §2.4.2). statusString/failInfo are consumed so the
-        //closing emptiness check is exact, but not surfaced — ResponseRejected already carries PKIStatus
-        //itself, and Table 1 names no requirement this reader would need either for.
-        static (int Status, ReadOnlyMemory<byte>? TimeStampToken) ReadTimeStampResp(ReadOnlyMemory<byte> responseDer)
+        //failInfo PKIFailureInfo OPTIONAL } (RFC 3161 §2.4.2). statusString is consumed so the closing emptiness
+        //check is exact; failInfo is interpreted for set bits (see the caller) rather than discarded —
+        //ResponseRejected already carries PKIStatus itself.
+        static (int Status, ReadOnlyMemory<byte>? TimeStampToken, bool FailInfoHasSetBits) ReadTimeStampResp(ReadOnlyMemory<byte> responseDer)
         {
             var reader = new AsnReader(responseDer, AsnEncodingRules.DER);
             AsnReader response = reader.ReadSequence();
@@ -368,12 +402,16 @@ public static class TimestampAcquisition
                 freeText.ThrowIfNotEmpty();
             }
 
+            bool failInfoHasSetBits = false;
             if(statusInfo.HasData && statusInfo.PeekTag() == Asn1Tag.PrimitiveBitString)
             {
-                if(!statusInfo.TryReadPrimitiveBitString(out _, out _))
+                if(!statusInfo.TryReadPrimitiveBitString(out _, out ReadOnlyMemory<byte> failInfo))
                 {
                     throw new AsnContentException("A TimeStampResp PKIFailureInfo must be a primitive BIT STRING in DER.");
                 }
+
+                //Any non-zero octet means at least one PKIFailureInfo bit is set.
+                failInfoHasSetBits = failInfo.Span.IndexOfAnyExcept((byte)0) >= 0;
             }
 
             statusInfo.ThrowIfNotEmpty();
@@ -396,7 +434,7 @@ public static class TimestampAcquisition
 
             response.ThrowIfNotEmpty();
 
-            return (status, timeStampToken);
+            return (status, timeStampToken, failInfoHasSetBits);
         }
 
 
@@ -490,7 +528,8 @@ public static class TimestampAcquisition
         using(response)
         {
             return await VerifyResponseAsync(
-                response, messageImprintDigest, messageImprintAlgorithm, request.RequestNonce, pool, cancellationToken).ConfigureAwait(false);
+                response, messageImprintDigest, messageImprintAlgorithm, request.RequestNonce,
+                request.RequestedPolicyOid, pool, cancellationToken).ConfigureAwait(false);
         }
     }
 }

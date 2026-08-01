@@ -32,19 +32,30 @@ public sealed class TimestampRequestContent: IDisposable
     /// </summary>
     public Nonce? RequestNonce { get; }
 
+    /// <summary>
+    /// Gets the TSA policy object identifier this request asked the authority to issue under
+    /// (<c>reqPolicy</c>, <see href="https://www.rfc-editor.org/rfc/rfc3161#section-2.4.1">RFC 3161 §2.4.1</see>),
+    /// or <see langword="null"/> when the request stated none. Retained so
+    /// <see cref="TimestampAcquisition.VerifyResponseAsync"/> can hold the returned token's <c>policy</c> to what
+    /// was asked for (RFC 3161 §2.4.2); a request that named no policy imposes no policy check on the response.
+    /// </summary>
+    public string? RequestedPolicyOid { get; }
+
 
     /// <summary>
     /// Initializes a new <see cref="TimestampRequestContent"/>, taking ownership of both carriers.
     /// </summary>
     /// <param name="request">The DER-encoded TimeStampReq. Ownership transfers to this instance.</param>
     /// <param name="requestNonce">The request's nonce, or <see langword="null"/>. Ownership transfers to this instance.</param>
+    /// <param name="requestedPolicyOid">The TSA policy the request asked for (<c>reqPolicy</c>), or <see langword="null"/>.</param>
     /// <exception cref="ArgumentNullException">When <paramref name="request"/> is <see langword="null"/>.</exception>
-    public TimestampRequestContent(PkiCertificateMemory request, Nonce? requestNonce)
+    public TimestampRequestContent(PkiCertificateMemory request, Nonce? requestNonce, string? requestedPolicyOid = null)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         Request = request;
         RequestNonce = requestNonce;
+        RequestedPolicyOid = requestedPolicyOid;
     }
 
 
@@ -169,7 +180,7 @@ public static class TimestampRequests
                 _ = writer.TryEncode(requestOwner.Memory.Span, out _);
                 var request = new PkiCertificateMemory(requestOwner, PkiCertificateTags.TimestampRequest);
 
-                return ValueTask.FromResult(new TimestampRequestContent(request, nonce));
+                return ValueTask.FromResult(new TimestampRequestContent(request, nonce, reqPolicyOid));
             }
             catch
             {

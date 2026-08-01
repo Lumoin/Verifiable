@@ -16,12 +16,15 @@ namespace Verifiable.OAuth.Federation;
 /// </para>
 /// <list type="bullet">
 ///   <item><description>1100–1119: Entity Statement validation per
-///     <see href="https://openid.net/specs/openid-federation-1_0.html#section-3.2">Federation §3.2</see>.</description></item>
+///     <see href="https://openid.net/specs/openid-federation-1_0.html#section-3.2">Federation §3.2</see>.
+///     This band is full; the late-added Entity Statement <c>kid</c>-header MUST
+///     (<see cref="KidPresent"/>, §3.1) continues the group at code 1128.</description></item>
 ///   <item><description>1120–1139: Trust chain validation per
 ///     <see href="https://openid.net/specs/openid-federation-1_0.html#section-4.3">§4.3</see>
 ///     (inline) and
 ///     <see href="https://openid.net/specs/openid-federation-1_0.html#section-10">§10</see>
-///     (HTTP).</description></item>
+///     (HTTP), plus <see cref="KidPresent"/> at 1128 (an Entity Statement check the full
+///     1100–1119 band had no room for; kept here rather than renumbering the published IDs).</description></item>
 ///   <item><description>1140–1159: Metadata policy merge and application per
 ///     <see href="https://openid.net/specs/openid-federation-1_0.html#section-6.1.4">§6.1.4</see>.</description></item>
 ///   <item><description>1160–1169: Party approval gate (consumed by
@@ -50,6 +53,17 @@ public static class WellKnownFederationClaimIds
     /// <c>none</c>.
     /// </summary>
     public static ClaimId AlgPresent { get; } = ClaimId.Create(1100, "AlgPresent");
+
+    /// <summary>
+    /// The JWS protected header carries a non-empty <c>kid</c> (Key ID) header
+    /// parameter, per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-3.1">Federation §3.1</see>
+    /// ("Entity Statement JWTs MUST include the <c>kid</c> (Key ID) header parameter with its value being the
+    /// Key ID of the signing key used"). Its absence is the malformed input the in-chain key resolver refuses
+    /// to answer with a silent first-key selection. Code 1128 rather than a 1100–1119 slot: that Entity
+    /// Statement band is full (see the class remarks).
+    /// </summary>
+    public static ClaimId KidPresent { get; } = ClaimId.Create(1128, "KidPresent");
 
     /// <summary>
     /// The JWS protected header's <c>typ</c> equals
@@ -94,10 +108,16 @@ public static class WellKnownFederationClaimIds
     public static ClaimId SignatureVerifies { get; } = ClaimId.Create(1106, "SignatureVerifies");
 
     /// <summary>
-    /// For an Entity Configuration (<c>iss</c> == <c>sub</c>), the
-    /// <c>jwks</c> claim is present and carries at least one key.
+    /// The <c>jwks</c> claim is present and carries at least one key for the
+    /// statement shapes
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-3.1">Federation §3.1.1</see>
+    /// makes it REQUIRED on: every Subordinate Statement and every Entity Configuration (Trust Anchor,
+    /// Intermediate and Leaf). The one carve-out is the Explicit Registration Response entity statement, for
+    /// which connect-1.1 §3.1.2 makes <c>jwks</c> OPTIONAL
+    /// (<see cref="Verifiable.Core.Assessment.ClaimOutcome.NotApplicable"/> when absent). Reshaped from the
+    /// earlier self-signed-only check, which wrongly exempted the Subordinate Statement shape.
     /// </summary>
-    public static ClaimId JwksPresentWhenSelfSigned { get; } = ClaimId.Create(1107, "JwksPresentWhenSelfSigned");
+    public static ClaimId JwksPresentPerStatementShape { get; } = ClaimId.Create(1107, "JwksPresentPerStatementShape");
 
     /// <summary>
     /// The <c>authority_hints</c> claim (when present) is a well-formed
@@ -356,6 +376,15 @@ public static class WellKnownFederationClaimIds
     /// — an unsigned (<c>alg=none</c>) trust mark is rejected.
     /// </summary>
     public static ClaimId TrustMarkAlgPresent { get; } = ClaimId.Create(1175, "TrustMarkAlgPresent");
+
+    /// <summary>
+    /// The trust mark's JWS protected header carries a non-empty <c>kid</c> (Key ID) header parameter, per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-7">Federation §7</see>
+    /// ("Trust Mark JWTs MUST include the <c>kid</c> (Key ID) header parameter with its value being the Key ID
+    /// of the signing key used"; the same MUST binds the Trust Mark Status Response JWT at §8.4.2). A mark whose
+    /// <c>kid</c> is absent cannot be key-pinned, so the in-chain key resolver returns no key for it.
+    /// </summary>
+    public static ClaimId TrustMarkKidPresent { get; } = ClaimId.Create(1177, "TrustMarkKidPresent");
 
     /// <summary>
     /// The trust mark's <c>iat</c> claim is within the clock-skew window

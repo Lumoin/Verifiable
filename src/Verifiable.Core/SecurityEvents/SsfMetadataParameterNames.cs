@@ -120,4 +120,21 @@ public static class SsfMetadataParameterNames
 
     /// <summary>The <c>default_subjects</c> value <c>NONE</c> — new streams include no subjects by default.</summary>
     public static readonly string DefaultSubjectsNone = Utf8Constants.ToInternedString(DefaultSubjectsNoneUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="AuthorizationSchemeSpecUrnOAuth2"/>.</summary>
+    public static ReadOnlySpan<byte> AuthorizationSchemeSpecUrnOAuth2Utf8 => "urn:ietf:rfc:6749"u8;
+
+    /// <summary>
+    /// The <see cref="SpecUrn"/> value naming OAuth 2.0 (<c>urn:ietf:rfc:6749</c>) as the
+    /// authorization scheme of the stream-management APIs. Under CAEP Interoperability
+    /// Profile 1.0 §2.3.7 the <see cref="AuthorizationSchemes"/> value MUST include an entry
+    /// carrying exactly this URN.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://openid.net/specs/openid-caep-interoperability-profile-1_0-01.html">OpenID
+    /// CAEP Interoperability Profile 1.0, draft 01, section 2.3.7</see> — no Final text exists;
+    /// draft 01 is the document under public review.
+    /// </remarks>
+    public static readonly string AuthorizationSchemeSpecUrnOAuth2 =
+        Utf8Constants.ToInternedString(AuthorizationSchemeSpecUrnOAuth2Utf8);
 }

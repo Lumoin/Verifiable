@@ -129,6 +129,13 @@ public sealed class TimestampTokenInfo: IDisposable
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;
 
+    /// <summary>
+    /// The <c>id-ct-TSTInfo</c> content type (<see href="https://www.rfc-editor.org/rfc/rfc3161#section-2.4.2">RFC 3161 §2.4.2</see>,
+    /// registered under RFC 5652's content-type arc), the <c>eContentType</c> a time-stamp token's CMS
+    /// <c>SignedData</c> MUST carry.
+    /// </summary>
+    private const string TstInfoContentTypeOid = "1.2.840.113549.1.9.16.1.4";
+
 
     /// <summary>
     /// Initialises a new instance. Private: an instance only ever comes from <see cref="Read"/>, so a status and
@@ -398,6 +405,15 @@ public sealed class TimestampTokenInfo: IDisposable
             CmsVerifiedContent content = await verifyCms(carrier, pool, cancellationToken).ConfigureAwait(false);
             using(content)
             {
+                //RFC 3161 §2.4.2: a TimeStampToken's SignedData eContentType SHALL be id-ct-TSTInfo and its
+                //eContent SHALL be the DER TSTInfo. A verified SignedData whose encapsulated content is anything
+                //else is not a time-stamp token; refuse to read its content as a TSTInfo rather than trusting the
+                //bytes to be one because the signature verified.
+                if(!string.Equals(content.ContentType, TstInfoContentTypeOid, StringComparison.Ordinal))
+                {
+                    return NotVerified();
+                }
+
                 return Read(content.Content, pool);
             }
         }

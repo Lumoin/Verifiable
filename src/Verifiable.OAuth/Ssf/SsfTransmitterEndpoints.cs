@@ -190,8 +190,22 @@ public static class SsfTransmitterEndpoints
                         : await oauth.ContributeSsfTransmitterMetadataAsync(
                             registration, context, ct).ConfigureAwait(false);
 
-                string metadataJson = SsfTransmitterJsonWriting.BuildTransmitterConfigurationJson(
-                    issuer, CollectEndpointMembers(chain), contribution);
+                //A contribution from which no profile-conformant document can be
+                //built fails the request closed with the writer's diagnostic: a
+                //Receiver that cannot discover the delivery methods is better off
+                //seeing an error than a document that silently violates CAEP
+                //Interoperability Profile §2.3.2.
+                string metadataJson;
+                try
+                {
+                    metadataJson = SsfTransmitterJsonWriting.BuildTransmitterConfigurationJson(
+                        issuer, CollectEndpointMembers(chain), contribution);
+                }
+                catch(ArgumentException metadataRefusal)
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, metadataRefusal.Message));
+                }
 
                 return (null, ServerHttpResponse.Ok(
                     metadataJson, WellKnownMediaTypes.Application.Json));

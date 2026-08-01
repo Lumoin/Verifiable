@@ -9,6 +9,7 @@ using Verifiable.Core.Assessment;
 using Verifiable.Core.Assessment.EArchiving;
 using Verifiable.Tests.Cryptography;
 using Verifiable.Tests.EuEArk;
+using Verifiable.Tests.SecurityEvents;
 
 namespace Verifiable.Tests.TestInfrastructure;
 
@@ -79,7 +80,8 @@ internal static class RequirementsMatrixExport
 
     /// <summary>
     /// Every requirements matrix this assembly ships, in the order the artifact writes them: the two of the
-    /// eArchiving wave first, then the earlier signature and container waves in the order they were built.
+    /// eArchiving wave first, then the earlier signature and container waves in the order they were built, then
+    /// the two later conformance matrices (the CAEP Interoperability Profile and EN 319 422 time-stamping).
     /// </summary>
     /// <remarks>
     /// The list is stated rather than discovered so the artifact's order is stable across runtimes;
@@ -92,7 +94,9 @@ internal static class RequirementsMatrixExport
         typeof(SignatureValidationRequirementsMatrixTests),
         typeof(CAdESRequirementsMatrixTests),
         typeof(AsicRequirementsMatrixTests),
-        typeof(EvidenceRecordRequirementsMatrixTests)
+        typeof(EvidenceRecordRequirementsMatrixTests),
+        typeof(CaepInteropProfileRequirementsMatrixTests),
+        typeof(Timestamp319422RequirementsMatrixTests)
     ];
 
 

@@ -34,9 +34,9 @@ namespace Verifiable.OAuth.Client;
 ///     authorization server fetches the document on demand.
 ///   </description></item>
 ///   <item><description>
-///     <see href="https://openid.net/specs/openid-federation-1_1-final.html">OpenID Federation 1.1</see>:
-///     the federation entity URL of the relying party. The authorization
-///     server resolves the trust chain from this entity identifier.
+///     <see href="https://openid.net/specs/openid-federation-connect-1_1-final.html#section-12.1">OpenID Federation Connect 1.1 §12.1</see>:
+///     the federation entity URL of the relying party (the <c>client_id</c> is the RP Entity Identifier). The
+///     authorization server resolves the trust chain from this entity identifier per OpenID Federation 1.1.
 ///   </description></item>
 ///   <item><description>
 ///     DID-based identification (decentralised-identifier deployments):

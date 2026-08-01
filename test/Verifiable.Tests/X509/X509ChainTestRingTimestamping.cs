@@ -104,6 +104,7 @@ internal static class X509ChainTestRingTimestamping
     /// <param name="accuracy">The <c>accuracy</c> the authority states, in whole seconds; omitted from the token when <see langword="null"/>.</param>
     /// <param name="isOrdered">Whether the token sets the <c>ordering</c> field.</param>
     /// <param name="messageImprintAlgorithm">The algorithm the imprint was computed under, or <see langword="null"/> for SHA-256.</param>
+    /// <param name="policyOid">The TSA policy object identifier the token states, or <see langword="null"/> for <see cref="TestPolicyOid"/> — a real authority answers under the request's <c>reqPolicy</c> (RFC 3161 §2.4.2), which the responder threads through here.</param>
     /// <returns>The pooled DER-encoded token, tagged <see cref="PkiCertificateTags.TimestampToken"/>; the caller disposes it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when a required argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="messageImprintDigest"/> is not the stated algorithm's digest length, or that algorithm is one this fixture does not mint under.</exception>
@@ -122,7 +123,8 @@ internal static class X509ChainTestRingTimestamping
         ReadOnlySpan<byte> requestNonce = default,
         TimeSpan? accuracy = null,
         bool isOrdered = false,
-        PkiDigestAlgorithm? messageImprintAlgorithm = null)
+        PkiDigestAlgorithm? messageImprintAlgorithm = null,
+        string? policyOid = null)
     {
         ArgumentNullException.ThrowIfNull(authority);
         ArgumentNullException.ThrowIfNull(embeddedCertificates);
@@ -147,7 +149,7 @@ internal static class X509ChainTestRingTimestamping
         var tokenGenerator = new TimeStampTokenGenerator(
             signerInfoGenerator,
             Asn1DigestFactory.Get(NistObjectIdentifiers.IdSha256),
-            new DerObjectIdentifier(TestPolicyOid),
+            new DerObjectIdentifier(policyOid ?? TestPolicyOid),
             isIssuerSerialIncluded: false);
 
         List<BcX509Certificate> carried = [];

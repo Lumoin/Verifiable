@@ -132,7 +132,7 @@ public static class WellKnownFederationCapabilityIdentifiers
     /// <summary>
     /// Serves the explicit client registration endpoint
     /// (<c>federation_registration_endpoint</c>) per
-    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-12.2">Federation §12.2</see>.
+    /// <see href="https://openid.net/specs/openid-federation-connect-1_1-final.html#section-12.2">Connect-1.1 §12.2</see>.
     /// A registration carrying this capability accepts a Relying Party's
     /// signed Entity Configuration via POST and returns a signed Explicit
     /// Registration Response (an Entity Statement about the RP). Signed with
@@ -147,7 +147,7 @@ public static class WellKnownFederationCapabilityIdentifiers
     /// <summary>
     /// Admits a Relying Party via automatic registration from an inline trust
     /// chain on the Authorization Request per
-    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-12.1">Federation §12.1</see>,
+    /// <see href="https://openid.net/specs/openid-federation-connect-1_1-final.html#section-12.1">Connect-1.1 §12.1</see>,
     /// without prior registration. Implemented by
     /// <see cref="FederationAutomaticRegistration"/>. A registration carrying
     /// this capability advertises <c>automatic</c> in its Entity Configuration's

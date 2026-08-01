@@ -310,6 +310,7 @@ internal static class FederationTestRing
         DateTimeOffset? expiresAt = null,
         IReadOnlyDictionary<string, object>? extraClaims = null,
         bool includeKid = true,
+        string? kidOverride = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(issuer);
@@ -322,9 +323,15 @@ internal static class FederationTestRing
             [WellKnownJwkMemberNames.Alg] = AlgorithmName,
         };
 
-        //A kid-less mark is valid for a single-key issuer; an in-chain key resolver then selects that one
-        //published key. The caller omits the kid when the published key carries an id the ring node does not know.
-        if(includeKid)
+        //Federation §7 makes the kid header a MUST on Trust Mark JWTs; the in-chain resolver key-pins on it and
+        //no longer falls back to a first published key when it is absent. Callers that publish their key under
+        //an id the ring node does not carry (e.g. the server's federation signing key id) pass kidOverride so
+        //the mark references the published key; includeKid: false mints the (rejectable) kid-less mark.
+        if(kidOverride is not null)
+        {
+            headerDict[WellKnownJwkMemberNames.Kid] = kidOverride;
+        }
+        else if(includeKid)
         {
             headerDict[WellKnownJwkMemberNames.Kid] = issuer.Kid;
         }

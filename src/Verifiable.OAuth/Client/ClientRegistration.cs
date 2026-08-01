@@ -46,8 +46,8 @@ namespace Verifiable.OAuth.Client;
 ///     on first use.
 ///   </description></item>
 ///   <item><description>
-///     <strong>OpenID Federation 1.1 per <see href="https://openid.net/specs/openid-federation-1_1-final.html">OpenID
-///     Federation 1.1</see>.</strong> <see cref="FederationEntityId"/> is set
+///     <strong>OpenID Federation 1.1 per <see href="https://openid.net/specs/openid-federation-connect-1_1-final.html#section-12.1">OpenID
+///     Federation Connect 1.1 §12.1</see>.</strong> <see cref="FederationEntityId"/> is set
 ///     to the relying party's federation entity URL;
 ///     <see cref="AuthorityHints"/> lists the parent authorities. The AS
 ///     resolves the trust chain on first use and applies metadata policies
@@ -240,7 +240,7 @@ public sealed record ClientRegistration
 
     /// <summary>
     /// The parent authorities this entity hints at per
-    /// <see href="https://openid.net/specs/openid-federation-1_1-final.html#section-3.1">OpenID Federation 1.1 §3.1</see>
+    /// <see href="https://openid.net/specs/openid-federation-1_1-final.html#section-3.1.2">OpenID Federation 1.1 §3.1.2</see>
     /// — the intermediate authorities or trust anchors above this leaf in
     /// the federation. Empty for non-federation lifecycles.
     /// </summary>

@@ -29,6 +29,9 @@ public static class FederationValidationProfiles
             new(FederationValidationChecks.CheckAlgPresent,
                 [WellKnownFederationClaimIds.AlgPresent]),
 
+            new(FederationValidationChecks.CheckKidPresent,
+                [WellKnownFederationClaimIds.KidPresent]),
+
             new(FederationValidationChecks.CheckTypMatchesEntityStatement,
                 [WellKnownFederationClaimIds.TypMatchesEntityStatement]),
 
@@ -50,8 +53,8 @@ public static class FederationValidationProfiles
             new(FederationValidationChecks.CheckSignatureVerifies,
                 [WellKnownFederationClaimIds.SignatureVerifies]),
 
-            new(FederationValidationChecks.CheckJwksPresentWhenSelfSigned,
-                [WellKnownFederationClaimIds.JwksPresentWhenSelfSigned]),
+            new(FederationValidationChecks.CheckJwksPresentPerStatementShape,
+                [WellKnownFederationClaimIds.JwksPresentPerStatementShape]),
 
             new(FederationValidationChecks.CheckJwksContainsNoPrivateOrSymmetricKeys,
                 [WellKnownFederationClaimIds.JwksContainsNoPrivateOrSymmetricKeys]),
@@ -109,6 +112,9 @@ public static class FederationValidationProfiles
 
             new(FederationValidationChecks.CheckTrustMarkAlgPresent,
                 [WellKnownFederationClaimIds.TrustMarkAlgPresent]),
+
+            new(FederationValidationChecks.CheckTrustMarkKidPresent,
+                [WellKnownFederationClaimIds.TrustMarkKidPresent]),
 
             new(FederationValidationChecks.CheckTrustMarkIatInRange,
                 [WellKnownFederationClaimIds.TrustMarkIatInRange]),
