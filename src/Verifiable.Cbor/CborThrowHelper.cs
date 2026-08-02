@@ -190,6 +190,48 @@ public static class CborThrowHelper
 
 
     /// <summary>
+    /// Throws a <see cref="CborContentException"/> indicating an invalid map length.
+    /// </summary>
+    /// <param name="expected">The expected map length.</param>
+    /// <param name="actual">The actual map length.</param>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidMapLength(int expected, int actual)
+    {
+        throw new CborContentException($"Expected CBOR map with {expected} entries, but found {actual}.");
+    }
+
+
+    /// <summary>
+    /// Throws a <see cref="CborContentException"/> indicating an invalid map length range.
+    /// </summary>
+    /// <param name="minimum">The minimum expected map length.</param>
+    /// <param name="maximum">The maximum expected map length.</param>
+    /// <param name="actual">The actual map length.</param>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowInvalidMapLengthRange(int minimum, int maximum, int actual)
+    {
+        throw new CborContentException($"Expected CBOR map with {minimum}-{maximum} entries, but found {actual}.");
+    }
+
+
+    /// <summary>
+    /// Throws a <see cref="CborContentException"/> indicating that CBOR map keys were not encountered in
+    /// strictly increasing order, violating the canonical (RFC 8949 §4.2.1) deterministic map-key ordering.
+    /// </summary>
+    /// <param name="previousKey">The previously read key.</param>
+    /// <param name="key">The out-of-order or duplicate key.</param>
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowMapKeysNotAscending(long previousKey, long key)
+    {
+        throw new CborContentException(
+            $"CBOR map keys must be strictly increasing under canonical encoding; got {key} after {previousKey}.");
+    }
+
+
+    /// <summary>
     /// Throws an <see cref="InvalidOperationException"/> indicating a converter was not found.
     /// </summary>
     /// <param name="type">The type for which no converter was found.</param>

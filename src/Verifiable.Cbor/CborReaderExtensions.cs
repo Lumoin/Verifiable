@@ -106,6 +106,109 @@ public static class CborReaderExtensions
 
 
     /// <summary>
+    /// Reads a CBOR tag 32 (<c>#6.32(tstr)</c>) value as a <see cref="Uri"/> per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.4.5.3">RFC 8949 §3.4.5.3</see>.
+    /// </summary>
+    /// <param name="reader">The CBOR reader.</param>
+    /// <returns>The decoded URI.</returns>
+    /// <exception cref="CborContentException">Thrown when the current item is not tagged 32.</exception>
+    public static Uri ReadUri(this CborReader reader)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
+
+        CborTag tag = reader.ReadTag();
+        if(tag != CborTag.Uri)
+        {
+            CborThrowHelper.ThrowCborContentException($"Expected CBOR tag {(ulong)CborTag.Uri} (URI), but got tag {(ulong)tag}.");
+        }
+
+        string text = reader.ReadTextString();
+        return new Uri(text, UriKind.RelativeOrAbsolute);
+    }
+
+
+    /// <summary>
+    /// Reads the next CBOR map entry's integer key, requiring it to be strictly greater than
+    /// <paramref name="previousKey"/> — the canonical (RFC 8949 §4.2.1) ascending map-key ordering the
+    /// .NET canonical writer enforces on write but the reader does not enforce on its own.
+    /// </summary>
+    /// <param name="reader">The CBOR reader.</param>
+    /// <param name="previousKey">
+    /// The previous key read from the same map (pass <c>0</c> before the first entry — every CB-AdES map
+    /// key is a positive integer). Updated to the newly read key on return.
+    /// </param>
+    /// <returns>The map entry's integer key.</returns>
+    /// <exception cref="CborContentException">
+    /// Thrown when the key is not strictly greater than <paramref name="previousKey"/>.
+    /// </exception>
+    public static int ReadAscendingMapKey(this CborReader reader, ref int previousKey)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
+
+        int key = reader.ReadInt32();
+        if(key <= previousKey)
+        {
+            CborThrowHelper.ThrowMapKeysNotAscending(previousKey, key);
+        }
+
+        previousKey = key;
+        return key;
+    }
+
+
+    /// <summary>
+    /// Expects and reads a specific map length, throwing if the length does not match.
+    /// </summary>
+    /// <param name="reader">The CBOR reader.</param>
+    /// <param name="expectedLength">The expected map length.</param>
+    /// <returns>The actual map length (equal to <paramref name="expectedLength"/>).</returns>
+    /// <exception cref="CborContentException">Thrown when the length does not match, or is indefinite.</exception>
+    public static int ReadStartMapExpectLength(this CborReader reader, int expectedLength)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
+        int? length = reader.ReadStartMap();
+        if(length is null)
+        {
+            CborThrowHelper.ThrowIndefiniteLengthNotAllowed();
+        }
+
+        if(length!.Value != expectedLength)
+        {
+            CborThrowHelper.ThrowInvalidMapLength(expectedLength, length.Value);
+        }
+
+        return length.Value;
+    }
+
+
+    /// <summary>
+    /// Reads the start of a map and validates the length is within a range.
+    /// </summary>
+    /// <param name="reader">The CBOR reader.</param>
+    /// <param name="minLength">The minimum allowed map length.</param>
+    /// <param name="maxLength">The maximum allowed map length.</param>
+    /// <returns>The actual map length.</returns>
+    /// <exception cref="CborContentException">Thrown when the length is out of range, or is indefinite.</exception>
+    public static int ReadStartMapExpectLengthRange(this CborReader reader, int minLength, int maxLength)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
+        int? length = reader.ReadStartMap();
+        if(length is null)
+        {
+            CborThrowHelper.ThrowIndefiniteLengthNotAllowed();
+            return 0; //Unreachable, but satisfies compiler.
+        }
+
+        if(length.Value < minLength || length.Value > maxLength)
+        {
+            CborThrowHelper.ThrowInvalidMapLengthRange(minLength, maxLength, length.Value);
+        }
+
+        return length.Value;
+    }
+
+
+    /// <summary>
     /// Reads a CBOR array of unsigned integers.
     /// </summary>
     /// <param name="reader">The CBOR reader.</param>

@@ -94,6 +94,7 @@ internal static class RequirementsMatrixExport
         typeof(PreservationRequirementsMatrixTests),
         typeof(SignatureValidationRequirementsMatrixTests),
         typeof(CAdESRequirementsMatrixTests),
+        typeof(CBAdESRequirementsMatrixTests),
         typeof(AsicRequirementsMatrixTests),
         typeof(EvidenceRecordRequirementsMatrixTests),
         typeof(CaepInteropProfileRequirementsMatrixTests),
