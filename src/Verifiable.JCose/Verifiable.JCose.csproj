@@ -16,5 +16,16 @@
     <ProjectReference Include="..\Verifiable.Foundation\Verifiable.Foundation.csproj" />
     <ProjectReference Include="..\Verifiable.Cryptography\Verifiable.Cryptography.csproj" />
   </ItemGroup>
-    
+
+  <!--
+    CBAdESSign1ParseResult (CBAdESSerializationDelegates.cs) is mint-only: its constructor and
+    Success/Failure factories are internal, so a "successfully parsed" result can only originate from a
+    CBOR parse implementation this assembly grants access to. Verifiable.Cbor implements
+    ParseCBAdESSign1Delegate (wavecb S3 stage m4) and therefore needs that access; the global
+    Tests/Benchmarks grants come from the root Directory.Build.props.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Verifiable.Cbor" />
+  </ItemGroup>
+
 </Project>

@@ -218,7 +218,10 @@ public static class CborThrowHelper
 
     /// <summary>
     /// Throws a <see cref="CborContentException"/> indicating that CBOR map keys were not encountered in
-    /// strictly increasing order, violating the canonical (RFC 8949 §4.2.1) deterministic map-key ordering.
+    /// strictly increasing canonical order — RFC 8949 §4.2.3 (equivalently RFC 7049 §3.9)'s deterministic
+    /// map-key ordering: the shorter encoding sorts first, ties broken bytewise-lexicographically. Corrected
+    /// from an earlier citation of RFC 8949 §4.2.1, which defines "Preferred Serialization" (minimal-length
+    /// integer/float encoding), not map-key order (wavecb S3 FX-B).
     /// </summary>
     /// <param name="previousKey">The previously read key.</param>
     /// <param name="key">The out-of-order or duplicate key.</param>

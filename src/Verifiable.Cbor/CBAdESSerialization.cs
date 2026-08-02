@@ -207,7 +207,13 @@ public static class CBAdESSerialization
     /// <param name="writer">The CBOR writer.</param>
     /// <param name="hashAlgorithm">The digest-algorithm identifier (the pair's <c>hashAlg</c> element).</param>
     /// <param name="digest">The digest bytes (the pair's <c>hashValue</c> element).</param>
-    private static void WriteHashAlgorithmDigestPair(CborWriter writer, CBAdESDigestAlgorithmIdentifier hashAlgorithm, DigestValue digest)
+    /// <remarks>
+    /// Widened from <see langword="private"/> to <see langword="internal"/> at S3 (wavecb) so
+    /// <see cref="CBAdESSignatureSerialization"/> can reuse it for the clause 5.1.7 <c>x5t</c> IETF header,
+    /// which shares this exact <c>COSE_CertHash</c> shape but has no dedicated S1/S2 public codec of its own
+    /// (only the plural <c>x5ts</c> collection does) — reuse over reinvention (wavecb-contract.md R-2).
+    /// </remarks>
+    internal static void WriteHashAlgorithmDigestPair(CborWriter writer, CBAdESDigestAlgorithmIdentifier hashAlgorithm, DigestValue digest)
     {
         writer.WriteStartArray(2);
         WriteDigestAlgorithmIdentifier(writer, hashAlgorithm);
@@ -225,7 +231,12 @@ public static class CBAdESSerialization
     /// <param name="pool">The memory pool the digest's buffer is rented from.</param>
     /// <param name="hashAlgorithm">Receives the parsed digest-algorithm identifier.</param>
     /// <param name="digest">Receives the parsed, pool-owned digest.</param>
-    private static void ReadHashAlgorithmDigestPair(
+    /// <remarks>
+    /// Widened from <see langword="private"/> to <see langword="internal"/> at S3 (wavecb) — see
+    /// <see cref="WriteHashAlgorithmDigestPair"/>'s remarks; <see cref="CBAdESSignatureSerialization"/> reuses
+    /// this directly against its own live protected-header reader for the <c>x5t</c> IETF header.
+    /// </remarks>
+    internal static void ReadHashAlgorithmDigestPair(
         CborReader reader,
         BaseMemoryPool pool,
         out CBAdESDigestAlgorithmIdentifier hashAlgorithm,

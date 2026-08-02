@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Formats.Cbor;
+using Verifiable.JCose;
 
 namespace Verifiable.Cbor;
 
@@ -128,31 +129,135 @@ public static class CborReaderExtensions
 
 
     /// <summary>
-    /// Reads the next CBOR map entry's integer key, requiring it to be strictly greater than
-    /// <paramref name="previousKey"/> — the canonical (RFC 8949 §4.2.1) ascending map-key ordering the
-    /// .NET canonical writer enforces on write but the reader does not enforce on its own.
+    /// Reads the next CBOR map entry's integer key, requiring it to sort strictly after
+    /// <paramref name="previousKey"/> under the canonical (RFC 8949 §4.2.3, equivalently RFC 7049 §3.9)
+    /// deterministic map-key ordering the .NET canonical writer enforces on write but the reader does not
+    /// enforce on its own — the shorter canonical encoding sorts first; same-length encodings compare
+    /// bytewise-lexicographically. Corrected from an earlier naive <c>key &lt;= previousKey</c> signed-integer
+    /// comparison (wavecb S3 FX-B), which diverges from canonical order for negative keys: major type 1's
+    /// magnitude encoding does not correspond to signed integer order, so a self-round-trip of a
+    /// canonically-encoded map carrying a negative key after a positive one used to be rejected as
+    /// "not ascending" even though the writer itself produced exactly that byte order.
     /// </summary>
     /// <param name="reader">The CBOR reader.</param>
     /// <param name="previousKey">
     /// The previous key read from the same map (pass <c>0</c> before the first entry — every CB-AdES map
-    /// key is a positive integer). Updated to the newly read key on return.
+    /// key this method serves is a small nonnegative integer, for which canonical order and signed-integer
+    /// order provably coincide). Updated to the newly read key on return.
     /// </param>
     /// <returns>The map entry's integer key.</returns>
     /// <exception cref="CborContentException">
-    /// Thrown when the key is not strictly greater than <paramref name="previousKey"/>.
+    /// Thrown when the key does not sort strictly after <paramref name="previousKey"/> under canonical order.
     /// </exception>
     public static int ReadAscendingMapKey(this CborReader reader, ref int previousKey)
     {
         ArgumentNullException.ThrowIfNull(reader);
 
         int key = reader.ReadInt32();
-        if(key <= previousKey)
+        if(!IsAfterInCanonicalOrder(key, previousKey))
         {
             CborThrowHelper.ThrowMapKeysNotAscending(previousKey, key);
         }
 
         previousKey = key;
         return key;
+
+        /// <summary>
+        /// Determines whether <paramref name="candidateKey"/> sorts strictly after
+        /// <paramref name="precedingKey"/> under the canonical CBOR integer encoding .NET's
+        /// <see cref="CborConformanceMode.Canonical"/> writer actually produces. Both operands are re-encoded
+        /// through a scratch canonical <see cref="CborWriter"/> so the comparison is provably identical to what
+        /// the write side (e.g. <see cref="Verifiable.Cbor.CBAdESSignatureSerialization.EncodeCBAdESProtectedHeader"/>)
+        /// produces.
+        /// </summary>
+        /// <param name="candidateKey">The candidate key.</param>
+        /// <param name="precedingKey">The previously read key (or the caller's sentinel before the first entry).</param>
+        /// <returns><see langword="true"/> when <paramref name="candidateKey"/> sorts strictly after <paramref name="precedingKey"/>.</returns>
+        static bool IsAfterInCanonicalOrder(int candidateKey, int precedingKey)
+        {
+            Span<byte> candidateBuffer = stackalloc byte[5];
+            Span<byte> precedingBuffer = stackalloc byte[5];
+
+            int candidateLength = EncodeCanonicalInt32(candidateKey, candidateBuffer);
+            int precedingLength = EncodeCanonicalInt32(precedingKey, precedingBuffer);
+
+            return IsEncodedKeyAfterInCanonicalOrder(candidateBuffer[..candidateLength], precedingBuffer[..precedingLength]);
+
+            static int EncodeCanonicalInt32(int value, Span<byte> destination)
+            {
+                var scratchWriter = new CborWriter(CborConformanceMode.Canonical);
+                scratchWriter.WriteInt32(value);
+                if(!scratchWriter.TryEncode(destination, out int bytesWritten))
+                {
+                    CborThrowHelper.ThrowCborContentException(
+                        "Canonical map-key comparison encoding overflowed the 5-byte scratch buffer.");
+                }
+
+                return bytesWritten;
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// Determines whether <paramref name="candidate"/>'s already-encoded CBOR item bytes sort strictly after
+    /// <paramref name="previous"/>'s, under the canonical (RFC 8949 §4.2.3, equivalently RFC 7049 §3.9)
+    /// deterministic-encoding map-key ordering: the SHORTER encoding sorts first; same-length encodings compare
+    /// bytewise-lexicographically. Shared by <see cref="ReadAscendingMapKey"/> (whose two operands are always a
+    /// canonically re-encoded <see langword="int"/>) and CB-AdES's top-level protected-header map-key reader
+    /// (<see cref="Verifiable.Cbor.CBAdESSignatureSerialization.ParseCBAdESSign1"/>, whose operands may be
+    /// either arm of the general COSE <c>label: int / tstr</c> union, RFC 9052 §1.4) — widened to
+    /// <see langword="internal"/> rather than kept <see langword="private"/> so that reader (same assembly) can
+    /// reuse this comparison instead of duplicating it, mirroring this file's own precedent for cross-file
+    /// <see langword="internal"/> widening (<see cref="Verifiable.Cbor.CBAdESSignatureSerialization"/>'s remarks
+    /// on <c>CBAdESSerialization.WriteHashAlgorithmDigestPair</c>).
+    /// </summary>
+    /// <param name="candidate">The candidate key's encoded bytes.</param>
+    /// <param name="previous">The previously read key's encoded bytes.</param>
+    /// <returns><see langword="true"/> when <paramref name="candidate"/> sorts strictly after <paramref name="previous"/>.</returns>
+    internal static bool IsEncodedKeyAfterInCanonicalOrder(ReadOnlySpan<byte> candidate, ReadOnlySpan<byte> previous)
+    {
+        if(candidate.Length != previous.Length)
+        {
+            return candidate.Length > previous.Length;
+        }
+
+        return candidate.SequenceCompareTo(previous) > 0;
+    }
+
+
+    /// <summary>
+    /// Reads a CBOR array of <see cref="CoseHeaderLabel"/> values — the general COSE <c>label: int / tstr</c>
+    /// CDDL union (<see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.4">RFC 9052 §1.4</see>,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3.1">RFC 9052 §3.1</see>), as used by the
+    /// <c>crit</c> header parameter's array elements. Each element is decoded per its own CBOR major type: a
+    /// text string decodes to the <see cref="CoseHeaderTextLabel"/> arm, anything else to the
+    /// <see cref="CoseHeaderIntegerLabel"/> arm. RFC 9052 imposes no ordering over <c>crit</c>'s array elements
+    /// (unlike a map's keys), so this reader enforces none.
+    /// </summary>
+    /// <param name="reader">The CBOR reader.</param>
+    /// <returns>The decoded labels, in wire order.</returns>
+    /// <exception cref="CborContentException">Thrown when the structure is invalid.</exception>
+    public static List<CoseHeaderLabel> ReadCoseHeaderLabelArray(this CborReader reader)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
+        int? length = reader.ReadStartArray();
+        if(length is null)
+        {
+            CborThrowHelper.ThrowIndefiniteLengthNotAllowed();
+        }
+
+        var result = new List<CoseHeaderLabel>(length.Value);
+        for(int i = 0; i < length.Value; i++)
+        {
+            CoseHeaderLabel label = reader.PeekState() == CborReaderState.TextString
+                ? new CoseHeaderTextLabel(reader.ReadTextString())
+                : new CoseHeaderIntegerLabel(reader.ReadInt32());
+            result.Add(label);
+        }
+
+        reader.ReadEndArray();
+        return result;
     }
 
 
