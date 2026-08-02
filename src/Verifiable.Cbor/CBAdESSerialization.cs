@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Cbor;
+using System.Globalization;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -12,13 +13,15 @@ using Verifiable.JCose;
 namespace Verifiable.Cbor;
 
 /// <summary>
-/// CBOR encode/parse bindings for the CB-AdES stage-1 vocabulary — the seven new signed header parameters
-/// (clause 5.2), the clause 5.4 shared syntax types (<c>oId</c>, <c>pkiOb</c>, <c>tstContainer</c>/
-/// <c>TstToken</c>), and <c>adoTst</c> (clause 5.2.6, a straight <c>tstContainer</c> alias) — per
+/// CBOR encode/parse bindings for the CB-AdES stage-1 and stage-2 vocabulary — the seven new signed header
+/// parameters (clause 5.2), the clause 5.4 shared syntax types (<c>oId</c>, <c>pkiOb</c>, <c>tstContainer</c>/
+/// <c>TstToken</c>), <c>adoTst</c> (clause 5.2.6, a straight <c>tstContainer</c> alias), the clause 5.3
+/// unsigned components (<c>uHeaders</c>, <c>sigPSt</c>, <c>sigTst</c>, <c>valData</c>, <c>arcTst</c>), and
+/// Annex A's <c>refs</c>/<c>sigRTst</c>/<c>rfsTst</c> — per
 /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
 /// ETSI TS 119 152-1 V1.1.1</see>. The typed models this class encodes/parses live in
-/// <see cref="Verifiable.JCose"/> (<c>CBAdES*</c>); the CDDL derivation for each is documented on the
-/// model type itself.
+/// <see cref="Verifiable.Cryptography.Pki"/> (<c>CBAdES*</c>, per wavecb-contract.md ruling R-1(a)); the CDDL
+/// derivation for each is documented on the model type itself.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -191,6 +194,84 @@ public static class CBAdESSerialization
         reader.PeekState() == CborReaderState.TextString
             ? new CBAdESDigestAlgorithmTextIdentifier(reader.ReadTextString())
             : new CBAdESDigestAlgorithmIntegerIdentifier(reader.ReadInt32());
+
+
+    /// <summary>
+    /// Writes the shared "digest algorithm + digest value" two-element CBOR array shape this document reuses
+    /// under several wire names — <c>COSE_CertHash</c> (<c>x5ts</c>, clause 5.1.7; the <c>x5t</c> member of
+    /// Annex A.1.1's <c>CertId</c>) and <c>DigAlgVal</c> (<c>sigPId.digAlgVal</c>, clause 5.2.7.1;
+    /// <c>CRLRef.digAlgVal</c>/<c>OCSPRef.digAlgVal</c>, Annex A.1.1) — to <paramref name="writer"/>. Reused
+    /// verbatim at every call site rather than duplicated (wavecb-contract.md task instructions for stage 2:
+    /// "reuse, do not duplicate").
+    /// </summary>
+    /// <param name="writer">The CBOR writer.</param>
+    /// <param name="hashAlgorithm">The digest-algorithm identifier (the pair's <c>hashAlg</c> element).</param>
+    /// <param name="digest">The digest bytes (the pair's <c>hashValue</c> element).</param>
+    private static void WriteHashAlgorithmDigestPair(CborWriter writer, CBAdESDigestAlgorithmIdentifier hashAlgorithm, DigestValue digest)
+    {
+        writer.WriteStartArray(2);
+        WriteDigestAlgorithmIdentifier(writer, hashAlgorithm);
+        writer.WriteByteString(digest.AsReadOnlySpan());
+        writer.WriteEndArray();
+    }
+
+
+    /// <summary>
+    /// Reads the shared "digest algorithm + digest value" two-element CBOR array shape (see
+    /// <see cref="WriteHashAlgorithmDigestPair"/>) from <paramref name="reader"/>, wrapping the digest bytes in
+    /// a pool-rented <see cref="DigestValue"/>.
+    /// </summary>
+    /// <param name="reader">The CBOR reader.</param>
+    /// <param name="pool">The memory pool the digest's buffer is rented from.</param>
+    /// <param name="hashAlgorithm">Receives the parsed digest-algorithm identifier.</param>
+    /// <param name="digest">Receives the parsed, pool-owned digest.</param>
+    private static void ReadHashAlgorithmDigestPair(
+        CborReader reader,
+        BaseMemoryPool pool,
+        out CBAdESDigestAlgorithmIdentifier hashAlgorithm,
+        out DigestValue digest)
+    {
+        reader.ReadStartArrayExpectLength(2);
+        hashAlgorithm = ReadDigestAlgorithmIdentifier(reader);
+        byte[] digestBytes = reader.ReadByteString();
+        reader.ReadEndArray();
+
+        digest = CreateDigestValue(digestBytes, hashAlgorithm, pool);
+    }
+
+
+    /// <summary>
+    /// Writes a CBOR tag-0 (<c>#6.0(tstr)</c>, RFC 8949 §3.4.1) "tdate" — an RFC 3339 date-time text string —
+    /// to <paramref name="writer"/>. Shared by every stage-2 component that carries a CDDL <c>#6.0(tstr)</c>
+    /// member (<c>CRLId.issueTime</c>, <c>OCSPId.producedAt</c>, both Annex A.1.1).
+    /// </summary>
+    /// <param name="writer">The CBOR writer.</param>
+    /// <param name="value">The date-time value to write.</param>
+    private static void WriteTDate(CborWriter writer, DateTimeOffset value)
+    {
+        writer.WriteTag(CborTag.DateTimeString);
+        writer.WriteTextString(value.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture));
+    }
+
+
+    /// <summary>
+    /// Reads a CBOR tag-0 (<c>#6.0(tstr)</c>, RFC 8949 §3.4.1) "tdate" from <paramref name="reader"/>. See
+    /// <see cref="WriteTDate"/>.
+    /// </summary>
+    /// <param name="reader">The CBOR reader.</param>
+    /// <returns>The parsed date-time value.</returns>
+    /// <exception cref="CborContentException">Thrown when the current item is not tagged 0.</exception>
+    private static DateTimeOffset ReadTDate(CborReader reader)
+    {
+        CborTag tag = reader.ReadTag();
+        if(tag != CborTag.DateTimeString)
+        {
+            throw new CborContentException($"Expected CBOR tag {(ulong)CborTag.DateTimeString} (tdate, RFC 8949 section 3.4.1), but got tag {(ulong)tag}.");
+        }
+
+        string rfc3339 = reader.ReadTextString();
+        return DateTimeOffset.Parse(rfc3339, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+    }
 
 
     /// <summary>
@@ -724,10 +805,7 @@ public static class CBAdESSerialization
         writer.WriteStartArray(thumbprints.Thumbprints.Count);
         foreach(CBAdESCertificateThumbprint thumbprint in thumbprints.Thumbprints)
         {
-            writer.WriteStartArray(2);
-            WriteDigestAlgorithmIdentifier(writer, thumbprint.HashAlgorithm);
-            writer.WriteByteString(thumbprint.Digest.AsReadOnlySpan());
-            writer.WriteEndArray();
+            WriteHashAlgorithmDigestPair(writer, thumbprint.HashAlgorithm, thumbprint.Digest);
         }
 
         writer.WriteEndArray();
@@ -768,12 +846,7 @@ public static class CBAdESSerialization
             thumbprints = new List<CBAdESCertificateThumbprint>(Math.Min(count, 64));
             for(int i = 0; i < count; i++)
             {
-                reader.ReadStartArrayExpectLength(2);
-                CBAdESDigestAlgorithmIdentifier hashAlgorithm = ReadDigestAlgorithmIdentifier(reader);
-                byte[] digestBytes = reader.ReadByteString();
-                reader.ReadEndArray();
-
-                DigestValue digest = CreateDigestValue(digestBytes, hashAlgorithm, pool);
+                ReadHashAlgorithmDigestPair(reader, pool, out CBAdESDigestAlgorithmIdentifier hashAlgorithm, out DigestValue digest);
                 thumbprints.Add(new CBAdESCertificateThumbprint(hashAlgorithm, digest));
             }
 
@@ -1500,10 +1573,7 @@ public static class CBAdESSerialization
         WriteObjectIdentifier(writer, identifier.Id);
 
         writer.WriteInt32(CBAdESSignaturePolicyIdentifier.DigAlgValKey);
-        writer.WriteStartArray(2);
-        WriteDigestAlgorithmIdentifier(writer, identifier.HashAlgorithm);
-        writer.WriteByteString(identifier.Digest.AsReadOnlySpan());
-        writer.WriteEndArray();
+        WriteHashAlgorithmDigestPair(writer, identifier.HashAlgorithm, identifier.Digest);
 
         //CB-5.2.7-11: absence of digPSp is equivalent to false, so the default is omitted from the wire.
         if(identifier.DigestIsPerSpecification)
@@ -1720,12 +1790,9 @@ public static class CBAdESSerialization
 
         static bool AssignDigAlgVal(CborReader reader, BaseMemoryPool pool, ref CBAdESDigestAlgorithmIdentifier? hashAlgorithm, ref DigestValue? digest)
         {
-            reader.ReadStartArrayExpectLength(2);
-            hashAlgorithm = ReadDigestAlgorithmIdentifier(reader);
-            byte[] digestBytes = reader.ReadByteString();
-            reader.ReadEndArray();
-
-            digest = CreateDigestValue(digestBytes, hashAlgorithm, pool);
+            ReadHashAlgorithmDigestPair(reader, pool, out CBAdESDigestAlgorithmIdentifier algorithm, out DigestValue value);
+            hashAlgorithm = algorithm;
+            digest = value;
             return true;
         }
 
@@ -2158,5 +2225,1934 @@ public static class CBAdESSerialization
                 return null;
             }
         }
+    }
+
+
+    /// <summary>
+    /// Encodes the <c>sigPSt</c> unsigned header parameter (<see cref="CBAdESSignaturePolicyStore"/>, label
+    /// <see cref="CBAdESUnsignedHeaderElement.SignaturePolicyStoreLabel"/>) to canonical CBOR.
+    /// </summary>
+    /// <param name="signaturePolicyStore">The value to encode.</param>
+    /// <param name="pool">The memory pool the returned carrier's buffer is rented from.</param>
+    /// <returns>The pool-rented, tagged carrier for the encoded <c>sigPSt</c> map.</returns>
+    /// <remarks>
+    /// See <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
+    /// ETSI TS 119 152-1 V1.1.1, clause 5.3.2, Table 9</see>.
+    /// </remarks>
+    public static PooledMemory EncodeSignaturePolicyStore(CBAdESSignaturePolicyStore signaturePolicyStore, BaseMemoryPool pool)
+    {
+        ArgumentNullException.ThrowIfNull(signaturePolicyStore);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        var writer = new CborWriter(CborConformanceMode.Canonical);
+        WriteSignaturePolicyStore(writer, signaturePolicyStore);
+
+        return PooledMemory.FromBytes(writer.Encode(), pool, ComponentTag);
+    }
+
+
+    /// <summary>
+    /// Parses canonical CBOR bytes into the <c>sigPSt</c> unsigned header parameter
+    /// (<see cref="CBAdESSignaturePolicyStore"/>). Fails closed: malformed or non-conformant input returns
+    /// <see langword="false"/>, never throws.
+    /// </summary>
+    /// <param name="encoded">The encoded <c>sigPSt</c> map bytes.</param>
+    /// <param name="result">The parsed value on success; <see langword="null"/> on failure.</param>
+    /// <returns><see langword="true"/> on success; otherwise, <see langword="false"/>.</returns>
+    /// <remarks>
+    /// See <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
+    /// ETSI TS 119 152-1 V1.1.1, clause 5.3.2, Table 9</see>.
+    /// </remarks>
+    public static bool TryParseSignaturePolicyStore(ReadOnlyMemory<byte> encoded, out CBAdESSignaturePolicyStore? result)
+    {
+        try
+        {
+            var reader = new CborReader(encoded, CborConformanceMode.Canonical);
+            result = ReadSignaturePolicyStore(reader);
+            if(reader.BytesRemaining != 0)
+            {
+                result = null;
+                return false;
+            }
+
+            return true;
+        }
+        catch(Exception ex) when(IsFailClosedParseException(ex))
+        {
+            result = null;
+            return false;
+        }
+    }
+
+
+    /// <summary>
+    /// Writes a <c>sigPSt</c> map (clause 5.3.2, Table 9) to <paramref name="writer"/>.
+    /// </summary>
+    /// <param name="writer">The CBOR writer.</param>
+    /// <param name="signaturePolicyStore">The value to write.</param>
+    private static void WriteSignaturePolicyStore(CborWriter writer, CBAdESSignaturePolicyStore signaturePolicyStore)
+    {
+        int memberCount = 1 + (signaturePolicyStore.SpDSpec is not null ? 1 : 0);
+        writer.WriteStartMap(memberCount);
+
+        writer.WriteInt32(CBAdESSignaturePolicyStore.DocOrLocalUriKey);
+        WriteSignaturePolicyStoreContent(writer, signaturePolicyStore.Content);
+
+        if(signaturePolicyStore.SpDSpec is not null)
+        {
+            writer.WriteInt32(CBAdESSignaturePolicyStore.SpDSpecKey);
+            WriteObjectIdentifier(writer, signaturePolicyStore.SpDSpec);
+        }
+
+        writer.WriteEndMap();
+    }
+
+
+    /// <summary>
+    /// Writes a <c>DocOrLocalURI</c> one-entry map (clause 5.3.2) to <paramref name="writer"/> — the exclusive
+    /// choice between the signature policy document itself and a local-store URI.
+    /// </summary>
+    /// <param name="writer">The CBOR writer.</param>
+    /// <param name="content">The value to write.</param>
+    /// <exception cref="NotSupportedException">Thrown when <paramref name="content"/> is an unknown arm.</exception>
+    private static void WriteSignaturePolicyStoreContent(CborWriter writer, CBAdESSignaturePolicyStoreContent content)
+    {
+        writer.WriteStartMap(1);
+
+        _ = content switch
+        {
+            CBAdESSignaturePolicyStoreDocument document => WriteDocument(writer, document),
+            CBAdESSignaturePolicyStoreLocalUri localUri => WriteLocalUri(writer, localUri),
+            _ => throw new NotSupportedException($"Unknown DocOrLocalURI arm '{content.GetType()}'.")
+        };
+
+        writer.WriteEndMap();
+
+        static bool WriteDocument(CborWriter writer, CBAdESSignaturePolicyStoreDocument document)
+        {
+            writer.WriteInt32(CBAdESSignaturePolicyStoreContent.SigPolDocKey);
+            writer.WriteByteString(document.Document.Span);
+            return true;
+        }
+
+        static bool WriteLocalUri(CborWriter writer, CBAdESSignaturePolicyStoreLocalUri localUri)
+        {
+            writer.WriteInt32(CBAdESSignaturePolicyStoreContent.SigPolLocalUriKey);
+            writer.WriteUri(localUri.Location);
+            return true;
+        }
+    }
+
+
+    /// <summary>
+    /// Reads a <c>sigPSt</c> map (clause 5.3.2, Table 9) from <paramref name="reader"/>.
+    /// </summary>
+    /// <param name="reader">The CBOR reader.</param>
+    /// <returns>The parsed value.</returns>
+    /// <exception cref="CborContentException">
+    /// Thrown when the map is malformed or the required <c>docOrLocalUri</c> member is absent.
+    /// </exception>
+    private static CBAdESSignaturePolicyStore ReadSignaturePolicyStore(CborReader reader)
+    {
+        int count = reader.ReadStartMapExpectLengthRange(1, 2);
+
+        CBAdESSignaturePolicyStoreContent? content = null;
+        CBAdESObjectIdentifier? spDSpec = null;
+        int previousKey = 0;
+
+        for(int i = 0; i < count; i++)
+        {
+            int key = reader.ReadAscendingMapKey(ref previousKey);
+
+            _ = key switch
+            {
+                CBAdESSignaturePolicyStore.DocOrLocalUriKey => AssignContent(reader, ref content),
+                CBAdESSignaturePolicyStore.SpDSpecKey => AssignSpDSpec(reader, ref spDSpec),
+                _ => throw new CborContentException($"Unknown sigPSt map key {key}.")
+            };
+        }
+
+        reader.ReadEndMap();
+
+        if(content is null)
+        {
+            throw new CborContentException("sigPSt requires the 'docOrLocalUri' (map key 1) member.");
+        }
+
+        return new CBAdESSignaturePolicyStore(content, spDSpec);
+
+        static bool AssignContent(CborReader reader, ref CBAdESSignaturePolicyStoreContent? content)
+        {
+            content = ReadSignaturePolicyStoreContent(reader);
+            return true;
+        }
+
+        static bool AssignSpDSpec(CborReader reader, ref CBAdESObjectIdentifier? spDSpec)
+        {
+            spDSpec = ReadObjectIdentifier(reader);
+            return true;
+        }
+    }
+
+
+    /// <summary>
+    /// Reads a <c>DocOrLocalURI</c> one-entry map (clause 5.3.2) from <paramref name="reader"/>. The printed
+    /// CDDL carries a stray comma after the group's second arm (leg-3 preflight trap); this method reads the
+    /// prose's "either ... or ..." (CB-5.3.2-01) as an exclusive choice — exactly one entry, never both and
+    /// never neither — enforced structurally by requiring the map length to be exactly 1.
+    /// </summary>
+    /// <param name="reader">The CBOR reader.</param>
+    /// <returns>The parsed value.</returns>
+    /// <exception cref="CborContentException">Thrown when the map key is not a known choice arm.</exception>
+    private static CBAdESSignaturePolicyStoreContent ReadSignaturePolicyStoreContent(CborReader reader)
+    {
+        _ = reader.ReadStartMapExpectLength(1);
+        int key = reader.ReadInt32();
+
+        CBAdESSignaturePolicyStoreContent result = key switch
+        {
+            CBAdESSignaturePolicyStoreContent.SigPolDocKey => new CBAdESSignaturePolicyStoreDocument(reader.ReadByteString()),
+            CBAdESSignaturePolicyStoreContent.SigPolLocalUriKey => new CBAdESSignaturePolicyStoreLocalUri(reader.ReadUri()),
+            _ => throw new CborContentException($"Unknown DocOrLocalURI map key {key}.")
+        };
+
+        reader.ReadEndMap();
+        return result;
+    }
+
+
+    /// <summary>
+    /// Encodes the <c>valData</c> unsigned header parameter (<see cref="CBAdESValidationData"/>, label
+    /// <see cref="CBAdESUnsignedHeaderElement.ValidationDataLabel"/>) to canonical CBOR.
+    /// </summary>
+    /// <param name="validationData">The value to encode.</param>
+    /// <param name="pool">The memory pool the returned carrier's buffer is rented from.</param>
+    /// <returns>The pool-rented, tagged carrier for the encoded <c>valData</c> map.</returns>
+    /// <remarks>
+    /// See <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
+    /// ETSI TS 119 152-1 V1.1.1, clause 5.3.4, Table 10</see>.
+    /// </remarks>
+    public static PooledMemory EncodeValidationData(CBAdESValidationData validationData, BaseMemoryPool pool)
+    {
+        ArgumentNullException.ThrowIfNull(validationData);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        var writer = new CborWriter(CborConformanceMode.Canonical);
+        WriteValidationData(writer, validationData);
+
+        return PooledMemory.FromBytes(writer.Encode(), pool, ComponentTag);
+    }
+
+
+    /// <summary>
+    /// Parses canonical CBOR bytes into the <c>valData</c> unsigned header parameter
+    /// (<see cref="CBAdESValidationData"/>). Fails closed: malformed, non-conformant, or empty-map
+    /// (CB-5.3.4-01/02/03) input returns <see langword="false"/>, never throws.
+    /// </summary>
+    /// <param name="encoded">The encoded <c>valData</c> map bytes.</param>
+    /// <param name="result">The parsed value on success; <see langword="null"/> on failure.</param>
+    /// <returns><see langword="true"/> on success; otherwise, <see langword="false"/>.</returns>
+    /// <remarks>
+    /// See <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
+    /// ETSI TS 119 152-1 V1.1.1, clause 5.3.4, Table 10</see>.
+    /// </remarks>
+    public static bool TryParseValidationData(ReadOnlyMemory<byte> encoded, out CBAdESValidationData? result)
+    {
+        try
+        {
+            var reader = new CborReader(encoded, CborConformanceMode.Canonical);
+            result = ReadValidationData(reader);
+            if(reader.BytesRemaining != 0)
+            {
+                result = null;
+                return false;
+            }
+
+            return true;
+        }
+        catch(Exception ex) when(IsFailClosedParseException(ex))
+        {
+            result = null;
+            return false;
+        }
+    }
+
+
+    /// <summary>
+    /// Writes a <c>valData</c> map (clause 5.3.4, Table 10) to <paramref name="writer"/>.
+    /// </summary>
+    /// <param name="writer">The CBOR writer.</param>
+    /// <param name="validationData">The value to write.</param>
+    private static void WriteValidationData(CborWriter writer, CBAdESValidationData validationData)
+    {
+        int memberCount = (validationData.CertificateValues is not null ? 1 : 0)
+            + (validationData.RevocationValues is not null ? 1 : 0);
+
+        writer.WriteStartMap(memberCount);
+
+        if(validationData.CertificateValues is not null)
+        {
+            writer.WriteInt32(CBAdESValidationData.XValsKey);
+            writer.WriteStartArray(validationData.CertificateValues.Count);
+            foreach(CBAdESX509OrOtherCertificate certificate in validationData.CertificateValues)
+            {
+                WriteX509OrOtherCertificate(writer, certificate);
+            }
+
+            writer.WriteEndArray();
+        }
+
+        if(validationData.RevocationValues is not null)
+        {
+            writer.WriteInt32(CBAdESValidationData.RValsKey);
+            WriteRevocationValues(writer, validationData.RevocationValues);
+        }
+
+        writer.WriteEndMap();
+    }
+
+
+    /// <summary>
+    /// Writes an <c>X509OrOther</c> one-entry map (clause 5.3.4, Table 10) to <paramref name="writer"/>.
+    /// </summary>
+    /// <param name="writer">The CBOR writer.</param>
+    /// <param name="certificate">The value to write.</param>
+    /// <exception cref="NotSupportedException">Thrown when <paramref name="certificate"/> is an unknown arm.</exception>
+    private static void WriteX509OrOtherCertificate(CborWriter writer, CBAdESX509OrOtherCertificate certificate)
+    {
+        (int key, CBAdESPkiObject pkiObject) = certificate switch
+        {
+            CBAdESX509Certificate x509 => (CBAdESX509OrOtherCertificate.X509CertKey, x509.Certificate),
+            CBAdESOtherCertificate other => (CBAdESX509OrOtherCertificate.OtherCertKey, other.Certificate),
+            _ => throw new NotSupportedException($"Unknown X509OrOther arm '{certificate.GetType()}'.")
+        };
+
+        writer.WriteStartMap(1);
+        writer.WriteInt32(key);
+        WritePkiObject(writer, pkiObject);
+        writer.WriteEndMap();
+    }
+
+
+    /// <summary>
+    /// Writes an <c>rVals</c> map (clause 5.3.4, Table 10) to <paramref name="writer"/>.
+    /// </summary>
+    /// <param name="writer">The CBOR writer.</param>
+    /// <param name="revocationValues">The value to write.</param>
+    private static void WriteRevocationValues(CborWriter writer, CBAdESRevocationValues revocationValues)
+    {
+        int memberCount = (revocationValues.CrlValues is not null ? 1 : 0)
+            + (revocationValues.OcspValues is not null ? 1 : 0)
+            + (revocationValues.OtherValues is not null ? 1 : 0);
+
+        writer.WriteStartMap(memberCount);
+
+        if(revocationValues.CrlValues is not null)
+        {
+            writer.WriteInt32(CBAdESRevocationValues.CrlValsKey);
+            WritePkiObjectArray(writer, revocationValues.CrlValues);
+        }
+
+        if(revocationValues.OcspValues is not null)
+        {
+            writer.WriteInt32(CBAdESRevocationValues.OcspValsKey);
+            WritePkiObjectArray(writer, revocationValues.OcspValues);
+        }
+
+        if(revocationValues.OtherValues is not null)
+        {
+            writer.WriteInt32(CBAdESRevocationValues.OtherValsKey);
+            WritePkiObjectArray(writer, revocationValues.OtherValues);
+        }
+
+        writer.WriteEndMap();
+
+        static void WritePkiObjectArray(CborWriter writer, IReadOnlyList<CBAdESPkiObject> pkiObjects)
+        {
+            writer.WriteStartArray(pkiObjects.Count);
+            foreach(CBAdESPkiObject pkiObject in pkiObjects)
+            {
+                WritePkiObject(writer, pkiObject);
+            }
+
+            writer.WriteEndArray();
+        }
+    }
+
+
+    /// <summary>
+    /// Reads a <c>valData</c> map (clause 5.3.4, Table 10) from <paramref name="reader"/>. No disposable
+    /// resources are owned by any member of the returned value (every <c>pkiOb</c> carries only borrowed
+    /// bytes), so no partial-failure disposal is required here.
+    /// </summary>
+    /// <param name="reader">The CBOR reader.</param>
+    /// <returns>The parsed value.</returns>
+    /// <exception cref="CborContentException">Thrown when the map is malformed.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the parsed content violates <see cref="CBAdESValidationData"/>'s construction invariants
+    /// (CB-5.3.4-01/02/03).
+    /// </exception>
+    private static CBAdESValidationData ReadValidationData(CborReader reader)
+    {
+        int count = reader.ReadStartMapExpectLengthRange(1, 2);
+
+        List<CBAdESX509OrOtherCertificate>? certificateValues = null;
+        CBAdESRevocationValues? revocationValues = null;
+        int previousKey = 0;
+
+        for(int i = 0; i < count; i++)
+        {
+            int key = reader.ReadAscendingMapKey(ref previousKey);
+
+            _ = key switch
+            {
+                CBAdESValidationData.XValsKey => AssignCertificateValues(reader, ref certificateValues),
+                CBAdESValidationData.RValsKey => AssignRevocationValues(reader, ref revocationValues),
+                _ => throw new CborContentException($"Unknown valData map key {key}.")
+            };
+        }
+
+        reader.ReadEndMap();
+
+        return new CBAdESValidationData(certificateValues, revocationValues);
+
+        static bool AssignCertificateValues(CborReader reader, ref List<CBAdESX509OrOtherCertificate>? certificateValues)
+        {
+            int entryCount = reader.ReadStartArrayExpectLengthRange(1, int.MaxValue);
+            var entries = new List<CBAdESX509OrOtherCertificate>(Math.Min(entryCount, 64));
+            for(int i = 0; i < entryCount; i++)
+            {
+                entries.Add(ReadX509OrOtherCertificate(reader));
+            }
+
+            reader.ReadEndArray();
+            certificateValues = entries;
+            return true;
+        }
+
+        static bool AssignRevocationValues(CborReader reader, ref CBAdESRevocationValues? revocationValues)
+        {
+            revocationValues = ReadRevocationValues(reader);
+            return true;
+        }
+    }
+
+
+    /// <summary>
+    /// Reads an <c>X509OrOther</c> one-entry map (clause 5.3.4, Table 10) from <paramref name="reader"/>.
+    /// </summary>
+    /// <param name="reader">The CBOR reader.</param>
+    /// <returns>The parsed value.</returns>
+    /// <exception cref="CborContentException">Thrown when the map key is not a known choice arm.</exception>
+    private static CBAdESX509OrOtherCertificate ReadX509OrOtherCertificate(CborReader reader)
+    {
+        _ = reader.ReadStartMapExpectLength(1);
+        int key = reader.ReadInt32();
+        CBAdESPkiObject pkiObject = ReadPkiObject(reader);
+        reader.ReadEndMap();
+
+        return key switch
+        {
+            CBAdESX509OrOtherCertificate.X509CertKey => new CBAdESX509Certificate(pkiObject),
+            CBAdESX509OrOtherCertificate.OtherCertKey => new CBAdESOtherCertificate(pkiObject),
+            _ => throw new CborContentException($"Unknown X509OrOther map key {key}.")
+        };
+    }
+
+
+    /// <summary>
+    /// Reads an <c>rVals</c> map (clause 5.3.4, Table 10) from <paramref name="reader"/>.
+    /// </summary>
+    /// <param name="reader">The CBOR reader.</param>
+    /// <returns>The parsed value.</returns>
+    /// <exception cref="CborContentException">Thrown when the map is malformed.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the parsed content violates <see cref="CBAdESRevocationValues"/>'s construction invariants
+    /// (CB-5.3.4-05/06/09).
+    /// </exception>
+    private static CBAdESRevocationValues ReadRevocationValues(CborReader reader)
+    {
+        int count = reader.ReadStartMapExpectLengthRange(1, 3);
+
+        List<CBAdESPkiObject>? crlValues = null;
+        List<CBAdESPkiObject>? ocspValues = null;
+        List<CBAdESPkiObject>? otherValues = null;
+        int previousKey = 0;
+
+        for(int i = 0; i < count; i++)
+        {
+            int key = reader.ReadAscendingMapKey(ref previousKey);
+
+            _ = key switch
+            {
+                CBAdESRevocationValues.CrlValsKey => AssignPkiObjects(reader, ref crlValues),
+                CBAdESRevocationValues.OcspValsKey => AssignPkiObjects(reader, ref ocspValues),
+                CBAdESRevocationValues.OtherValsKey => AssignPkiObjects(reader, ref otherValues),
+                _ => throw new CborContentException($"Unknown rVals map key {key}.")
+            };
+        }
+
+        reader.ReadEndMap();
+
+        return new CBAdESRevocationValues(crlValues, ocspValues, otherValues);
+
+        static bool AssignPkiObjects(CborReader reader, ref List<CBAdESPkiObject>? values)
+        {
+            int entryCount = reader.ReadStartArrayExpectLengthRange(1, int.MaxValue);
+            var entries = new List<CBAdESPkiObject>(Math.Min(entryCount, 64));
+            for(int i = 0; i < entryCount; i++)
+            {
+                entries.Add(ReadPkiObject(reader));
+            }
+
+            reader.ReadEndArray();
+            values = entries;
+            return true;
+        }
+    }
+
+
+    /// <summary>
+    /// Encodes the <c>refs</c> unsigned header parameter (<see cref="CBAdESReferences"/>, label
+    /// <see cref="CBAdESUnsignedHeaderElement.ReferencesLabel"/>) to canonical CBOR.
+    /// </summary>
+    /// <param name="references">The value to encode.</param>
+    /// <param name="pool">The memory pool the returned carrier's buffer is rented from.</param>
+    /// <returns>The pool-rented, tagged carrier for the encoded <c>refs</c> map.</returns>
+    /// <remarks>
+    /// See <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
+    /// ETSI TS 119 152-1 V1.1.1, Annex A.1.1, Table A.1</see>.
+    /// </remarks>
+    public static PooledMemory EncodeReferences(CBAdESReferences references, BaseMemoryPool pool)
+    {
+        ArgumentNullException.ThrowIfNull(references);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        var writer = new CborWriter(CborConformanceMode.Canonical);
+        WriteReferences(writer, references);
+
+        return PooledMemory.FromBytes(writer.Encode(), pool, ComponentTag);
+    }
+
+
+    /// <summary>
+    /// Parses canonical CBOR bytes into the <c>refs</c> unsigned header parameter
+    /// (<see cref="CBAdESReferences"/>). Fails closed: malformed, non-conformant, or empty-map
+    /// (CB-A.1.1-04/05/09) input returns <see langword="false"/>, never throws; every digest already
+    /// constructed before a later failure is disposed before returning.
+    /// </summary>
+    /// <param name="encoded">The encoded <c>refs</c> map bytes.</param>
+    /// <param name="pool">The memory pool each entry's digest buffer is rented from.</param>
+    /// <param name="result">The parsed value on success; <see langword="null"/> on failure.</param>
+    /// <returns><see langword="true"/> on success; otherwise, <see langword="false"/>.</returns>
+    /// <remarks>
+    /// See <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
+    /// ETSI TS 119 152-1 V1.1.1, Annex A.1.1, Table A.1</see>.
+    /// </remarks>
+    public static bool TryParseReferences(ReadOnlyMemory<byte> encoded, BaseMemoryPool pool, out CBAdESReferences? result)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+
+        try
+        {
+            var reader = new CborReader(encoded, CborConformanceMode.Canonical);
+            result = ReadReferences(reader, pool);
+            if(reader.BytesRemaining != 0)
+            {
+                result.Dispose();
+                result = null;
+                return false;
+            }
+
+            return true;
+        }
+        catch(Exception ex) when(IsFailClosedParseException(ex))
+        {
+            result = null;
+            return false;
+        }
+    }
+
+
+    /// <summary>
+    /// Writes a <c>refs</c> map (Annex A.1.1, Table A.1) to <paramref name="writer"/>.
+    /// </summary>
+    /// <param name="writer">The CBOR writer.</param>
+    /// <param name="references">The value to write.</param>
+    private static void WriteReferences(CborWriter writer, CBAdESReferences references)
+    {
+        int memberCount = (references.CertificateReferences is not null ? 1 : 0)
+            + (references.RevocationReferences is not null ? 1 : 0);
+
+        writer.WriteStartMap(memberCount);
+
+        if(references.CertificateReferences is not null)
+        {
+            writer.WriteInt32(CBAdESReferences.CertificateReferencesKey);
+            writer.WriteStartArray(references.CertificateReferences.Count);
+            foreach(CBAdESCertificateReference certificateReference in references.CertificateReferences)
+            {
+                WriteCertId(writer, certificateReference);
+            }
+
+            writer.WriteEndArray();
+        }
+
+        if(references.RevocationReferences is not null)
+        {
+            writer.WriteInt32(CBAdESReferences.RevocationReferencesKey);
+            WriteRevocationReferences(writer, references.RevocationReferences);
+        }
+
+        writer.WriteEndMap();
+    }
+
+
+    /// <summary>
+    /// Writes a <c>CertId</c> map (Annex A.1.1, Table A.1) to <paramref name="writer"/>. <c>x5t</c> reuses the
+    /// same <c>COSE_CertHash</c> shape <see cref="EncodeCertificateThumbprints"/> writes for <c>x5ts</c>
+    /// (<see cref="WriteHashAlgorithmDigestPair"/>).
+    /// </summary>
+    /// <param name="writer">The CBOR writer.</param>
+    /// <param name="certificateReference">The value to write.</param>
+    private static void WriteCertId(CborWriter writer, CBAdESCertificateReference certificateReference)
+    {
+        int memberCount = 1
+            + (certificateReference.KeyIdentifier is not null ? 1 : 0)
+            + (certificateReference.LocationHint is not null ? 1 : 0);
+
+        writer.WriteStartMap(memberCount);
+
+        writer.WriteInt32(CBAdESCertificateReference.ThumbprintKey);
+        WriteHashAlgorithmDigestPair(writer, certificateReference.Thumbprint.HashAlgorithm, certificateReference.Thumbprint.Digest);
+
+        if(certificateReference.KeyIdentifier is not null)
+        {
+            writer.WriteInt32(CBAdESCertificateReference.KeyIdentifierKey);
+            WriteKeyIdentifier(writer, certificateReference.KeyIdentifier);
+        }
+
+        if(certificateReference.LocationHint is not null)
+        {
+            writer.WriteInt32(CBAdESCertificateReference.LocationHintKey);
+            writer.WriteUri(certificateReference.LocationHint);
+        }
+
+        writer.WriteEndMap();
+    }
+
+
+    /// <summary>
+    /// Writes the <c>kid</c> member's <c>int / tstr / bstr</c> CDDL union (Annex A.1.1, <c>CertId</c>) to
+    /// <paramref name="writer"/>.
+    /// </summary>
+    /// <param name="writer">The CBOR writer.</param>
+    /// <param name="keyIdentifier">The value to write.</param>
+    /// <exception cref="NotSupportedException">Thrown when <paramref name="keyIdentifier"/> is an unknown arm.</exception>
+    private static void WriteKeyIdentifier(CborWriter writer, CBAdESCertificateReferenceKeyIdentifier keyIdentifier)
+    {
+        _ = keyIdentifier switch
+        {
+            CBAdESCertificateReferenceKeyIdentifierInteger integerIdentifier => WriteIntegerIdentifier(writer, integerIdentifier),
+            CBAdESCertificateReferenceKeyIdentifierText textIdentifier => WriteTextIdentifier(writer, textIdentifier),
+            CBAdESCertificateReferenceKeyIdentifierBytes bytesIdentifier => WriteBytesIdentifier(writer, bytesIdentifier),
+            _ => throw new NotSupportedException($"Unknown kid arm '{keyIdentifier.GetType()}'.")
+        };
+
+        static bool WriteIntegerIdentifier(CborWriter writer, CBAdESCertificateReferenceKeyIdentifierInteger integerIdentifier)
+        {
+            writer.WriteInt32(integerIdentifier.Value);
+            return true;
+        }
+
+        static bool WriteTextIdentifier(CborWriter writer, CBAdESCertificateReferenceKeyIdentifierText textIdentifier)
+        {
+            writer.WriteTextString(textIdentifier.Value);
+            return true;
+        }
+
+        static bool WriteBytesIdentifier(CborWriter writer, CBAdESCertificateReferenceKeyIdentifierBytes bytesIdentifier)
+        {
+            writer.WriteByteString(bytesIdentifier.Value.Span);
+            return true;
+        }
+    }
+
+
+    /// <summary>
+    /// Writes an <c>rRefs</c> map (Annex A.1.1, Table A.1) to <paramref name="writer"/>.
+    /// </summary>
+    /// <param name="writer">The CBOR writer.</param>
+    /// <param name="revocationReferences">The value to write.</param>
+    private static void WriteRevocationReferences(CborWriter writer, CBAdESRevocationReferences revocationReferences)
+    {
+        int memberCount = (revocationReferences.CrlReferences is not null ? 1 : 0)
+            + (revocationReferences.OcspReferences is not null ? 1 : 0)
+            + (revocationReferences.OtherReferences is not null ? 1 : 0);
+
+        writer.WriteStartMap(memberCount);
+
+        if(revocationReferences.CrlReferences is not null)
+        {
+            writer.WriteInt32(CBAdESRevocationReferences.CrlReferencesKey);
+            writer.WriteStartArray(revocationReferences.CrlReferences.Count);
+            foreach(CBAdESCrlReference crlReference in revocationReferences.CrlReferences)
+            {
+                WriteCrlRef(writer, crlReference);
+            }
+
+            writer.WriteEndArray();
+        }
+
+        if(revocationReferences.OcspReferences is not null)
+        {
+            writer.WriteInt32(CBAdESRevocationReferences.OcspReferencesKey);
+            writer.WriteStartArray(revocationReferences.OcspReferences.Count);
+            foreach(CBAdESOcspReference ocspReference in revocationReferences.OcspReferences)
+            {
+                WriteOcspRef(writer, ocspReference);
+            }
+
+            writer.WriteEndArray();
+        }
+
+        if(revocationReferences.OtherReferences is not null)
+        {
+            writer.WriteInt32(CBAdESRevocationReferences.OtherReferencesKey);
+            writer.WriteStartArray(revocationReferences.OtherReferences.Count);
+            foreach(ReadOnlyMemory<byte> otherReference in revocationReferences.OtherReferences)
+            {
+                writer.WriteEncodedValue(otherReference.Span);
+            }
+
+            writer.WriteEndArray();
+        }
+
+        writer.WriteEndMap();
+    }
+
+
+    /// <summary>
+    /// Writes a <c>CRLRef</c> map (Annex A.1.1, Table A.1) to <paramref name="writer"/>.
+    /// </summary>
+    /// <param name="writer">The CBOR writer.</param>
+    /// <param name="crlReference">The value to write.</param>
+    private static void WriteCrlRef(CborWriter writer, CBAdESCrlReference crlReference)
+    {
+        int memberCount = 1 + (crlReference.CrlIdentifier is not null ? 1 : 0);
+        writer.WriteStartMap(memberCount);
+
+        writer.WriteInt32(CBAdESCrlReference.DigAlgValKey);
+        WriteHashAlgorithmDigestPair(writer, crlReference.HashAlgorithm, crlReference.Digest);
+
+        if(crlReference.CrlIdentifier is not null)
+        {
+            writer.WriteInt32(CBAdESCrlReference.CrlIdentifierKey);
+            WriteCrlId(writer, crlReference.CrlIdentifier);
+        }
+
+        writer.WriteEndMap();
+    }
+
+
+    /// <summary>
+    /// Writes a <c>CRLId</c> map (Annex A.1.1, Table A.1) to <paramref name="writer"/>.
+    /// </summary>
+    /// <param name="writer">The CBOR writer.</param>
+    /// <param name="crlIdentifier">The value to write.</param>
+    private static void WriteCrlId(CborWriter writer, CBAdESCrlIdentifier crlIdentifier)
+    {
+        int memberCount = 2
+            + (crlIdentifier.Number is not null ? 1 : 0)
+            + (crlIdentifier.LocationHint is not null ? 1 : 0);
+
+        writer.WriteStartMap(memberCount);
+
+        writer.WriteInt32(CBAdESCrlIdentifier.IssuerKey);
+        writer.WriteByteString(crlIdentifier.Issuer.Span);
+
+        writer.WriteInt32(CBAdESCrlIdentifier.IssueTimeKey);
+        WriteTDate(writer, crlIdentifier.IssueTime);
+
+        if(crlIdentifier.Number is not null)
+        {
+            writer.WriteInt32(CBAdESCrlIdentifier.NumberKey);
+            writer.WriteUInt64(crlIdentifier.Number.Value);
+        }
+
+        if(crlIdentifier.LocationHint is not null)
+        {
+            writer.WriteInt32(CBAdESCrlIdentifier.LocationHintKey);
+            writer.WriteUri(crlIdentifier.LocationHint);
+        }
+
+        writer.WriteEndMap();
+    }
+
+
+    /// <summary>
+    /// Writes an <c>OCSPRef</c> map (Annex A.1.1, Table A.1) to <paramref name="writer"/>.
+    /// </summary>
+    /// <param name="writer">The CBOR writer.</param>
+    /// <param name="ocspReference">The value to write.</param>
+    private static void WriteOcspRef(CborWriter writer, CBAdESOcspReference ocspReference)
+    {
+        writer.WriteStartMap(2);
+
+        writer.WriteInt32(CBAdESOcspReference.DigAlgValKey);
+        WriteHashAlgorithmDigestPair(writer, ocspReference.HashAlgorithm, ocspReference.Digest);
+
+        writer.WriteInt32(CBAdESOcspReference.OcspIdentifierKey);
+        WriteOcspId(writer, ocspReference.OcspIdentifier);
+
+        writer.WriteEndMap();
+    }
+
+
+    /// <summary>
+    /// Writes an <c>OCSPId</c> map (Annex A.1.1, Table A.1) to <paramref name="writer"/>.
+    /// </summary>
+    /// <param name="writer">The CBOR writer.</param>
+    /// <param name="ocspIdentifier">The value to write.</param>
+    private static void WriteOcspId(CborWriter writer, CBAdESOcspIdentifier ocspIdentifier)
+    {
+        int memberCount = 2 + (ocspIdentifier.LocationHint is not null ? 1 : 0);
+        writer.WriteStartMap(memberCount);
+
+        writer.WriteInt32(CBAdESOcspIdentifier.ResponderKey);
+        WriteResponderId(writer, ocspIdentifier.Responder);
+
+        writer.WriteInt32(CBAdESOcspIdentifier.ProducedAtKey);
+        WriteTDate(writer, ocspIdentifier.ProducedAt);
+
+        if(ocspIdentifier.LocationHint is not null)
+        {
+            writer.WriteInt32(CBAdESOcspIdentifier.LocationHintKey);
+            writer.WriteUri(ocspIdentifier.LocationHint);
+        }
+
+        writer.WriteEndMap();
+    }
+
+
+    /// <summary>
+    /// Writes a <c>ResponderIdChoice</c> one-entry map (Annex A.1.1) to <paramref name="writer"/>.
+    /// </summary>
+    /// <param name="writer">The CBOR writer.</param>
+    /// <param name="responder">The value to write.</param>
+    /// <exception cref="NotSupportedException">Thrown when <paramref name="responder"/> is an unknown arm.</exception>
+    /// <remarks>
+    /// <strong>D8 (contract R-6, RULED):</strong> the <c>responderIdByKey</c> arm writes the raw DER
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6960">IETF RFC 6960</see> <c>ResponderID.byKey</c>
+    /// (<c>KeyHash</c>) bytes directly into the <c>bstr</c> — no base64 step. See the D8 remarks on
+    /// <see cref="CBAdESOcspResponderIdentifierByKey"/> for the ruling.
+    /// </remarks>
+    private static void WriteResponderId(CborWriter writer, CBAdESOcspResponderIdentifier responder)
+    {
+        (int key, ReadOnlyMemory<byte> value) = responder switch
+        {
+            CBAdESOcspResponderIdentifierByName byName => (CBAdESOcspResponderIdentifier.ByNameKey, byName.Name),
+            CBAdESOcspResponderIdentifierByKey byKey => (CBAdESOcspResponderIdentifier.ByKeyKey, byKey.KeyDigest),
+            _ => throw new NotSupportedException($"Unknown ResponderIdChoice arm '{responder.GetType()}'.")
+        };
+
+        writer.WriteStartMap(1);
+        writer.WriteInt32(key);
+        writer.WriteByteString(value.Span);
+        writer.WriteEndMap();
+    }
+
+
+    /// <summary>
+    /// Reads a <c>refs</c> map (Annex A.1.1, Table A.1) from <paramref name="reader"/>. Disposal-safe: every
+    /// certificate-reference and revocation-reference digest already constructed is disposed before this
+    /// method rethrows on any later failure within the same map.
+    /// </summary>
+    /// <param name="reader">The CBOR reader.</param>
+    /// <param name="pool">The memory pool each entry's digest buffer is rented from.</param>
+    /// <returns>The parsed value.</returns>
+    /// <exception cref="CborContentException">Thrown when the map is malformed.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the parsed content violates <see cref="CBAdESReferences"/>'s construction invariants
+    /// (CB-A.1.1-04/05).
+    /// </exception>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "The enclosing try/catch disposes every already-accumulated certificate/revocation-reference digest before rethrowing on any failure; on success ownership of the returned CBAdESReferences transfers to the caller.")]
+    private static CBAdESReferences ReadReferences(CborReader reader, BaseMemoryPool pool)
+    {
+        int count = reader.ReadStartMapExpectLengthRange(1, 2);
+
+        List<CBAdESCertificateReference>? certificateReferences = null;
+        CBAdESRevocationReferences? revocationReferences = null;
+        int previousKey = 0;
+
+        try
+        {
+            for(int i = 0; i < count; i++)
+            {
+                int key = reader.ReadAscendingMapKey(ref previousKey);
+
+                _ = key switch
+                {
+                    CBAdESReferences.CertificateReferencesKey => AssignCertificateReferences(reader, pool, ref certificateReferences),
+                    CBAdESReferences.RevocationReferencesKey => AssignRevocationReferences(reader, pool, ref revocationReferences),
+                    _ => throw new CborContentException($"Unknown refs map key {key}.")
+                };
+            }
+
+            reader.ReadEndMap();
+
+            return new CBAdESReferences(certificateReferences, revocationReferences);
+        }
+        catch
+        {
+            DisposeAll(certificateReferences);
+            revocationReferences?.Dispose();
+            throw;
+        }
+
+        static void DisposeAll(List<CBAdESCertificateReference>? items)
+        {
+            if(items is null)
+            {
+                return;
+            }
+
+            foreach(CBAdESCertificateReference item in items)
+            {
+                item.Dispose();
+            }
+        }
+
+        static bool AssignCertificateReferences(CborReader reader, BaseMemoryPool pool, ref List<CBAdESCertificateReference>? certificateReferences)
+        {
+            int entryCount = reader.ReadStartArrayExpectLengthRange(1, int.MaxValue);
+            var entries = new List<CBAdESCertificateReference>(Math.Min(entryCount, 64));
+            certificateReferences = entries;
+            for(int i = 0; i < entryCount; i++)
+            {
+                entries.Add(ReadCertId(reader, pool));
+            }
+
+            reader.ReadEndArray();
+            return true;
+        }
+
+        static bool AssignRevocationReferences(CborReader reader, BaseMemoryPool pool, ref CBAdESRevocationReferences? revocationReferences)
+        {
+            revocationReferences = ReadRevocationReferences(reader, pool);
+            return true;
+        }
+    }
+
+
+    /// <summary>
+    /// Reads a <c>CertId</c> map (Annex A.1.1, Table A.1) from <paramref name="reader"/>. <c>x5t</c> reuses the
+    /// same <c>COSE_CertHash</c> shape <see cref="TryParseCertificateThumbprints"/> reads for <c>x5ts</c>
+    /// (<see cref="ReadHashAlgorithmDigestPair"/>). Disposal-safe: the in-flight <c>x5t</c> digest is disposed
+    /// before this method rethrows on any later failure within the same map.
+    /// </summary>
+    /// <param name="reader">The CBOR reader.</param>
+    /// <param name="pool">The memory pool the digest's buffer is rented from.</param>
+    /// <returns>The parsed value.</returns>
+    /// <exception cref="CborContentException">
+    /// Thrown when the map is malformed or the required <c>x5t</c> member is absent.
+    /// </exception>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "The enclosing try/catch disposes the in-flight x5t digest before rethrowing on any failure; on success ownership of the digest transfers into the returned CBAdESCertificateReference.")]
+    private static CBAdESCertificateReference ReadCertId(CborReader reader, BaseMemoryPool pool)
+    {
+        int count = reader.ReadStartMapExpectLengthRange(1, 3);
+
+        CBAdESDigestAlgorithmIdentifier? hashAlgorithm = null;
+        DigestValue? digest = null;
+        CBAdESCertificateReferenceKeyIdentifier? keyIdentifier = null;
+        Uri? locationHint = null;
+        int previousKey = 0;
+
+        try
+        {
+            for(int i = 0; i < count; i++)
+            {
+                int key = reader.ReadAscendingMapKey(ref previousKey);
+
+                _ = key switch
+                {
+                    CBAdESCertificateReference.ThumbprintKey => AssignThumbprint(reader, pool, ref hashAlgorithm, ref digest),
+                    CBAdESCertificateReference.KeyIdentifierKey => AssignKeyIdentifier(reader, ref keyIdentifier),
+                    CBAdESCertificateReference.LocationHintKey => AssignLocationHint(reader, ref locationHint),
+                    _ => throw new CborContentException($"Unknown CertId map key {key}.")
+                };
+            }
+
+            reader.ReadEndMap();
+
+            if(hashAlgorithm is null || digest is null)
+            {
+                throw new CborContentException("CertId requires the 'x5t' (map key 1) member.");
+            }
+
+            return new CBAdESCertificateReference(new CBAdESCertificateThumbprint(hashAlgorithm, digest), keyIdentifier, locationHint);
+        }
+        catch
+        {
+            digest?.Dispose();
+            throw;
+        }
+
+        static bool AssignThumbprint(
+            CborReader reader,
+            BaseMemoryPool pool,
+            ref CBAdESDigestAlgorithmIdentifier? hashAlgorithm,
+            ref DigestValue? digest)
+        {
+            ReadHashAlgorithmDigestPair(reader, pool, out CBAdESDigestAlgorithmIdentifier algorithm, out DigestValue value);
+            hashAlgorithm = algorithm;
+            digest = value;
+            return true;
+        }
+
+        static bool AssignKeyIdentifier(CborReader reader, ref CBAdESCertificateReferenceKeyIdentifier? keyIdentifier)
+        {
+            keyIdentifier = ReadKeyIdentifier(reader);
+            return true;
+        }
+
+        static bool AssignLocationHint(CborReader reader, ref Uri? locationHint)
+        {
+            locationHint = reader.ReadUri();
+            return true;
+        }
+    }
+
+
+    /// <summary>
+    /// Reads the <c>kid</c> member's <c>int / tstr / bstr</c> CDDL union (Annex A.1.1, <c>CertId</c>) from
+    /// <paramref name="reader"/>, selecting the arm from the wire's own major type.
+    /// </summary>
+    /// <param name="reader">The CBOR reader.</param>
+    /// <returns>The parsed value.</returns>
+    private static CBAdESCertificateReferenceKeyIdentifier ReadKeyIdentifier(CborReader reader)
+    {
+        return reader.PeekState() switch
+        {
+            CborReaderState.TextString => new CBAdESCertificateReferenceKeyIdentifierText(reader.ReadTextString()),
+            CborReaderState.ByteString => new CBAdESCertificateReferenceKeyIdentifierBytes(reader.ReadByteString()),
+            _ => new CBAdESCertificateReferenceKeyIdentifierInteger(reader.ReadInt32())
+        };
+    }
+
+
+    /// <summary>
+    /// Reads an <c>rRefs</c> map (Annex A.1.1, Table A.1) from <paramref name="reader"/>. Disposal-safe: every
+    /// CRL-reference and OCSP-reference digest already constructed is disposed before this method rethrows on
+    /// any later failure within the same map. <c>otherRefs</c> (leg-5 trap 3: the CDDL comment is a
+    /// spec-original copy-paste defect, NOT OCSP-only — see the remarks on <see cref="CBAdESRevocationReferences"/>)
+    /// is read as opaque, byte-exact raw CBOR items via <see cref="CborReader.ReadEncodedValue"/>.
+    /// </summary>
+    /// <param name="reader">The CBOR reader.</param>
+    /// <param name="pool">The memory pool each entry's digest buffer is rented from.</param>
+    /// <returns>The parsed value.</returns>
+    /// <exception cref="CborContentException">Thrown when the map is malformed.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the parsed content violates <see cref="CBAdESRevocationReferences"/>'s construction
+    /// invariants (CB-A.1.1-09/10/19).
+    /// </exception>
+    private static CBAdESRevocationReferences ReadRevocationReferences(CborReader reader, BaseMemoryPool pool)
+    {
+        int count = reader.ReadStartMapExpectLengthRange(1, 3);
+
+        List<CBAdESCrlReference>? crlReferences = null;
+        List<CBAdESOcspReference>? ocspReferences = null;
+        List<ReadOnlyMemory<byte>>? otherReferences = null;
+        int previousKey = 0;
+
+        try
+        {
+            for(int i = 0; i < count; i++)
+            {
+                int key = reader.ReadAscendingMapKey(ref previousKey);
+
+                _ = key switch
+                {
+                    CBAdESRevocationReferences.CrlReferencesKey => AssignCrlReferences(reader, pool, ref crlReferences),
+                    CBAdESRevocationReferences.OcspReferencesKey => AssignOcspReferences(reader, pool, ref ocspReferences),
+                    CBAdESRevocationReferences.OtherReferencesKey => AssignOtherReferences(reader, ref otherReferences),
+                    _ => throw new CborContentException($"Unknown rRefs map key {key}.")
+                };
+            }
+
+            reader.ReadEndMap();
+
+            return new CBAdESRevocationReferences(crlReferences, ocspReferences, otherReferences);
+        }
+        catch
+        {
+            DisposeAll(crlReferences, ocspReferences);
+            throw;
+        }
+
+        static void DisposeAll(List<CBAdESCrlReference>? crlItems, List<CBAdESOcspReference>? ocspItems)
+        {
+            if(crlItems is not null)
+            {
+                foreach(CBAdESCrlReference item in crlItems)
+                {
+                    item.Dispose();
+                }
+            }
+
+            if(ocspItems is not null)
+            {
+                foreach(CBAdESOcspReference item in ocspItems)
+                {
+                    item.Dispose();
+                }
+            }
+        }
+
+        static bool AssignCrlReferences(CborReader reader, BaseMemoryPool pool, ref List<CBAdESCrlReference>? crlReferences)
+        {
+            int entryCount = reader.ReadStartArrayExpectLengthRange(1, int.MaxValue);
+            var entries = new List<CBAdESCrlReference>(Math.Min(entryCount, 64));
+            crlReferences = entries;
+            for(int i = 0; i < entryCount; i++)
+            {
+                entries.Add(ReadCrlRef(reader, pool));
+            }
+
+            reader.ReadEndArray();
+            return true;
+        }
+
+        static bool AssignOcspReferences(CborReader reader, BaseMemoryPool pool, ref List<CBAdESOcspReference>? ocspReferences)
+        {
+            int entryCount = reader.ReadStartArrayExpectLengthRange(1, int.MaxValue);
+            var entries = new List<CBAdESOcspReference>(Math.Min(entryCount, 64));
+            ocspReferences = entries;
+            for(int i = 0; i < entryCount; i++)
+            {
+                entries.Add(ReadOcspRef(reader, pool));
+            }
+
+            reader.ReadEndArray();
+            return true;
+        }
+
+        static bool AssignOtherReferences(CborReader reader, ref List<ReadOnlyMemory<byte>>? otherReferences)
+        {
+            int entryCount = reader.ReadStartArrayExpectLengthRange(1, int.MaxValue);
+            var entries = new List<ReadOnlyMemory<byte>>(Math.Min(entryCount, 64));
+            for(int i = 0; i < entryCount; i++)
+            {
+                entries.Add(reader.ReadEncodedValue());
+            }
+
+            reader.ReadEndArray();
+            otherReferences = entries;
+            return true;
+        }
+    }
+
+
+    /// <summary>
+    /// Reads a <c>CRLRef</c> map (Annex A.1.1, Table A.1) from <paramref name="reader"/>. Disposal-safe: the
+    /// in-flight digest is disposed before this method rethrows on any later failure within the same map.
+    /// </summary>
+    /// <param name="reader">The CBOR reader.</param>
+    /// <param name="pool">The memory pool the digest's buffer is rented from.</param>
+    /// <returns>The parsed value.</returns>
+    /// <exception cref="CborContentException">
+    /// Thrown when the map is malformed or the required <c>digAlgVal</c> member is absent.
+    /// </exception>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "The enclosing try/catch disposes the in-flight digAlgVal digest before rethrowing on any failure; on success ownership of the digest transfers into the returned CBAdESCrlReference.")]
+    private static CBAdESCrlReference ReadCrlRef(CborReader reader, BaseMemoryPool pool)
+    {
+        int count = reader.ReadStartMapExpectLengthRange(1, 2);
+
+        CBAdESDigestAlgorithmIdentifier? hashAlgorithm = null;
+        DigestValue? digest = null;
+        CBAdESCrlIdentifier? crlIdentifier = null;
+        int previousKey = 0;
+
+        try
+        {
+            for(int i = 0; i < count; i++)
+            {
+                int key = reader.ReadAscendingMapKey(ref previousKey);
+
+                _ = key switch
+                {
+                    CBAdESCrlReference.DigAlgValKey => AssignDigAlgVal(reader, pool, ref hashAlgorithm, ref digest),
+                    CBAdESCrlReference.CrlIdentifierKey => AssignCrlIdentifier(reader, ref crlIdentifier),
+                    _ => throw new CborContentException($"Unknown CRLRef map key {key}.")
+                };
+            }
+
+            reader.ReadEndMap();
+
+            if(hashAlgorithm is null || digest is null)
+            {
+                throw new CborContentException("CRLRef requires the 'digAlgVal' (map key 1) member.");
+            }
+
+            return new CBAdESCrlReference(hashAlgorithm, digest, crlIdentifier);
+        }
+        catch
+        {
+            digest?.Dispose();
+            throw;
+        }
+
+        static bool AssignDigAlgVal(CborReader reader, BaseMemoryPool pool, ref CBAdESDigestAlgorithmIdentifier? hashAlgorithm, ref DigestValue? digest)
+        {
+            ReadHashAlgorithmDigestPair(reader, pool, out CBAdESDigestAlgorithmIdentifier algorithm, out DigestValue value);
+            hashAlgorithm = algorithm;
+            digest = value;
+            return true;
+        }
+
+        static bool AssignCrlIdentifier(CborReader reader, ref CBAdESCrlIdentifier? crlIdentifier)
+        {
+            crlIdentifier = ReadCrlId(reader);
+            return true;
+        }
+    }
+
+
+    /// <summary>
+    /// Reads a <c>CRLId</c> map (Annex A.1.1, Table A.1) from <paramref name="reader"/>.
+    /// </summary>
+    /// <param name="reader">The CBOR reader.</param>
+    /// <returns>The parsed value.</returns>
+    /// <exception cref="CborContentException">
+    /// Thrown when the map is malformed or a required member is absent.
+    /// </exception>
+    private static CBAdESCrlIdentifier ReadCrlId(CborReader reader)
+    {
+        int count = reader.ReadStartMapExpectLengthRange(2, 4);
+
+        byte[]? issuer = null;
+        DateTimeOffset? issueTime = null;
+        ulong? number = null;
+        Uri? locationHint = null;
+        int previousKey = 0;
+
+        for(int i = 0; i < count; i++)
+        {
+            int key = reader.ReadAscendingMapKey(ref previousKey);
+
+            _ = key switch
+            {
+                CBAdESCrlIdentifier.IssuerKey => AssignIssuer(reader, ref issuer),
+                CBAdESCrlIdentifier.IssueTimeKey => AssignIssueTime(reader, ref issueTime),
+                CBAdESCrlIdentifier.NumberKey => AssignNumber(reader, ref number),
+                CBAdESCrlIdentifier.LocationHintKey => AssignLocationHint(reader, ref locationHint),
+                _ => throw new CborContentException($"Unknown CRLId map key {key}.")
+            };
+        }
+
+        reader.ReadEndMap();
+
+        if(issuer is null || issueTime is null)
+        {
+            throw new CborContentException("CRLId requires the 'issuer' (map key 1) and 'issueTime' (map key 2) members.");
+        }
+
+        return new CBAdESCrlIdentifier { Issuer = issuer, IssueTime = issueTime.Value, Number = number, LocationHint = locationHint };
+
+        static bool AssignIssuer(CborReader reader, ref byte[]? issuer)
+        {
+            issuer = reader.ReadByteString();
+            return true;
+        }
+
+        static bool AssignIssueTime(CborReader reader, ref DateTimeOffset? issueTime)
+        {
+            issueTime = ReadTDate(reader);
+            return true;
+        }
+
+        static bool AssignNumber(CborReader reader, ref ulong? number)
+        {
+            number = reader.ReadUInt64();
+            return true;
+        }
+
+        static bool AssignLocationHint(CborReader reader, ref Uri? locationHint)
+        {
+            locationHint = reader.ReadUri();
+            return true;
+        }
+    }
+
+
+    /// <summary>
+    /// Reads an <c>OCSPRef</c> map (Annex A.1.1, Table A.1) from <paramref name="reader"/>. Disposal-safe: the
+    /// in-flight digest is disposed before this method rethrows on any later failure within the same map.
+    /// </summary>
+    /// <param name="reader">The CBOR reader.</param>
+    /// <param name="pool">The memory pool the digest's buffer is rented from.</param>
+    /// <returns>The parsed value.</returns>
+    /// <exception cref="CborContentException">
+    /// Thrown when the map is malformed or a required member is absent.
+    /// </exception>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "The enclosing try/catch disposes the in-flight digAlgVal digest before rethrowing on any failure; on success ownership of the digest transfers into the returned CBAdESOcspReference.")]
+    private static CBAdESOcspReference ReadOcspRef(CborReader reader, BaseMemoryPool pool)
+    {
+        int count = reader.ReadStartMapExpectLengthRange(1, 2);
+
+        CBAdESDigestAlgorithmIdentifier? hashAlgorithm = null;
+        DigestValue? digest = null;
+        CBAdESOcspIdentifier? ocspIdentifier = null;
+        int previousKey = 0;
+
+        try
+        {
+            for(int i = 0; i < count; i++)
+            {
+                int key = reader.ReadAscendingMapKey(ref previousKey);
+
+                _ = key switch
+                {
+                    CBAdESOcspReference.DigAlgValKey => AssignDigAlgVal(reader, pool, ref hashAlgorithm, ref digest),
+                    CBAdESOcspReference.OcspIdentifierKey => AssignOcspIdentifier(reader, ref ocspIdentifier),
+                    _ => throw new CborContentException($"Unknown OCSPRef map key {key}.")
+                };
+            }
+
+            reader.ReadEndMap();
+
+            if(hashAlgorithm is null || digest is null || ocspIdentifier is null)
+            {
+                throw new CborContentException("OCSPRef requires the 'digAlgVal' (map key 1) and 'ocspId' (map key 2) members.");
+            }
+
+            return new CBAdESOcspReference(hashAlgorithm, digest, ocspIdentifier);
+        }
+        catch
+        {
+            digest?.Dispose();
+            throw;
+        }
+
+        static bool AssignDigAlgVal(CborReader reader, BaseMemoryPool pool, ref CBAdESDigestAlgorithmIdentifier? hashAlgorithm, ref DigestValue? digest)
+        {
+            ReadHashAlgorithmDigestPair(reader, pool, out CBAdESDigestAlgorithmIdentifier algorithm, out DigestValue value);
+            hashAlgorithm = algorithm;
+            digest = value;
+            return true;
+        }
+
+        static bool AssignOcspIdentifier(CborReader reader, ref CBAdESOcspIdentifier? ocspIdentifier)
+        {
+            ocspIdentifier = ReadOcspId(reader);
+            return true;
+        }
+    }
+
+
+    /// <summary>
+    /// Reads an <c>OCSPId</c> map (Annex A.1.1, Table A.1) from <paramref name="reader"/>.
+    /// </summary>
+    /// <param name="reader">The CBOR reader.</param>
+    /// <returns>The parsed value.</returns>
+    /// <exception cref="CborContentException">
+    /// Thrown when the map is malformed or a required member is absent.
+    /// </exception>
+    private static CBAdESOcspIdentifier ReadOcspId(CborReader reader)
+    {
+        int count = reader.ReadStartMapExpectLengthRange(2, 3);
+
+        CBAdESOcspResponderIdentifier? responder = null;
+        DateTimeOffset? producedAt = null;
+        Uri? locationHint = null;
+        int previousKey = 0;
+
+        for(int i = 0; i < count; i++)
+        {
+            int key = reader.ReadAscendingMapKey(ref previousKey);
+
+            _ = key switch
+            {
+                CBAdESOcspIdentifier.ResponderKey => AssignResponder(reader, ref responder),
+                CBAdESOcspIdentifier.ProducedAtKey => AssignProducedAt(reader, ref producedAt),
+                CBAdESOcspIdentifier.LocationHintKey => AssignLocationHint(reader, ref locationHint),
+                _ => throw new CborContentException($"Unknown OCSPId map key {key}.")
+            };
+        }
+
+        reader.ReadEndMap();
+
+        if(responder is null || producedAt is null)
+        {
+            throw new CborContentException("OCSPId requires the 'responderChoice' (map key 1) and 'producedAt' (map key 2) members.");
+        }
+
+        return new CBAdESOcspIdentifier(responder, producedAt.Value, locationHint);
+
+        static bool AssignResponder(CborReader reader, ref CBAdESOcspResponderIdentifier? responder)
+        {
+            responder = ReadResponderId(reader);
+            return true;
+        }
+
+        static bool AssignProducedAt(CborReader reader, ref DateTimeOffset? producedAt)
+        {
+            producedAt = ReadTDate(reader);
+            return true;
+        }
+
+        static bool AssignLocationHint(CborReader reader, ref Uri? locationHint)
+        {
+            locationHint = reader.ReadUri();
+            return true;
+        }
+    }
+
+
+    /// <summary>
+    /// Reads a <c>ResponderIdChoice</c> one-entry map (Annex A.1.1) from <paramref name="reader"/>.
+    /// </summary>
+    /// <param name="reader">The CBOR reader.</param>
+    /// <returns>The parsed value.</returns>
+    /// <exception cref="CborContentException">Thrown when the map key is not a known choice arm.</exception>
+    /// <remarks>
+    /// <strong>D8 (contract R-6, RULED):</strong> the <c>responderIdByKey</c> arm reads the <c>bstr</c> as raw
+    /// DER <see href="https://www.rfc-editor.org/rfc/rfc6960">IETF RFC 6960</see> <c>ResponderID.byKey</c>
+    /// (<c>KeyHash</c>) bytes — no base64 decoding step. See the D8 remarks on
+    /// <see cref="CBAdESOcspResponderIdentifierByKey"/> for the ruling.
+    /// </remarks>
+    private static CBAdESOcspResponderIdentifier ReadResponderId(CborReader reader)
+    {
+        _ = reader.ReadStartMapExpectLength(1);
+        int key = reader.ReadInt32();
+        byte[] value = reader.ReadByteString();
+        reader.ReadEndMap();
+
+        return key switch
+        {
+            CBAdESOcspResponderIdentifier.ByNameKey => new CBAdESOcspResponderIdentifierByName(value),
+            CBAdESOcspResponderIdentifier.ByKeyKey => new CBAdESOcspResponderIdentifierByKey(value),
+            _ => throw new CborContentException($"Unknown ResponderIdChoice map key {key}.")
+        };
+    }
+
+
+    /// <summary>
+    /// Encodes the <c>sigTst</c> unsigned header parameter (<see cref="CBAdESSignatureTimestamp"/>, label
+    /// <see cref="CBAdESUnsignedHeaderElement.SignatureTimestampLabel"/>) to canonical CBOR. A straight
+    /// <c>tstContainer</c> alias (clause 5.3.3): delegates to <see cref="EncodeTimestampContainer"/>.
+    /// </summary>
+    /// <param name="timestamp">The value to encode.</param>
+    /// <param name="pool">The memory pool the returned carrier's buffer is rented from.</param>
+    /// <returns>The pool-rented, tagged carrier for the encoded <c>sigTst</c> map.</returns>
+    /// <remarks>
+    /// See <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
+    /// ETSI TS 119 152-1 V1.1.1, clause 5.3.3</see>.
+    /// </remarks>
+    public static PooledMemory EncodeSignatureTimestamp(CBAdESSignatureTimestamp timestamp, BaseMemoryPool pool)
+    {
+        ArgumentNullException.ThrowIfNull(timestamp);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        return EncodeTimestampContainer(timestamp.TimestampContainer, pool);
+    }
+
+
+    /// <summary>
+    /// Parses canonical CBOR bytes into the <c>sigTst</c> unsigned header parameter
+    /// (<see cref="CBAdESSignatureTimestamp"/>). A straight <c>tstContainer</c> alias (clause 5.3.3): delegates
+    /// to <see cref="TryParseTimestampContainer"/>. Fails closed: malformed or non-conformant input returns
+    /// <see langword="false"/>, never throws.
+    /// </summary>
+    /// <param name="encoded">The encoded <c>sigTst</c> map bytes.</param>
+    /// <param name="result">The parsed value on success; <see langword="null"/> on failure.</param>
+    /// <returns><see langword="true"/> on success; otherwise, <see langword="false"/>.</returns>
+    /// <remarks>
+    /// See <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
+    /// ETSI TS 119 152-1 V1.1.1, clause 5.3.3</see>.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of container transfers immediately into the returned CBAdESSignatureTimestamp on success; on failure this method returns before any container is ever constructed.")]
+    public static bool TryParseSignatureTimestamp(ReadOnlyMemory<byte> encoded, out CBAdESSignatureTimestamp? result)
+    {
+        if(!TryParseTimestampContainer(encoded, out CBAdESTimestampContainer? container) || container is null)
+        {
+            result = null;
+            return false;
+        }
+
+        result = new CBAdESSignatureTimestamp(container);
+        return true;
+    }
+
+
+    /// <summary>
+    /// Encodes the <c>arcTst</c> unsigned header parameter (<see cref="CBAdESArchiveTimestamp"/>, label
+    /// <see cref="CBAdESUnsignedHeaderElement.ArchiveTimestampLabel"/>) to canonical CBOR. A straight
+    /// <c>tstContainer</c> alias (clause 5.3.5.1): delegates to <see cref="EncodeTimestampContainer"/>.
+    /// </summary>
+    /// <param name="timestamp">The value to encode.</param>
+    /// <param name="pool">The memory pool the returned carrier's buffer is rented from.</param>
+    /// <returns>The pool-rented, tagged carrier for the encoded <c>arcTst</c> map.</returns>
+    /// <remarks>
+    /// See <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
+    /// ETSI TS 119 152-1 V1.1.1, clause 5.3.5.1</see>.
+    /// </remarks>
+    public static PooledMemory EncodeArchiveTimestamp(CBAdESArchiveTimestamp timestamp, BaseMemoryPool pool)
+    {
+        ArgumentNullException.ThrowIfNull(timestamp);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        return EncodeTimestampContainer(timestamp.TimestampContainer, pool);
+    }
+
+
+    /// <summary>
+    /// Parses canonical CBOR bytes into the <c>arcTst</c> unsigned header parameter
+    /// (<see cref="CBAdESArchiveTimestamp"/>). A straight <c>tstContainer</c> alias (clause 5.3.5.1): delegates
+    /// to <see cref="TryParseTimestampContainer"/>. Fails closed: malformed or non-conformant input returns
+    /// <see langword="false"/>, never throws.
+    /// </summary>
+    /// <param name="encoded">The encoded <c>arcTst</c> map bytes.</param>
+    /// <param name="result">The parsed value on success; <see langword="null"/> on failure.</param>
+    /// <returns><see langword="true"/> on success; otherwise, <see langword="false"/>.</returns>
+    /// <remarks>
+    /// See <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
+    /// ETSI TS 119 152-1 V1.1.1, clause 5.3.5.1</see>.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of container transfers immediately into the returned CBAdESArchiveTimestamp on success; on failure this method returns before any container is ever constructed.")]
+    public static bool TryParseArchiveTimestamp(ReadOnlyMemory<byte> encoded, out CBAdESArchiveTimestamp? result)
+    {
+        if(!TryParseTimestampContainer(encoded, out CBAdESTimestampContainer? container) || container is null)
+        {
+            result = null;
+            return false;
+        }
+
+        result = new CBAdESArchiveTimestamp(container);
+        return true;
+    }
+
+
+    /// <summary>
+    /// Encodes the <c>sigRTst</c> unsigned header parameter (<see cref="CBAdESSignatureAndReferencesTimestamp"/>,
+    /// label <see cref="CBAdESUnsignedHeaderElement.SignatureAndReferencesTimestampLabel"/>) to canonical CBOR.
+    /// A straight <c>tstContainer</c> alias (Annex A.1.2.1.1): delegates to <see cref="EncodeTimestampContainer"/>.
+    /// </summary>
+    /// <param name="timestamp">The value to encode.</param>
+    /// <param name="pool">The memory pool the returned carrier's buffer is rented from.</param>
+    /// <returns>The pool-rented, tagged carrier for the encoded <c>sigRTst</c> map.</returns>
+    /// <remarks>
+    /// See <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
+    /// ETSI TS 119 152-1 V1.1.1, Annex A.1.2.1.1</see>.
+    /// </remarks>
+    public static PooledMemory EncodeSignatureAndReferencesTimestamp(CBAdESSignatureAndReferencesTimestamp timestamp, BaseMemoryPool pool)
+    {
+        ArgumentNullException.ThrowIfNull(timestamp);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        return EncodeTimestampContainer(timestamp.TimestampContainer, pool);
+    }
+
+
+    /// <summary>
+    /// Parses canonical CBOR bytes into the <c>sigRTst</c> unsigned header parameter
+    /// (<see cref="CBAdESSignatureAndReferencesTimestamp"/>). A straight <c>tstContainer</c> alias (Annex
+    /// A.1.2.1.1): delegates to <see cref="TryParseTimestampContainer"/>. Fails closed: malformed or
+    /// non-conformant input returns <see langword="false"/>, never throws.
+    /// </summary>
+    /// <param name="encoded">The encoded <c>sigRTst</c> map bytes.</param>
+    /// <param name="result">The parsed value on success; <see langword="null"/> on failure.</param>
+    /// <returns><see langword="true"/> on success; otherwise, <see langword="false"/>.</returns>
+    /// <remarks>
+    /// See <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
+    /// ETSI TS 119 152-1 V1.1.1, Annex A.1.2.1.1</see>.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of container transfers immediately into the returned CBAdESSignatureAndReferencesTimestamp on success; on failure this method returns before any container is ever constructed.")]
+    public static bool TryParseSignatureAndReferencesTimestamp(ReadOnlyMemory<byte> encoded, out CBAdESSignatureAndReferencesTimestamp? result)
+    {
+        if(!TryParseTimestampContainer(encoded, out CBAdESTimestampContainer? container) || container is null)
+        {
+            result = null;
+            return false;
+        }
+
+        result = new CBAdESSignatureAndReferencesTimestamp(container);
+        return true;
+    }
+
+
+    /// <summary>
+    /// Encodes the <c>rfsTst</c> unsigned header parameter (<see cref="CBAdESReferencesTimestamp"/>, label
+    /// <see cref="CBAdESUnsignedHeaderElement.ReferencesTimestampLabel"/>) to canonical CBOR. A straight
+    /// <c>tstContainer</c> alias (Annex A.1.2.2.1): delegates to <see cref="EncodeTimestampContainer"/>.
+    /// </summary>
+    /// <param name="timestamp">The value to encode.</param>
+    /// <param name="pool">The memory pool the returned carrier's buffer is rented from.</param>
+    /// <returns>The pool-rented, tagged carrier for the encoded <c>rfsTst</c> map.</returns>
+    /// <remarks>
+    /// See <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
+    /// ETSI TS 119 152-1 V1.1.1, Annex A.1.2.2.1</see>.
+    /// </remarks>
+    public static PooledMemory EncodeReferencesTimestamp(CBAdESReferencesTimestamp timestamp, BaseMemoryPool pool)
+    {
+        ArgumentNullException.ThrowIfNull(timestamp);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        return EncodeTimestampContainer(timestamp.TimestampContainer, pool);
+    }
+
+
+    /// <summary>
+    /// Parses canonical CBOR bytes into the <c>rfsTst</c> unsigned header parameter
+    /// (<see cref="CBAdESReferencesTimestamp"/>). A straight <c>tstContainer</c> alias (Annex A.1.2.2.1):
+    /// delegates to <see cref="TryParseTimestampContainer"/>. Fails closed: malformed or non-conformant input
+    /// returns <see langword="false"/>, never throws.
+    /// </summary>
+    /// <param name="encoded">The encoded <c>rfsTst</c> map bytes.</param>
+    /// <param name="result">The parsed value on success; <see langword="null"/> on failure.</param>
+    /// <returns><see langword="true"/> on success; otherwise, <see langword="false"/>.</returns>
+    /// <remarks>
+    /// See <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
+    /// ETSI TS 119 152-1 V1.1.1, Annex A.1.2.2.1</see>.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of container transfers immediately into the returned CBAdESReferencesTimestamp on success; on failure this method returns before any container is ever constructed.")]
+    public static bool TryParseReferencesTimestamp(ReadOnlyMemory<byte> encoded, out CBAdESReferencesTimestamp? result)
+    {
+        if(!TryParseTimestampContainer(encoded, out CBAdESTimestampContainer? container) || container is null)
+        {
+            result = null;
+            return false;
+        }
+
+        result = new CBAdESReferencesTimestamp(container);
+        return true;
+    }
+
+
+    /// <summary>
+    /// Encodes the <c>uHeaders</c> unsigned header parameter (<see cref="CBAdESUnsignedHeaders"/>, label
+    /// <c>268</c>) to canonical CBOR: a CBOR array with one <c>bstr</c> per element (CB-5.3.1-04), each
+    /// encapsulating the one-entry <c>UHeaderInstance</c> map keyed by the element's Table 8 label.
+    /// </summary>
+    /// <param name="unsignedHeaders">The value to encode.</param>
+    /// <param name="pool">The memory pool the returned carrier's buffer is rented from.</param>
+    /// <returns>The pool-rented, tagged carrier for the encoded <c>uHeaders</c> array.</returns>
+    /// <remarks>
+    /// <para>
+    /// See <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
+    /// ETSI TS 119 152-1 V1.1.1, clause 5.3.1, Table 8</see>.
+    /// </para>
+    /// <para>
+    /// <strong>No <c>#6.268</c> tag around the array.</strong> Table 8's "tag" column names the IANA COSE
+    /// header-parameter label under which <c>uHeaders</c> appears as a member of the unprotected headers map
+    /// (clause 3, IETF RFC 9052) — not a CBOR major-type-6 tag applied to the array value itself; see the
+    /// <see cref="CBAdESUnsignedHeaders"/> type remarks for the same reading. This method therefore writes the
+    /// array untagged.
+    /// </para>
+    /// </remarks>
+    public static PooledMemory EncodeUnsignedHeaders(CBAdESUnsignedHeaders unsignedHeaders, BaseMemoryPool pool)
+    {
+        ArgumentNullException.ThrowIfNull(unsignedHeaders);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        var writer = new CborWriter(CborConformanceMode.Canonical);
+        writer.WriteStartArray(unsignedHeaders.Count);
+        for(int i = 0; i < unsignedHeaders.Count; i++)
+        {
+            writer.WriteByteString(EncodeUnsignedHeaderElement(unsignedHeaders[i]));
+        }
+
+        writer.WriteEndArray();
+
+        return PooledMemory.FromBytes(writer.Encode(), pool, ComponentTag);
+    }
+
+
+    /// <summary>
+    /// Encodes one <c>UHeaderInstance</c> element — a one-entry map keyed by <paramref name="element"/>'s own
+    /// <see cref="CBAdESUnsignedHeaderElement.Label"/> — to its own independent, canonical CBOR byte string,
+    /// ready to be wrapped as one <c>uHeaders</c> array entry (CB-5.3.1-04).
+    /// </summary>
+    /// <param name="element">The element to encode.</param>
+    /// <returns>The encoded <c>UHeaderInstance</c> map bytes.</returns>
+    /// <exception cref="NotSupportedException">Thrown when <paramref name="element"/> is an unknown arm.</exception>
+    private static byte[] EncodeUnsignedHeaderElement(CBAdESUnsignedHeaderElement element)
+    {
+        var writer = new CborWriter(CborConformanceMode.Canonical);
+        writer.WriteStartMap(1);
+        WriteUnsignedHeaderElementLabel(writer, element.Label);
+
+        _ = element switch
+        {
+            CBAdESUnsignedHeaderElementSignatureTimestamp signatureTimestamp => WriteSignatureTimestampArm(writer, signatureTimestamp),
+            CBAdESUnsignedHeaderElementValidationData validationData => WriteValidationDataArm(writer, validationData),
+            CBAdESUnsignedHeaderElementArchiveTimestamp archiveTimestamp => WriteArchiveTimestampArm(writer, archiveTimestamp),
+            CBAdESUnsignedHeaderElementReferences references => WriteReferencesArm(writer, references),
+            CBAdESUnsignedHeaderElementSignatureAndReferencesTimestamp signatureAndReferencesTimestamp =>
+                WriteSignatureAndReferencesTimestampArm(writer, signatureAndReferencesTimestamp),
+            CBAdESUnsignedHeaderElementReferencesTimestamp referencesTimestamp => WriteReferencesTimestampArm(writer, referencesTimestamp),
+            CBAdESUnsignedHeaderElementSignaturePolicyStore signaturePolicyStore => WriteSignaturePolicyStoreArm(writer, signaturePolicyStore),
+            CBAdESUnsignedHeaderElementFullCounterSignature fullCounterSignature => WriteOpaqueArm(writer, fullCounterSignature.Value),
+            CBAdESUnsignedHeaderElementAbbreviatedCounterSignature abbreviatedCounterSignature =>
+                WriteOpaqueArm(writer, abbreviatedCounterSignature.Value),
+            CBAdESUnsignedHeaderElementCertificateChain certificateChain => WriteOpaqueArm(writer, certificateChain.Value),
+            CBAdESUnsignedHeaderElementUnknown unknown => WriteOpaqueArm(writer, unknown.Value),
+            _ => throw new NotSupportedException($"Unknown UHeaderInstance arm '{element.GetType()}'.")
+        };
+
+        writer.WriteEndMap();
+        return writer.Encode();
+
+        static bool WriteSignatureTimestampArm(CborWriter writer, CBAdESUnsignedHeaderElementSignatureTimestamp signatureTimestamp)
+        {
+            WriteTimestampContainer(writer, signatureTimestamp.SignatureTimestamp.TimestampContainer);
+            return true;
+        }
+
+        static bool WriteValidationDataArm(CborWriter writer, CBAdESUnsignedHeaderElementValidationData validationData)
+        {
+            WriteValidationData(writer, validationData.ValidationData);
+            return true;
+        }
+
+        static bool WriteArchiveTimestampArm(CborWriter writer, CBAdESUnsignedHeaderElementArchiveTimestamp archiveTimestamp)
+        {
+            WriteTimestampContainer(writer, archiveTimestamp.ArchiveTimestamp.TimestampContainer);
+            return true;
+        }
+
+        static bool WriteReferencesArm(CborWriter writer, CBAdESUnsignedHeaderElementReferences references)
+        {
+            WriteReferences(writer, references.References);
+            return true;
+        }
+
+        static bool WriteSignatureAndReferencesTimestampArm(
+            CborWriter writer,
+            CBAdESUnsignedHeaderElementSignatureAndReferencesTimestamp signatureAndReferencesTimestamp)
+        {
+            WriteTimestampContainer(writer, signatureAndReferencesTimestamp.SignatureAndReferencesTimestamp.TimestampContainer);
+            return true;
+        }
+
+        static bool WriteReferencesTimestampArm(CborWriter writer, CBAdESUnsignedHeaderElementReferencesTimestamp referencesTimestamp)
+        {
+            WriteTimestampContainer(writer, referencesTimestamp.ReferencesTimestamp.TimestampContainer);
+            return true;
+        }
+
+        static bool WriteSignaturePolicyStoreArm(CborWriter writer, CBAdESUnsignedHeaderElementSignaturePolicyStore signaturePolicyStore)
+        {
+            WriteSignaturePolicyStore(writer, signaturePolicyStore.SignaturePolicyStore);
+            return true;
+        }
+
+        static bool WriteOpaqueArm(CborWriter writer, ReadOnlyMemory<byte> value)
+        {
+            writer.WriteEncodedValue(value.Span);
+            return true;
+        }
+    }
+
+
+    /// <summary>
+    /// Writes a <see cref="CBAdESUnsignedHeaderElementLabel"/> (the CDDL's <c>label = int / tstr</c> rule, as
+    /// it applies to <see cref="CBAdESUnsignedHeaderElement.Label"/>) to <paramref name="writer"/>.
+    /// </summary>
+    /// <param name="writer">The CBOR writer.</param>
+    /// <param name="label">The value to write.</param>
+    /// <exception cref="NotSupportedException">Thrown when <paramref name="label"/> is an unknown arm.</exception>
+    private static void WriteUnsignedHeaderElementLabel(CborWriter writer, CBAdESUnsignedHeaderElementLabel label)
+    {
+        _ = label switch
+        {
+            CBAdESUnsignedHeaderElementIntegerLabel integerLabel => WriteIntegerLabel(writer, integerLabel),
+            CBAdESUnsignedHeaderElementTextLabel textLabel => WriteTextLabel(writer, textLabel),
+            _ => throw new NotSupportedException($"Unknown uHeaders element label arm '{label.GetType()}'.")
+        };
+
+        static bool WriteIntegerLabel(CborWriter writer, CBAdESUnsignedHeaderElementIntegerLabel integerLabel)
+        {
+            writer.WriteInt32(integerLabel.Value);
+            return true;
+        }
+
+        static bool WriteTextLabel(CborWriter writer, CBAdESUnsignedHeaderElementTextLabel textLabel)
+        {
+            writer.WriteTextString(textLabel.Value);
+            return true;
+        }
+    }
+
+
+    /// <summary>
+    /// Parses canonical CBOR bytes into the <c>uHeaders</c> unsigned header parameter
+    /// (<see cref="CBAdESUnsignedHeaders"/>). Fails closed: malformed, non-conformant, or empty-array
+    /// (CB-5.3.1-07) input returns <see langword="false"/>, never throws; every element already constructed
+    /// before a later failure — including any owned digest reachable through it — is disposed before
+    /// returning.
+    /// </summary>
+    /// <param name="encoded">The encoded <c>uHeaders</c> array bytes.</param>
+    /// <param name="pool">The memory pool used to reconstruct any digest carried by a typed element.</param>
+    /// <param name="result">The parsed value on success; <see langword="null"/> on failure.</param>
+    /// <returns><see langword="true"/> on success; otherwise, <see langword="false"/>.</returns>
+    /// <remarks>
+    /// See <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
+    /// ETSI TS 119 152-1 V1.1.1, clause 5.3.1, Table 8</see>. Order is preserved element-for-element
+    /// (CB-5.3.1-01/03); see the <see cref="EncodeUnsignedHeaders"/> remarks for why no <c>#6.268</c> tag is
+    /// expected around the array.
+    /// </remarks>
+    public static bool TryParseUnsignedHeaders(ReadOnlyMemory<byte> encoded, BaseMemoryPool pool, out CBAdESUnsignedHeaders? result)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+
+        List<CBAdESUnsignedHeaderElement>? elements = null;
+        try
+        {
+            var reader = new CborReader(encoded, CborConformanceMode.Canonical);
+            int count = reader.ReadStartArrayExpectLengthRange(1, int.MaxValue);
+
+            var items = new List<CBAdESUnsignedHeaderElement>(Math.Min(count, 64));
+            elements = items;
+            for(int i = 0; i < count; i++)
+            {
+                byte[] elementBytes = reader.ReadByteString();
+                items.Add(ReadUnsignedHeaderElement(elementBytes, pool));
+            }
+
+            reader.ReadEndArray();
+
+            if(reader.BytesRemaining != 0)
+            {
+                DisposeAll(elements);
+                result = null;
+                return false;
+            }
+
+            result = new CBAdESUnsignedHeaders(items);
+            return true;
+        }
+        catch(Exception ex) when(IsFailClosedParseException(ex))
+        {
+            DisposeAll(elements);
+            result = null;
+            return false;
+        }
+
+        static void DisposeAll(List<CBAdESUnsignedHeaderElement>? items)
+        {
+            if(items is null)
+            {
+                return;
+            }
+
+            foreach(CBAdESUnsignedHeaderElement item in items)
+            {
+                if(item is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// Reads one <c>uHeaders</c> array element's bytes as an independent <c>UHeaderInstance</c> CBOR document —
+    /// a one-entry map keyed by the element's Table 8 label (or a free-form <c>label</c> for the catch-all
+    /// case). Labels <c>1</c>-<c>7</c> dispatch to their own component parser (any inner failure fails the
+    /// whole element, fail-closed); labels <c>11</c>/<c>12</c>/<c>33</c> and any unrecognized integer label, or
+    /// any text label, are read as opaque, byte-exact raw CBOR values via <see cref="CborReader.ReadEncodedValue"/>.
+    /// </summary>
+    /// <param name="elementBytes">One <c>uHeaders</c> array entry's <c>bstr</c> content.</param>
+    /// <param name="pool">The memory pool used to reconstruct any digest carried by a typed element (<c>refs</c>).</param>
+    /// <returns>The parsed element.</returns>
+    /// <exception cref="CborContentException">
+    /// Thrown when the map is malformed, or trailing bytes remain after the one-entry map.
+    /// </exception>
+    /// <remarks>
+    /// Disposal-safe: the switch assignment through <see cref="CborReader.ReadEndMap"/> runs inside a
+    /// try/catch that disposes an already-constructed <c>result</c> before rethrowing, matching the family's
+    /// dispose-on-throw idiom (<see cref="ReadReferences"/>, <see cref="ReadCertId"/>, <see cref="ReadCrlRef"/>,
+    /// <see cref="ReadOcspRef"/>). Under <see cref="CborConformanceMode.Canonical"/> a well-formed one-entry
+    /// map's own <see cref="CborReader.ReadEndMap"/> call cannot itself throw once every entry has been
+    /// consumed, so this is defense-in-depth rather than a reachable path today.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "The enclosing try/catch disposes an already-constructed result before rethrowing on any failure (defense-in-depth; unreachable under Canonical mode today); the trailing-bytes check disposes it on that failure path too, and on success ownership transfers to the caller.")]
+    private static CBAdESUnsignedHeaderElement ReadUnsignedHeaderElement(byte[] elementBytes, BaseMemoryPool pool)
+    {
+        var reader = new CborReader(elementBytes, CborConformanceMode.Canonical);
+        _ = reader.ReadStartMapExpectLength(1);
+
+        CBAdESUnsignedHeaderElement? result = null;
+        try
+        {
+            if(reader.PeekState() == CborReaderState.TextString)
+            {
+                string textLabel = reader.ReadTextString();
+                result = new CBAdESUnsignedHeaderElementUnknown(new CBAdESUnsignedHeaderElementTextLabel(textLabel), reader.ReadEncodedValue());
+            }
+            else
+            {
+                int label = reader.ReadInt32();
+                result = label switch
+                {
+                    CBAdESUnsignedHeaderElement.SignatureTimestampLabel =>
+                        new CBAdESUnsignedHeaderElementSignatureTimestamp(new CBAdESSignatureTimestamp(ReadTimestampContainer(reader))),
+                    CBAdESUnsignedHeaderElement.ValidationDataLabel =>
+                        new CBAdESUnsignedHeaderElementValidationData(ReadValidationData(reader)),
+                    CBAdESUnsignedHeaderElement.ArchiveTimestampLabel =>
+                        new CBAdESUnsignedHeaderElementArchiveTimestamp(new CBAdESArchiveTimestamp(ReadTimestampContainer(reader))),
+                    CBAdESUnsignedHeaderElement.ReferencesLabel =>
+                        new CBAdESUnsignedHeaderElementReferences(ReadReferences(reader, pool)),
+                    CBAdESUnsignedHeaderElement.SignatureAndReferencesTimestampLabel =>
+                        new CBAdESUnsignedHeaderElementSignatureAndReferencesTimestamp(
+                            new CBAdESSignatureAndReferencesTimestamp(ReadTimestampContainer(reader))),
+                    CBAdESUnsignedHeaderElement.ReferencesTimestampLabel =>
+                        new CBAdESUnsignedHeaderElementReferencesTimestamp(new CBAdESReferencesTimestamp(ReadTimestampContainer(reader))),
+                    CBAdESUnsignedHeaderElement.SignaturePolicyStoreLabel =>
+                        new CBAdESUnsignedHeaderElementSignaturePolicyStore(ReadSignaturePolicyStore(reader)),
+                    CBAdESUnsignedHeaderElement.FullCounterSignatureLabel =>
+                        new CBAdESUnsignedHeaderElementFullCounterSignature(reader.ReadEncodedValue()),
+                    CBAdESUnsignedHeaderElement.AbbreviatedCounterSignatureLabel =>
+                        new CBAdESUnsignedHeaderElementAbbreviatedCounterSignature(reader.ReadEncodedValue()),
+                    CBAdESUnsignedHeaderElement.CertificateChainLabel =>
+                        new CBAdESUnsignedHeaderElementCertificateChain(reader.ReadEncodedValue()),
+                    _ => new CBAdESUnsignedHeaderElementUnknown(new CBAdESUnsignedHeaderElementIntegerLabel(label), reader.ReadEncodedValue())
+                };
+            }
+
+            reader.ReadEndMap();
+        }
+        catch
+        {
+            if(result is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
+
+            throw;
+        }
+
+        if(reader.BytesRemaining != 0)
+        {
+            if(result is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
+
+            throw new CborContentException("Trailing bytes after a uHeaders element's UHeaderInstance map.");
+        }
+
+        return result;
     }
 }

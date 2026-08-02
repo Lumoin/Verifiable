@@ -5,40 +5,57 @@ using System.Reflection;
 namespace Verifiable.Tests.Cryptography;
 
 /// <summary>
-/// The RFC 2119 requirements matrix for the CB-AdES vocabulary built in stage 1 of this wave: every discrete
-/// normative statement the preflight legs extracted from
+/// The RFC 2119 requirements matrix for the CB-AdES vocabulary, cumulative across the wave's stages: every
+/// discrete normative statement the preflight legs extracted from
 /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
 /// ETSI TS 119 152-1 V1.1.1</see> clause 4 (general requirements), clause 5.1 (IETF-defined header parameter
 /// profiling), clause 5.2 (the seven new signed header parameters — <c>x5ts</c>, <c>srCms</c>, <c>sigPl</c>,
-/// <c>srAts</c>, <c>adoTst</c>, <c>sigPId</c>, <c>sigD</c>) and clause 5.4 (the <c>oId</c>/<c>pkiOb</c>/
-/// <c>tstContainer</c> shared syntax) — this stage's scope per <c>tempdocs/roadmap/wavecb-contract.md</c>.
-/// Mirrors the rows-as-spec-cells shape and <c>RowData</c> member idiom of
-/// <c>CAdESRequirementsMatrixTests</c> (ETSI EN 319 122-1).
+/// <c>srAts</c>, <c>adoTst</c>, <c>sigPId</c>, <c>sigD</c>), and clause 5.4 (the <c>oId</c>/<c>pkiOb</c>/
+/// <c>tstContainer</c> shared syntax) — stage 1's scope — plus clause 5.3 (<c>uHeaders</c> and the unsigned
+/// components <c>sigPSt</c>, <c>sigTst</c>, <c>valData</c>, <c>arcTst</c>, and the clause 5.3.5.3 message-imprint
+/// algorithm) and Annexes A (<c>refs</c>, <c>sigRTst</c>, <c>rfsTst</c>, and their own message-imprint
+/// algorithms) and E (alternative long-term-availability disclosure) — stage 2's addition — per
+/// <c>tempdocs/roadmap/wavecb-contract.md</c>. Mirrors the rows-as-spec-cells shape and <c>RowData</c> member
+/// idiom of <c>CAdESRequirementsMatrixTests</c> (ETSI EN 319 122-1).
 /// </summary>
 /// <remarks>
 /// <para>
 /// <strong>Requirement identifiers.</strong> Every <see cref="RequirementMatrixRow.ClauseId"/> is a
-/// <c>CB-&lt;clause&gt;-&lt;seq&gt;</c> identifier exactly as one of the three preflight leg reports
+/// <c>CB-&lt;clause&gt;-&lt;seq&gt;</c> identifier exactly as one of the preflight leg reports
 /// (<c>wavecb-leg-1-clause4-5p1-general-and-ietf-headers.md</c>, <c>wavecb-leg-2-clause5p2-new-signed-headers.md</c>,
-/// and the clause-5.4 rows of <c>wavecb-leg-3-clause5p3-5p4-unsigned-and-shared-syntax.md</c>) assigned it — no
-/// identifier here was invented for this matrix. Leg 1 states 68 rows (clause 4 + 5.1) and its own table has
-/// exactly 68; leg 3's clause-5.4-only slice has exactly 22. Leg 2's own prose states "91 discrete requirement
-/// rows" for clause 5.2, but its table itself enumerates 124 distinct <c>CB-5.2.*</c> identifiers — a
-/// self-reporting discrepancy in the leg document, not in this matrix; every one of the 124 rows the table
-/// actually states is seeded here; none were trimmed.
+/// <c>wavecb-leg-3-clause5p3-5p4-unsigned-and-shared-syntax.md</c>, and
+/// <c>wavecb-leg-5-annexes-a-to-f.md</c>) assigned it — no identifier here was invented for this matrix. Leg 1
+/// states 68 rows (clause 4 + 5.1) and its own table has exactly 68; leg 3's clause-5.4-only slice has exactly
+/// 22 (seeded in stage 1) and its clause-5.3 slice states 52 <c>CB-5.3.*</c> rows across 5.3.1 through 5.3.5.3
+/// (seeded in stage 2, this addition). Leg 2's own prose states "91 discrete requirement rows" for clause 5.2,
+/// but its table itself enumerates 124 distinct <c>CB-5.2.*</c> identifiers — a self-reporting discrepancy in
+/// the leg document, not in this matrix; every one of the 124 rows the table actually states is seeded here;
+/// none were trimmed. Leg 5's Annex A/E slice states 49 rows (<c>CB-A.1.1-01..30</c>, <c>CB-A.1.2.1-01..03</c>,
+/// <c>CB-A.1.2.1.2-01..05</c>, <c>CB-A.1.2.2-01..03</c>, <c>CB-A.1.2.2.2-01..04</c>, <c>CB-E-01..04</c>) —
+/// every one is seeded here in this stage-2 addition, none trimmed.
 /// </para>
 /// <para>
-/// <strong>Statuses are honest about what stage 1 ships.</strong> A row is
+/// <strong>Statuses are honest about what each stage ships.</strong> A row is
 /// <see cref="RequirementCoverageStatus.Tested"/> only when an existing test in <c>CBAdESRegistryTests</c>,
-/// <c>CBAdESSharedSyntaxTests</c>, or <c>CBAdESSignedHeaderModelTests</c> (all <c>test/Verifiable.Tests/JCose/</c>)
-/// demonstrably exercises it. Stage 1 builds the label/tag registries, the clause 5.4 shared syntax, and the
-/// seven clause 5.2 signed-header component models with their CBOR codec — nothing that composes a whole
-/// COSE_Sign/COSE_Sign1 structure. Every requirement that needs the not-yet-built pieces is
+/// <c>CBAdESSharedSyntaxTests</c>, <c>CBAdESSignedHeaderModelTests</c> (stage 1), or
+/// <c>CBAdESUnsignedComponentTests</c>, <c>CBAdESUnsignedComponentSerializationTests</c>,
+/// <c>CBAdESUnsignedHeadersTests</c>, <c>CBAdESMessageImprintTests</c> (stage 2 — all
+/// <c>test/Verifiable.Tests/JCose/</c>) demonstrably exercises it. Stage 1 built the label/tag registries, the
+/// clause 5.4 shared syntax, and the seven clause 5.2 signed-header component models with their CBOR codec.
+/// Stage 2 adds the <c>uHeaders</c> ordered-array container, the clause 5.3 unsigned components (<c>sigPSt</c>,
+/// <c>valData</c>, <c>arcTst</c>/<c>sigTst</c> as <c>tstContainer</c> aliases), Annex A's <c>refs</c>/
+/// <c>sigRTst</c>/<c>rfsTst</c>, and all four message-imprint-input builders (<c>adoTst</c>, <c>arcTst</c>,
+/// <c>sigRTst</c>, <c>rfsTst</c>) — nothing that composes a whole COSE_Sign/COSE_Sign1 structure, actually
+/// requests a time-stamp token from a TSA, or cross-checks one component's references against another's
+/// values. Every requirement that needs one of those not-yet-built pieces is
 /// <see cref="RequirementCoverageStatus.OutOfScope"/>, its evidence naming the wave stage that owns it per the
-/// contract's stage plan: S2 (unsigned components — <c>uHeaders</c>, clause 5.3), S3 (B-B creation/validation
-/// e2e — the signature-composition orchestrator that places every header in a protected/unprotected map, most
-/// of clause 5.1's placement rules, and the <c>sigD</c> dereference-delegate mechanisms), or S6 (COSE_Sign +
-/// RFC 9338 countersignatures, the multi-signer substrate stage). Clause 4's rows (the <c>uHeaders</c>-is-the-
+/// contract's stage plan: S3 (B-B creation/validation e2e — the signature-composition orchestrator that places
+/// every header in a protected/unprotected map, most of clause 5.1's placement rules, and the <c>sigD</c>
+/// dereference-delegate mechanisms), S4 (B-T/B-LT augmentation, the TSA wire seam, the <c>refs</c>
+/// mechanism's strip-on-upgrade transition and CB-A.1.1-30 cross-consistency), S5 (<c>arcTst</c> generation
+/// orchestration per clause 5.3.5.2 and the Annex E disclosure convention), S6 (COSE_Sign + RFC 9338
+/// countersignatures, the multi-signer substrate stage), or S7 (validation/conclusions, including the
+/// Delta-CRL and cross-reference completeness policy checks). Clause 4's rows (the <c>uHeaders</c>-is-the-
 /// sole-member rule, the COSE_Sign/COSE_Sign1 top-level shapes, attached/detached payload, integer keys/tags,
 /// bstr encapsulation) are included as later-stage rows per instruction, not silently dropped because they
 /// predate this stage's own component work.
@@ -51,7 +68,15 @@ namespace Verifiable.Tests.Cryptography;
 /// own CDDL — owner-flagged, carried opaque), D6 (Table 5's <c>sigPQuals</c> row mislabelled "in
 /// CertifiedAttrChoice"), D7 (5.2.4's garbled <c>addressCountry</c> sentence, read permissively), D4 (5.2.8.1's
 /// <c>sigD :</c> CDDL typo, read as <c>=</c>), and D11 (5.2.7.2's qualifier wire shape — one-entry maps keyed
-/// per Table 6, not CBOR-tagged data items, ruled at the S1 review).
+/// per Table 6, not CBOR-tagged data items, ruled at the S1 review). Stage 2 additionally cites D1 (5.3.5.3's
+/// closing sentence names "step 11)"; only step 12 yields a byte string — read as step 12, on the
+/// <c>CB-5.3.5.3-*</c> imprint-output rows), D8 (Annex A.1.1's <c>responderIdByKey</c> — the raw DER
+/// <c>byKey</c> bytes ride the <c>bstr</c> with no base64 transformation, the spec's "base64" wording being a
+/// JAdES copy-residue, ruled in the contract), the leg-5 trap-3 reading (Annex A.1.1's <c>otherRefs</c>
+/// CDDL comment is a copy-paste defect from <c>ocspRefs</c>, not evidence that <c>otherRefs</c> is OCSP-only),
+/// and the leg-5 trap-4 reading (Annex A.1.2.1.2 step 4 and A.1.2.2.2 step 3 both say "signer layer" for their
+/// <c>COSE_Sign1</c> branch, a copy-paste leftover from the preceding <c>COSE_Sign</c> step — read as "body
+/// layer").
 /// </para>
 /// <para>
 /// <strong>No external oracle, no vectors yet.</strong> Per the contract's recorded synthesis, no CB-AdES
@@ -419,11 +444,11 @@ internal sealed class CBAdESRequirementsMatrixTests
         ("CB-5.2.6-03", "adoTst shall encapsulate one or more electronic time-stamps generated before signature production (adoTst = tstContainer).",
             RequirementCoverageStatus.Tested, "CBAdESSignedHeaderModelTests.EncodePayloadTimestampMatchesIndependentOracleForMultipleTokens"),
         ("CB-5.2.6-04", "The message-imprint computation input for each such time-stamp shall be the COSE Payload of the CB-AdES signature.",
-            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S3 — per CBAdESPayloadTimestamp's own remarks, the message-imprint input is explicitly not this type's concern; it belongs to the not-yet-built mechanism-dispatch builder."),
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.AdoTstAttachedPayloadIsWrappedByteString (also CBAdESMessageImprintTests.AdoTstDetachedPayloadIsWrappedByteString for the detached arm) -- CBAdESMessageImprints.BuildPayloadTimestampMessageImprintInput builds exactly the COSE Payload bytes for both arms."),
         ("CB-5.2.6-05", "If sigD is absent, the imprint input shall be the CBOR byte string of the payload field, or the bytes of the detached COSE Payload wrapped in one, if the payload field is absent.",
-            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S3 — same reasoning as CB-5.2.6-04."),
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.AdoTstAttachedPayloadIsWrappedByteString (payload field present, wrapped bstr); CBAdESMessageImprintTests.AdoTstDetachedPayloadIsWrappedByteString (payload field absent, detached bytes retrieved and wrapped)."),
         ("CB-5.2.6-06", "If sigD is present with mId ObjectIdByURI or ObjectIdByURIHash, the imprint input shall be the concatenation from processing sigD.pars per clause 5.2.8.2.2, even under the Hash mechanism.",
-            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S3 — same reasoning as CB-5.2.6-04; wired to CB-5.2.8.2.3-07 below."),
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.AdoTstSigDProcessedPayloadIsRawConcatenationWithNoByteStringWrapping -- the concatenation-with-no-wrapping shape this row states is Tested; clause 5.2.8.2.2's own pars-dereferencing (retrieving and processing the referenced objects behind sigD.pars) remains deferred to CB-AdES wave stage S3, per CBAdESSigDProcessedPayloadImprintSource's own remarks -- the segments arrive pre-processed, borrowed views, never derived from a dereferenced source by this builder; wired to CB-5.2.8.2.3-07 below."),
         ("CB-5.2.6-07", "If sigD.mId is neither of the two defined URIs, the specification defining that mId shall specify how to retrieve the COSE Payload.",
             RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S3 — an extension-point contract on third-party mId specs; the imprint builder that would dispatch on mId does not exist yet."),
         ("CB-5.2.6-08", "In COSE_Sign, adoTst shall be placed at the signer layer.",
@@ -587,7 +612,7 @@ internal sealed class CBAdESRequirementsMatrixTests
         ("CB-5.2.8.2.3-06", "When using this mechanism, the COSE Payload shall contribute as an empty stream to the COSE signature value computation.",
             RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S3 — a payload-construction algorithm the orchestrator runs; this model does not build the COSE Payload."),
         ("CB-5.2.8.2.3-07", "If the COSE Payload is required for purposes other than the COSE signature value (e.g. adoTst/arcTst), it shall be generated per clause 5.2.8.2.2.",
-            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S3 — wired to CB-5.2.6-06's adoTst imprint-input dispatch, itself S3."),
+            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S3 — only clause 5.2.8.2.2's pars-dereferencing (retrieving and processing the referenced objects behind sigD.pars) remains S3; the imprint-input encapsulation of the already-processed segments is itself Tested (see CB-5.2.6-06), not this row's concern."),
 
         //Clause 5.4.1 — oId/obId.
         ("CB-5.4.1-01", "Instances of obId shall contain a unique and permanent identifier of one data object.",
@@ -640,5 +665,233 @@ internal sealed class CBAdESRequirementsMatrixTests
             RequirementCoverageStatus.Tested, "CBAdESSharedSyntaxTests.TimestampContainerRoundTripsWithRfc3161StyleToken"),
         ("CB-5.4.3.3-09", "Time-stamp containers within uHeaders implicitly identify what they cover by position; no further information in the container is required.",
             RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S2 — this is precisely uHeaders' own positional/implicit-coverage design (clause 5.3.1, the load-bearing 'order is semantically significant' rule); unreachable without the uHeaders array container."),
+
+        //Clause 5.3.1 — uHeaders, the unprotected-headers-map array container (stage 2, leg 3).
+        ("CB-5.3.1-01", "The uHeaders header parameter shall be a CBOR array whose elements contain CBOR values that are not signed by the CB-AdES signature.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedHeadersTests.RoundTripsMixedElementSequenceByteExactlyPreservingOrder (CBAdESUnsignedHeaders is an ordered sequence type, never a map/dictionary, encoded as a CBOR array of bstr-wrapped elements)"),
+        ("CB-5.3.1-02", "The uHeaders header parameter shall contain CBOR values that qualify the CB-AdES signature itself, or the signer, or the COSE Payload.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedHeadersTests.RoundTripsMixedElementSequenceByteExactlyPreservingOrder (exercises one instance of every defined element kind -- sigTst, valData, arcTst, refs, sigRTst, rfsTst, sigPSt, x5chain -- as the closed-sum element type's cases)"),
+        ("CB-5.3.1-03", "New unsigned attributes shall always be added at the end of the uHeaders header parameter, which is a CBOR array.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedHeadersTests.AppendReturnsNewInstanceLeavingOriginalUnchanged (also CBAdESUnsignedHeadersTests.PublicSurfaceExposesNoInsertRemoveOrReorderOperation for the API-shape enforcement)"),
+        ("CB-5.3.1-04", "The unsigned attributes shall be encapsulated in CBOR byte strings before being placed within the uHeaders header parameter.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedHeadersTests.RoundTripsMixedElementSequenceByteExactlyPreservingOrder (also CBAdESUnsignedHeadersTests.TryParseUnsignedHeadersFailsClosedOnElementNotByteString for the negative enforcement)"),
+        ("CB-5.3.1-05", "All the CBOR objects sigPSt, counter signature, sigTst, valData, arcTst, refs, sigRTst and rfsTst shall be placed within the uHeaders header parameter if they are incorporated into the CB-AdES signature.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedHeadersTests.RoundTripsMixedElementSequenceByteExactlyPreservingOrder (all seven Table 8 kinds plus the x5chain arm round-trip as uHeaders elements; the counter-signature arm, labels 11/12, remains out of scope until CB-AdES wave stage S6)"),
+        ("CB-5.3.1-06", "The uHeaders CBOR array shall be assigned an identifying tag, and each unsigned attribute shall be assigned a label (Table 8: uHeaders=268, sigTst=1, valData=2, arcTst=3, refs=4, sigRTst=5, rfsTst=6, sigPSt=7).",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedHeadersTests.RoundTripsMixedElementSequenceByteExactlyPreservingOrder (labels 1 through 7 and 33 exercised byte-exact against an independent oracle; also CBAdESRegistryTests.HeaderParameterLabelsMatchTable1AndTable8Assignments for the uHeaders=268 header-parameter label itself)"),
+        ("CB-5.3.1-07", "The uHeaders header parameter shall be a non-empty array.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedHeadersTests.ConstructingUnsignedHeadersWithEmptyElementsThrows (also CBAdESUnsignedHeadersTests.TryParseUnsignedHeadersFailsClosedOnEmptyArray for the parse-side mirror)"),
+        ("CB-5.3.1-08", "In CB-AdES signatures supported by a COSE_Sign structure, the uHeaders header parameter shall be placed at the signer layer.",
+            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S6 -- needs the COSE_Sign multi-signer structure to distinguish body from signer layer; CBAdESUnsignedHeaders itself is layer-agnostic."),
+        ("CB-5.3.1-09", "The uHeaders header parameter shall be incorporated as member of the unprotected header map of the CB-AdES signature.",
+            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S3 -- actually placing the encoded uHeaders array into a real COSE_Sign1 unprotected header map needs the not-yet-built signature-composition orchestrator."),
+        ("CB-5.3.1-10", "The uHeaders header parameter should be the only header parameter incorporated to the unprotected headers map.",
+            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S3 -- a producer-side conformance-by-default check exercised at signature-composition time; no orchestrator exists yet."),
+        ("CB-5.3.1-11", "Any CBOR value that is not specified in the present document should be incorporated as an element of the uHeaders header parameter.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedHeadersTests.TryParseUnsignedHeadersRoundTripsSingleUnrecognizedIntegerLabelElementByteExactly (also CBAdESUnsignedHeadersTests.TryParseUnsignedHeadersRoundTripsSingleUnrecognizedTextLabelElementByteExactly for the tstr-labelled arm)"),
+
+        //Clause 5.3.2 -- sigPSt (stage 2, leg 3).
+        ("CB-5.3.2-01", "The sigPSt CBOR map shall contain either the signature policy document referenced in sigPId, or a URI referencing a local store where it can be retrieved.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.SignaturePolicyStoreRoundTripsWithDocumentArmAndNoSpDSpec (also CBAdESUnsignedComponentSerializationTests.ParseSignaturePolicyStoreFailsClosedWhenDocOrLocalUriHasBothArms and ...FailsClosedWhenDocOrLocalUriHasNoArms for the exclusive-choice enforcement, and CBAdESUnsignedComponentTests.ConstructingSignaturePolicyStoreWithNullContentThrows)"),
+        ("CB-5.3.2-02", "The sigPolDoc member shall contain the signature policy document encapsulated within a CBOR byte string.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.SignaturePolicyStoreRoundTripsWithDocumentArmAndNoSpDSpec"),
+        ("CB-5.3.2-03", "The sigPolLocalURI member shall have as value the URI pointing to a local store where the present document can be retrieved.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.SignaturePolicyStoreRoundTripsWithLocalUriArmAndNoSpDSpec (also CBAdESUnsignedComponentSerializationTests.ParseSignaturePolicyStoreFailsClosedOnMissingTag32ForLocalUri for the tag-32 enforcement)"),
+        ("CB-5.3.2-04", "The spDSpec member shall identify the technical specification that defines the syntax used for producing the signature policy document.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.SignaturePolicyStoreRoundTripsWithDocumentArmAndSpDSpec"),
+
+        //Clause 5.3.3 -- sigTst (stage 2, leg 3).
+        ("CB-5.3.3-01", "The sigTst CBOR map shall encapsulate one or more electronic time-stamps time-stamping the COSE signature value.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.SignatureTimestampRoundTripsThroughWrapperCodec (also CBAdESUnsignedComponentTests.ConstructingSignatureTimestampWithNullContainerThrows)"),
+        ("CB-5.3.3-02", "The input of the message imprint computation for the time-stamp tokens encapsulated by sigTst shall be the COSE signature value present within the CB-AdES signature.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.SigTstMessageImprintReturnsRawSignatureValueBytesUnwrapped (also CBAdESMessageImprintTests.SigTstMessageImprintReturnsEmptyBytesForEmptySignatureValue for the empty-input edge) -- CBAdESMessageImprints.BuildSignatureTimestampMessageImprintInput returns exactly the literal COSE signature-value bytes (RFC 9052 clause 4.1), unwrapped and unconcatenated; composing this input against a REAL composed signature awaits CB-AdES wave stage S3's orchestrator; the sigTst container itself is Tested via CBAdESUnsignedComponentSerializationTests.SignatureTimestampRoundTripsThroughWrapperCodec."),
+
+        //Clause 5.3.4 -- valData (stage 2, leg 3).
+        ("CB-5.3.4-01", "The valData CBOR map shall contain the certificates identified by xVals, or the revocation data identified by rVals, or both of them.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ValidationDataRoundTripsWithBothCertificateAndRevocationValues (also the certificate-only and revocation-only round trips in the same file)"),
+        ("CB-5.3.4-02", "CB-AdES signatures shall not incorporate empty valData maps.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentTests.ConstructingValidationDataWithNeitherCertificateNorRevocationValuesThrows (also CBAdESUnsignedComponentSerializationTests.ParseValidationDataFailsClosedOnEmptyMap)"),
+        ("CB-5.3.4-03", "The xVals array shall have at least one member.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentTests.ConstructingValidationDataWithEmptyCertificateValuesArrayThrows (also CBAdESUnsignedComponentSerializationTests.ParseValidationDataFailsClosedOnEmptyCertificateValuesArray)"),
+        ("CB-5.3.4-04", "An x509Cert item shall contain one DER-encoded X.509 certificate encapsulated within an instance of pkiOb.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ValidationDataRoundTripsWithMultipleCertificateValuesInWireOrder"),
+        ("CB-5.3.4-05", "The rVals map shall have at least one member.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentTests.ConstructingRevocationValuesWithEveryMemberAbsentThrows"),
+        ("CB-5.3.4-06", "The crlVals member shall be a non-empty array of DER-encoded X.509 CRLs.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentTests.ConstructingRevocationValuesWithEmptyCrlValuesArrayThrows (also CBAdESUnsignedComponentSerializationTests.ValidationDataRoundTripsWithCrlValuesOnly and ...ParseValidationDataFailsClosedOnEmptyCrlValuesArray)"),
+        ("CB-5.3.4-07", "Each element of the crlVals array shall contain one DER-encoded X.509 CRL encapsulated in a CBOR byte string.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ValidationDataRoundTripsWithCrlValuesOnly"),
+        ("CB-5.3.4-08", "If the validation data contain one or more Delta CRLs, the crlVals member shall contain the set of CRLs required to provide complete revocation lists.",
+            RequirementCoverageStatus.OutOfScope, "Not runtime-enforced this stage -- a cross-CRL completeness policy check (whether a Delta CRL's base CRL is also present) needs a validation pass over the whole assembled valData graph, not a single-instance construction guard; deferred to CB-AdES wave stage S7 (validation/conclusions), alongside CB-A.1.1-18's identical reasoning."),
+        ("CB-5.3.4-09", "The ocspVals member shall be a non-empty array of DER-encoded OCSP responses.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentTests.ConstructingRevocationValuesWithEmptyOcspValuesArrayThrows (also CBAdESUnsignedComponentSerializationTests.ValidationDataRoundTripsWithOcspValuesOnly for the non-empty round trip)"),
+        ("CB-5.3.4-10", "Each item of the ocspVals array shall contain a DER-encoded OCSPResponse.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ValidationDataRoundTripsWithOcspValuesOnly"),
+
+        //Clause 5.3.5.1 -- arcTst, general (stage 2, leg 3).
+        ("CB-5.3.5.1-01", "The arcTst CBOR map shall encapsulate electronic time-stamps computed on the COSE Payload, the protected headers map(s), the COSE signature value, externally supplied data when present, and the uHeaders array at the time of generating each time-stamp.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.ArcTstGenerationCoseSign1AttachedPayloadMatchesIndependentOracle (the semantic summary this row states is precisely what the twelve-step builder assembles; see the CB-5.3.5.3 rows for the operative per-step breakdown)"),
+        ("CB-5.3.5.1-02", "If the CB-AdES signature incorporates a counter signature element, all required material for validating the counter signature shall be incorporated before generating the first arcTst CBOR map.",
+            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S6 (needs the countersignature substrate) and S5 (arcTst generation orchestration) -- no counter-signature structure exists yet to order against."),
+        ("CB-5.3.5.1-03", "The contents of the counter signature element should not be changed once it has been time-stamped by the arcTst.",
+            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S6 -- same reasoning as CB-5.3.5.1-02; an informative consequence of a structure not yet modeled."),
+        ("CB-5.3.5.1-04", "The tstContainer member shall be as specified in clause 5.4.3.3 of the present document.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ArchiveTimestampRoundTripsThroughWrapperCodec (also CBAdESUnsignedComponentTests.ConstructingArchiveTimestampWithNullContainerThrows)"),
+
+        //Clause 5.3.5.2 -- arcTst generation, steps 1-5 (stage 2, leg 3).
+        ("CB-5.3.5.2-01", "Step 1: if the CB-AdES signature misses certificates and/or revocation data required for validating its signed objects, these shall be encapsulated within a new valData CBOR map, incorporated before generating the arcTst time-stamp(s).",
+            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S5 (arcTst generation orchestration, per wavecb-contract.md's stage plan) -- deciding 'the signature misses validation material' and appending a gap-filling valData element is an orchestration decision over the whole assembled signature, not built this stage."),
+        ("CB-5.3.5.2-02", "Step 2: compute the message imprint for the new archive time-stamp token(s), as indicated in clause 5.3.5.3.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.ArcTstGenerationCoseSign1AttachedPayloadMatchesIndependentOracle (the shipped message-imprint builder this step invokes; see the CB-5.3.5.3 rows)"),
+        ("CB-5.3.5.2-03", "Step 3: request as many archive time-stamp token(s) as required to the corresponding time-stamp token Service Providers.",
+            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S5 (arcTst-specific request orchestration), over the TSA wire seam that lands in CB-AdES wave stage S4 -- no TSA request/response wiring exists yet for arcTst."),
+        ("CB-5.3.5.2-04", "Step 4: build a new arcTst CBOR map, encapsulating the time-stamp token(s) issued in the previous step and wrap it.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ArchiveTimestampRoundTripsThroughWrapperCodec (the tstContainer-shaped arcTst wrapper this step builds)"),
+        ("CB-5.3.5.2-05", "Step 5: wrap the arcTst CBOR map in a CBOR byte string and incorporate it as the last element in the uHeaders CBOR array.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedHeadersTests.AppendReturnsNewInstanceLeavingOriginalUnchanged (also CBAdESUnsignedHeadersTests.RoundTripsMixedElementSequenceByteExactlyPreservingOrder, which round-trips an arcTst element bstr-wrapped in place)"),
+
+        //Clause 5.3.5.3 -- the arcTst message-imprint algorithm, twelve steps plus the validation variant (stage 2, leg 3; D1 ruling on the closing sentence).
+        ("CB-5.3.5.3-01", "For computing the input to the message imprint computation indicated in clause 5.3.5.2 step 2, the steps listed below shall be performed.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.ArcTstGenerationCoseSign1AttachedPayloadMatchesIndependentOracle (a full, byte-exact run of the twelve-step algorithm against an independently assembled oracle)"),
+        ("CB-5.3.5.3-02", "Step 1: initialize an empty CBOR array.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.ArcTstGenerationCoseSign1AttachedPayloadMatchesIndependentOracle (the array-length header of every expected oracle value is asserted byte-exact)"),
+        ("CB-5.3.5.3-03", "Step 2: add a context text string, 'Signature' for COSE_Sign, 'Signature1' for COSE_Sign1, or the RFC 9338 clause 3.3 context string for a counter signature.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.ArcTstGenerationCoseSign1AttachedPayloadMatchesIndependentOracle ('Signature1'; also CBAdESMessageImprintTests.ArcTstGenerationCoseSignWithSignerProtectedHeaderPresentMatchesIndependentOracle for the 'Signature' arm; the RFC 9338 counter-signature arm is deferred to CB-AdES wave stage S6)"),
+        ("CB-5.3.5.3-04", "Step 3: add the protected header from the body layer, encapsulated in a CBOR byte string, or a zero-length byte string if absent.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.ArcTstGenerationCoseSign1AttachedPayloadMatchesIndependentOracle (present; also CBAdESMessageImprintTests.ArcTstGenerationCoseSign1DetachedPayloadMatchesIndependentOracle for the zero-length sentinel)"),
+        ("CB-5.3.5.3-05", "Step 4: if built on COSE_Sign, add the signer layer's protected header (or a zero-length byte string if absent); COSE_Sign1 has no explicit branch for this step.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.ArcTstGenerationCoseSignWithSignerProtectedHeaderPresentMatchesIndependentOracle (also CBAdESMessageImprintTests.ArcTstGenerationCoseSignWithSignerProtectedHeaderAbsentUsesZeroLengthSentinel and ...ThrowsWhenSignerProtectedHeaderNullnessMismatchesStructure for the leg-3 step-4 trap's guard)"),
+        ("CB-5.3.5.3-06", "Step 5: add the externally supplied data from the application, encapsulated in a CBOR byte string, or a zero-length byte string if none was supplied.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.ArcTstGenerationCoseSign1DetachedPayloadMatchesIndependentOracle (present; also CBAdESMessageImprintTests.ArcTstGenerationCoseSign1AttachedPayloadMatchesIndependentOracle for the zero-length sentinel)"),
+        ("CB-5.3.5.3-07", "Step 6: if sigD is absent, add the CBOR byte string of the payload field, or the retrieved detached COSE Payload bytes wrapped in one if the payload field is absent.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.ArcTstGenerationCoseSign1AttachedPayloadMatchesIndependentOracle (payload field present; also CBAdESMessageImprintTests.ArcTstGenerationCoseSign1DetachedPayloadMatchesIndependentOracle for the detached-and-retrieved case)"),
+        ("CB-5.3.5.3-08", "Step 7: if sigD is present, retrieve and concatenate the bytes resulting from processing sigD.pars per clause 5.2.8.2.2, then encapsulate the concatenation in one CBOR byte string.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.ArcTstGenerationSigDBranchConcatenatesThenEncapsulatesProcessedPars"),
+        ("CB-5.3.5.3-09", "Step 8: if built on a version-2 RFC 9338 counter signature, add the other_fields CBOR array.",
+            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S6 -- needs the RFC 9338 countersignature substrate; CBAdESArchiveTimestampImprintContext.CountersignatureOtherFields exists as a field but is always null this stage (per CBAdESMessageImprintTests's own BuildArcTstContext helper)."),
+        ("CB-5.3.5.3-10", "Step 9: add the CBOR byte string in the signature component.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.ArcTstGenerationCoseSign1AttachedPayloadMatchesIndependentOracle"),
+        ("CB-5.3.5.3-11", "Step 10: if built on COSE_Sign, take the elements in the uHeaders header parameter from the signer layer, in wire order, and add them (or a zero-length byte string if the signer layer has no uHeaders).",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.ArcTstGenerationAppendsMultiElementUHeadersInWireOrder (the shipped builder's own remarks record that it does not re-derive the signer-vs-body layer choice -- the same UHeadersEncodedArray-append code path serves both step 10 and step 11, differentiated only by which layer's already-encoded bytes the caller supplies; also CBAdESMessageImprintTests.ArcTstGenerationCoseSignWithSignerProtectedHeaderPresentMatchesIndependentOracle for the COSE_Sign zero-length-sentinel sub-case)"),
+        ("CB-5.3.5.3-12", "Step 11: else if built on COSE_Sign1, take the elements in the uHeaders header parameter from the body layer, in wire order, and add them (or a zero-length byte string if the body layer has no uHeaders).",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.ArcTstGenerationAppendsMultiElementUHeadersInWireOrder (also CBAdESMessageImprintTests.ArcTstGenerationCoseSign1AttachedPayloadMatchesIndependentOracle for the zero-length-sentinel sub-case)"),
+        ("CB-5.3.5.3-13", "Step 12: encode the generated CBOR array in a CBOR byte string.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.ArcTstGenerationCoseSign1AttachedPayloadMatchesIndependentOracle (D1: the returned bytes ARE this final encoding, asserted byte-exact against the independent oracle, per the class's own D1/step-12 remarks)"),
+        ("CB-5.3.5.3-14", "Validation variant, step 10: if COSE_Sign, take the signer-layer uHeaders elements that precede the arcTst under validation, in wire order (or a zero-length byte string if uHeaders is absent).",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.ArcTstValidationAppendsOnlyElementsPrecedingTargetIndexAndDiffersFromGenerationByExcludedSuffix (the shipped validation builder does not re-derive the signer-vs-body layer choice, the same prefix-selection code path serving both this row and CB-5.3.5.3-15); the absent-uHeaders sentinel arm is Tested via CBAdESMessageImprintTests.ArcTstValidationUsesZeroLengthSentinelWhenUHeadersAbsentRegardlessOfElementIndex and the present-but-empty-prefix asymmetry via CBAdESMessageImprintTests.ArcTstValidationAtIndexZeroWithPresentUHeadersDiffersFromAbsentUHeadersBySentinelItem (D13)"),
+        ("CB-5.3.5.3-15", "Validation variant, step 11: else if COSE_Sign1, take the body-layer uHeaders elements that precede the arcTst under validation, in wire order (or a zero-length byte string if uHeaders is absent).",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.ArcTstValidationAppendsOnlyElementsPrecedingTargetIndexAndDiffersFromGenerationByExcludedSuffix (the same prefix-selection code path serves both this row and CB-5.3.5.3-14); the absent-uHeaders sentinel arm is Tested via CBAdESMessageImprintTests.ArcTstValidationUsesZeroLengthSentinelWhenUHeadersAbsentRegardlessOfElementIndex and the present-but-empty-prefix asymmetry via CBAdESMessageImprintTests.ArcTstValidationAtIndexZeroWithPresentUHeadersDiffersFromAbsentUHeadersBySentinelItem (D13)"),
+        ("CB-5.3.5.3-16", "D1 (contract R-6, RULED): the message imprint computation input shall be the CBOR byte string resulting from step 12 -- the spec's closing sentence literally names 'step 11', which produces no byte string.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.ArcTstGenerationCoseSign1AttachedPayloadMatchesIndependentOracle (the recorded reading is documented on CBAdESMessageImprints's own D1 remarks; every expected oracle value in this test class is the fully-assembled array's own encoding, never wrapped a further time)"),
+
+        //Annex A.1.1 -- the refs CBOR map (stage 2, leg 5).
+        ("CB-A.1.1-01", "refs may contain references to certificate values validating any digital signature present in any component of the CB-AdES signature, without restriction.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ReferencesRoundTripsWithMultipleCertificateReferencesIncludingKidAbsentInWireOrder (satisfied by construction -- CBAdESCertificateReference carries no target-signature restriction field, so a CertId entry is not scoped to any one signature)"),
+        ("CB-A.1.1-02", "refs shall not contain the signing certificate of the CB-AdES signature itself.",
+            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S3 (B-B creation) -- rejecting/stripping the signer's own certificate from xRefs needs to compare against the actual signing certificate, which only exists once a real signature is composed."),
+        ("CB-A.1.1-03", "refs may contain references to the revocation value(s) of the certificate(s) supporting any signature the refs component reaches.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ReferencesRoundTripsWithCertificateAndAllThreeRevocationReferenceKindsCombined (rRefs carries the same unrestricted-scope shape as xRefs)"),
+        ("CB-A.1.1-04", "CB-AdES signatures shall not incorporate empty refs CBOR maps.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentTests.ConstructingReferencesWithNeitherCertificateNorRevocationReferencesThrows (also CBAdESUnsignedComponentSerializationTests.ParseReferencesFailsClosedOnEmptyMap)"),
+        ("CB-A.1.1-05", "Empty xRefs shall not be incorporated.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentTests.ConstructingReferencesWithEmptyCertificateReferencesArrayThrows (also CBAdESUnsignedComponentSerializationTests.ParseReferencesFailsClosedOnEmptyCertificateReferencesArray)"),
+        ("CB-A.1.1-06", "Within xRefs, the x5t member shall identify the digest algorithm and digest value computed on the DER-encoded certificate.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentTests.ConstructingCertificateReferenceWithNullThumbprintThrows (also CBAdESUnsignedComponentSerializationTests.ReferencesRoundTripsWithCertificateReferenceKidAsIntegerAndNoLocationHint for the digest round trip)"),
+        ("CB-A.1.1-07", "The content of kid should be a DER-encoded IssuerSerial wrapped in a CBOR byte string.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ReferencesRoundTripsWithCertificateReferenceKidAsBytesIssuerSerialPlaceholder"),
+        ("CB-A.1.1-08", "x5u shall provide an indication of where the referenced certificate can be found.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ReferencesRoundTripsWithCertificateReferenceKidAsTextAndLocationHint"),
+        ("CB-A.1.1-09", "Empty rRefs shall not be incorporated.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentTests.ConstructingRevocationReferencesWithEveryMemberAbsentThrows (also CBAdESUnsignedComponentSerializationTests.ParseReferencesFailsClosedOnEmptyRevocationReferencesMap)"),
+        ("CB-A.1.1-10", "crlRefs shall contain a non-empty array of references to CRLs.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentTests.ConstructingRevocationReferencesWithEmptyCrlReferencesArrayThrows (also CBAdESUnsignedComponentSerializationTests.ParseReferencesFailsClosedOnEmptyCrlReferencesArray)"),
+        ("CB-A.1.1-11", "Each item within the crlRefs array shall contain one reference to one CRL.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ReferencesRoundTripsWithCrlReferenceWithoutCrlId"),
+        ("CB-A.1.1-12", "CRLRef.digAlgVal shall contain a digest algorithm indication and the digest value of the DER-encoded referenced CRL, wrapped in a CBOR byte string.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentTests.ConstructingCrlReferenceWithNullHashAlgorithmThrows (also CBAdESUnsignedComponentTests.ConstructingCrlReferenceWithNullDigestThrows and CBAdESUnsignedComponentSerializationTests.ReferencesRoundTripsWithCrlReferenceWithoutCrlId)"),
+        ("CB-A.1.1-13", "crlId needs not to be present if the referenced CRL can be inferred from other information.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ReferencesRoundTripsWithCrlReferenceWithoutCrlId"),
+        ("CB-A.1.1-14", "crlId items shall include the issuer's name in issuer.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ReferencesRoundTripsWithCrlReferenceWithCrlIdAllMembers (also CBAdESUnsignedComponentSerializationTests.ParseReferencesFailsClosedOnMissingRequiredIssuerInCrlId)"),
+        ("CB-A.1.1-15", "crlId items shall include the CRL issuance time in issueTime.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ReferencesRoundTripsWithCrlReferenceWithCrlIdAllMembers"),
+        ("CB-A.1.1-16", "crlId items may include the CRL number in number.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ReferencesRoundTripsWithCrlReferenceWithCrlIdAllMembers"),
+        ("CB-A.1.1-17", "crlId.uri shall indicate one place where the referenced CRL can be found, when present.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ReferencesRoundTripsWithCrlReferenceWithCrlIdAllMembers"),
+        ("CB-A.1.1-18", "If one or more identified CRLs is a Delta CRL, refs shall include references to the full set of CRLs needed for a complete revocation list.",
+            RequirementCoverageStatus.OutOfScope, "Not runtime-enforced this stage -- the same cross-reference completeness policy check as CB-5.3.4-08, over the whole assembled refs graph; deferred to CB-AdES wave stage S7 (validation/conclusions)."),
+        ("CB-A.1.1-19", "ocspRefs shall contain a non-empty array of references to OCSP responses.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentTests.ConstructingRevocationReferencesWithEmptyOcspReferencesArrayThrows (also CBAdESUnsignedComponentSerializationTests.ParseReferencesFailsClosedOnEmptyOcspReferencesArray)"),
+        ("CB-A.1.1-20", "Each item within ocspRefs shall contain one reference to one OCSP response.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ReferencesRoundTripsWithOcspReferenceResponderByName"),
+        ("CB-A.1.1-21", "ocspId items shall include an identifier of the responder wrapped in a CBOR byte string.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentTests.ConstructingOcspIdentifierWithNullResponderThrows (also CBAdESUnsignedComponentTests.ConstructingOcspReferenceWithNullOcspIdentifierThrows)"),
+        ("CB-A.1.1-22", "If the responder identifier is the digest of the server's public key, responderIdByKey shall be present.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ReferencesRoundTripsWithOcspReferenceResponderByKeyPreservesRawDerBytes"),
+        ("CB-A.1.1-23", "If the responder identifier is the DER-encoded name of the responder, responderIdByName shall be present.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ReferencesRoundTripsWithOcspReferenceResponderByName"),
+        ("CB-A.1.1-24", "D8 (contract R-6, RULED): when identified by public-key digest, the responderIdByKey member shall carry the raw DER byKey bytes -- the spec's own 'base64 encoding' wording is a JAdES copy-residue, not an actual base64 transformation.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ReferencesRoundTripsWithOcspReferenceResponderByKeyPreservesRawDerBytes (both assertions in this test are explicitly annotated with the D8 citation)"),
+        ("CB-A.1.1-25", "ocspId items shall include the OCSP response's generation time in producedAt.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ReferencesRoundTripsWithOcspReferenceResponderByName (structurally mandatory: CBAdESOcspIdentifier.ProducedAt is a non-nullable DateTimeOffset, so an absent value cannot be represented)"),
+        ("CB-A.1.1-26", "ocspId.producedAt shall indicate the same time as the referenced response's ProducedAt field.",
+            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S7 -- cross-checking the supplied producedAt against an actual decoded OCSPResponse.ProducedAt field needs OCSP DER parsing over assembled material, the same cross-component validation-pass reasoning as CB-5.3.4-08/CB-A.1.1-18; CBAdESOcspIdentifier carries the caller-supplied value opaquely this stage."),
+        ("CB-A.1.1-27", "ocspId.uri shall indicate one place where the referenced OCSP response can be found.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ReferencesRoundTripsWithOcspReferenceResponderByKeyPreservesRawDerBytes"),
+        ("CB-A.1.1-28", "OCSPRef.digAlgVal shall contain a digest algorithm indication and digest value of the DER-encoded OCSPResponse, wrapped in a CBOR byte string.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentTests.ConstructingOcspReferenceWithNullHashAlgorithmThrows (also CBAdESUnsignedComponentTests.ConstructingOcspReferenceWithNullDigestThrows and CBAdESUnsignedComponentSerializationTests.ReferencesRoundTripsWithOcspReferenceResponderByName)"),
+        ("CB-A.1.1-29", "References to alternative validation-data forms may be included via otherRefs; their semantics and syntax are out of scope of the present document.",
+            RequirementCoverageStatus.Tested, "CBAdESUnsignedComponentSerializationTests.ReferencesRoundTripsWithOtherReferencesOpaqueBytes (also CBAdESUnsignedComponentTests.ConstructingRevocationReferencesWithEmptyOtherReferencesArrayThrows -- leg-5 trap-3's otherRefs-is-not-OCSP-only reading is cited in this test's own doc comment)"),
+        ("CB-A.1.1-30", "If valData or arcTst is incorporated into the signature, all certificates and validation data referenced in refs shall be present elsewhere in the signature.",
+            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S4 -- the contract names this cross-consistency check explicitly as an S4 deliverable, alongside the B-B/B-T refs mechanism and the strip-on-upgrade transition."),
+
+        //Annex A.1.2.1.1 -- the sigRTst CBOR map (stage 2, leg 5).
+        ("CB-A.1.2.1-01", "sigRTst shall encapsulate electronic time-stamp(s) on the COSE signature value, the signature time-stamp (if present), and the CB-AdES components containing references to validation data.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.SigRTstMessageImprintFiltersToSigTstAndRefsElementsInWireOrderAfterSignatureValue (also CBAdESUnsignedComponentSerializationTests.SignatureAndReferencesTimestampRoundTripsThroughWrapperCodec for the container wrapper)"),
+        ("CB-A.1.2.1-02", "The sigRTst CBOR map shall contain an electronic time-stamp that time-stamps the member encapsulating the COSE signature value, and sigTst/refs when present.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.SigRTstMessageImprintFiltersToSigTstAndRefsElementsInWireOrderAfterSignatureValue"),
+        ("CB-A.1.2.1-03", "If refs is not present, the sigRTst CBOR map shall not be generated.",
+            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S4 -- a generation-time precondition gate belonging alongside the refs mechanism's own generation orchestration; the shipped message-imprint builder computes the imprint bytes unconditionally and does not itself decide whether sigRTst should be generated at all."),
+
+        //Annex A.1.2.1.2 -- the sigRTst message-imprint computation, five steps (stage 2, leg 5; leg-5 trap 4 on step 4's COSE_Sign1 wording).
+        ("CB-A.1.2.1.2-01", "Step 1: initialize an empty CBOR array.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.SigRTstMessageImprintFiltersToSigTstAndRefsElementsInWireOrderAfterSignatureValue"),
+        ("CB-A.1.2.1.2-02", "Step 2: add the CBOR byte string in the signature component.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.SigRTstMessageImprintFiltersToSigTstAndRefsElementsInWireOrderAfterSignatureValue (the signature-value element leads the array; also CBAdESMessageImprintTests.RfsTstMessageImprintMatchesSigRTstMinusTheLeadingSignatureElement, which demonstrates this element's presence by its absence in rfsTst)"),
+        ("CB-A.1.2.1.2-03", "Step 3: if built on COSE_Sign, take sigTst (if present) then refs (if present) from the signer layer's uHeaders, in wire order, appending a zero-length byte string if neither is present.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.SigRTstMessageImprintFiltersToSigTstAndRefsElementsInWireOrderAfterSignatureValue (the shipped builder takes no structure-context parameter at all -- the same filter-and-append code path serves both this row and CB-A.1.2.1.2-04, per leg 5's own 'one parameterized function' implication; also CBAdESMessageImprintTests.SigRTstMessageImprintUsesZeroLengthSentinelWhenUHeadersAbsent and ...CollapsesToZeroLengthSentinelWhenUHeadersPresentButNoElementsMatch for the sentinel cases)"),
+        ("CB-A.1.2.1.2-04", "Step 4 (leg-5 trap 4: read 'body layer' for COSE_Sign1): if built on COSE_Sign1, take sigTst (if present) then refs (if present) from the body layer's uHeaders, in wire order, appending a zero-length byte string if neither is present.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.SigRTstMessageImprintFiltersToSigTstAndRefsElementsInWireOrderAfterSignatureValue (same structure-agnostic code path as CB-A.1.2.1.2-03; the trap-4 reading is recorded in CBAdESMessageImprints's own remarks)"),
+        ("CB-A.1.2.1.2-05", "Step 5: encode the generated CBOR array in a CBOR byte string.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.SigRTstMessageImprintFiltersToSigTstAndRefsElementsInWireOrderAfterSignatureValue"),
+
+        //Annex A.1.2.2.1 -- the rfsTst CBOR map (stage 2, leg 5).
+        ("CB-A.1.2.2-01", "rfsTst shall encapsulate electronic time-stamp(s) on the signature time-stamp (if present) and the CB-AdES components containing references to validation data, deliberately excluding the raw signature value.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.RfsTstMessageImprintMatchesSigRTstMinusTheLeadingSignatureElement (also CBAdESUnsignedComponentSerializationTests.ReferencesTimestampRoundTripsThroughWrapperCodec for the container wrapper)"),
+        ("CB-A.1.2.2-02", "The rfsTst CBOR map shall contain an electronic time-stamp time-stamping the member encapsulating sigTst/refs when present.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.RfsTstMessageImprintMatchesSigRTstMinusTheLeadingSignatureElement"),
+        ("CB-A.1.2.2-03", "If refs is not present, the rfsTst CBOR map shall not be generated.",
+            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S4 -- the same generation-time precondition gate as CB-A.1.2.1-03."),
+
+        //Annex A.1.2.2.2 -- the rfsTst message-imprint computation, four steps (stage 2, leg 5; leg-5 trap 4 again on step 3).
+        ("CB-A.1.2.2.2-01", "Step 1: initialize an empty CBOR array; no signature-value element is ever added.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.RfsTstMessageImprintMatchesSigRTstMinusTheLeadingSignatureElement (explicitly demonstrates the absent signature-value element by direct byte comparison against sigRTst's own output)"),
+        ("CB-A.1.2.2.2-02", "Step 2: if built on COSE_Sign, take sigTst (if present) then refs (if present) from the signer layer's uHeaders, in wire order, appending a zero-length byte string if neither is present.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.RfsTstMessageImprintUsesZeroLengthSentinelWhenUHeadersAbsent (the shipped builder takes no structure-context parameter -- the same filter-and-append code path serves both this row and CB-A.1.2.2.2-03; also CBAdESMessageImprintTests.RfsTstMessageImprintMatchesSigRTstMinusTheLeadingSignatureElement for the matching-elements case)"),
+        ("CB-A.1.2.2.2-03", "Step 3 (leg-5 trap 4: read 'body layer' for COSE_Sign1): if built on COSE_Sign1, take sigTst (if present) then refs (if present) from the body layer's uHeaders, in wire order, appending a zero-length byte string if neither is present.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.RfsTstMessageImprintMatchesSigRTstMinusTheLeadingSignatureElement (same structure-agnostic code path as CB-A.1.2.2.2-02; the trap-4 reading is recorded in CBAdESMessageImprints's own remarks)"),
+        ("CB-A.1.2.2.2-04", "Step 4: encode the generated CBOR array in a CBOR byte string.",
+            RequirementCoverageStatus.Tested, "CBAdESMessageImprintTests.RfsTstMessageImprintUsesZeroLengthSentinelWhenUHeadersAbsent"),
+
+        //Annex E (normative) -- alternative long-term availability/integrity mechanisms (stage 2, leg 5).
+        ("CB-E-01", "If an alternative mechanism for long-term availability/integrity of validation data is incorporated as an unsigned component, all three disclosures below shall be specified for it.",
+            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S5 -- the contract names Annex E's disclosure convention over the shipped Evidence Record extension points as an explicit S5 deliverable; no registration-record type exists yet this stage."),
+        ("CB-E-02", "Item 1: the clear specification of the semantics and syntax of the component, including its unique identifier, shall be specified.",
+            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S5 -- same reasoning as CB-E-01."),
+        ("CB-E-03", "Item 2: the strategy of how the mechanism guarantees that all necessary parts of the signature are protected by the component shall be specified.",
+            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S5 -- same reasoning as CB-E-01."),
+        ("CB-E-04", "Item 3: the strategy of how to handle signatures containing components defined in the present document (coexistence with refs/valData/sigRTst/rfsTst/arcTst) shall be specified.",
+            RequirementCoverageStatus.OutOfScope, "Deferred to CB-AdES wave stage S5 -- same reasoning as CB-E-01."),
     ];
 }
