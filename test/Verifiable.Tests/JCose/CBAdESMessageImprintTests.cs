@@ -832,7 +832,7 @@ internal sealed class CBAdESMessageImprintTests
         byte[] expected = BuildExpectedArrayOfByteStrings(signatureValue, sigTstElement, refsElement);
 
         bool built = CBAdESMessageImprints.TryBuildSignatureAndReferencesTimestampMessageImprintInput(
-            signatureValue, uHeadersEncodedArray, BaseMemoryPool.Shared, out PooledMemory? result);
+            signatureValue, uHeadersEncodedArray, uHeadersSliceBound: null, BaseMemoryPool.Shared, out PooledMemory? result);
 
         Assert.IsTrue(built);
         using(result)
@@ -850,7 +850,7 @@ internal sealed class CBAdESMessageImprintTests
         byte[] expected = BuildExpectedArrayOfByteStrings(signatureValue, Array.Empty<byte>());
 
         bool built = CBAdESMessageImprints.TryBuildSignatureAndReferencesTimestampMessageImprintInput(
-            signatureValue, null, BaseMemoryPool.Shared, out PooledMemory? result);
+            signatureValue, null, uHeadersSliceBound: null, BaseMemoryPool.Shared, out PooledMemory? result);
 
         Assert.IsTrue(built);
         using(result)
@@ -875,7 +875,7 @@ internal sealed class CBAdESMessageImprintTests
         byte[] expected = BuildExpectedArrayOfByteStrings(signatureValue, Array.Empty<byte>());
 
         bool built = CBAdESMessageImprints.TryBuildSignatureAndReferencesTimestampMessageImprintInput(
-            signatureValue, uHeadersEncodedArray, BaseMemoryPool.Shared, out PooledMemory? result);
+            signatureValue, uHeadersEncodedArray, uHeadersSliceBound: null, BaseMemoryPool.Shared, out PooledMemory? result);
 
         Assert.IsTrue(built);
         using(result)
@@ -898,9 +898,9 @@ internal sealed class CBAdESMessageImprintTests
         (byte[] uHeadersEncodedArray, byte[] sigTstElement, byte[] refsElement) = BuildMixedFilterFixture();
 
         bool sigRTstOk = CBAdESMessageImprints.TryBuildSignatureAndReferencesTimestampMessageImprintInput(
-            signatureValue, uHeadersEncodedArray, BaseMemoryPool.Shared, out PooledMemory? sigRTstResult);
+            signatureValue, uHeadersEncodedArray, uHeadersSliceBound: null, BaseMemoryPool.Shared, out PooledMemory? sigRTstResult);
         bool rfsTstOk = CBAdESMessageImprints.TryBuildReferencesOnlyTimestampMessageImprintInput(
-            uHeadersEncodedArray, BaseMemoryPool.Shared, out PooledMemory? rfsTstResult);
+            uHeadersEncodedArray, uHeadersSliceBound: null, BaseMemoryPool.Shared, out PooledMemory? rfsTstResult);
 
         Assert.IsTrue(sigRTstOk);
         Assert.IsTrue(rfsTstOk);
@@ -929,7 +929,7 @@ internal sealed class CBAdESMessageImprintTests
     {
         byte[] expected = BuildExpectedArrayOfByteStrings(Array.Empty<byte>());
 
-        bool built = CBAdESMessageImprints.TryBuildReferencesOnlyTimestampMessageImprintInput(null, BaseMemoryPool.Shared, out PooledMemory? result);
+        bool built = CBAdESMessageImprints.TryBuildReferencesOnlyTimestampMessageImprintInput(null, uHeadersSliceBound: null, BaseMemoryPool.Shared, out PooledMemory? result);
 
         Assert.IsTrue(built);
         using(result)
@@ -944,7 +944,7 @@ internal sealed class CBAdESMessageImprintTests
     public void SigRTstMessageImprintFailsClosedWhenUHeadersIsNotAnArray()
     {
         bool built = CBAdESMessageImprints.TryBuildSignatureAndReferencesTimestampMessageImprintInput(
-            new byte[] { 0x01 }, BuildUHeadersBytesThatAreNotAnArray(), BaseMemoryPool.Shared, out PooledMemory? result);
+            new byte[] { 0x01 }, BuildUHeadersBytesThatAreNotAnArray(), uHeadersSliceBound: null, BaseMemoryPool.Shared, out PooledMemory? result);
 
         Assert.IsFalse(built, "Non-array uHeaders bytes must fail closed.");
         Assert.IsNull(result);
@@ -957,7 +957,7 @@ internal sealed class CBAdESMessageImprintTests
     public void SigRTstMessageImprintFailsClosedWhenUHeadersElementIsNotByteString()
     {
         bool built = CBAdESMessageImprints.TryBuildSignatureAndReferencesTimestampMessageImprintInput(
-            new byte[] { 0x01 }, BuildUHeadersArrayWithNonByteStringElement(), BaseMemoryPool.Shared, out PooledMemory? result);
+            new byte[] { 0x01 }, BuildUHeadersArrayWithNonByteStringElement(), uHeadersSliceBound: null, BaseMemoryPool.Shared, out PooledMemory? result);
 
         Assert.IsFalse(built, "A non-bstr uHeaders array element must fail closed.");
         Assert.IsNull(result);
@@ -970,7 +970,7 @@ internal sealed class CBAdESMessageImprintTests
     public void SigRTstMessageImprintFailsClosedOnZeroElementUHeadersArray()
     {
         bool built = CBAdESMessageImprints.TryBuildSignatureAndReferencesTimestampMessageImprintInput(
-            new byte[] { 0x01 }, BuildZeroElementUHeadersArray(), BaseMemoryPool.Shared, out PooledMemory? result);
+            new byte[] { 0x01 }, BuildZeroElementUHeadersArray(), uHeadersSliceBound: null, BaseMemoryPool.Shared, out PooledMemory? result);
 
         Assert.IsFalse(built, "A zero-element uHeaders array violates CB-5.3.1-07's non-empty-array requirement and must fail closed.");
         Assert.IsNull(result);
@@ -986,7 +986,7 @@ internal sealed class CBAdESMessageImprintTests
         byte[] truncated = wellFormed[..^1];
 
         bool built = CBAdESMessageImprints.TryBuildSignatureAndReferencesTimestampMessageImprintInput(
-            new byte[] { 0x01 }, truncated, BaseMemoryPool.Shared, out PooledMemory? result);
+            new byte[] { 0x01 }, truncated, uHeadersSliceBound: null, BaseMemoryPool.Shared, out PooledMemory? result);
 
         Assert.IsFalse(built, "Truncated uHeaders bytes must fail closed.");
         Assert.IsNull(result);
@@ -999,7 +999,7 @@ internal sealed class CBAdESMessageImprintTests
     public void RfsTstMessageImprintFailsClosedWhenUHeadersIsNotAnArray()
     {
         bool built = CBAdESMessageImprints.TryBuildReferencesOnlyTimestampMessageImprintInput(
-            BuildUHeadersBytesThatAreNotAnArray(), BaseMemoryPool.Shared, out PooledMemory? result);
+            BuildUHeadersBytesThatAreNotAnArray(), uHeadersSliceBound: null, BaseMemoryPool.Shared, out PooledMemory? result);
 
         Assert.IsFalse(built, "Non-array uHeaders bytes must fail closed.");
         Assert.IsNull(result);
@@ -1012,7 +1012,7 @@ internal sealed class CBAdESMessageImprintTests
     public void RfsTstMessageImprintFailsClosedWhenUHeadersElementIsNotByteString()
     {
         bool built = CBAdESMessageImprints.TryBuildReferencesOnlyTimestampMessageImprintInput(
-            BuildUHeadersArrayWithNonByteStringElement(), BaseMemoryPool.Shared, out PooledMemory? result);
+            BuildUHeadersArrayWithNonByteStringElement(), uHeadersSliceBound: null, BaseMemoryPool.Shared, out PooledMemory? result);
 
         Assert.IsFalse(built, "A non-bstr uHeaders array element must fail closed.");
         Assert.IsNull(result);
@@ -1025,7 +1025,7 @@ internal sealed class CBAdESMessageImprintTests
     public void RfsTstMessageImprintFailsClosedOnZeroElementUHeadersArray()
     {
         bool built = CBAdESMessageImprints.TryBuildReferencesOnlyTimestampMessageImprintInput(
-            BuildZeroElementUHeadersArray(), BaseMemoryPool.Shared, out PooledMemory? result);
+            BuildZeroElementUHeadersArray(), uHeadersSliceBound: null, BaseMemoryPool.Shared, out PooledMemory? result);
 
         Assert.IsFalse(built, "A zero-element uHeaders array violates CB-5.3.1-07's non-empty-array requirement and must fail closed.");
         Assert.IsNull(result);
@@ -1041,7 +1041,7 @@ internal sealed class CBAdESMessageImprintTests
         byte[] truncated = wellFormed[..^1];
 
         bool built = CBAdESMessageImprints.TryBuildReferencesOnlyTimestampMessageImprintInput(
-            truncated, BaseMemoryPool.Shared, out PooledMemory? result);
+            truncated, uHeadersSliceBound: null, BaseMemoryPool.Shared, out PooledMemory? result);
 
         Assert.IsFalse(built, "Truncated uHeaders bytes must fail closed.");
         Assert.IsNull(result);
@@ -1073,7 +1073,7 @@ internal sealed class CBAdESMessageImprintTests
 
         bool arcTstOk = CBAdESMessageImprints.TryBuildArchiveTimestampGenerationMessageImprintInput(arcTstContext, BaseMemoryPool.Shared, out PooledMemory? arcTstResult);
         bool sigRTstOk = CBAdESMessageImprints.TryBuildSignatureAndReferencesTimestampMessageImprintInput(
-            signatureValue, uHeadersEncodedArray, BaseMemoryPool.Shared, out PooledMemory? sigRTstResult);
+            signatureValue, uHeadersEncodedArray, uHeadersSliceBound: null, BaseMemoryPool.Shared, out PooledMemory? sigRTstResult);
 
         Assert.IsTrue(arcTstOk);
         Assert.IsTrue(sigRTstOk);

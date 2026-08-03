@@ -131,6 +131,15 @@ namespace Verifiable.Cbor;
 /// detached <c>sigD</c> signature could not previously round-trip as detached through any shipped serializer).
 /// </para>
 /// <para>
+/// <strong>Raw <c>uHeaders</c> capture, added at wavecb S4 (coordinator ruling (3)).</strong>
+/// <see cref="ParseCBAdESSign1"/> now captures the <c>uHeaders</c> array's own verbatim wire bytes into
+/// <see cref="CBAdESSign1ParseResult.RawUnsignedHeaders"/> — an <see cref="EncodedCBAdESUnsignedHeaders"/>
+/// carrier mirroring <see cref="EncodedCoseProtectedHeader"/>'s "preserve the original encoding" shape
+/// exactly, the same wavecb S3 FX-A precedent that motivated <see cref="CBAdESSign1ParseResult.RawProtectedHeader"/>.
+/// The Annex A.1.2.1.2/A.1.2.2.2 <c>sigRTst</c>/<c>rfsTst</c> message-imprint builders consume THESE bytes at
+/// validation time; there is no re-encode path.
+/// </para>
+/// <para>
 /// <strong>Parse fail-closed convention, dispose-on-throw.</strong> <see cref="ParseCBAdESSign1"/> never
 /// throws for malformed input (contract R-5) — every failure path inside its single try block, including a
 /// failed component <c>TryParse*</c> call, is converted to a <see cref="CborContentException"/> throw so ALL
@@ -138,7 +147,7 @@ namespace Verifiable.Cbor;
 /// (the raw protected-header carrier, the five <see cref="CBAdESProtectedHeaders"/>-owned members, the decoded
 /// <c>uHeaders</c> set, and the signature carrier) before returning <see cref="CBAdESSign1ParseResult.Failure"/>
 /// — the S2 review's "misplaced early-return leaks a partially-parsed carrier" lesson, applied at the
-/// message-envelope level.
+/// message-envelope level; the wavecb S4 raw-<c>uHeaders</c> carrier joins that same cleanup set.
 /// </para>
 /// </remarks>
 public static class CBAdESSignatureSerialization
@@ -355,6 +364,132 @@ public static class CBAdESSignatureSerialization
 
 
     /// <summary>
+    /// Gets a delegate that splices the unprotected-header dictionary an AUGMENTATION verb needs: every
+    /// retained <c>uHeaders</c> element's own CONTENT bytes copied verbatim from the raw wire array captured at
+    /// parse, plus a freshly-encoded new element appended last. See
+    /// <see cref="TrySpliceCBAdESUnprotectedHeaderDelegate"/>'s own remarks for why this exists beside
+    /// <see cref="EncodeCBAdESUnprotectedHeader"/> (wavecb S4 FX-A).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Content-only preservation; the outer <c>bstr</c> framing is never carried forward as raw
+    /// bytes, and that is provably lossless.</strong> Each retained element's bytes are read via
+    /// <see cref="CborReader.ReadByteString"/> — the exact technique <see cref="EncodeCBAdESUnprotectedHeader"/>
+    /// already applies to its own freshly re-encoded array — which unwraps the array element's outer
+    /// <c>bstr</c> framing and returns only the encapsulated <c>UHeaderInstance</c> map's own content bytes,
+    /// untouched. That content is placed into the returned dictionary exactly as
+    /// <see cref="EncodeCBAdESUnprotectedHeader"/>'s own output shape requires, so the SAME downstream
+    /// general-purpose writer (<see cref="CborValueConverter.WriteValue"/>) re-wraps it in a FRESH <c>bstr</c>
+    /// at final serialize time — never a double-wrap, since neither delegate ever hands that writer an
+    /// already-framed item. The freshly-written framing is byte-identical to the original: <see cref="ParseCBAdESSign1"/>
+    /// reads the augmented signature's raw input under <see cref="CborConformanceMode.Canonical"/>, so every
+    /// successfully-parsed element's <c>bstr</c> header is already the RFC 8949 section 9 minimal-length
+    /// encoding for that exact content length — the same length-driven encoding the downstream Canonical-mode
+    /// writer independently re-derives when it writes the fresh <c>bstr</c> over the identical content. Only a
+    /// retained element's CONTENT is ever at risk of drifting (the FX-A defect: re-encoding the DECODED model,
+    /// e.g. <see cref="CBAdESSerialization.WriteTDate"/>'s whole-second, forced-<c>Z</c> writer normalizing a
+    /// sub-second or non-<c>Z</c>-offset wire <c>tdate</c>) — and this method never performs that re-encode for
+    /// a retained element at all; it only ever freshly encodes the genuinely NEW element
+    /// <paramref name="newElement" />'s remarks below name.
+    /// </para>
+    /// <para>
+    /// <strong>The count-parity guard below (wavecb S4 FX-A regression) is defense-in-depth, not a reachable
+    /// production path.</strong> <see cref="CBAdESSerialization.TryParseUnsignedHeaders"/> decodes exactly one
+    /// <see cref="CBAdESUnsignedHeaderElement"/> per raw array entry read from the SAME bytes
+    /// <see cref="ParseCBAdESSign1"/> captures verbatim into the <see cref="EncodedCBAdESUnsignedHeaders"/> it
+    /// passes here as <c>rawUnsignedHeaders</c> — both walk the identical <c>uHeaders</c> CBOR array — or fails
+    /// the WHOLE parse outright on any one element, never a partial/silently-skipped decode. Consequently, for
+    /// every successful <see cref="CBAdESSign1ParseResult"/>, its raw array's own element count and its decoded
+    /// <see cref="CBAdESSign1ParseResult.UnsignedHeaders"/> count agree BY CONSTRUCTION, and
+    /// <see cref="CBAdESSignatureAugmentation"/>'s own <c>EncodeAndSerialize</c> always derives
+    /// <c>decodedElementCount</c> from that same <see cref="CBAdESSign1ParseResult"/> instance's
+    /// <see cref="CBAdESSign1ParseResult.UnsignedHeaders"/>. The guard below therefore can never fire through
+    /// <see cref="ParseCBAdESSign1"/> followed by any shipped augmentation verb; reaching it would require
+    /// either a genuine bug in <see cref="CBAdESSerialization.TryParseUnsignedHeaders"/> itself or a
+    /// hand-fabricated <see cref="CBAdESSign1ParseResult"/> from a caller-supplied
+    /// <see cref="ParseCBAdESSign1Delegate"/> test double — the latter blocked from outside this library's own
+    /// assembly boundary by <see cref="CBAdESSign1ParseResult"/>'s <see langword="internal"/> constructor, which
+    /// stays internal rather than growing an <c>InternalsVisibleTo</c> grant for this one defensive branch. The
+    /// regression exercises this delegate DIRECTLY with a hand-fabricated mismatch instead — a caller-facing
+    /// entry point this property already is, needing no internals access.
+    /// </para>
+    /// </remarks>
+    public static TrySpliceCBAdESUnprotectedHeaderDelegate TrySpliceCBAdESUnprotectedHeader { get; } =
+        static (EncodedCBAdESUnsignedHeaders? rawUnsignedHeaders, int decodedElementCount, IReadOnlySet<int>? skipDecodedIndexes,
+            CBAdESUnsignedHeaderElement? newElement, BaseMemoryPool pool, out IReadOnlyDictionary<int, object>? result) =>
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+
+        try
+        {
+            var elements = new List<object>();
+
+            if(rawUnsignedHeaders is not null)
+            {
+                var reader = new CborReader(rawUnsignedHeaders.AsReadOnlyMemory(), CborConformanceMode.Canonical);
+                int rawCount = reader.ReadStartArrayExpectLengthRange(1, int.MaxValue);
+                if(rawCount != decodedElementCount)
+                {
+                    //An internal inconsistency between the parse step and this splice: the raw array's own
+                    //element count must match what CBAdESSign1ParseResult.UnsignedHeaders decoded from these
+                    //exact bytes, or the positional skipDecodedIndexes classification below would be
+                    //meaningless. Fail closed; nothing is emitted. See this property's own remarks (wavecb S4
+                    //FX-A) for why this branch is unreachable through ParseCBAdESSign1 + any shipped
+                    //augmentation verb, and is instead exercised directly against this delegate.
+                    result = null;
+                    return false;
+                }
+
+                for(int i = 0; i < rawCount; ++i)
+                {
+                    byte[] elementContent = reader.ReadByteString();
+                    if(skipDecodedIndexes is null || !skipDecodedIndexes.Contains(i))
+                    {
+                        elements.Add(elementContent);
+                    }
+                }
+
+                reader.ReadEndArray();
+                if(reader.BytesRemaining != 0)
+                {
+                    result = null;
+                    return false;
+                }
+            }
+            else if(decodedElementCount != 0)
+            {
+                //RawUnsignedHeaders is non-null iff UnsignedHeaders is non-null (CBAdESSign1ParseResult's own
+                //invariant) -- a null raw array paired with a non-zero decoded count is the same internal
+                //inconsistency the count-mismatch branch above guards, just for the absent-array arm.
+                result = null;
+                return false;
+            }
+
+            if(newElement is not null)
+            {
+                elements.Add(EncodeNewUnsignedHeaderElementContent(newElement, pool));
+            }
+
+            if(elements.Count == 0)
+            {
+                //Nothing retained and nothing new -- matches EncodeCBAdESUnprotectedHeader's own null-for-absent
+                //convention (no uHeaders member at all), e.g. StripReferencesForLongTerm stripping everything.
+                result = null;
+                return true;
+            }
+
+            result = new Dictionary<int, object> { [CBAdESHeaderParameters.UHeaders] = elements };
+            return true;
+        }
+        catch(Exception ex) when(IsFailClosedParseException(ex))
+        {
+            result = null;
+            return false;
+        }
+    };
+
+
+    /// <summary>
     /// Gets a delegate that performs the fail-closed full parse of CB-AdES <c>COSE_Sign1</c> wire bytes. See
     /// the class remarks for the tagged-and-untagged acceptance decision, the conformance mode, and the
     /// dispose-on-throw convention every failure path in this delegate follows.
@@ -372,6 +507,7 @@ public static class CBAdESSignatureSerialization
         Signature? signatureCarrier = null;
         CBAdESProtectedHeaders? headers = null;
         EncodedCoseProtectedHeader? rawProtectedHeader = null;
+        EncodedCBAdESUnsignedHeaders? rawUnsignedHeaders = null;
 
         try
         {
@@ -424,7 +560,13 @@ public static class CBAdESSignatureSerialization
                         $"152-1 V1.1.1, clause 4.4, CB-4.4-01); got label {unprotectedLabel}.");
                 }
 
+                //wavecb S4 coordinator ruling (3), the wavecb S3 FX-A raw-bytes precedent extended to
+                //uHeaders: capture the exact wire bytes BEFORE handing them to the decoder, so the S4
+                //sigRTst/rfsTst message-imprint builders can walk the verbatim encoding at validation time
+                //rather than a re-encoding of the decoded CBAdESUnsignedHeaders model.
                 ReadOnlyMemory<byte> uHeadersBytes = reader.ReadEncodedValue();
+                rawUnsignedHeaders = EncodedCBAdESUnsignedHeaders.FromBytes(uHeadersBytes.Span, pool);
+
                 if(!CBAdESSerialization.TryParseUnsignedHeaders(uHeadersBytes, pool, out unsignedHeaders) || unsignedHeaders is null)
                 {
                     throw new CborContentException("Malformed uHeaders (label 268) value.");
@@ -634,10 +776,11 @@ public static class CBAdESSignatureSerialization
             signaturePolicyIdentifier = null;
             detachedObjects = null;
 
-            CBAdESSign1ParseResult success = CBAdESSign1ParseResult.Success(headers, rawProtectedHeader, payloadIsPresent, payload, signatureCarrier, unsignedHeaders);
+            CBAdESSign1ParseResult success = CBAdESSign1ParseResult.Success(headers, rawProtectedHeader, payloadIsPresent, payload, signatureCarrier, unsignedHeaders, rawUnsignedHeaders);
             rawProtectedHeader = null;
             signatureCarrier = null;
             unsignedHeaders = null;
+            rawUnsignedHeaders = null;
 
             return success;
         }
@@ -651,6 +794,7 @@ public static class CBAdESSignatureSerialization
             signaturePolicyIdentifier?.Dispose();
             detachedObjects?.Dispose();
             unsignedHeaders?.Dispose();
+            rawUnsignedHeaders?.Dispose();
             signatureCarrier?.Dispose();
 
             return CBAdESSign1ParseResult.Failure();
@@ -1076,6 +1220,31 @@ public static class CBAdESSignatureSerialization
     {
         string text = reader.ReadTextString();
         return new Uri(text, UriKind.RelativeOrAbsolute);
+    }
+
+
+    /// <summary>
+    /// Encodes <paramref name="element"/> as a standalone, one-element <c>uHeaders</c> array through the
+    /// existing, tested S2 <see cref="CBAdESSerialization.EncodeUnsignedHeaders"/> encoder, then unwraps that
+    /// single array entry to return only its own CONTENT bytes — the exact shape
+    /// <see cref="TrySpliceCBAdESUnprotectedHeader"/> needs to append a genuinely NEW element beside its
+    /// raw-copied retained ones (wavecb S4 FX-A). Reuse over reinvention: this never duplicates
+    /// <see cref="CBAdESSerialization"/>'s own per-element writer, which stays <see langword="private"/> to that
+    /// class.
+    /// </summary>
+    /// <param name="element">The freshly-built element to encode.</param>
+    /// <param name="pool">The memory pool the transient one-element array encoding rents from.</param>
+    /// <returns>The element's own <c>UHeaderInstance</c> map content bytes, unwrapped.</returns>
+    private static byte[] EncodeNewUnsignedHeaderElementContent(CBAdESUnsignedHeaderElement element, BaseMemoryPool pool)
+    {
+        using PooledMemory singleElementArray = CBAdESSerialization.EncodeUnsignedHeaders(new CBAdESUnsignedHeaders([element]), pool);
+
+        var reader = new CborReader(singleElementArray.AsReadOnlyMemory(), CborConformanceMode.Canonical);
+        reader.ReadStartArrayExpectLength(1);
+        byte[] content = reader.ReadByteString();
+        reader.ReadEndArray();
+
+        return content;
     }
 
 

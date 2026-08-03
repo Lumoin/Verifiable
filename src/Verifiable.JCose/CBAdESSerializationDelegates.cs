@@ -92,6 +92,66 @@ public delegate IReadOnlyDictionary<int, object>? EncodeCBAdESUnprotectedHeaderD
 
 
 /// <summary>
+/// Splices the unprotected-header dictionary an AUGMENTATION verb needs by copying every RETAINED <c>uHeaders</c>
+/// element's own CONTENT bytes verbatim from <paramref name="rawUnsignedHeaders"/> — never re-deriving them
+/// from the decoded <see cref="CBAdESUnsignedHeaders"/> model — and appending <paramref name="newElement"/>'s
+/// own freshly-encoded content last, when supplied.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <strong>wavecb S4 FX-A: why this seam exists beside <see cref="EncodeCBAdESUnprotectedHeaderDelegate"/>
+/// rather than replacing it.</strong> <see cref="EncodeCBAdESUnprotectedHeaderDelegate"/> re-encodes the WHOLE
+/// decoded <see cref="CBAdESUnsignedHeaders"/> model from scratch, which stays correct only for CREATION
+/// (<see cref="CBAdESSignatureCreation.SignAsync(CBAdESProtectedHeaders, CBAdESSigningPayloadInput, CBAdESUnsignedHeaders?, EncodeCBAdESProtectedHeaderDelegate, EncodeCBAdESUnprotectedHeaderDelegate, BuildSigStructureDelegate, PrivateKeyMemory, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, CBAdESUnknownDetachedObjectMechanismDelegate?, BaseMemoryPool, CancellationToken)"/>
+/// builds <c>uHeaders</c> fresh every time, so nothing retained can ever drift). An AUGMENTATION verb starts
+/// from a signature it did not build: re-encoding a retained element from its decoded model can silently
+/// change that element's wire bytes whenever the decoded model does not itself retain enough information to
+/// reproduce the original CDDL union arm byte-for-byte — e.g. a sub-second or non-<c>Z</c>-offset <c>tdate</c>
+/// (<c>ocspId.producedAt</c>) collapses to a whole-second, forced-<c>Z</c> form on re-encode, or an opaque
+/// <see cref="Verifiable.Cryptography.Pki.CBAdESUnsignedHeaderElementUnknown"/> element's own inner encoding is
+/// never modeled precisely enough to reproduce at all — which breaks a PRIOR <c>sigRTst</c>/<c>rfsTst</c>
+/// token's message-imprint coverage over the now-changed bytes (clause 5.3.1 NOTE 1's imprint-unambiguity
+/// rationale). This seam closes that gap: canonical-on-CREATE, preserve-on-AUGMENT.
+/// </para>
+/// </remarks>
+/// <param name="rawUnsignedHeaders">
+/// The signature-being-augmented's raw, undecoded <c>uHeaders</c> array wire bytes, captured at parse
+/// (<see cref="CBAdESSign1ParseResult.RawUnsignedHeaders"/>), or <see langword="null"/> when it carries no
+/// <c>uHeaders</c> member at all.
+/// </param>
+/// <param name="decodedElementCount">
+/// The element count <see cref="CBAdESSign1ParseResult.UnsignedHeaders"/> decoded from
+/// <paramref name="rawUnsignedHeaders"/> at parse time. This method asserts the raw array's own element walk
+/// reproduces exactly this count before trusting <paramref name="skipDecodedIndexes"/>'s positional
+/// classification of it — an internal consistency check between the parse step and this splice, never a
+/// caller-supplied fault. Zero when <paramref name="rawUnsignedHeaders"/> is <see langword="null"/>.
+/// </param>
+/// <param name="skipDecodedIndexes">
+/// The zero-based decoded-model indexes whose raw array entry is DROPPED rather than copied (the B-LT strip
+/// verb's refs-family elements), or <see langword="null"/>/empty to retain every element.
+/// </param>
+/// <param name="newElement">The freshly-built element to encode and append last, or <see langword="null"/> to append nothing new.</param>
+/// <param name="pool">The memory pool the per-element encodings rent their buffers from.</param>
+/// <param name="result">
+/// The single-entry <c>uHeaders</c>-keyed dictionary on success — the exact shape
+/// <see cref="EncodeCBAdESUnprotectedHeaderDelegate"/> also returns — or <see langword="null"/> when the
+/// splice retains and appends nothing at all, or on failure.
+/// </param>
+/// <returns>
+/// <see langword="true"/> on success; <see langword="false"/> when <paramref name="rawUnsignedHeaders"/>'s own
+/// element count does not equal <paramref name="decodedElementCount"/>, or its bytes are otherwise malformed
+/// (never throws for that case, mirroring the message-imprint <c>TryBuild*</c> convention).
+/// </returns>
+public delegate bool TrySpliceCBAdESUnprotectedHeaderDelegate(
+    EncodedCBAdESUnsignedHeaders? rawUnsignedHeaders,
+    int decodedElementCount,
+    IReadOnlySet<int>? skipDecodedIndexes,
+    CBAdESUnsignedHeaderElement? newElement,
+    BaseMemoryPool pool,
+    out IReadOnlyDictionary<int, object>? result);
+
+
+/// <summary>
 /// Fail-closed parse of CB-AdES <c>COSE_Sign1</c> wire bytes into a <see cref="CBAdESSign1ParseResult"/>.
 /// </summary>
 /// <remarks>
@@ -154,6 +214,7 @@ public sealed class CBAdESSign1ParseResult: IDisposable
     /// <param name="payload">See <see cref="Payload"/>.</param>
     /// <param name="signature">See <see cref="Signature"/>.</param>
     /// <param name="unsignedHeaders">See <see cref="UnsignedHeaders"/>.</param>
+    /// <param name="rawUnsignedHeaders">See <see cref="RawUnsignedHeaders"/>.</param>
     internal CBAdESSign1ParseResult(
         bool isSuccess,
         CBAdESProtectedHeaders? protectedHeaders,
@@ -161,7 +222,8 @@ public sealed class CBAdESSign1ParseResult: IDisposable
         bool payloadIsPresent,
         ReadOnlyMemory<byte> payload,
         Signature? signature,
-        CBAdESUnsignedHeaders? unsignedHeaders)
+        CBAdESUnsignedHeaders? unsignedHeaders,
+        EncodedCBAdESUnsignedHeaders? rawUnsignedHeaders = null)
     {
         IsSuccess = isSuccess;
         ProtectedHeaders = protectedHeaders;
@@ -170,6 +232,7 @@ public sealed class CBAdESSign1ParseResult: IDisposable
         Payload = payload;
         Signature = signature;
         UnsignedHeaders = unsignedHeaders;
+        RawUnsignedHeaders = rawUnsignedHeaders;
     }
 
 
@@ -227,11 +290,29 @@ public sealed class CBAdESSign1ParseResult: IDisposable
     /// </summary>
     public CBAdESUnsignedHeaders? UnsignedHeaders { get; }
 
+    /// <summary>
+    /// Gets the raw, undecoded <c>uHeaders</c> array wire bytes (label 268) — the exact encoded
+    /// <c>[+bstr .cbor UHeaderInstance]</c> array the parse step read off the wire, verbatim — or
+    /// <see langword="null"/> when <c>uHeaders</c> is absent from the wire OR when <see cref="IsSuccess"/> is
+    /// <see langword="false"/>. Non-null iff <see cref="UnsignedHeaders"/> is non-null (wavecb S4 coordinator
+    /// ruling (3), the wavecb S3 FX-A raw-bytes precedent extended to <c>uHeaders</c>). The Annex A.1.2.1.2
+    /// (<c>sigRTst</c>) and A.1.2.2.2 (<c>rfsTst</c>) message-imprint builders MUST consume these exact bytes
+    /// at validation time — never a re-encoding of <see cref="UnsignedHeaders"/>, for the same reason
+    /// <see cref="RawProtectedHeader"/> exists beside <see cref="ProtectedHeaders"/>: a re-encoder cannot be
+    /// relied upon to reproduce an opaque or unprofiled <c>uHeaders</c> element
+    /// (<see cref="Verifiable.Cryptography.Pki.CBAdESUnsignedHeaderElementUnknown"/>,
+    /// <see cref="Verifiable.Cryptography.Pki.CBAdESUnsignedHeaderElementFullCounterSignature"/>,
+    /// <see cref="Verifiable.Cryptography.Pki.CBAdESUnsignedHeaderElementAbbreviatedCounterSignature"/>,
+    /// <see cref="Verifiable.Cryptography.Pki.CBAdESUnsignedHeaderElementCertificateChain"/>) byte-for-byte
+    /// from the decoded model alone. Owned by this instance; disposed via <see cref="Dispose"/>.
+    /// </summary>
+    public EncodedCBAdESUnsignedHeaders? RawUnsignedHeaders { get; }
+
 
     /// <summary>
     /// Mints a successful result. Ownership of <paramref name="protectedHeaders"/>, <paramref name="rawProtectedHeader"/>,
-    /// <paramref name="signature"/>, and <paramref name="unsignedHeaders"/>, when supplied, transfers to the
-    /// returned instance.
+    /// <paramref name="signature"/>, <paramref name="unsignedHeaders"/>, and <paramref name="rawUnsignedHeaders"/>,
+    /// when supplied, transfers to the returned instance.
     /// </summary>
     /// <param name="protectedHeaders">The decoded signed-header-set aggregate.</param>
     /// <param name="rawProtectedHeader">The raw protected-header wire bytes; see <see cref="RawProtectedHeader"/>.</param>
@@ -239,6 +320,10 @@ public sealed class CBAdESSign1ParseResult: IDisposable
     /// <param name="payload">The payload bytes; see <see cref="Payload"/>.</param>
     /// <param name="signature">The decoded signature carrier.</param>
     /// <param name="unsignedHeaders">The decoded <c>uHeaders</c> set, or <see langword="null"/> when absent.</param>
+    /// <param name="rawUnsignedHeaders">
+    /// The raw <c>uHeaders</c> array wire bytes, or <see langword="null"/> when absent; see
+    /// <see cref="RawUnsignedHeaders"/>. Must be non-null iff <paramref name="unsignedHeaders"/> is non-null.
+    /// </param>
     /// <returns>A successful <see cref="CBAdESSign1ParseResult"/>.</returns>
     internal static CBAdESSign1ParseResult Success(
         CBAdESProtectedHeaders protectedHeaders,
@@ -246,18 +331,19 @@ public sealed class CBAdESSign1ParseResult: IDisposable
         bool payloadIsPresent,
         ReadOnlyMemory<byte> payload,
         Signature signature,
-        CBAdESUnsignedHeaders? unsignedHeaders) =>
-        new(true, protectedHeaders, rawProtectedHeader, payloadIsPresent, payload, signature, unsignedHeaders);
+        CBAdESUnsignedHeaders? unsignedHeaders,
+        EncodedCBAdESUnsignedHeaders? rawUnsignedHeaders = null) =>
+        new(true, protectedHeaders, rawProtectedHeader, payloadIsPresent, payload, signature, unsignedHeaders, rawUnsignedHeaders);
 
 
     /// <summary>Mints a failed result carrying no decoded content.</summary>
     /// <returns>A failed <see cref="CBAdESSign1ParseResult"/>.</returns>
-    internal static CBAdESSign1ParseResult Failure() => new(false, null, null, false, default, null, null);
+    internal static CBAdESSign1ParseResult Failure() => new(false, null, null, false, default, null, null, null);
 
 
     /// <summary>
-    /// Disposes <see cref="ProtectedHeaders"/>, <see cref="RawProtectedHeader"/>, <see cref="Signature"/>, and
-    /// <see cref="UnsignedHeaders"/> when present.
+    /// Disposes <see cref="ProtectedHeaders"/>, <see cref="RawProtectedHeader"/>, <see cref="Signature"/>,
+    /// <see cref="UnsignedHeaders"/>, and <see cref="RawUnsignedHeaders"/> when present.
     /// </summary>
     public void Dispose()
     {
@@ -267,6 +353,7 @@ public sealed class CBAdESSign1ParseResult: IDisposable
             RawProtectedHeader?.Dispose();
             Signature?.Dispose();
             UnsignedHeaders?.Dispose();
+            RawUnsignedHeaders?.Dispose();
             disposed = true;
         }
     }

@@ -175,6 +175,7 @@ public sealed class TimestampTokenInfo: IDisposable
     /// <param name="serialNumber">The <c>serialNumber</c> field, hex-encoded.</param>
     /// <param name="nonce">The <c>nonce</c> field, hex-encoded, when present.</param>
     /// <param name="timestampAuthorityName">The name read from the <c>tsa</c> field, when present.</param>
+    /// <param name="hasEmbeddedCertificates">See <see cref="HasEmbeddedCertificates"/>.</param>
     private TimestampTokenInfo(
         TimestampTokenInfoStatus status,
         int version,
@@ -186,7 +187,8 @@ public sealed class TimestampTokenInfo: IDisposable
         bool isOrdered,
         string serialNumber,
         string? nonce,
-        string? timestampAuthorityName)
+        string? timestampAuthorityName,
+        bool hasEmbeddedCertificates)
     {
         Status = status;
         Version = version;
@@ -199,6 +201,7 @@ public sealed class TimestampTokenInfo: IDisposable
         SerialNumber = serialNumber;
         Nonce = nonce;
         TimestampAuthorityName = timestampAuthorityName;
+        HasEmbeddedCertificates = hasEmbeddedCertificates;
     }
 
 
@@ -248,6 +251,28 @@ public sealed class TimestampTokenInfo: IDisposable
     /// </summary>
     public string? TimestampAuthorityName { get; }
 
+    /// <summary>
+    /// Gets whether the token's own CMS <c>SignedData</c> carried at least one embedded certificate in its
+    /// optional <c>certificates</c> set (<see href="https://www.rfc-editor.org/rfc/rfc5652#section-5.1">
+    /// IETF RFC 5652 §5.1</see>) — wavecb S4's probe for CB-6.3-28 (the "certificate and revocation values
+    /// embedded in the electronic time-stamp itself" service-provision option). Only
+    /// <see cref="ReadFromTokenAsync"/> ever sees the wrapping CMS layer, so this is always
+    /// <see langword="false"/> on an instance <see cref="Read"/> produced directly from already-unwrapped
+    /// <c>TSTInfo</c> content — not a genuine "no embedded certificates" fact there, just the absence of the
+    /// visibility needed to establish one.
+    /// </summary>
+    /// <remarks>
+    /// This is a certificates-only probe. RFC 5652 SignedData's optional <c>crls</c> field is not modelled
+    /// anywhere in this library's CMS verification surface — <see cref="CmsVerifiedContent"/> exposes
+    /// <see cref="CmsVerifiedContent.Certificates"/> only, with no accessor for embedded revocation values — so
+    /// a token that embeds ONLY revocation material with no certificate at all is not detected by this
+    /// property. Widening <see cref="CmsVerifiedContent"/> to also surface embedded CRLs is a larger CMS-surface
+    /// change than this minimal accessor need justifies on its own; flagged loudly for review adjudication
+    /// rather than silently narrowing CB-6.3-28's own "certificate AND revocation values" wording to
+    /// certificates alone without a record of the gap.
+    /// </remarks>
+    public bool HasEmbeddedCertificates { get; }
+
 
     /// <summary>
     /// Reads the <c>TSTInfo</c> of a time-stamp token — the encapsulated content of the token's CMS SignedData,
@@ -257,9 +282,26 @@ public sealed class TimestampTokenInfo: IDisposable
     /// <param name="pool">The memory pool the message-imprint carrier is rented from.</param>
     /// <returns>
     /// The read facts. Check <see cref="Status"/>: only <see cref="TimestampTokenInfoStatus.Read"/> means the
-    /// other members carry data. The caller disposes the returned instance in every case.
+    /// other members carry data. <see cref="HasEmbeddedCertificates"/> is always <see langword="false"/> on the
+    /// instance this overload returns — see that member's remarks. The caller disposes the returned instance
+    /// in every case.
     /// </returns>
-    public static TimestampTokenInfo Read(ReadOnlyMemory<byte> tstInfo, BaseMemoryPool pool)
+    public static TimestampTokenInfo Read(ReadOnlyMemory<byte> tstInfo, BaseMemoryPool pool) =>
+        Read(tstInfo, pool, hasEmbeddedCertificates: false);
+
+
+    /// <summary>
+    /// The core of <see cref="Read(ReadOnlyMemory{byte}, BaseMemoryPool)"/>, additionally threading through the
+    /// <see cref="HasEmbeddedCertificates"/> fact <see cref="ReadFromTokenAsync"/> alone can observe (it opens
+    /// the wrapping CMS layer this overload never sees) — the single choke point both entry points share, so
+    /// the fact is set exactly once, at the point of construction, never patched onto an already-minted
+    /// instance.
+    /// </summary>
+    /// <param name="tstInfo">The DER-encoded <c>TSTInfo</c>.</param>
+    /// <param name="pool">The memory pool the message-imprint carrier is rented from.</param>
+    /// <param name="hasEmbeddedCertificates">See <see cref="HasEmbeddedCertificates"/>.</param>
+    /// <returns>The read facts; see <see cref="Read(ReadOnlyMemory{byte}, BaseMemoryPool)"/>.</returns>
+    private static TimestampTokenInfo Read(ReadOnlyMemory<byte> tstInfo, BaseMemoryPool pool, bool hasEmbeddedCertificates)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -285,7 +327,7 @@ public sealed class TimestampTokenInfo: IDisposable
 
             if(!info.TryReadInt32(out version))
             {
-                return Failed(TimestampTokenInfoStatus.Malformed);
+                return Failed(TimestampTokenInfoStatus.Malformed, hasEmbeddedCertificates);
             }
 
             policyOid = info.ReadObjectIdentifier();
@@ -330,20 +372,20 @@ public sealed class TimestampTokenInfo: IDisposable
         }
         catch(AsnContentException)
         {
-            return Failed(TimestampTokenInfoStatus.Malformed);
+            return Failed(TimestampTokenInfoStatus.Malformed, hasEmbeddedCertificates);
         }
 
         PkiDigestAlgorithm? algorithm = PkiDigestAlgorithm.FromOid(hashOid);
         if(algorithm is null)
         {
-            return Failed(TimestampTokenInfoStatus.UnsupportedMessageImprintAlgorithm);
+            return Failed(TimestampTokenInfoStatus.UnsupportedMessageImprintAlgorithm, hasEmbeddedCertificates);
         }
 
         if(imprintBytes.Length != algorithm.Value.OutputByteLength)
         {
             //A hashedMessage whose length contradicts the algorithm it was hashed under is not a message
             //imprint at all; rejecting it here keeps the comparison in VerifyMessageImprintAsync total.
-            return Failed(TimestampTokenInfoStatus.Malformed);
+            return Failed(TimestampTokenInfoStatus.Malformed, hasEmbeddedCertificates);
         }
 
         IMemoryOwner<byte> imprintOwner = pool.Rent(imprintBytes.Length);
@@ -362,7 +404,8 @@ public sealed class TimestampTokenInfo: IDisposable
                 isOrdered,
                 Convert.ToHexString(serialNumber.Span),
                 nonce,
-                timestampAuthorityName);
+                timestampAuthorityName,
+                hasEmbeddedCertificates);
         }
         catch
         {
@@ -371,11 +414,13 @@ public sealed class TimestampTokenInfo: IDisposable
             throw;
         }
 
-        //Builds the instance every unsuccessful read returns: the status, and nothing else.
-        static TimestampTokenInfo Failed(TimestampTokenInfoStatus status) =>
+        //Builds the instance every unsuccessful read returns: the status, and nothing else. Takes
+        //hasEmbeddedCertificates explicitly (no closure capture) even though every call site in THIS overload
+        //passes through the same enclosing parameter, since a static local function cannot close over it.
+        static TimestampTokenInfo Failed(TimestampTokenInfoStatus status, bool hasEmbeddedCertificates) =>
             new(status, version: 0, policyOid: string.Empty, messageImprintAlgorithm: default,
                 imprint: null, generationTime: default, accuracy: null, isOrdered: false,
-                serialNumber: string.Empty, nonce: null, timestampAuthorityName: null);
+                serialNumber: string.Empty, nonce: null, timestampAuthorityName: null, hasEmbeddedCertificates);
     }
 
 
@@ -390,7 +435,9 @@ public sealed class TimestampTokenInfo: IDisposable
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>
     /// The read facts, or <see cref="TimestampTokenInfoStatus.TokenNotVerified"/> when the token's own CMS
-    /// signature does not verify. The caller disposes the returned instance in every case.
+    /// signature does not verify. Unlike <see cref="Read(ReadOnlyMemory{byte}, BaseMemoryPool)"/>, the returned
+    /// instance's <see cref="HasEmbeddedCertificates"/> reflects a genuine observation of the token's own CMS
+    /// <c>certificates</c> set. The caller disposes the returned instance in every case.
     /// </returns>
     /// <exception cref="InvalidOperationException">Thrown when no <see cref="VerifyCmsSignedDataDelegate"/> has been registered.</exception>
     /// <remarks>
@@ -437,7 +484,10 @@ public sealed class TimestampTokenInfo: IDisposable
                     return NotVerified();
                 }
 
-                return Read(content.Content, pool);
+                //The single choke point where HasEmbeddedCertificates is actually observable: content.Certificates
+                //is read (and, via the enclosing using, disposed) here, before the CMS layer this call opened
+                //goes out of scope — see the private Read(bytes, pool, bool) overload's remarks.
+                return Read(content.Content, pool, hasEmbeddedCertificates: content.Certificates.Count > 0);
             }
         }
         catch(Exception exception) when(exception is not OperationCanceledException)
@@ -453,7 +503,8 @@ public sealed class TimestampTokenInfo: IDisposable
         static TimestampTokenInfo NotVerified() =>
             new(TimestampTokenInfoStatus.TokenNotVerified, version: 0, policyOid: string.Empty,
                 messageImprintAlgorithm: default, imprint: null, generationTime: default, accuracy: null,
-                isOrdered: false, serialNumber: string.Empty, nonce: null, timestampAuthorityName: null);
+                isOrdered: false, serialNumber: string.Empty, nonce: null, timestampAuthorityName: null,
+                hasEmbeddedCertificates: false);
     }
 
 

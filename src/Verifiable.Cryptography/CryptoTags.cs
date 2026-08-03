@@ -583,6 +583,24 @@ public static class CryptoTags
 
 
     /// <summary>
+    /// Tag for the CBOR-encoded <c>uHeaders</c> array bytes (label 268) of a CB-AdES <c>COSE_Sign1</c>
+    /// message's unprotected header map, per
+    /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
+    /// ETSI TS 119 152-1 V1.1.1</see>, clause 5.3.1.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Mirrors <see cref="CoseEncodedProtectedHeader"/>'s "preserve the original encoding" rationale
+    /// (wavecb S4 coordinator ruling (3), the FX-A raw-bytes precedent): the Annex A.1.2.1.2 (<c>sigRTst</c>)
+    /// and A.1.2.2.2 (<c>rfsTst</c>) message-imprint algorithms walk the <c>uHeaders</c> array's own encoded
+    /// wire bytes, never a re-encoding of the decoded model — preserving the original encoding keeps that
+    /// byte-exact.
+    /// </para>
+    /// </remarks>
+    public static Tag CoseEncodedUnsignedHeaders { get; } = Tag.Create(Purpose.Data).With(EncodingScheme.Cose);
+
+
+    /// <summary>
     /// Tag for the DER wire bytes of a CMS SignedData structure per
     /// <see href="https://www.rfc-editor.org/rfc/rfc5652">RFC 5652</see> — the signature-envelope
     /// substrate of eMRTD Passive Authentication (EF.SOD) and the CAdES family of EU advanced
@@ -797,6 +815,7 @@ public static class CryptoTags
         BrainpoolP512r1ExchangePublicKey, BrainpoolP512r1ExchangePrivateKey,
         MdocIssuerSignedItemRandom, WireDecodedDisclosureSalt, X509CertificateSerialNumber,
         CoseEncodedSign1, AlgorithmAgnosticSignature, CoseEncodedMac0, CoseEncodedProtectedHeader,
+        CoseEncodedUnsignedHeaders,
         CmsEncodedSignedData, CmsSignedAttributeValue, CmsEncodedAttribute, CmsEncodedSignedAttributes,
         CmsEncodedSignerInfo, DerEncodedSignatureValue,
         Sha256Digest, Sha384Digest, Sha512Digest, Blake3Digest,

@@ -784,11 +784,20 @@ public static class CBAdESMessageImprints
     /// leg-5 trap 4 reading), or <see langword="null"/> when that layer does not have the <c>uHeaders</c>
     /// header parameter (steps 3/4).
     /// </param>
+    /// <param name="uHeadersSliceBound">
+    /// <see langword="null"/> for the generation-time call (every element that precedes this <c>sigRTst</c>
+    /// instance in wire order — which, at generation time, is EVERY element already present, since the new
+    /// instance is about to be appended after them); otherwise the exclusive upper bound (element count to
+    /// take from the start of <paramref name="uHeadersEncodedArray"/>) for the validation-time call, mirroring
+    /// <see cref="TryBuildArchiveTimestampMessageImprintInputCore"/>'s <c>uHeadersSliceBound</c>
+    /// precedent exactly. See the class remarks' D15 citation below for why this parameter exists.
+    /// </param>
     /// <param name="pool">The memory pool the returned carrier's buffer is rented from.</param>
     /// <param name="result">The message-imprint input on success; <see langword="null"/> on failure.</param>
     /// <returns>
     /// <see langword="true"/> on success; <see langword="false"/> when <paramref name="uHeadersEncodedArray"/>
-    /// is present but malformed or non-conformant (never throws for that case — contract R-5).
+    /// is present but malformed or non-conformant, or <paramref name="uHeadersSliceBound"/> is negative (never
+    /// throws for either case — contract R-5).
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="pool"/> is null.</exception>
     /// <remarks>
@@ -799,6 +808,17 @@ public static class CBAdESMessageImprints
     /// <c>refs</c> being present before generation — that precondition ("if the component <c>refs</c> is not
     /// present, the <c>sigRTst</c> CBOR map shall not be generated") is owned by the creation-path orchestrator
     /// that decides whether to call this method at all, not by the byte-assembly step itself.
+    /// </para>
+    /// <para>
+    /// <strong>D15 (wavecb-contract.md R-6, added at S4 review, RULED).</strong> Annex A.1.2.1.2 lacks the
+    /// explicit validation-time prefix replacement clause 5.3.5.3 gives <c>arcTst</c> (its steps 10/11
+    /// "elements that precede..."). A repeated <c>sigTst</c> instance appended AFTER a <c>sigRTst</c> is legal
+    /// (Table 14 note 7); reading this step over the FULL final <c>uHeaders</c> array at validation time would
+    /// then make validation compute a different imprint than the one the Time-Stamping Authority actually
+    /// attested at generation — a false <c>ImprintMismatch</c> on a conformant signature. RULED by analogy with
+    /// 5.3.5.3's own validation variant: the message-imprint input for a SPECIFIC <c>sigRTst</c> instance — at
+    /// generation and validation alike — is built from only the <c>uHeaders</c> elements that precede that
+    /// instance's own position. <paramref name="uHeadersSliceBound"/> is this reading's mechanism.
     /// </para>
     /// <para>
     /// <strong>Leg-5 trap 4 (recorded reading).</strong> Step 4's text says "take those elements in the
@@ -814,11 +834,12 @@ public static class CBAdESMessageImprints
     /// only the elements whose inner one-entry <c>UHeaderInstance</c> map key is the <c>sigTst</c> label
     /// (<see cref="CBAdESUnsignedHeaderElement.SignatureTimestampLabel"/>, <c>1</c>) or the <c>refs</c> label
     /// (<see cref="CBAdESUnsignedHeaderElement.ReferencesLabel"/>, <c>4</c>), preserving whichever of the two
-    /// happens to appear first) — not a fixed "<c>sigTst</c> always precedes <c>refs</c>" rule. When the
+    /// happens to appear first) — not a fixed "<c>sigTst</c> always precedes <c>refs</c>" rule, applied over
+    /// only the prefix <paramref name="uHeadersSliceBound"/> selects (D15). When the
     /// filtered result is empty (whether because <paramref name="uHeadersEncodedArray"/> is
-    /// <see langword="null"/>, or present but contains neither label — both read as "the layer does not have
-    /// any of those <c>uHeaders</c> header parameters"), exactly one zero-length CBOR byte string is added —
-    /// unlike the <c>arcTst</c> builder's own absent-vs-empty-slice asymmetry (see
+    /// <see langword="null"/>, or present but contains neither label within the selected prefix — both read as
+    /// "the layer does not have any of those <c>uHeaders</c> header parameters"), exactly one zero-length CBOR
+    /// byte string is added — unlike the <c>arcTst</c> builder's own absent-vs-empty-slice asymmetry (see
     /// <see cref="CBAdESArchiveTimestampImprintContext.UHeadersEncodedArray"/>), these two conditions collapse
     /// to the same outcome here.
     /// </para>
@@ -826,9 +847,10 @@ public static class CBAdESMessageImprints
     public static bool TryBuildSignatureAndReferencesTimestampMessageImprintInput(
         ReadOnlyMemory<byte> signatureValue,
         ReadOnlyMemory<byte>? uHeadersEncodedArray,
+        int? uHeadersSliceBound,
         BaseMemoryPool pool,
         out PooledMemory? result) =>
-        TryBuildReferencesFamilyMessageImprintInputCore(includeSignatureValue: true, signatureValue, uHeadersEncodedArray, pool, out result);
+        TryBuildReferencesFamilyMessageImprintInputCore(includeSignatureValue: true, signatureValue, uHeadersEncodedArray, uHeadersSliceBound, pool, out result);
 
 
     /// <summary>
@@ -842,24 +864,33 @@ public static class CBAdESMessageImprints
     /// <see cref="TryBuildSignatureAndReferencesTimestampMessageImprintInput"/>'s remarks for the leg-5 trap
     /// 4 and filter readings, both identical here.
     /// </param>
+    /// <param name="uHeadersSliceBound">
+    /// <see langword="null"/> for the generation-time call; otherwise the exclusive upper bound (element count
+    /// to take from the start of <paramref name="uHeadersEncodedArray"/>) for the validation-time call. See
+    /// <see cref="TryBuildSignatureAndReferencesTimestampMessageImprintInput"/>'s D15 remarks, identical here
+    /// for Annex A.1.2.2.2.
+    /// </param>
     /// <param name="pool">The memory pool the returned carrier's buffer is rented from.</param>
     /// <param name="result">The message-imprint input on success; <see langword="null"/> on failure.</param>
     /// <returns>
     /// <see langword="true"/> on success; <see langword="false"/> when <paramref name="uHeadersEncodedArray"/>
-    /// is present but malformed or non-conformant (never throws for that case — contract R-5).
+    /// is present but malformed or non-conformant, or <paramref name="uHeadersSliceBound"/> is negative (never
+    /// throws for either case — contract R-5).
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="pool"/> is null.</exception>
     /// <remarks>
     /// See
     /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
     /// ETSI TS 119 152-1 V1.1.1, Annex A.1.2.2.2</see>. CB-A.1.2.2-03: same generation-gate deferral as
-    /// <see cref="TryBuildSignatureAndReferencesTimestampMessageImprintInput"/>'s CB-A.1.2.1-03 remark.
+    /// <see cref="TryBuildSignatureAndReferencesTimestampMessageImprintInput"/>'s CB-A.1.2.1-03 remark. D15
+    /// (wavecb-contract.md R-6): same validation-time prefix-replacement ruling, identical rationale.
     /// </remarks>
     public static bool TryBuildReferencesOnlyTimestampMessageImprintInput(
         ReadOnlyMemory<byte>? uHeadersEncodedArray,
+        int? uHeadersSliceBound,
         BaseMemoryPool pool,
         out PooledMemory? result) =>
-        TryBuildReferencesFamilyMessageImprintInputCore(includeSignatureValue: false, default, uHeadersEncodedArray, pool, out result);
+        TryBuildReferencesFamilyMessageImprintInputCore(includeSignatureValue: false, default, uHeadersEncodedArray, uHeadersSliceBound, pool, out result);
 
 
     /// <summary>
@@ -877,21 +908,35 @@ public static class CBAdESMessageImprints
     /// <see langword="false"/>.
     /// </param>
     /// <param name="uHeadersEncodedArray">The encoded <c>uHeaders</c> CBOR array bytes, or <see langword="null"/>.</param>
+    /// <param name="uHeadersSliceBound">
+    /// <see langword="null"/> to filter over every element of <paramref name="uHeadersEncodedArray"/>
+    /// (generation time); otherwise the exclusive upper bound (element count to take from the array's start)
+    /// the filter runs over, mirroring <see cref="TryBuildArchiveTimestampMessageImprintInputCore"/>'s
+    /// <c>uHeadersSliceBound</c> precedent exactly (D15, wavecb-contract.md R-6).
+    /// </param>
     /// <param name="pool">The memory pool the returned carrier's buffer is rented from.</param>
     /// <param name="result">The message-imprint input on success; <see langword="null"/> on failure.</param>
-    /// <returns><see langword="true"/> on success; <see langword="false"/> on malformed <c>uHeaders</c> bytes.</returns>
+    /// <returns><see langword="true"/> on success; <see langword="false"/> on malformed <c>uHeaders</c> bytes, or a negative <paramref name="uHeadersSliceBound"/>.</returns>
     /// <remarks>
     /// Fails closed (returns <see langword="false"/>) when <paramref name="uHeadersEncodedArray"/> is present
-    /// but empty — a present <c>uHeaders</c> shall be non-empty (CB-5.3.1-07).
+    /// but empty — a present <c>uHeaders</c> shall be non-empty (CB-5.3.1-07) — or when
+    /// <paramref name="uHeadersSliceBound"/> is negative.
     /// </remarks>
     private static bool TryBuildReferencesFamilyMessageImprintInputCore(
         bool includeSignatureValue,
         ReadOnlyMemory<byte> signatureValue,
         ReadOnlyMemory<byte>? uHeadersEncodedArray,
+        int? uHeadersSliceBound,
         BaseMemoryPool pool,
         out PooledMemory? result)
     {
         ArgumentNullException.ThrowIfNull(pool);
+
+        if(uHeadersSliceBound is { } negativeCheck && negativeCheck < 0)
+        {
+            result = null;
+            return false;
+        }
 
         try
         {
@@ -900,12 +945,17 @@ public static class CBAdESMessageImprints
             {
                 var uHeadersReader = new CborReader(uHeadersEncodedArray.Value, CborConformanceMode.Canonical);
                 int elementCount = uHeadersReader.ReadStartArrayExpectLengthRange(1, int.MaxValue);
+                int itemsToConsider = uHeadersSliceBound.HasValue ? Math.Min(uHeadersSliceBound.Value, elementCount) : elementCount;
 
                 var items = new List<byte[]>(Math.Min(elementCount, 64));
                 for(int i = 0; i < elementCount; ++i)
                 {
                     byte[] elementContent = uHeadersReader.ReadByteString();
-                    if(IsSigTstOrRefsElement(elementContent))
+
+                    //D15: only elements strictly before the specific sigRTst/rfsTst instance's own position
+                    //contribute -- elements at or after uHeadersSliceBound are read off the wire (to stay
+                    //positioned correctly) but never offered to the filter.
+                    if(i < itemsToConsider && IsSigTstOrRefsElement(elementContent))
                     {
                         items.Add(elementContent);
                     }

@@ -22,13 +22,19 @@ namespace Verifiable.JCose;
 /// so the result itself must be <see cref="IDisposable"/> — a value-type record struct cannot express that.
 /// </para>
 /// <para>
-/// <strong>Scope boundary (wavecb-contract.md stage list; S3 coordinator ruling (6)).</strong> This is the
-/// structural-conformance-plus-cryptographic-verification verdict for the B-B baseline level only: every
-/// clause-5 signed/unsigned header rule this stage's <see cref="CBAdESHeaderRules"/> enforces, plus the COSE
-/// signature-value check itself, over caller-provided key material. It is NOT an
+/// <strong>Scope boundary (wavecb-contract.md stage list; S3 coordinator ruling (6); extended level-scoped by
+/// S4 coordinator ruling (5)).</strong> This is the structural-conformance-plus-cryptographic-verification
+/// verdict — every clause-5 signed/unsigned header rule <see cref="CBAdESHeaderRules"/> enforces, the COSE
+/// signature-value check itself, over caller-provided key material, and, on the level-aware
+/// <see cref="CBAdESSignatureValidation.ValidateAsync(ReadOnlyMemory{byte}, ParseCBAdESSign1Delegate, BuildSigStructureDelegate, PublicKeyMemory, VerificationDelegate, CBAdESDetachedObjectDereferenceDelegate?, CBAdESDetachedObjectDereferenceContext?, ReadOnlyMemory{byte}?, CBAdESUnknownDetachedObjectMechanismDelegate?, CBAdESBaselineLevel, BuildPayloadTimestampMessageImprintInputDelegate, TryBuildSignatureAndReferencesTimestampMessageImprintInputDelegate, TryBuildReferencesOnlyTimestampMessageImprintInputDelegate, BaseMemoryPool, CancellationToken)"/>
+/// overloads (wavecb S4), every B-T/B-LT/B-LTA level-scoped rule <see cref="Verifiable.Cryptography.Pki.CBAdESLevelRules"/>
+/// enforces plus the message-imprint binding of every electronic time-stamp token this signature carries. It
+/// remains certificate-path-neutral at EVERY level this type's <see cref="IsValid"/> can report: certificate-
+/// path trust and revocation are NEVER resolved, chained, or validated, at any level — opening a time-stamp
+/// token only checks that token's OWN CMS signature, never a chain to a trust anchor for the Time-Stamping
+/// Authority. This is NOT an
 /// <see href="https://www.etsi.org/deliver/etsi_en/319100_319199/31910201/01.04.01_60/en_31910201v010401p.pdf">
-/// ETSI EN 319 102-1</see> Indication/SubIndication conclusion — certificate-path trust, revocation, and
-/// time-stamp validation (B-T/B-LT/B-LTA) are later stages (S4/S7), and mapping this B-B verdict onto the
+/// ETSI EN 319 102-1</see> Indication/SubIndication conclusion at any level — mapping any of this onto the
 /// EN 319 102-1 vocabulary is stage S7's job, not this type's.
 /// </para>
 /// <para>

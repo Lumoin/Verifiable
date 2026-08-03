@@ -464,3 +464,421 @@ public sealed record CBAdESMd5DigestAlgorithmViolation(CBAdESMd5DigestAlgorithmS
     public override string Message =>
         $"MD5 shall not be used as a digest algorithm (ETSI TS 119 152-1 V1.1.1, clause 6.2.1); named at {Surface}.";
 }
+
+
+/// <summary>
+/// No <c>sigTst</c> instance is present in <c>uHeaders</c> at level B-T or above (<see cref="CBAdESLevelRules"/>,
+/// wavecb S4).
+/// </summary>
+/// <remarks>
+/// CB-6.3-21's Table 14 cardinality cell is level-split: <c>B-B: &gt;=0</c>; <c>B-T, B-LT, B-LTA: &gt;=1</c>,
+/// then a duplicated <c>B-LT, B-LTA: 0</c> sub-line (D2, wavecb-contract.md R-6, reproduced verbatim per the
+/// register — the duplicate could not be resolved to two distinct meanings from the source text). This
+/// violation enforces the cumulative <c>&gt;=1</c> reading: once level B-T is reached, at least one <c>sigTst</c>
+/// instance shall be present in <c>uHeaders</c> and (append-only, CB-5.3.1-03) shall remain present at every
+/// higher level; the duplicated <c>B-LT, B-LTA: 0</c> sub-line is read as "zero NEW instances required" at
+/// those levels, not "zero total" — a distinct, non-enforceable-from-one-snapshot fact this record's doc
+/// comment records rather than checks (a before/after-augmentation comparison, not a single-snapshot
+/// invariant, would be needed to enforce the "zero new" half; that is the augmenting orchestrator's own
+/// concern, not this collect-posture rule's).
+/// </remarks>
+public sealed record CBAdESSignatureTimestampMissingViolation : CBAdESRuleViolation
+{
+    /// <inheritdoc/>
+    public override string RequirementId => "CB-6.3-21";
+
+    /// <inheritdoc/>
+    public override string Message =>
+        "At least one sigTst instance shall be present in uHeaders from level B-T onward, cumulatively " +
+        "(ETSI TS 119 152-1 V1.1.1, clause 6.3, Table 14).";
+}
+
+
+/// <summary>
+/// A <c>sigTst</c> instance's encapsulated <c>tstContainer</c> holds a number of electronic time-stamp
+/// tokens other than exactly one (<see cref="CBAdESLevelRules"/>, wavecb S4).
+/// </summary>
+/// <param name="TokenCount">The actual number of tokens found in the offending <c>sigTst</c> instance.</param>
+/// <remarks>
+/// Additional requirement (c): "Each <c>sigTst</c> shall contain only one electronic time-stamp." Distinct
+/// from <see cref="CBAdESSignatureTimestampMissingViolation"/>'s Table 14 cardinality (the COUNT of
+/// <c>sigTst</c> INSTANCES): multiple TSAs are achieved via multiple <c>sigTst</c> instances (Table 14 note
+/// 7), never via multiple tokens inside one instance's <c>tstContainer</c>.
+/// </remarks>
+public sealed record CBAdESSignatureTimestampTokenCountViolation(int TokenCount) : CBAdESRuleViolation
+{
+    /// <inheritdoc/>
+    public override string RequirementId => "CB-6.3-c";
+
+    /// <inheritdoc/>
+    public override string Message =>
+        $"Each sigTst instance shall contain only one electronic time-stamp (ETSI TS 119 152-1 V1.1.1, " +
+        $"clause 6.3, additional requirement (c)); found {TokenCount}.";
+}
+
+
+/// <summary>
+/// Which <c>tstContainer</c>-bearing <c>uHeaders</c> element kind a <see cref="CBAdESTimestampTokenNotBaselineViolation"/>
+/// was found on.
+/// </summary>
+public enum CBAdESTimestampContainerKind
+{
+    /// <summary>The <c>sigTst</c> element (Table 8, label 1).</summary>
+    SignatureTimestamp,
+
+    /// <summary>The <c>arcTst</c> element (Table 8, label 3).</summary>
+    ArchiveTimestamp,
+
+    /// <summary>The <c>sigRTst</c> element (Table 8, label 5, Annex A.1.2.1).</summary>
+    SignatureAndReferencesTimestamp,
+
+    /// <summary>The <c>rfsTst</c> element (Table 8, label 6, Annex A.1.2.2).</summary>
+    ReferencesTimestamp
+}
+
+
+/// <summary>
+/// A <c>TstToken</c> carries a <c>type</c>, <c>encoding</c>, or <c>specRef</c> member — the explicitly-typed
+/// token shape clause 5.4.3.3 defines for non-RFC-3161 formats — where CB-AdES baseline conformance narrows
+/// every time-stamp-token container to the legacy RFC 3161(+5816) shape only
+/// (<see cref="CBAdESLevelRules"/>, wavecb S4).
+/// </summary>
+/// <param name="Kind">Which container kind the offending token was found in.</param>
+/// <remarks>
+/// CB-6.3-02: "In CB-AdES baseline signatures, the components acting as electronic time-stamp containers
+/// shall encapsulate only IETF RFC 3161 (updated by RFC 5816) time-stamp tokens" — for an RFC 3161 token,
+/// <c>type</c>/<c>encoding</c>/<c>specRef</c> shall all be absent (clause 5.4.3.3, CB-5.4.3.3-05/06/07). This
+/// is a baseline-wide statement, not level-specific, so this rule scans every <c>sigTst</c>/<c>arcTst</c>/
+/// <c>sigRTst</c>/<c>rfsTst</c> element found in <c>uHeaders</c> regardless of the current level.
+/// </remarks>
+public sealed record CBAdESTimestampTokenNotBaselineViolation(CBAdESTimestampContainerKind Kind) : CBAdESRuleViolation
+{
+    /// <inheritdoc/>
+    public override string RequirementId => "CB-6.3-02";
+
+    /// <inheritdoc/>
+    public override string Message =>
+        $"Every electronic time-stamp token shall be the IETF RFC 3161(+5816) legacy shape (type/encoding/" +
+        $"specRef absent) in CB-AdES baseline signatures (ETSI TS 119 152-1 V1.1.1, clause 6.3, CB-6.3-02); " +
+        $"a typed token was found in {Kind}.";
+}
+
+
+/// <summary>
+/// Which <c>refs</c>-family <c>uHeaders</c> element kind a <see cref="CBAdESRefsFamilyForbiddenViolation"/>
+/// found present at level B-LT or above.
+/// </summary>
+public enum CBAdESRefsFamilyKind
+{
+    /// <summary>The <c>refs</c> element (Annex A.1.1, Table 8 label 4).</summary>
+    References,
+
+    /// <summary>The <c>sigRTst</c> element (Annex A.1.2.1, Table 8 label 5).</summary>
+    SignatureAndReferencesTimestamp,
+
+    /// <summary>The <c>rfsTst</c> element (Annex A.1.2.2, Table 8 label 6).</summary>
+    ReferencesTimestamp
+}
+
+
+/// <summary>
+/// A <c>refs</c>-family <c>uHeaders</c> element (<c>refs</c>, <c>sigRTst</c>, or <c>rfsTst</c>) is present at
+/// level B-LT or above, where Table 14 hard-forbids the whole family (<see cref="CBAdESLevelRules"/>, wavecb
+/// S4).
+/// </summary>
+/// <param name="Kind">Which family member was found present.</param>
+/// <remarks>
+/// CB-6.3-23 (<c>refs</c>), CB-6.3-24 (<c>sigRTst</c>), CB-6.3-25 (<c>rfsTst</c>): all three carry presence
+/// <c>"*"</c> (should-not) at B-B/B-T and <c>shall not be present</c> at B-LT/B-LTA, with cardinality <c>0</c>
+/// hard-enforced at those two levels. A level-upgrade to B-LT must strip every pre-existing instance of the
+/// three (the augmenting orchestrator's own concern, not this collect-posture rule's, which only reports
+/// what it finds).
+/// </remarks>
+public sealed record CBAdESRefsFamilyForbiddenViolation(CBAdESRefsFamilyKind Kind) : CBAdESRuleViolation
+{
+    /// <inheritdoc/>
+    public override string RequirementId => Kind switch
+    {
+        CBAdESRefsFamilyKind.References => "CB-6.3-23",
+        CBAdESRefsFamilyKind.SignatureAndReferencesTimestamp => "CB-6.3-24",
+        CBAdESRefsFamilyKind.ReferencesTimestamp => "CB-6.3-25",
+        _ => throw new NotSupportedException($"Unknown {nameof(CBAdESRefsFamilyKind)} value '{Kind}'.")
+    };
+
+    /// <inheritdoc/>
+    public override string Message =>
+        $"{Kind} shall not be present at level B-LT or above (ETSI TS 119 152-1 V1.1.1, clause 6.3, Table 14, " +
+        $"{RequirementId}).";
+}
+
+
+/// <summary>
+/// Which <c>refs</c>-family time-stamp element kind a <see cref="CBAdESReferencesTimestampGenerationGateViolation"/>
+/// was generated for without a preceding <c>refs</c> element.
+/// </summary>
+public enum CBAdESReferencesTimestampGenerationKind
+{
+    /// <summary>The <c>sigRTst</c> element (Annex A.1.2.1).</summary>
+    SignatureAndReferences,
+
+    /// <summary>The <c>rfsTst</c> element (Annex A.1.2.2).</summary>
+    ReferencesOnly
+}
+
+
+/// <summary>
+/// A <c>sigRTst</c> or <c>rfsTst</c> element is present in <c>uHeaders</c> with no <c>refs</c> element
+/// preceding it in wire order — the generation gate both time-stamp kinds share
+/// (<see cref="CBAdESLevelRules"/>, wavecb S4).
+/// </summary>
+/// <param name="Kind">Which of the two time-stamp kinds failed the gate.</param>
+/// <remarks>
+/// CB-A.1.2.1-03: "If the component <c>refs</c> is not present, the <c>sigRTst</c> CBOR map shall not be
+/// generated." CB-A.1.2.2-03: the identical gate for <c>rfsTst</c>. Because <c>uHeaders</c> is append-only
+/// (CB-5.3.1-03), "present at generation time" is checked positionally: a <c>refs</c> element shall appear
+/// at some position strictly before the <c>sigRTst</c>/<c>rfsTst</c> element under check
+/// (<see cref="Verifiable.Cryptography.Pki.CBAdESUnsignedHeaders.ElementsBefore(int)"/>).
+/// </remarks>
+public sealed record CBAdESReferencesTimestampGenerationGateViolation(CBAdESReferencesTimestampGenerationKind Kind) : CBAdESRuleViolation
+{
+    /// <inheritdoc/>
+    public override string RequirementId => Kind switch
+    {
+        CBAdESReferencesTimestampGenerationKind.SignatureAndReferences => "CB-A.1.2.1-03",
+        CBAdESReferencesTimestampGenerationKind.ReferencesOnly => "CB-A.1.2.2-03",
+        _ => throw new NotSupportedException($"Unknown {nameof(CBAdESReferencesTimestampGenerationKind)} value '{Kind}'.")
+    };
+
+    /// <inheritdoc/>
+    public override string Message =>
+        $"A refs element shall precede this time-stamp element in uHeaders wire order (ETSI TS 119 152-1 " +
+        $"V1.1.1, Annex A.1.2.1.1/A.1.2.2.1, {RequirementId}); kind={Kind}.";
+}
+
+
+/// <summary>
+/// At level B-LT or above, neither a <c>valData</c> element is present in <c>uHeaders</c> nor does any
+/// electronic time-stamp token carry its own embedded certificate/revocation validation material — the
+/// validation-data-for-time-stamps service (CB-6.3-26) is unsatisfied by either of its two SPOs
+/// (<see cref="CBAdESLevelRules"/>, wavecb S4).
+/// </summary>
+/// <remarks>
+/// <para>
+/// Additional requirement (h): "The validation data for electronic time-stamps shall be present within
+/// <c>valData</c> OR embedded in the electronic time-stamp itself." A disjunctive hard requirement — this
+/// violation is reported only when BOTH SPOs fail, never when just one does.
+/// </para>
+/// <para>
+/// Additional requirement (i) (a SHOULD, not enforced as a violation, recorded here only): "The validation
+/// data for electronic time-stamps should be included within <c>valData</c>" — a soft preference for the
+/// <c>valData</c> SPO over the embedded-in-token SPO when a generator has a genuine choice between them.
+/// </para>
+/// </remarks>
+public sealed record CBAdESTimestampValidationDataServiceViolation : CBAdESRuleViolation
+{
+    /// <inheritdoc/>
+    public override string RequirementId => "CB-6.3-26";
+
+    /// <inheritdoc/>
+    public override string Message =>
+        "At level B-LT or above, validation data for electronic time-stamps shall be present within valData " +
+        "or embedded in the electronic time-stamp itself (ETSI TS 119 152-1 V1.1.1, clause 6.3, Table 14, " +
+        "additional requirement (h)); neither SPO is satisfied.";
+}
+
+
+/// <summary>
+/// A <c>refs</c> element's <c>xRefs</c> (certificate references) contains a reference whose digest matches
+/// a digest of the CB-AdES signature's own signing certificate (<see cref="CBAdESLevelRules"/>, wavecb S4).
+/// </summary>
+/// <remarks>
+/// CB-A.1.1-02: "The <c>refs</c> CBOR map shall not contain the signing certificate of the CB-AdES signature
+/// itself." Detected by byte-comparing every <c>CertId.x5t</c> digest against every caller-supplied signing-
+/// certificate digest (the caller supplies these because this rule surface cannot itself derive the signing
+/// certificate from a <c>uHeaders</c> snapshot alone).
+/// </remarks>
+public sealed record CBAdESReferencesSigningCertificateExclusionViolation : CBAdESRuleViolation
+{
+    /// <inheritdoc/>
+    public override string RequirementId => "CB-A.1.1-02";
+
+    /// <inheritdoc/>
+    public override string Message =>
+        "refs shall not contain the signing certificate of the CB-AdES signature itself (ETSI TS 119 152-1 " +
+        "V1.1.1, Annex A.1.1, CB-A.1.1-02).";
+}
+
+
+/// <summary>
+/// Which <c>refs</c>-family digest-algorithm-identifier surface a <see cref="CBAdESRefsFamilyMd5DigestAlgorithmViolation"/>
+/// names MD5 on.
+/// </summary>
+public enum CBAdESRefsFamilyDigestSurface
+{
+    /// <summary>A <c>CertId.x5t</c> digest pair (Annex A.1.1).</summary>
+    CertificateReferenceThumbprint,
+
+    /// <summary>A <c>CRLRef.digAlgVal</c> digest pair (Annex A.1.1).</summary>
+    CrlReferenceDigest,
+
+    /// <summary>An <c>OCSPRef.digAlgVal</c> digest pair (Annex A.1.1).</summary>
+    OcspReferenceDigest
+}
+
+
+/// <summary>
+/// A <c>refs</c>-family digest-algorithm-identifier surface names MD5 — refused independent of any algorithm
+/// policy (R-5, wavecb-contract.md), mirroring <see cref="CBAdESMd5DigestAlgorithmViolation"/>'s S3
+/// mechanism for the Annex A.1.1 surfaces this stage (wavecb S4, <see cref="CBAdESLevelRules"/>) introduces.
+/// A distinct sibling record (rather than a new <see cref="CBAdESMd5DigestAlgorithmSurface"/> case) keeps
+/// the S3 B-B rule surface's own closed enum untouched, per this stage's edit scope.
+/// </summary>
+/// <param name="Surface">Which surface named MD5.</param>
+public sealed record CBAdESRefsFamilyMd5DigestAlgorithmViolation(CBAdESRefsFamilyDigestSurface Surface) : CBAdESRuleViolation
+{
+    /// <inheritdoc/>
+    public override string RequirementId => "CB-6.2.1-02";
+
+    /// <inheritdoc/>
+    public override string Message =>
+        $"MD5 shall not be used as a digest algorithm (ETSI TS 119 152-1 V1.1.1, clause 6.2.1); named at {Surface}.";
+}
+
+
+/// <summary>
+/// Which kind of referenced material a <see cref="CBAdESReferencesValidationDataConsistencyViolation"/>
+/// failed to resolve to <c>valData</c>.
+/// </summary>
+public enum CBAdESReferenceMaterialKind
+{
+    /// <summary>A <c>CertId</c> entry (Annex A.1.1, <c>xRefs</c>).</summary>
+    Certificate,
+
+    /// <summary>A <c>CRLRef</c> entry (Annex A.1.1, <c>rRefs.crlRefs</c>).</summary>
+    Crl,
+
+    /// <summary>An <c>OCSPRef</c> entry (Annex A.1.1, <c>rRefs.ocspRefs</c>).</summary>
+    Ocsp
+}
+
+
+/// <summary>
+/// A <c>refs</c> entry does not resolve to any material actually present in <c>valData</c> — the
+/// cross-component consistency check CB-A.1.1-30 imposes when both <c>refs</c> and <c>valData</c> are
+/// present (<see cref="CBAdESLevelRules"/>, wavecb S4). Reported by the ASYNC
+/// <see cref="CBAdESLevelRules.CheckReferencesResolveToValidationDataAsync"/>, never the sync
+/// <see cref="CBAdESLevelRules.Check"/>, since resolution requires digesting <c>valData</c> candidates
+/// through the registered digest delegate.
+/// </summary>
+/// <param name="Kind">Which reference kind failed to resolve.</param>
+/// <remarks>
+/// CB-A.1.1-30: "If at least one of the following: <c>valData</c> or the <c>arcTst</c>, is incorporated into
+/// the signature, all the certificates and validation data referenced in <c>refs</c> shall be present
+/// elsewhere in the signature." This wave checks <c>valData</c> resolution only — the <c>arcTst</c>-reachable
+/// half of the disjunction is an S5 extension point (S5 must additionally resolve against <c>arcTst</c>'s own
+/// protected material once that stage's generation lands).
+/// </remarks>
+public sealed record CBAdESReferencesValidationDataConsistencyViolation(CBAdESReferenceMaterialKind Kind) : CBAdESRuleViolation
+{
+    /// <inheritdoc/>
+    public override string RequirementId => "CB-A.1.1-30";
+
+    /// <inheritdoc/>
+    public override string Message =>
+        $"Every reference in refs shall resolve to material present in valData when valData is incorporated " +
+        $"(ETSI TS 119 152-1 V1.1.1, Annex A.1.1, CB-A.1.1-30); a {Kind} reference did not resolve.";
+}
+
+
+/// <summary>
+/// Which electronic time-stamp token kind a <see cref="CBAdESTimestampTokenBindingViolation"/> concerns
+/// (wavecb S4, <see cref="CBAdESSignatureValidation"/>'s async token-imprint verification).
+/// </summary>
+public enum CBAdESTimestampTokenBindingKind
+{
+    /// <summary>A <c>sigTst</c> token — time-stamps the COSE signature value (clause 5.3.3, CB-5.3.3-02).</summary>
+    SignatureTimestamp,
+
+    /// <summary>An <c>adoTst</c> token — time-stamps the COSE Payload (clause 5.2.6, CB-5.2.6-04).</summary>
+    PayloadTimestamp,
+
+    /// <summary>
+    /// An <c>arcTst</c> token — this stage only opens/CMS-verifies it (its message-imprint binding is the
+    /// clause 5.3.5.3 12-step algorithm, deferred to wavecb S5 once <c>arcTst</c> generation lands; see
+    /// <see cref="CBAdESLevelRules"/>'s own remarks for the identical deferral on CB-A.1.1-30's <c>arcTst</c>-
+    /// reachable half).
+    /// </summary>
+    ArchiveTimestamp,
+
+    /// <summary>A <c>sigRTst</c> token — time-stamps the signature value plus <c>sigTst</c>/<c>refs</c> (Annex A.1.2.1, CB-A.1.2.1-02).</summary>
+    SignatureAndReferencesTimestamp,
+
+    /// <summary>A <c>rfsTst</c> token — time-stamps <c>sigTst</c>/<c>refs</c> (Annex A.1.2.2, CB-A.1.2.2-02).</summary>
+    ReferencesTimestamp
+}
+
+
+/// <summary>
+/// Why a <see cref="CBAdESTimestampTokenBindingViolation"/> was reported.
+/// </summary>
+public enum CBAdESTimestampTokenBindingFailureReason
+{
+    /// <summary>
+    /// <see cref="Verifiable.Cryptography.Pki.TimestampTokenInfo.ReadFromTokenAsync"/> returned a status other
+    /// than <see cref="Verifiable.Cryptography.Pki.TimestampTokenInfoStatus.Read"/> — the token's DER is
+    /// malformed, its message-imprint algorithm is unresolvable (CB-6.2.1-02's MD5 denylist is satisfied BY
+    /// CONSTRUCTION here: <see cref="Verifiable.Cryptography.Pki.PkiDigestAlgorithm.FromOid"/> never resolves
+    /// MD5's OID, so an MD5-imprint token reaches this reason as
+    /// <see cref="Verifiable.Cryptography.Pki.TimestampTokenInfoStatus.UnsupportedMessageImprintAlgorithm"/>,
+    /// mirroring <see cref="CBAdESMd5DigestAlgorithmViolation"/>'s own by-construction reasoning for
+    /// <see cref="CBAdESProtectedHeaders.Algorithm"/>), or its own CMS signature did not verify.
+    /// </summary>
+    TokenNotRead,
+
+    /// <summary>
+    /// The token read successfully, but <see cref="Verifiable.Cryptography.Pki.TimestampTokenInfo.VerifyMessageImprintAsync"/>
+    /// returned <see langword="false"/> against the expected message-imprint input.
+    /// </summary>
+    ImprintMismatch,
+
+    /// <summary>
+    /// The message-imprint INPUT itself could not be reconstructed from the wire bytes — a <c>sigD</c>
+    /// dereference failed while resolving the <c>adoTst</c> payload contribution, no out-of-band detached
+    /// payload was supplied, or the raw captured <c>uHeaders</c> bytes a <c>sigRTst</c>/<c>rfsTst</c> builder
+    /// needs were absent or rejected as malformed.
+    /// </summary>
+    ImprintInputUnresolvable
+}
+
+
+/// <summary>
+/// An electronic time-stamp token could not be opened/CMS-verified, or its message imprint does not bind the
+/// data it is claimed to time-stamp (wavecb S4, <see cref="CBAdESSignatureValidation"/>). Reported by the
+/// ASYNC token-imprint verification pass, never <see cref="CBAdESLevelRules.Check"/>, since opening a token
+/// requires the registered CMS verification seam and computing/comparing a digest requires the registered
+/// digest delegate.
+/// </summary>
+/// <param name="Kind">Which token kind failed.</param>
+/// <param name="Reason">Why it failed.</param>
+/// <param name="Detail">A human-readable statement of the specific failure (e.g. the observed <see cref="Verifiable.Cryptography.Pki.TimestampTokenInfoStatus"/>, or the unresolvable dereference's reason).</param>
+[DebuggerDisplay("CBAdESTimestampTokenBindingViolation: {Kind}/{Reason}")]
+public sealed record CBAdESTimestampTokenBindingViolation(
+    CBAdESTimestampTokenBindingKind Kind,
+    CBAdESTimestampTokenBindingFailureReason Reason,
+    string Detail) : CBAdESRuleViolation
+{
+    /// <inheritdoc/>
+    public override string RequirementId => Kind switch
+    {
+        CBAdESTimestampTokenBindingKind.SignatureTimestamp => "CB-5.3.3-02",
+        CBAdESTimestampTokenBindingKind.PayloadTimestamp => "CB-5.2.6-04",
+        CBAdESTimestampTokenBindingKind.ArchiveTimestamp => "CB-5.4.3.3",
+        CBAdESTimestampTokenBindingKind.SignatureAndReferencesTimestamp => "CB-A.1.2.1-02",
+        CBAdESTimestampTokenBindingKind.ReferencesTimestamp => "CB-A.1.2.2-02",
+        _ => throw new NotSupportedException($"Unknown {nameof(CBAdESTimestampTokenBindingKind)} value '{Kind}'.")
+    };
+
+    /// <inheritdoc/>
+    public override string Message =>
+        $"{Kind} token binding failed ({Reason}) (ETSI TS 119 152-1 V1.1.1, {RequirementId}): {Detail}";
+}

@@ -256,6 +256,21 @@ public static class CBAdESSerialization
     /// to <paramref name="writer"/>. Shared by every stage-2 component that carries a CDDL <c>#6.0(tstr)</c>
     /// member (<c>CRLId.issueTime</c>, <c>OCSPId.producedAt</c>, both Annex A.1.1).
     /// </summary>
+    /// <remarks>
+    /// Always writes the canonical whole-second, forced-<c>Z</c> form — legal per the CDDL (any RFC 3339
+    /// <c>#6.0(tstr)</c> form is), but not the only legal wire shape a <c>tdate</c> may carry: a sub-second or
+    /// non-<c>Z</c>-offset form is equally conformant and <see cref="ReadTDate"/> parses it faithfully. This
+    /// writer is therefore canonical-on-CREATE only — every element this class builds fresh (signature
+    /// creation, or a genuinely NEW unsigned-header element an augmentation verb appends) goes through here,
+    /// but an AUGMENTATION verb never re-encodes a RETAINED element through this writer: doing so would
+    /// silently collapse a foreign signature's own sub-second/non-<c>Z</c>-offset <c>producedAt</c> to this
+    /// writer's normalized form, changing that element's wire bytes and breaking a prior <c>sigRTst</c>/
+    /// <c>rfsTst</c> token's message-imprint coverage over it (clause 5.3.1 NOTE 1's imprint-unambiguity
+    /// rationale — the wavecb S4 FX-A defect this writer must never reintroduce). Retained elements instead
+    /// survive byte-exact through the raw-splice seam
+    /// (<see cref="CBAdESSignatureSerialization.TrySpliceCBAdESUnprotectedHeader"/>'s own remarks); preserve-
+    /// on-AUGMENT.
+    /// </remarks>
     /// <param name="writer">The CBOR writer.</param>
     /// <param name="value">The date-time value to write.</param>
     private static void WriteTDate(CborWriter writer, DateTimeOffset value)
