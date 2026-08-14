@@ -44,7 +44,7 @@ public static class AttachmentJsonValueJson
     //Serializes the embedded JSON value into an owned, exact-length pooled buffer. A System.Text.Json
     //serialization failure is translated into the framework-neutral FormatException so no STJ type escapes
     //this leaf into Verifiable.DidComm; the resolver maps that to MalformedInline.
-    private static IMemoryOwner<byte> Serialize(object jsonValue, MemoryPool<byte> memoryPool)
+    private static IMemoryOwner<byte> Serialize(object jsonValue, BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(jsonValue);
         ArgumentNullException.ThrowIfNull(memoryPool);

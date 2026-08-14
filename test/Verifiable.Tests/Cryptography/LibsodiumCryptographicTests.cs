@@ -2,15 +2,17 @@ using System;
 using System.Buffers;
 using System.Text;
 using System.Threading.Tasks;
+using Lumoin.Base.Libsodium;
 using Verifiable.Cryptography;
 using Verifiable.Libsodium;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cryptography
 {
     /// <summary>
     /// Tests libsodium as the cryptographic provider across its supported algorithms (Ed25519,
     /// X25519), porting the intent of the retired managed-wrapper Ed25519/X25519 provider tests onto
-    /// the new binding, plus the IETF known-answer vectors (R-6) that pin the native binding against
+    /// the new binding, plus the IETF known-answer vectors that pin the native binding against
     /// <see href="https://www.rfc-editor.org/rfc/rfc8032">RFC 8032</see> (Ed25519) and
     /// <see href="https://www.rfc-editor.org/rfc/rfc7748">RFC 7748</see> (X25519).
     /// </summary>
@@ -162,11 +164,11 @@ namespace Verifiable.Tests.Cryptography
             byte[] uCoordinate = Convert.FromHexString("e6db6867583030db3594c1a424b15f7c726624ec26b3353b10a903a6d0ab1c4c");
             byte[] expectedOutput = Convert.FromHexString("c3da55379de9c6908e94ea4df28d084f32eccf03491c71f754b4075577a28552");
 
-            Span<byte> output = stackalloc byte[LibsodiumNativeMethods.X25519PointLength];
-            int result = LibsodiumNativeMethods.crypto_scalarmult(output, scalar, uCoordinate);
+            Span<byte> output = stackalloc byte[LibsodiumCrypto.X25519PointLength];
+            int result = LibsodiumCrypto.ScalarMult(output, scalar, uCoordinate);
 
             Assert.AreEqual(0, result);
-            Assert.IsTrue(output.SequenceEqual(expectedOutput), "crypto_scalarmult must match the RFC 7748 section 5.2 known-answer output.");
+            Assert.IsTrue(output.SequenceEqual(expectedOutput), "ScalarMult must match the RFC 7748 section 5.2 known-answer output.");
         }
 
 
@@ -184,19 +186,19 @@ namespace Verifiable.Tests.Cryptography
             byte[] bobPublic = Convert.FromHexString("de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f");
             byte[] expectedShared = Convert.FromHexString("4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742");
 
-            Span<byte> derivedAlicePublic = stackalloc byte[LibsodiumNativeMethods.X25519PointLength];
-            Assert.AreEqual(0, LibsodiumNativeMethods.crypto_scalarmult_base(derivedAlicePublic, alicePrivate));
+            Span<byte> derivedAlicePublic = stackalloc byte[LibsodiumCrypto.X25519PointLength];
+            Assert.AreEqual(0, LibsodiumCrypto.ScalarMultBase(derivedAlicePublic, alicePrivate));
             Assert.IsTrue(derivedAlicePublic.SequenceEqual(alicePublic), "Alice's public key must match the RFC 7748 section 6.1 known answer.");
 
-            Span<byte> derivedBobPublic = stackalloc byte[LibsodiumNativeMethods.X25519PointLength];
-            Assert.AreEqual(0, LibsodiumNativeMethods.crypto_scalarmult_base(derivedBobPublic, bobPrivate));
+            Span<byte> derivedBobPublic = stackalloc byte[LibsodiumCrypto.X25519PointLength];
+            Assert.AreEqual(0, LibsodiumCrypto.ScalarMultBase(derivedBobPublic, bobPrivate));
             Assert.IsTrue(derivedBobPublic.SequenceEqual(bobPublic), "Bob's public key must match the RFC 7748 section 6.1 known answer.");
 
-            Span<byte> sharedFromAlice = stackalloc byte[LibsodiumNativeMethods.X25519PointLength];
-            Assert.AreEqual(0, LibsodiumNativeMethods.crypto_scalarmult(sharedFromAlice, alicePrivate, bobPublic));
+            Span<byte> sharedFromAlice = stackalloc byte[LibsodiumCrypto.X25519PointLength];
+            Assert.AreEqual(0, LibsodiumCrypto.ScalarMult(sharedFromAlice, alicePrivate, bobPublic));
 
-            Span<byte> sharedFromBob = stackalloc byte[LibsodiumNativeMethods.X25519PointLength];
-            Assert.AreEqual(0, LibsodiumNativeMethods.crypto_scalarmult(sharedFromBob, bobPrivate, alicePublic));
+            Span<byte> sharedFromBob = stackalloc byte[LibsodiumCrypto.X25519PointLength];
+            Assert.AreEqual(0, LibsodiumCrypto.ScalarMult(sharedFromBob, bobPrivate, alicePublic));
 
             Assert.IsTrue(sharedFromAlice.SequenceEqual(expectedShared), "Alice's computed shared secret must match the RFC 7748 section 6.1 known answer.");
             Assert.IsTrue(sharedFromBob.SequenceEqual(expectedShared), "Bob's computed shared secret must match the RFC 7748 section 6.1 known answer.");
@@ -212,18 +214,18 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void Ed25519ToCurve25519ConversionAgreesOnDiffieHellman()
         {
-            Span<byte> seedA = stackalloc byte[LibsodiumNativeMethods.Ed25519SeedLength];
-            Span<byte> seedB = stackalloc byte[LibsodiumNativeMethods.Ed25519SeedLength];
-            LibsodiumNativeMethods.randombytes_buf(seedA, (nuint)seedA.Length);
-            LibsodiumNativeMethods.randombytes_buf(seedB, (nuint)seedB.Length);
+            Span<byte> seedA = stackalloc byte[LibsodiumCrypto.Ed25519SeedLength];
+            Span<byte> seedB = stackalloc byte[LibsodiumCrypto.Ed25519SeedLength];
+            LibsodiumCrypto.RandomBytes(seedA);
+            LibsodiumCrypto.RandomBytes(seedB);
 
-            Span<byte> pkA = stackalloc byte[LibsodiumNativeMethods.Ed25519PublicKeyLength];
-            Span<byte> pkB = stackalloc byte[LibsodiumNativeMethods.Ed25519PublicKeyLength];
+            Span<byte> pkA = stackalloc byte[LibsodiumCrypto.Ed25519PublicKeyLength];
+            Span<byte> pkB = stackalloc byte[LibsodiumCrypto.Ed25519PublicKeyLength];
 
-            using IMemoryOwner<byte> secretKeyScratchOwnerA = LibsodiumNativeMethods.AllocateSecretKeyScratch(
-                "libsodium must allocate the first Ed25519 secret-key scratch.");
-            using IMemoryOwner<byte> secretKeyScratchOwnerB = LibsodiumNativeMethods.AllocateSecretKeyScratch(
-                "libsodium must allocate the second Ed25519 secret-key scratch.");
+            using IMemoryOwner<byte> secretKeyScratchOwnerA = LibsodiumCrypto.AllocateSecretKeyScratch(
+                BaseMemoryPool.Shared, "libsodium must allocate the first Ed25519 secret-key scratch.");
+            using IMemoryOwner<byte> secretKeyScratchOwnerB = LibsodiumCrypto.AllocateSecretKeyScratch(
+                BaseMemoryPool.Shared, "libsodium must allocate the second Ed25519 secret-key scratch.");
             using MemoryHandle secretKeyScratchHandleA = secretKeyScratchOwnerA.Memory.Pin();
             using MemoryHandle secretKeyScratchHandleB = secretKeyScratchOwnerB.Memory.Pin();
 
@@ -235,23 +237,23 @@ namespace Verifiable.Tests.Cryptography
                 secretKeyScratchB = (nint)secretKeyScratchHandleB.Pointer;
             }
 
-            Assert.AreEqual(0, LibsodiumNativeMethods.crypto_sign_seed_keypair(pkA, secretKeyScratchA, seedA));
-            Assert.AreEqual(0, LibsodiumNativeMethods.crypto_sign_seed_keypair(pkB, secretKeyScratchB, seedB));
+            Assert.AreEqual(0, LibsodiumCrypto.SignSeedKeypair(pkA, secretKeyScratchA, seedA));
+            Assert.AreEqual(0, LibsodiumCrypto.SignSeedKeypair(pkB, secretKeyScratchB, seedB));
 
-            Span<byte> x25519PkA = stackalloc byte[LibsodiumNativeMethods.X25519PointLength];
-            Span<byte> x25519PkB = stackalloc byte[LibsodiumNativeMethods.X25519PointLength];
-            Assert.AreEqual(0, LibsodiumNativeMethods.crypto_sign_ed25519_pk_to_curve25519(x25519PkA, pkA));
-            Assert.AreEqual(0, LibsodiumNativeMethods.crypto_sign_ed25519_pk_to_curve25519(x25519PkB, pkB));
+            Span<byte> x25519PkA = stackalloc byte[LibsodiumCrypto.X25519PointLength];
+            Span<byte> x25519PkB = stackalloc byte[LibsodiumCrypto.X25519PointLength];
+            Assert.AreEqual(0, LibsodiumCrypto.PublicKeyToCurve25519(x25519PkA, pkA));
+            Assert.AreEqual(0, LibsodiumCrypto.PublicKeyToCurve25519(x25519PkB, pkB));
 
-            Span<byte> x25519SkA = stackalloc byte[LibsodiumNativeMethods.X25519ScalarLength];
-            Span<byte> x25519SkB = stackalloc byte[LibsodiumNativeMethods.X25519ScalarLength];
-            Assert.AreEqual(0, LibsodiumNativeMethods.crypto_sign_ed25519_sk_to_curve25519(x25519SkA, secretKeyScratchA));
-            Assert.AreEqual(0, LibsodiumNativeMethods.crypto_sign_ed25519_sk_to_curve25519(x25519SkB, secretKeyScratchB));
+            Span<byte> x25519SkA = stackalloc byte[LibsodiumCrypto.X25519ScalarLength];
+            Span<byte> x25519SkB = stackalloc byte[LibsodiumCrypto.X25519ScalarLength];
+            Assert.AreEqual(0, LibsodiumCrypto.SecretKeyToCurve25519(x25519SkA, secretKeyScratchA));
+            Assert.AreEqual(0, LibsodiumCrypto.SecretKeyToCurve25519(x25519SkB, secretKeyScratchB));
 
-            Span<byte> sharedFromA = stackalloc byte[LibsodiumNativeMethods.X25519PointLength];
-            Span<byte> sharedFromB = stackalloc byte[LibsodiumNativeMethods.X25519PointLength];
-            Assert.AreEqual(0, LibsodiumNativeMethods.crypto_scalarmult(sharedFromA, x25519SkA, x25519PkB));
-            Assert.AreEqual(0, LibsodiumNativeMethods.crypto_scalarmult(sharedFromB, x25519SkB, x25519PkA));
+            Span<byte> sharedFromA = stackalloc byte[LibsodiumCrypto.X25519PointLength];
+            Span<byte> sharedFromB = stackalloc byte[LibsodiumCrypto.X25519PointLength];
+            Assert.AreEqual(0, LibsodiumCrypto.ScalarMult(sharedFromA, x25519SkA, x25519PkB));
+            Assert.AreEqual(0, LibsodiumCrypto.ScalarMult(sharedFromB, x25519SkB, x25519PkA));
 
             Assert.IsTrue(sharedFromA.SequenceEqual(sharedFromB),
                 "Independently converted Ed25519 keypairs must agree on the X25519 Diffie-Hellman shared secret.");
@@ -261,10 +263,10 @@ namespace Verifiable.Tests.Cryptography
         /// <summary>
         /// The PRODUCTION <see cref="LibsodiumKeyConversion.ConvertEd25519PublicKeyToCurve25519PublicKey"/>
         /// must be byte-identical to an independently derived native-direct conversion
-        /// (<c>crypto_sign_ed25519_pk_to_curve25519</c> called directly, bypassing the production method)
-        /// for the same minted Ed25519 public key. This is the oracle-equality half of the correctness
-        /// pinning the adversarial review found missing: the existing self-consistency KAT calls the
-        /// native methods directly and never exercises the production conversion method at all.
+        /// (<see cref="LibsodiumCrypto.PublicKeyToCurve25519"/> called directly, bypassing the production
+        /// method) for the same minted Ed25519 public key. This is the oracle-equality half of the
+        /// correctness pinning the adversarial review found missing: the existing self-consistency KAT
+        /// calls the native methods directly and never exercises the production conversion method at all.
         /// </summary>
         [TestMethod]
         public void ConvertEd25519PublicKeyToCurve25519PublicKeyMatchesNativeDirectConversion()
@@ -276,12 +278,12 @@ namespace Verifiable.Tests.Cryptography
             using IMemoryOwner<byte> productionConverted = LibsodiumKeyConversion.ConvertEd25519PublicKeyToCurve25519PublicKey(
                 publicKey.AsReadOnlySpan(), BaseMemoryPool.Shared);
 
-            Span<byte> nativeDirectConverted = stackalloc byte[LibsodiumNativeMethods.X25519PointLength];
-            int conversionResult = LibsodiumNativeMethods.crypto_sign_ed25519_pk_to_curve25519(nativeDirectConverted, publicKey.AsReadOnlySpan());
+            Span<byte> nativeDirectConverted = stackalloc byte[LibsodiumCrypto.X25519PointLength];
+            int conversionResult = LibsodiumCrypto.PublicKeyToCurve25519(nativeDirectConverted, publicKey.AsReadOnlySpan());
             Assert.AreEqual(0, conversionResult, "The independent native-direct conversion must succeed for a validly minted Ed25519 public key.");
 
             Assert.IsTrue(
-                productionConverted.Memory.Span[..LibsodiumNativeMethods.X25519PointLength].SequenceEqual(nativeDirectConverted),
+                productionConverted.Memory.Span[..LibsodiumCrypto.X25519PointLength].SequenceEqual(nativeDirectConverted),
                 "The production ConvertEd25519PublicKeyToCurve25519PublicKey output must be byte-identical to the independent native-direct conversion.");
         }
 
@@ -289,10 +291,11 @@ namespace Verifiable.Tests.Cryptography
         /// <summary>
         /// The PRODUCTION <see cref="LibsodiumKeyConversion.ConvertEd25519PrivateKeyToCurve25519PrivateKey"/>
         /// must be byte-identical to an independently derived native-direct conversion
-        /// (<c>crypto_sign_seed_keypair</c> into sodium scratch, then <c>crypto_sign_ed25519_sk_to_curve25519</c>
-        /// called directly, bypassing the production method) for the same minted Ed25519 seed. Composes the
-        /// same oracle path as <see cref="Ed25519ToCurve25519ConversionAgreesOnDiffieHellman"/> without
-        /// duplicating its DH-agreement assertion.
+        /// (<see cref="LibsodiumCrypto.SignSeedKeypair"/> into sodium scratch, then
+        /// <see cref="LibsodiumCrypto.SecretKeyToCurve25519"/> called directly, bypassing the production
+        /// method) for the same minted Ed25519 seed. Composes the same oracle path as
+        /// <see cref="Ed25519ToCurve25519ConversionAgreesOnDiffieHellman"/> without duplicating its
+        /// DH-agreement assertion.
         /// </summary>
         [TestMethod]
         public void ConvertEd25519PrivateKeyToCurve25519PrivateKeyMatchesNativeDirectConversion()
@@ -302,12 +305,12 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             using IMemoryOwner<byte> productionConverted = LibsodiumKeyConversion.ConvertEd25519PrivateKeyToCurve25519PrivateKey(
-                privateKey.AsReadOnlySpan(), BaseMemoryPool.Shared);
+                privateKey.AsReadOnlySpan(), BaseMemoryPool.Shared, SodiumScratchTestPool.Instance);
 
-            Span<byte> nativeDirectConverted = stackalloc byte[LibsodiumNativeMethods.X25519ScalarLength];
-            Span<byte> publicKeyScratch = stackalloc byte[LibsodiumNativeMethods.Ed25519PublicKeyLength];
-            using(IMemoryOwner<byte> secretKeyScratchOwner = LibsodiumNativeMethods.AllocateSecretKeyScratch(
-                "libsodium must allocate the Ed25519 secret-key scratch for the independent oracle path."))
+            Span<byte> nativeDirectConverted = stackalloc byte[LibsodiumCrypto.X25519ScalarLength];
+            Span<byte> publicKeyScratch = stackalloc byte[LibsodiumCrypto.Ed25519PublicKeyLength];
+            using(IMemoryOwner<byte> secretKeyScratchOwner = LibsodiumCrypto.AllocateSecretKeyScratch(
+                BaseMemoryPool.Shared, "libsodium must allocate the Ed25519 secret-key scratch for the independent oracle path."))
             using(MemoryHandle secretKeyScratchHandle = secretKeyScratchOwner.Memory.Pin())
             {
                 nint secretKeyScratch;
@@ -316,14 +319,14 @@ namespace Verifiable.Tests.Cryptography
                     secretKeyScratch = (nint)secretKeyScratchHandle.Pointer;
                 }
 
-                Assert.AreEqual(0, LibsodiumNativeMethods.crypto_sign_seed_keypair(publicKeyScratch, secretKeyScratch, privateKey.AsReadOnlySpan()),
+                Assert.AreEqual(0, LibsodiumCrypto.SignSeedKeypair(publicKeyScratch, secretKeyScratch, privateKey.AsReadOnlySpan()),
                     "The independent oracle path's keypair expansion must succeed for the minted seed.");
-                Assert.AreEqual(0, LibsodiumNativeMethods.crypto_sign_ed25519_sk_to_curve25519(nativeDirectConverted, secretKeyScratch),
+                Assert.AreEqual(0, LibsodiumCrypto.SecretKeyToCurve25519(nativeDirectConverted, secretKeyScratch),
                     "The independent native-direct sk-to-curve25519 conversion must succeed.");
             }
 
             Assert.IsTrue(
-                productionConverted.Memory.Span[..LibsodiumNativeMethods.X25519ScalarLength].SequenceEqual(nativeDirectConverted),
+                productionConverted.Memory.Span[..LibsodiumCrypto.X25519ScalarLength].SequenceEqual(nativeDirectConverted),
                 "The production ConvertEd25519PrivateKeyToCurve25519PrivateKey output must be byte-identical to the independent native-direct conversion.");
         }
 
@@ -346,28 +349,28 @@ namespace Verifiable.Tests.Cryptography
             using IMemoryOwner<byte> convertedPublicKey = LibsodiumKeyConversion.ConvertEd25519PublicKeyToCurve25519PublicKey(
                 publicKey.AsReadOnlySpan(), BaseMemoryPool.Shared);
             using IMemoryOwner<byte> convertedPrivateScalar = LibsodiumKeyConversion.ConvertEd25519PrivateKeyToCurve25519PrivateKey(
-                privateKey.AsReadOnlySpan(), BaseMemoryPool.Shared);
+                privateKey.AsReadOnlySpan(), BaseMemoryPool.Shared, SodiumScratchTestPool.Instance);
 
-            Span<byte> derivedPublicKey = stackalloc byte[LibsodiumNativeMethods.X25519PointLength];
-            int scalarMultResult = LibsodiumNativeMethods.crypto_scalarmult_base(
-                derivedPublicKey, convertedPrivateScalar.Memory.Span[..LibsodiumNativeMethods.X25519ScalarLength]);
-            Assert.AreEqual(0, scalarMultResult, "crypto_scalarmult_base must succeed over the production-converted private scalar.");
+            Span<byte> derivedPublicKey = stackalloc byte[LibsodiumCrypto.X25519PointLength];
+            int scalarMultResult = LibsodiumCrypto.ScalarMultBase(
+                derivedPublicKey, convertedPrivateScalar.Memory.Span[..LibsodiumCrypto.X25519ScalarLength]);
+            Assert.AreEqual(0, scalarMultResult, "ScalarMultBase must succeed over the production-converted private scalar.");
 
             Assert.IsTrue(
-                derivedPublicKey.SequenceEqual(convertedPublicKey.Memory.Span[..LibsodiumNativeMethods.X25519PointLength]),
-                "crypto_scalarmult_base over the production-converted private scalar must equal the production-converted public point.");
+                derivedPublicKey.SequenceEqual(convertedPublicKey.Memory.Span[..LibsodiumCrypto.X25519PointLength]),
+                "ScalarMultBase over the production-converted private scalar must equal the production-converted public point.");
         }
 
 
         /// <summary>
         /// <see cref="LibsodiumCryptographicFunctions.SignEd25519Async"/> fails closed with
         /// <see cref="ArgumentException"/> when the private key is not the 32-byte RFC 8032 seed length
-        /// (R-3 malformed-length guard).
+        /// (malformed-length guard).
         /// </summary>
         [TestMethod]
         public async Task SignEd25519AsyncWithWrongLengthPrivateKeyThrowsArgumentException()
         {
-            byte[] wrongLengthPrivateKey = new byte[LibsodiumNativeMethods.Ed25519SeedLength - 1];
+            byte[] wrongLengthPrivateKey = new byte[LibsodiumCrypto.Ed25519SeedLength - 1];
             ReadOnlyMemory<byte> data = TestData;
 
             await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
@@ -379,14 +382,14 @@ namespace Verifiable.Tests.Cryptography
 
         /// <summary>
         /// <see cref="LibsodiumCryptographicFunctions.VerifyEd25519Async"/> fails closed with
-        /// <see cref="ArgumentException"/> when the public key is not exactly 32 bytes (R-3 malformed-length
+        /// <see cref="ArgumentException"/> when the public key is not exactly 32 bytes (malformed-length
         /// guard).
         /// </summary>
         [TestMethod]
         public async Task VerifyEd25519AsyncWithWrongLengthPublicKeyThrowsArgumentException()
         {
-            byte[] wrongLengthPublicKey = new byte[LibsodiumNativeMethods.Ed25519PublicKeyLength - 1];
-            byte[] arbitrarySignature = new byte[LibsodiumNativeMethods.Ed25519SignatureLength];
+            byte[] wrongLengthPublicKey = new byte[LibsodiumCrypto.Ed25519PublicKeyLength - 1];
+            byte[] arbitrarySignature = new byte[LibsodiumCrypto.Ed25519SignatureLength];
             ReadOnlyMemory<byte> data = TestData;
 
             await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
@@ -398,14 +401,14 @@ namespace Verifiable.Tests.Cryptography
 
         /// <summary>
         /// <see cref="LibsodiumCryptographicFunctions.VerifyEd25519Async"/> fails closed with
-        /// <see cref="ArgumentException"/> when the signature is not exactly 64 bytes (R-3 malformed-length
+        /// <see cref="ArgumentException"/> when the signature is not exactly 64 bytes (malformed-length
         /// guard).
         /// </summary>
         [TestMethod]
         public async Task VerifyEd25519AsyncWithWrongLengthSignatureThrowsArgumentException()
         {
-            byte[] arbitraryPublicKey = new byte[LibsodiumNativeMethods.Ed25519PublicKeyLength];
-            byte[] wrongLengthSignature = new byte[LibsodiumNativeMethods.Ed25519SignatureLength - 1];
+            byte[] arbitraryPublicKey = new byte[LibsodiumCrypto.Ed25519PublicKeyLength];
+            byte[] wrongLengthSignature = new byte[LibsodiumCrypto.Ed25519SignatureLength - 1];
             ReadOnlyMemory<byte> data = TestData;
 
             await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
@@ -459,9 +462,9 @@ namespace Verifiable.Tests.Cryptography
             byte[] message = Convert.FromHexString(messageHex);
             byte[] expectedSignature = Convert.FromHexString(signatureHex);
 
-            Span<byte> derivedPublicKey = stackalloc byte[LibsodiumNativeMethods.Ed25519PublicKeyLength];
-            using(IMemoryOwner<byte> secretKeyScratchOwner = LibsodiumNativeMethods.AllocateSecretKeyScratch(
-                "libsodium must allocate the Ed25519 secret-key scratch."))
+            Span<byte> derivedPublicKey = stackalloc byte[LibsodiumCrypto.Ed25519PublicKeyLength];
+            using(IMemoryOwner<byte> secretKeyScratchOwner = LibsodiumCrypto.AllocateSecretKeyScratch(
+                BaseMemoryPool.Shared, "libsodium must allocate the Ed25519 secret-key scratch."))
             using(MemoryHandle secretKeyScratchHandle = secretKeyScratchOwner.Memory.Pin())
             {
                 nint secretKeyScratch;
@@ -470,7 +473,7 @@ namespace Verifiable.Tests.Cryptography
                     secretKeyScratch = (nint)secretKeyScratchHandle.Pointer;
                 }
 
-                Assert.AreEqual(0, LibsodiumNativeMethods.crypto_sign_seed_keypair(derivedPublicKey, secretKeyScratch, seed));
+                Assert.AreEqual(0, LibsodiumCrypto.SignSeedKeypair(derivedPublicKey, secretKeyScratch, seed));
             }
 
             Assert.IsTrue(derivedPublicKey.SequenceEqual(expectedPublicKey), "The seed must derive the RFC 8032 known-answer public key.");

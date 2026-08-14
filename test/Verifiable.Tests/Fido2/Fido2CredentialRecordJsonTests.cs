@@ -182,8 +182,8 @@ internal sealed class Fido2CredentialRecordJsonTests
 
 
     /// <summary>
-    /// A wave-4-shaped document with no <c>authenticatorAttachment</c> member at all — the exact shape
-    /// every document written before this wave has — still parses under the CURRENT version: adding
+    /// A document with no <c>authenticatorAttachment</c> member at all — the exact shape
+    /// every document written before this member existed has — still parses under the CURRENT version: adding
     /// the member was purely additive, with no version bump.
     /// </summary>
     [TestMethod]

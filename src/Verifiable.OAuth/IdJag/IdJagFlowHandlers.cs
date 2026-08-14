@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Client;
@@ -11,7 +10,6 @@ namespace Verifiable.OAuth.IdJag;
 /// transport. Both authenticate the confidential client (§9.1) with a <c>private_key_jwt</c> client
 /// assertion (RFC 7523 §2.2) and parse the response through the infrastructure's token-response parser.
 /// </summary>
-[DebuggerDisplay("IdJagFlowHandlers")]
 public static class IdJagFlowHandlers
 {
     /// <summary>
@@ -46,11 +44,14 @@ public static class IdJagFlowHandlers
             [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(options.SubjectTokenType)
         };
 
-        //§4.3: the requested resource (RFC 8707 — repeated values collapse to one space-delimited field
-        //the AS skin re-splits), scope, and authorization_details are forwarded only when supplied.
-        if(options.Resource.Count > 0)
+        //§4.3 / RFC 8707 §2.1.1: each requested resource becomes its OWN repeated resource occurrence
+        //on the wire (OutgoingFormFields.Add) — the genuine RFC 8707 multi-resource wire form the
+        //authorization server's own ReadResource/RequestFields.GetValues read expects, never one
+        //occurrence carrying several space-joined URIs (the AS now rejects embedded whitespace in a
+        //single occurrence as malformed). Scope and authorization_details are forwarded only when supplied.
+        foreach(string resource in options.Resource)
         {
-            form[OAuthRequestParameterNames.Resource] = string.Join(' ', options.Resource);
+            form.Add(OAuthRequestParameterNames.Resource, resource);
         }
 
         if(!string.IsNullOrEmpty(options.Scope))

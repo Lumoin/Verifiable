@@ -34,7 +34,7 @@ internal sealed class AndroidKeyDescriptionReaderTests
     /// Decodes section 16.14's own <c>KeyDescription</c> bytes and asserts the field order, the
     /// <c>softwareEnforced</c>/<c>teeEnforced</c> split, and the <c>purpose</c>/<c>origin</c> values
     /// the CR's own vector carries — the tag-number constants (<c>[1]</c>/<c>[702]</c>) are pinned by
-    /// the specification's own bytes, not by trust (owner ruling 2).
+    /// the specification's own bytes, not by trust.
     /// </summary>
     [TestMethod]
     public void ReadDecodesSection1614sOwnKeyDescriptionVectorExactly()

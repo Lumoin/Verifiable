@@ -785,4 +785,119 @@ internal sealed class DataIntegrityPresentationFlowTests
         Assert.IsFalse(result.IsValid);
         Assert.AreEqual(VerificationFailureReason.DomainMismatch, result.FailureReason);
     }
+
+
+    /// <summary>
+    /// Controller-RESOLUTION semantics: a presentation whose <c>holder</c> does NOT equal
+    /// the resolved verification method's own <c>controller</c> is refused, even though the
+    /// signature, proof purpose, and <c>authentication</c> relationship scoping all otherwise hold —
+    /// the deliberate rejection of controller indirection / <c>did:web</c> aliasing the ratified
+    /// controller-RESOLUTION semantics accept as a consequence.
+    /// </summary>
+    [TestMethod]
+    [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
+    public async Task HolderControllerMismatchIsRefused(DidWebTestData testData)
+    {
+        var keyPair = testData.KeyPairFactory();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
+        var holderDidDocument = await KeyDidBuilder.BuildAsync(
+            publicKey,
+            testData.VerificationMethodTypeInfo,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        var signedPresentation = await SignMinimalPresentationAsync(holderDidDocument, privateKey).ConfigureAwait(false);
+
+        //The same document, but the resolved method's controller is deliberately NOT the holder.
+        var tamperedDocument = new DidDocument
+        {
+            Id = holderDidDocument.Id,
+            VerificationMethod =
+            [
+                new VerificationMethod
+                {
+                    Id = holderDidDocument.VerificationMethod![0].Id,
+                    Type = holderDidDocument.VerificationMethod[0].Type,
+                    Controller = "did:example:someone-else-entirely",
+                    KeyFormat = holderDidDocument.VerificationMethod[0].KeyFormat
+                }
+            ],
+            Authentication = holderDidDocument.Authentication
+        };
+
+        var result = await signedPresentation.VerifyAsync(
+            tamperedDocument,
+            VerifierChallenge,
+            VerifierDomain,
+            JcsCanonicalizer,
+            contextResolver: null,
+            ProofValueDecoder,
+            SerializePresentation,
+            SerializeProofOptions,
+            TestSetup.Base58Decoder,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            BaseMemoryPool.Shared,
+            EmptyContext,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid);
+        Assert.AreEqual(VerificationFailureReason.ControllerMismatch, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// Positive Bound mint plus the witness-tie half: the presentation path now mints
+    /// <see cref="BoundProvenance"/> (<see cref="ResolutionSource.CallerControllerArtifact"/>,
+    /// <see cref="VerificationRelationship.Authentication"/>), and the SAME <see cref="BoundProvenance"/>,
+    /// established for THIS presentation instance, refuses to mint over a DIFFERENT
+    /// <see cref="DataIntegritySecuredPresentation"/> instance via <see cref="Verified{T}.TryCreateBound"/>
+    /// — a legitimate binding for one presentation can never be paired with another.
+    /// </summary>
+    [TestMethod]
+    [DynamicData(nameof(DidWebTheoryData.GetDidTheoryTestData), typeof(DidWebTheoryData))]
+    public async Task VerifiedPresentationIsIdentityBoundAndWitnessRefusesADifferentPresentation(DidWebTestData testData)
+    {
+        var keyPair = testData.KeyPairFactory();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
+        var holderDidDocument = await KeyDidBuilder.BuildAsync(
+            publicKey,
+            testData.VerificationMethodTypeInfo,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        var signedPresentation = await SignMinimalPresentationAsync(holderDidDocument, privateKey).ConfigureAwait(false);
+
+        var result = await signedPresentation.VerifyAsync(
+            holderDidDocument,
+            VerifierChallenge,
+            VerifierDomain,
+            JcsCanonicalizer,
+            contextResolver: null,
+            ProofValueDecoder,
+            SerializePresentation,
+            SerializeProofOptions,
+            TestSetup.Base58Decoder,
+            MicrosoftCryptographicFunctions.ComputeDigestAsync,
+            BaseMemoryPool.Shared,
+            EmptyContext,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsValid);
+        Assert.IsNotNull(result.Verified);
+        var verified = result.Verified!.Value;
+
+        Assert.IsTrue(verified.IsIdentityBound, "The presentation path must mint Bound, not Asserted.");
+        Assert.IsTrue(verified.Provenance is BoundProvenance, "The presentation path's provenance must be a BoundProvenance.");
+        var bound = (BoundProvenance)verified.Provenance!;
+        Assert.AreEqual(ResolutionSource.CallerControllerArtifact, bound.Source);
+        Assert.AreEqual(VerificationRelationship.Authentication, bound.Relationship);
+
+        //Witness tie: the SAME BoundProvenance refuses to mint over a DIFFERENT presentation instance.
+        var otherPresentation = await SignMinimalPresentationAsync(holderDidDocument, privateKey).ConfigureAwait(false);
+
+        Verified<DataIntegritySecuredPresentation>? witnessMismatch = Verified<DataIntegritySecuredPresentation>.TryCreateBound(otherPresentation, bound);
+        Assert.IsNull(witnessMismatch, "A BoundProvenance established for one presentation instance must refuse to mint over a different instance.");
+    }
 }

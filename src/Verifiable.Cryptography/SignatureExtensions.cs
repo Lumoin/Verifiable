@@ -18,7 +18,7 @@ public static class SignatureExtensions
         /// <param name="tag">The signature algorithm tag.</param>
         /// <param name="pool">Memory pool for allocation.</param>
         /// <returns>A new <see cref="Signature"/> owning pooled memory. Caller must dispose.</returns>
-        public Signature ToSignature(Tag tag, MemoryPool<byte> pool)
+        public Signature ToSignature(Tag tag, BaseMemoryPool pool)
         {
             ArgumentNullException.ThrowIfNull(tag);
             ArgumentNullException.ThrowIfNull(pool);
@@ -38,7 +38,7 @@ public static class SignatureExtensions
         /// <param name="tag">The signature algorithm tag.</param>
         /// <param name="pool">Memory pool for allocation.</param>
         /// <returns>A new <see cref="Signature"/> owning pooled memory. Caller must dispose.</returns>
-        public Signature ToSignature(Tag tag, MemoryPool<byte> pool)
+        public Signature ToSignature(Tag tag, BaseMemoryPool pool)
         {
             ArgumentNullException.ThrowIfNull(bytes);
             ArgumentNullException.ThrowIfNull(tag);

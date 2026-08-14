@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.Fido2;
 
@@ -21,5 +20,4 @@ namespace Verifiable.Fido2;
 /// key to create the attestation signature.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("SelfAttestationResult")]
 public sealed record SelfAttestationResult: AttestationResult;

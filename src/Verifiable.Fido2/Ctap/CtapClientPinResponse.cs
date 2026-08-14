@@ -6,15 +6,15 @@ namespace Verifiable.Fido2.Ctap;
 
 /// <summary>
 /// The <c>authenticatorClientPIN</c> response structure: every Optional member this library models,
-/// per §2.1's full table, so wave-b/c subcommands extend data, not structure.
+/// per §2.1's full table, so later subcommands extend data, not structure.
 /// </summary>
 /// <remarks>
 /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorClientPIN">
-/// CTAP 2.3, section 6.5.5: authenticatorClientPIN (0x06) Command Definition</see>. This wave's
-/// authenticator emits only <see cref="KeyAgreement"/> (<c>getKeyAgreement</c>),
+/// CTAP 2.3, section 6.5.5: authenticatorClientPIN (0x06) Command Definition</see>. This authenticator
+/// emits only <see cref="KeyAgreement"/> (<c>getKeyAgreement</c>),
 /// <see cref="PinRetries"/> (<c>getPINRetries</c>), and <see cref="UvRetries"/> (<c>getUVRetries</c>);
 /// <see cref="PinUvAuthToken"/> and <see cref="PowerCycleState"/> are modeled for the token-issuing
-/// subcommands and <c>powerCycleState</c> reporting a later wave implements.
+/// subcommands and <c>powerCycleState</c> reporting a later release implements.
 /// </remarks>
 /// <param name="KeyAgreement">
 /// Optional (<c>0x01</c>). The authenticator's key-agreement COSE_Key, the result of calling

@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
@@ -41,7 +40,6 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet;
 /// in the registry, not in per-call-site delegate parameters.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("KbJwtIssuance")]
 public static class KbJwtIssuance
 {
     private const int Sha256DigestLength = 32;
@@ -80,7 +78,7 @@ public static class KbJwtIssuance
         EncodeDelegate base64UrlEncoder,
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         IReadOnlyList<string>? transactionDataHashes = null,
         string? transactionDataHashesAlg = null,
         CancellationToken cancellationToken = default)
@@ -152,7 +150,7 @@ public static class KbJwtIssuance
     private static async ValueTask<string> ComputeSdHashAsync(
         ReadOnlyMemory<byte> input,
         EncodeDelegate encoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(

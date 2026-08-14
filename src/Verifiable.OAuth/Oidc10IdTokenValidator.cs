@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -47,7 +46,6 @@ namespace Verifiable.OAuth;
 /// symmetric signing algorithm decrypts or verifies before this call.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("Oidc10IdTokenValidator")]
 public static class Oidc10IdTokenValidator
 {
     /// <summary>
@@ -102,7 +100,7 @@ public static class Oidc10IdTokenValidator
         JwsAccessTokenJsonParser parser,
         DecodeDelegate base64UrlDecoder,
         TimeProvider timeProvider,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeSpan iatSkew,
         TenantId tenantId,
         ExchangeContext context,

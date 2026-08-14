@@ -15,8 +15,8 @@ namespace Verifiable.Tests.Tpm;
 /// <summary>
 /// Verifies the six ECC-backend-only admission-gate fix (<c>TPM_CC_Certify</c>, <c>TPM_CC_CertifyCreation</c>,
 /// <c>TPM_CC_GetTime</c>, <c>TPM_CC_NV_Certify</c>, <c>TPM_CC_VerifySignature</c>, <c>TPM_CC_Quote</c>) and its
-/// RSA-OAEP-wave sibling, the <c>TPM_CC_MakeCredential</c>/<c>TPM_CC_ActivateCredential</c> gate widening
-/// (R-10): an RSA-ONLY simulator configuration (an RSA signing backend supplied, no ECC backend) admits and
+/// RSA-OAEP sibling, the <c>TPM_CC_MakeCredential</c>/<c>TPM_CC_ActivateCredential</c> gate widening:
+/// an RSA-ONLY simulator configuration (an RSA signing backend supplied, no ECC backend) admits and
 /// completes RSA-keyed <c>TPM2_Certify()</c>, <c>TPM2_Quote()</c>, and the standard RSA endorsement key's
 /// <c>TPM2_MakeCredential()</c>/<c>TPM2_ActivateCredential()</c> round trip end to end through the production
 /// wire path, while an ECC <c>TPM2_CreatePrimary()</c> template under that same configuration still fails
@@ -64,7 +64,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     [TestMethod]
     public async Task RsaOnlySimulatorCompletesCertifyAndQuoteEndToEnd()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateRsaOnlyOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -101,7 +101,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     [TestMethod]
     public async Task RsaOnlySimulatorStillRejectsEccCreatePrimaryWithCommandCode()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateRsaOnlyOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -123,14 +123,14 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
 
     /// <summary>
     /// Verifies that an RSA-only simulator configuration completes the standard RSA endorsement key's
-    /// <c>TPM2_MakeCredential()</c> / <c>TPM2_ActivateCredential()</c> round trip end to end (R-10: the two
-    /// gates widen the same way the six attest-command gates did in wave 6), recovering exactly the credential
+    /// <c>TPM2_MakeCredential()</c> / <c>TPM2_ActivateCredential()</c> round trip end to end (the two
+    /// gates widen the same way the six attest-command gates do), recovering exactly the credential
     /// that was wrapped, with no ECC backend supplied at all.
     /// </summary>
     [TestMethod]
     public async Task RsaOnlySimulatorCompletesMakeAndActivateCredentialEndToEnd()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateRsaOnlyOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -175,16 +175,16 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
 
     /// <summary>
     /// Verifies that an RSA <em>signing</em> key (not a storage key) is rejected as the <c>keyHandle</c> of
-    /// <c>TPM2_MakeCredential()</c> with <c>TPM_RC_TYPE</c>: the widened admission gate (R-10) does not admit
+    /// <c>TPM2_MakeCredential()</c> with <c>TPM_RC_TYPE</c>: the widened admission gate does not admit
     /// any RSA key indiscriminately — the credential key must be a Storage Key by attribute
     /// (<c>restricted=1, decrypt=1</c>, TPM 2.0 Library Part 3, clause 12.6), the same attribute predicate the
-    /// ECC arm applies, not an algorithm check. This proves the wave replaced the old <c>KeyType != ECC</c>
-    /// reject with a storage-attribute predicate rather than merely widening it to admit every RSA key.
+    /// ECC arm applies, not an algorithm check. This proves the widened admission gate replaced the old
+    /// <c>KeyType != ECC</c> reject with a storage-attribute predicate rather than merely widening it to admit every RSA key.
     /// </summary>
     [TestMethod]
     public async Task RsaOnlySimulatorRejectsRsaSigningKeyAsCredentialKeyWithType()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateRsaOnlyOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -213,7 +213,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     /// <param name="registry">The response codec registry.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The CreatePrimary response (the caller owns it).</returns>
-    private async Task<CreatePrimaryResponse> CreateRsaEndorsementKeyAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool)
+    private async Task<CreatePrimaryResponse> CreateRsaEndorsementKeyAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForRsaEndorsementKey(TpmRh.TPM_RH_ENDORSEMENT, pool);
         using TpmPasswordSession hierarchyAuth = TpmPasswordSession.CreateEmpty(pool);
@@ -235,7 +235,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     /// <param name="hierarchy">The hierarchy under which to create the key.</param>
     /// <returns>The CreatePrimary response.</returns>
     private async Task<CreatePrimaryResponse> CreateRsaSigningPrimaryAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmRh hierarchy)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForRsaSigningKey(
             hierarchy, password: null, keyBits: Rsa2048KeyBits, TpmtRsaScheme.Null, pool, noDa: true);
@@ -254,7 +254,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational, RSA-only simulator.</returns>
-    private async Task<TpmSimulator> CreateRsaOnlyOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateRsaOnlyOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator(
             "tpm-in-house-rsa-only-dispatch",
@@ -272,7 +272,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     /// </summary>
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();

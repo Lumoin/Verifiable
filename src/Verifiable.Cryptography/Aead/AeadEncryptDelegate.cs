@@ -39,5 +39,5 @@ public delegate ValueTask<AeadEncryptResult> AeadEncryptDelegate(
     ReadOnlyMemory<byte> plaintext,
     SymmetricKeyMemory key,
     AdditionalData aad,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);

@@ -13,7 +13,7 @@ using Verifiable.Fido2.Ctap.Authenticator.Automata;
 namespace Verifiable.Tests.Fido2;
 
 /// <summary>
-/// The wave's capstone firewalled flow test: the RP-side <see cref="CtapAuthenticatorGetInfoClient"/>
+/// The capstone firewalled flow test: the RP-side <see cref="CtapAuthenticatorGetInfoClient"/>
 /// drives a <see cref="CtapAuthenticatorSimulator"/> over the real, unmodified
 /// <see cref="ApduExecutor"/>/<see cref="ApduDevice"/> stack via <see cref="CtapNfcTransport"/> and
 /// <see cref="CtapNfcResponder"/> — the two projects' own transport seam, with no shared type and no
@@ -47,15 +47,15 @@ internal sealed class CtapAuthenticatorGetInfoFlowTests
     /// The RP client's <c>authenticatorGetInfo</c> call reaches the simulator over the real APDU
     /// transport: SELECT never carries FIDO_2_3, the decoded getInfo response does, and a response
     /// large enough to exceed a short-form frame's 256-byte ceiling proves the round trip genuinely
-    /// used extended-length APDU framing rather than trivially fitting in a small buffer. TORN row
-    /// 4620 (snapshot line 4620: <c>"FIDO_2_2"</c> MUST NOT be present in <c>versions</c>) closes here
+    /// used extended-length APDU framing rather than trivially fitting in a small buffer. CTAP 2.3 §6.4
+    /// (<c>"FIDO_2_2"</c> MUST NOT be present in <c>versions</c>) closes here
     /// by an EXACT-ARRAY assertion on <see cref="CtapGetInfoResponse.Versions"/> — proving both that
     /// <c>FIDO_2_3</c> is present AND that nothing else, including a hypothetical <c>FIDO_2_2</c>, is.
     /// </summary>
     [TestMethod]
     public async Task RpClientDrivesSimulatorOverRealApduTransportAndDecodesGetInfo()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //A padded, but semantically legitimate, "supported extensions" personalization — this
         //simulator model advertises many extension identifiers, pushing the getInfo response past
@@ -122,7 +122,7 @@ internal sealed class CtapAuthenticatorGetInfoFlowTests
         Assert.IsNotNull(response.Options);
         Assert.IsTrue(response.Options!.ResidentKey);
 
-        //R5/R6/R7 over the real wire: maxCredentialCountInList (0x07) is always present and matches
+        //Over the real wire: maxCredentialCountInList (0x07) is always present and matches
         //the same fixed capacity mc/ga's own excludeList/allowList bound check enforces; algorithms
         //(0x0A) is OMITTED entirely since this simulator was constructed with no credentialSigningBackend
         //(a genuinely backendless authenticator, not merely an ES256-only one); firmwareVersion (0x0E)

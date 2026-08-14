@@ -11,7 +11,7 @@ namespace Verifiable.Fido2;
 /// <param name="signature">
 /// The certified attestation signature bytes (the CBOR <c>sig</c> member): a signature over
 /// <c>authenticatorData ‖ clientDataHash</c> produced with the SEEDED enterprise attestation private
-/// key (CTAP 2.3 §7.1, waveep R7) — never the credential private key, per
+/// key (CTAP 2.3 §7.1) — never the credential private key, per
 /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-packed-attestation">W3C Web Authentication Level 3,
 /// section 8.2: Packed Attestation Statement Format</see>'s signing procedure.
 /// </param>
@@ -31,6 +31,6 @@ namespace Verifiable.Fido2;
 /// <c>Verifiable.Cbor.Fido2.PackedAttestationStatementCborWriter.WriteCertified</c>, is
 /// method-group-compatible with this delegate. A <c>CtapAuthenticatorSimulator</c> minting an
 /// enterprise-attested credential composes this seam once mc Step 9 has granted the enterprise
-/// attestation (waveep R6), never for a self-attested credential.
+/// attestation, never for a self-attested credential.
 /// </remarks>
 public delegate TaggedMemory<byte> EncodePackedCertifiedAttestationStatementDelegate(int alg, ReadOnlySpan<byte> signature, IReadOnlyList<PkiCertificateMemory> x5c);

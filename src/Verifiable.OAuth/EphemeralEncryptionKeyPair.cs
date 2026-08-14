@@ -90,7 +90,7 @@ public sealed class EphemeralEncryptionKeyPair: IDisposable, IEquatable<Ephemera
         PublicKeyMemory publicKey,
         IMemoryOwner<byte> privateKeyOwner,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(privateKeyOwner);
@@ -118,7 +118,7 @@ public sealed class EphemeralEncryptionKeyPair: IDisposable, IEquatable<Ephemera
     public static string CreatePublicKeyJwks(
         PublicKeyMemory publicKey,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
@@ -131,7 +131,7 @@ public sealed class EphemeralEncryptionKeyPair: IDisposable, IEquatable<Ephemera
     private static string BuildP256JwksJson(
         PublicKeyMemory publicKey,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         //Uncompressed P-256 point: 0x04 || X (32 bytes) || Y (32 bytes) = 65 bytes.
         ReadOnlySpan<byte> point = publicKey.AsReadOnlySpan();

@@ -64,7 +64,7 @@ public delegate string SerializeDerivedProofDelegate(
     IReadOnlyList<int> mandatoryIndexes,
     EncodeDelegate encoder,
     DecodeDelegate decoder,
-    MemoryPool<byte> memoryPool);
+    BaseMemoryPool memoryPool);
 
 
 /// <summary>
@@ -88,7 +88,7 @@ public delegate string SerializeDerivedProofDelegate(
 public delegate BaseProofValue ParseBaseProofDelegate(
     string proofValue,
     DecodeDelegate decoder,
-    MemoryPool<byte> memoryPool);
+    BaseMemoryPool memoryPool);
 
 
 /// <summary>
@@ -118,4 +118,4 @@ public delegate DerivedProofValue ParseDerivedProofDelegate(
     string proofValue,
     DecodeDelegate decoder,
     EncodeDelegate encoder,
-    MemoryPool<byte> memoryPool);
+    BaseMemoryPool memoryPool);

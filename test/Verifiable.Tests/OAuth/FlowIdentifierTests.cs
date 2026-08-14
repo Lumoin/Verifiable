@@ -16,7 +16,7 @@ namespace Verifiable.Tests.OAuth;
 /// Tests for the dispatcher's flow-identifier generation.
 /// </summary>
 /// <remarks>
-/// Phase 9h chunk 8 switched flowId generation from
+/// flowId generation switched from
 /// <see cref="Guid.NewGuid"/> to <see cref="Guid.CreateVersion7"/>. v7
 /// GUIDs encode a 48-bit Unix-milliseconds timestamp in the high-order
 /// bits so they sort lexicographically by creation time. The test below

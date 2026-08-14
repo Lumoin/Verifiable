@@ -7,8 +7,8 @@ namespace Verifiable.Tests.Fido2;
 /// <summary>
 /// Table-driven coverage for the numeric-scalar well-known catalog family's predicates (the
 /// WellKnownCoseAlgorithms shape: const plus per-member Is* predicates), added across the
-/// CTAP2/ISO-7816-4 catalogs during the style-conformance wave. Each catalog's own value set
-/// is checked so every predicate accepts its own value and rejects every sibling value.
+/// CTAP2/ISO-7816-4 catalogs. Each catalog's own value set is checked so every predicate
+/// accepts its own value and rejects every sibling value.
 /// </summary>
 [TestClass]
 internal sealed class WellKnownCatalogNumericPredicateTests

@@ -61,7 +61,7 @@ public sealed class TpmsSensitiveCreate: IDisposable
     /// </summary>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>Empty sensitive creation data.</returns>
-    public static TpmsSensitiveCreate CreateEmpty(MemoryPool<byte> pool)
+    public static TpmsSensitiveCreate CreateEmpty(BaseMemoryPool pool)
     {
         return new TpmsSensitiveCreate(
             Tpm2bAuth.CreateEmpty(pool),
@@ -84,7 +84,7 @@ public sealed class TpmsSensitiveCreate: IDisposable
     /// <param name="password">The password string.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>Sensitive creation data with the specified auth.</returns>
-    public static TpmsSensitiveCreate WithPassword(string password, MemoryPool<byte> pool)
+    public static TpmsSensitiveCreate WithPassword(string password, BaseMemoryPool pool)
     {
         return new TpmsSensitiveCreate(Tpm2bAuth.CreateFromPassword(password, pool), Tpm2bSensitiveData.Empty);
     }
@@ -112,7 +112,7 @@ public sealed class TpmsSensitiveCreate: IDisposable
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed sensitive creation data.</returns>
-    public static TpmsSensitiveCreate Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static TpmsSensitiveCreate Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         var userAuth = Tpm2bAuth.Parse(ref reader, pool);
         var data = Tpm2bSensitiveData.Parse(ref reader, pool);

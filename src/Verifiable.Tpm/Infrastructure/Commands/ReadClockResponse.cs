@@ -36,7 +36,7 @@ public sealed class ReadClockResponse: ITpmWireType
     /// <param name="reader">The reader positioned at the response parameters.</param>
     /// <param name="pool">The memory pool for allocations (unused; this response owns no pooled memory).</param>
     /// <returns>The parsed response.</returns>
-    public static ReadClockResponse Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static ReadClockResponse Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         TpmsTimeInfo currentTime = TpmsTimeInfo.Parse(ref reader);
 

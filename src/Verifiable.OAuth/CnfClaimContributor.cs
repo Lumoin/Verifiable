@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core.Assessment;
 using Verifiable.JCose;
 
@@ -31,7 +30,6 @@ namespace Verifiable.OAuth;
 /// return <see cref="ClaimOutcome.NotApplicable"/>.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("CnfClaimContributor")]
 public static class CnfClaimContributor
 {
     /// <summary>

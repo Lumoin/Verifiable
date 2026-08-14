@@ -51,6 +51,34 @@ public static class FederationValidationChecks
 
 
     /// <summary>
+    /// Asserts the JWS protected header carries a non-empty <c>kid</c> (Key ID)
+    /// parameter, per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-3.1">Federation §3.1</see>
+    /// ("Entity Statement JWTs MUST include the <c>kid</c> (Key ID) header parameter"). A missing <c>kid</c> is
+    /// the malformed input <see cref="FederationKeyResolver"/> refuses to resolve with a silent first-key
+    /// selection — enforcing the presence here surfaces that as a statement-level failure rather than a
+    /// downstream key-resolution miss.
+    /// </summary>
+    public static ValueTask<List<Claim>> CheckKidPresent(
+        EntityStatementValidationContext context,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        ClaimOutcome outcome =
+            context.Header.TryGetValue(WellKnownJwkMemberNames.Kid, out object? kidObj)
+            && kidObj is string kid
+            && !string.IsNullOrWhiteSpace(kid)
+                ? ClaimOutcome.Success
+                : ClaimOutcome.Failure;
+
+        return ValueTask.FromResult<List<Claim>>(
+            [new Claim(WellKnownFederationClaimIds.KidPresent, outcome)]);
+    }
+
+
+    /// <summary>
     /// Asserts the JWS protected header's <c>typ</c> equals
     /// <see cref="WellKnownFederationMediaTypes.EntityStatementJwt"/> per
     /// RFC 8725 §3.11 explicit typing.
@@ -207,33 +235,72 @@ public static class FederationValidationChecks
 
 
     /// <summary>
-    /// For an <see cref="EntityConfiguration"/> (self-issued), asserts the
-    /// payload's <c>jwks</c> claim is present and carries at least one key.
-    /// For a <see cref="SubordinateStatement"/> the check is
-    /// <see cref="ClaimOutcome.NotApplicable"/> — superior-issued statements
-    /// also carry <c>jwks</c> but the requirement attaches specifically to
-    /// the self-issued shape per Federation §3.1.
+    /// Asserts the payload's <c>jwks</c> claim is present and carries at least
+    /// one key for every statement shape
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-3.1">Federation §3.1.1</see>
+    /// makes it REQUIRED on. The 1.1 restatement enumerates the three REQUIRED cases positively — "REQUIRED for
+    /// all Subordinate Statements, REQUIRED for all Entity Configurations of Trust Anchors and Intermediate
+    /// Entities, and ... for all Entity Configurations of Leaf Entities" — so both concrete shapes
+    /// (<see cref="EntityConfiguration"/> and <see cref="SubordinateStatement"/>) require a non-empty
+    /// <c>jwks</c>; its absence is <see cref="ClaimOutcome.Failure"/>.
     /// </summary>
-    public static ValueTask<List<Claim>> CheckJwksPresentWhenSelfSigned(
+    /// <remarks>
+    /// <para>
+    /// The single carve-out is the Explicit Registration Response entity statement — identified by its
+    /// <see cref="WellKnownFederationMediaTypes.ExplicitRegistrationResponseJwt"/> <c>typ</c> — for which
+    /// connect-1.1 §3.1.2 makes <c>jwks</c> OPTIONAL: absent is <see cref="ClaimOutcome.NotApplicable"/>,
+    /// present-and-non-empty is <see cref="ClaimOutcome.Success"/>, present-but-empty is
+    /// <see cref="ClaimOutcome.Failure"/>.
+    /// </para>
+    /// <para>
+    /// The 1.1 §3.1.1 leaf carve-out ("... of Leaf Entities not using a profile permitting it to be absent") is
+    /// deliberately NOT expressed: the secure default keeps <c>jwks</c> required on every Leaf Entity
+    /// Configuration until a named deployment profile signals otherwise, so a leaf without <c>jwks</c> fails
+    /// here too. Reshaped from the earlier self-signed-only check, which wrongly exempted the Subordinate
+    /// Statement shape §3.1.1 requires unconditionally.
+    /// </para>
+    /// </remarks>
+    public static ValueTask<List<Claim>> CheckJwksPresentPerStatementShape(
         EntityStatementValidationContext context,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
 
-        if(context.Statement is not EntityConfiguration)
+        bool jwksPresent = context.Statement.Payload.TryGetValue(WellKnownFederationClaimNames.Jwks, out _);
+        bool hasKeys = TryReadKeyCount(context.Statement.Payload, out int keyCount) && keyCount > 0;
+
+        //The Explicit Registration Response entity statement (connect-1.1 §3.1.2) is the one shape for which
+        //jwks is OPTIONAL; identify it by its explicit typ. Absent jwks is NotApplicable, present is graded.
+        if(IsExplicitRegistrationResponse(context.Header))
         {
+            ClaimOutcome carveOut = !jwksPresent
+                ? ClaimOutcome.NotApplicable
+                : (hasKeys ? ClaimOutcome.Success : ClaimOutcome.Failure);
+
             return ValueTask.FromResult<List<Claim>>(
-                [new Claim(WellKnownFederationClaimIds.JwksPresentWhenSelfSigned, ClaimOutcome.NotApplicable)]);
+                [new Claim(WellKnownFederationClaimIds.JwksPresentPerStatementShape, carveOut)]);
         }
 
-        ClaimOutcome outcome = TryReadKeyCount(context.Statement.Payload, out int keyCount) && keyCount > 0
-            ? ClaimOutcome.Success
-            : ClaimOutcome.Failure;
-
+        //Every other shape — an Entity Configuration (Trust Anchor, Intermediate or Leaf) and a Subordinate
+        //Statement — REQUIRES a non-empty jwks per §3.1.1.
         return ValueTask.FromResult<List<Claim>>(
-            [new Claim(WellKnownFederationClaimIds.JwksPresentWhenSelfSigned, outcome)]);
+            [new Claim(WellKnownFederationClaimIds.JwksPresentPerStatementShape,
+                hasKeys ? ClaimOutcome.Success : ClaimOutcome.Failure)]);
     }
+
+
+    /// <summary>
+    /// Whether <paramref name="header"/>'s <c>typ</c> marks the statement as an Explicit Registration Response
+    /// (<see cref="WellKnownFederationMediaTypes.ExplicitRegistrationResponseJwt"/>), the one entity-statement
+    /// shape connect-1.1 §3.1.2 lets omit <c>jwks</c>.
+    /// </summary>
+    /// <param name="header">The JWS protected header to read the <c>typ</c> from.</param>
+    /// <returns><see langword="true"/> when the <c>typ</c> is the Explicit Registration Response media type.</returns>
+    private static bool IsExplicitRegistrationResponse(UnverifiedJwtHeader header) =>
+        header.TryGetValue(WellKnownJoseHeaderNames.Typ, out object? typObj)
+        && typObj is string typ
+        && string.Equals(typ, WellKnownFederationMediaTypes.ExplicitRegistrationResponseJwt, StringComparison.Ordinal);
 
 
     /// <summary>
@@ -1221,6 +1288,34 @@ public static class FederationValidationChecks
 
 
     /// <summary>
+    /// Asserts the trust mark's JWS protected header carries a non-empty
+    /// <c>kid</c> (Key ID) parameter, per
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-7">Federation §7</see>
+    /// ("Trust Mark JWTs MUST include the <c>kid</c> (Key ID) header parameter"; §8.4.2 states the same MUST for
+    /// the Trust Mark Status Response JWT). The mirror of <see cref="CheckKidPresent"/> for the trust-mark path:
+    /// a <c>kid</c>-less mark cannot be key-pinned, so <see cref="FederationKeyResolver.ResolveInChainKeyAsync"/>
+    /// resolves no key for it and its signature never verifies — this check names that as a mark-level failure.
+    /// </summary>
+    public static ValueTask<List<Claim>> CheckTrustMarkKidPresent(
+        TrustMarkValidationContext context,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        ClaimOutcome outcome =
+            context.Header.TryGetValue(WellKnownJwkMemberNames.Kid, out object? kidObj)
+            && kidObj is string kid
+            && !string.IsNullOrWhiteSpace(kid)
+                ? ClaimOutcome.Success
+                : ClaimOutcome.Failure;
+
+        return ValueTask.FromResult<List<Claim>>(
+            [new Claim(WellKnownFederationClaimIds.TrustMarkKidPresent, outcome)]);
+    }
+
+
+    /// <summary>
     /// Asserts the trust mark's <c>iat</c> is within the
     /// <see cref="TrustMarkValidationContext.ClockSkew"/> window either side of
     /// <see cref="TrustMarkValidationContext.Now"/> — its issuance time is in
@@ -1373,7 +1468,7 @@ public static class FederationValidationChecks
 
 
     /// <summary>The shared empty block returned when no federation_entity metadata is present.</summary>
-    private static readonly IReadOnlyDictionary<string, object> EmptyMetadataBlock =
+    private static IReadOnlyDictionary<string, object> EmptyMetadataBlock { get; } =
         new Dictionary<string, object>(0);
 
 

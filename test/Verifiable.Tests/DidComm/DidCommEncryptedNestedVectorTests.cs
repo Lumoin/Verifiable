@@ -19,7 +19,7 @@ namespace Verifiable.Tests.DidComm;
 
 /// <summary>
 /// Anchors the DIDComm v2.1 nested <c>authcrypt(sign(plaintext))</c> UNPACK path
-/// (<see cref="DidCommEncryptedExtensions.UnpackAuthcryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, AuthenticatedKeyAgreementDecryptDelegate, AuthenticatedKeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, MemoryPool{byte}, System.Threading.CancellationToken)"/>)
+/// (<see cref="DidCommEncryptedExtensions.UnpackAuthcryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, AuthenticatedKeyAgreementDecryptDelegate, AuthenticatedKeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, BaseMemoryPool, System.Threading.CancellationToken)"/>)
 /// to the DIDComm Messaging v2.1 Appendix C.3 example 5 vector: the Appendix C.1 plaintext signed with
 /// EdDSA (Alice's <c>key-1</c>) and then authcrypted with ECDH-1PU over NIST P-256 and A256CBC-HS512,
 /// sent from <c>did:example:alice#key-p256-1</c> (the <c>skid</c>) to two of Bob's P-256
@@ -42,7 +42,7 @@ internal sealed class DidCommEncryptedNestedVectorTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly MemoryPool<byte> Pool = BaseMemoryPool.Shared;
+    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
     private static readonly ExchangeContext Context = new();

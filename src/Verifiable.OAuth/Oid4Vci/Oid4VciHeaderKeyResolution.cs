@@ -97,7 +97,7 @@ internal static class Oid4VciHeaderKeyResolution
         Oid4VciProofX509Verification? x509Verification,
         ExchangeContext context,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         //§F.1: kid/jwk/x5c are mutually exclusive — exactly one MUST identify the key.
@@ -187,7 +187,7 @@ internal static class Oid4VciHeaderKeyResolution
     private static PublicKeyMemory ReconstructKeyFromJwk(
         Dictionary<string, object> jwkMembers,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterial) =
             CryptoFormatConversions.DefaultJwkToAlgorithmConverter(jwkMembers, memoryPool, base64UrlDecoder);

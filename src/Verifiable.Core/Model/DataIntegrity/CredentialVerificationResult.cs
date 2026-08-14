@@ -79,7 +79,18 @@ public enum VerificationFailureReason
     /// does not enforce its <c>challenge</c>/<c>domain</c>. The interactive
     /// challenge/domain-checked verify is the only path that may verify such a presentation.
     /// </summary>
-    UnexpectedPresentationBinding
+    UnexpectedPresentationBinding,
+
+    /// <summary>
+    /// The resolved verification method's <c>controller</c> does not equal the claimed controller
+    /// (a credential's <c>issuer</c> or a presentation's <c>holder</c>) — the controller-RESOLUTION
+    /// identity bind a <see cref="Verifiable.Cryptography.BoundProvenance"/> gate performs after the
+    /// relationship-scoped resolve and the cryptographic verify both already succeeded. This is a
+    /// deliberate rejection of controller indirection / DID-aliasing: a document that resolves for
+    /// the claimed identifier but whose verification method declares a different controller does not
+    /// authenticate that identifier, even though the signature itself is valid.
+    /// </summary>
+    ControllerMismatch
 }
 
 

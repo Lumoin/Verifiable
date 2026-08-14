@@ -12,7 +12,7 @@ namespace Verifiable.Fido2.Ctap;
 /// <remarks>
 /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#sctn-hmac-secret-extension">
 /// CTAP 2.3, section 12.7: HMAC Secret Extension (hmac-secret)</see>, snapshot lines 13228-13248. Also
-/// the shape section 12.8 (snapshot line 13402, contract R6) reuses verbatim for
+/// the shape section 12.8 (snapshot line 13402) reuses verbatim for
 /// <c>"hmac-secret-mc"</c>'s own <c>authenticatorMakeCredential</c> input.
 /// </remarks>
 /// <param name="KeyAgreement">
@@ -23,8 +23,8 @@ namespace Verifiable.Fido2.Ctap;
 /// <param name="SaltEnc">
 /// The <see cref="WellKnownCtapHmacSecretExtensionKeys.SaltEnc"/> member: <c>encrypt(sharedSecret,
 /// salt1)</c> (one salt) or <c>encrypt(sharedSecret, salt1 || salt2)</c> (two salts). Opaque ciphertext
-/// at this layer — protocol two's own IV-prefixed shape (48/80 bytes) is a processing-time concern
-/// (contract R4 step 6, trap 7), never validated by length here.
+/// at this layer — protocol two's own IV-prefixed shape (48/80 bytes) is a processing-time concern,
+/// never validated by length here.
 /// </param>
 /// <param name="SaltAuth">
 /// The <see cref="WellKnownCtapHmacSecretExtensionKeys.SaltAuth"/> member: <c>authenticate(sharedSecret,
@@ -33,9 +33,8 @@ namespace Verifiable.Fido2.Ctap;
 /// <param name="PinUvAuthProtocol">
 /// The <see cref="WellKnownCtapHmacSecretExtensionKeys.PinUvAuthProtocol"/> member, or
 /// <see langword="null"/> when omitted — defaulting (absent implies protocol one, snapshot line 13279)
-/// and unsupported-value rejection (snapshot line 13281's antecedent-false branch; contract R4 step 1's
-/// clientPIN-analog ruling for a present-but-unsupported value) are both processing-time concerns, not
-/// this reader's.
+/// and unsupported-value rejection (snapshot line 13281's antecedent-false branch) are both
+/// processing-time concerns, not this reader's.
 /// </param>
 public sealed record CtapGetAssertionHmacSecretInput(
     CoseKey KeyAgreement,

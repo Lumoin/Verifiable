@@ -35,7 +35,7 @@ internal sealed class TpmCommandExecutorTests
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The TpmResponse is owned by the returned TpmResult and disposed by the executor under test.")]
-    private static TpmResult<TpmResponse> SuccessFrame(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
+    private static TpmResult<TpmResponse> SuccessFrame(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(bytes.Length);
         bytes.CopyTo(owner.Memory.Span);
@@ -71,7 +71,7 @@ internal sealed class TpmCommandExecutorTests
 
         ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             observedCommand = command.ToArray();
@@ -94,7 +94,7 @@ internal sealed class TpmCommandExecutorTests
         }
 
         using var device = TpmDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
 
@@ -125,7 +125,7 @@ internal sealed class TpmCommandExecutorTests
     {
         ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             //A header-only error response (no parameters) carrying a non-success response code.
@@ -135,7 +135,7 @@ internal sealed class TpmCommandExecutorTests
         }
 
         using var device = TpmDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
 
@@ -153,14 +153,14 @@ internal sealed class TpmCommandExecutorTests
     {
         ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             return ValueTask.FromResult(TpmResult<TpmResponse>.TransportError(0x1234u));
         }
 
         using var device = TpmDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
 
@@ -177,7 +177,7 @@ internal sealed class TpmCommandExecutorTests
     {
         ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             Assert.Fail("The device must not be invoked when handleNames has the wrong count.");
@@ -186,7 +186,7 @@ internal sealed class TpmCommandExecutorTests
         }
 
         using var device = TpmDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
 
@@ -211,7 +211,7 @@ internal sealed class TpmCommandExecutorTests
         //for an object). Deterministic, no hardware needed.
         ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             Assert.Fail("The device must not be invoked when a required object Name is missing.");
@@ -220,7 +220,7 @@ internal sealed class TpmCommandExecutorTests
         }
 
         using var device = TpmDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_Create, TpmResponseCodec.CreateObject);
 
@@ -246,7 +246,7 @@ internal sealed class TpmCommandExecutorTests
         //INDEPENDENT SHA-256/HMAC oracle over cpHash = H(cc || authName || nvName || params) and compared to the
         //bytes the executor sent. The raw-handle fallback (handleNames:null) is recomputed too, so the test
         //locks both that Names are used and that they are concatenated in handle order.
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_Read, TpmResponseCodec.NvRead);
 
@@ -310,14 +310,14 @@ internal sealed class TpmCommandExecutorTests
         IReadOnlyList<ReadOnlyMemory<byte>>? handleNames,
         byte[] nonceTpmValue,
         byte[] authValue,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TpmResponseRegistry registry)
     {
         byte[]? observed = null;
 
         ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
-            MemoryPool<byte> handlerPool,
+            BaseMemoryPool handlerPool,
             CancellationToken cancellationToken)
         {
             observed = command.ToArray();

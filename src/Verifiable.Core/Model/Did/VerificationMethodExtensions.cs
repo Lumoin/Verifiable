@@ -28,7 +28,7 @@ namespace Verifiable.Core.Model.Did
             this VerificationMethod verificationMethod,
             ReadOnlyMemory<byte> data,
             Signature signature,
-            MemoryPool<byte> memoryPool)
+            BaseMemoryPool memoryPool)
         {
             ArgumentNullException.ThrowIfNull(verificationMethod, nameof(verificationMethod));
             ArgumentNullException.ThrowIfNull(signature, nameof(signature));
@@ -68,7 +68,7 @@ namespace Verifiable.Core.Model.Did
         /// <param name="memoryPool">Memory pool for key material allocation.</param>
         /// <returns>A PublicKey instance ready for verification operations.</returns>
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller is responsible for disposing the returned PublicKey instance.")]
-        public static PublicKey CreatePublicKeyFromVerificationMethod(this VerificationMethod verificationMethod, MemoryPool<byte> memoryPool)
+        public static PublicKey CreatePublicKeyFromVerificationMethod(this VerificationMethod verificationMethod, BaseMemoryPool memoryPool)
         {
             ArgumentNullException.ThrowIfNull(verificationMethod, nameof(verificationMethod));
             ArgumentNullException.ThrowIfNull(memoryPool, nameof(memoryPool));

@@ -17,14 +17,14 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Fido2;
 
 /// <summary>
-/// PKG-E: the CTAP 2.3 §9-close real-wire capstones for <c>hmac-secret</c> (§12.7) and
-/// <c>hmac-secret-mc</c> (§12.8) — reconstructing the FULL R14 property set, the R13 platform-actor
-/// obligations, and the R2 credential lifecycle purely from wire bytes, over the UNCHANGED
-/// <see cref="CtapWave2TransportHarness"/>. Where PKG-B/PKG-C's own flow tests
+/// The CTAP 2.3 §9-close real-wire capstones for <c>hmac-secret</c> (§12.7) and
+/// <c>hmac-secret-mc</c> (§12.8) — reconstructing the FULL property set, the platform-actor
+/// obligations, and the credential lifecycle purely from wire bytes, over the UNCHANGED
+/// <see cref="CtapNfcTransportHarness"/>. Where the other flow tests
 /// (<see cref="CtapAuthenticatorHmacSecretGetAssertionFlowTests"/>,
 /// <see cref="CtapAuthenticatorHmacSecretMcFlowTests"/>) drive
 /// <see cref="CtapAuthenticatorSimulator.TransceiveAsync"/> in process, every test here drives
-/// <see cref="CtapWave2TransportHarness.Transceive"/> — the real, unmodified APDU/NFC transport stack —
+/// <see cref="CtapNfcTransportHarness.Transceive"/> — the real, unmodified APDU/NFC transport stack —
 /// so every assertion is observable by a genuine platform, never by a test holding a reference to the
 /// simulator's internal state.
 /// </summary>
@@ -44,11 +44,11 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
     /// over the wire; an <c>authenticatorMakeCredential</c> requesting <c>hmac-secret: true</c> carries
     /// the annotation in its authData on the wire; a one-salt protocol-one <c>authenticatorGetAssertion</c>
     /// OMITS the extension's own <c>pinUvAuthProtocol</c> member (snapshot line 13279's defaulting, live);
-    /// a two-salt protocol-two <c>authenticatorGetAssertion</c> INCLUDES it (snapshot line 13246,
-    /// contract R13); the full R14 property set — determinism (a), uv-separation (b, trap 4), linkage
-    /// (c), credential isolation (d, trap 21), protocol-two IV freshness (e, trap 6) — is proven from
-    /// wire bytes only; and three wire negatives close: a tampered <c>saltAuth</c> (0x33, trap 2), a
-    /// 48-byte decrypted plaintext (0x02, trap 3), and an unpaired <c>hmac-secret-mc</c> (0x14, trap 8).
+    /// a two-salt protocol-two <c>authenticatorGetAssertion</c> INCLUDES it (snapshot line 13246);
+    /// the full property set — determinism (a), uv-separation (b), linkage
+    /// (c), credential isolation (d), protocol-two IV freshness (e) — is proven from
+    /// wire bytes only; and three wire negatives close: a tampered <c>saltAuth</c> (0x33), a
+    /// 48-byte decrypted plaintext (0x02), and an unpaired <c>hmac-secret-mc</c> (0x14).
     /// </summary>
     /// <remarks>
     /// The protocol-two <c>pinUvAuthToken</c> this test issues right after establishing the PIN carries
@@ -57,7 +57,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
     /// rule (line 5828, applied at both <c>authenticatorMakeCredential</c> step 14.4 and
     /// <c>authenticatorGetAssertion</c> step 9.4: "when a pinUvAuthToken is used with an operation that
     /// tests user presence, it is updated to remove all permissions except lbw") means that token is spent
-    /// by the mc mint itself — so the R14(b) uv-separation step issues its OWN fresh <c>ga</c>-permission
+    /// by the mc mint itself — so the uv-separation step issues its OWN fresh <c>ga</c>-permission
     /// token immediately before the one ga call that needs <c>uv: 1</c>, mirroring
     /// <see cref="CtapAuthenticatorHmacSecretGetAssertionFlowTests.HmacSecretOutputDiffersBetweenUvAndNonUvForTheSameCredentialAndSalt"/>'s
     /// own documented ordering constraint (issue-then-immediately-consume, no intervening 'up' gesture).
@@ -65,12 +65,12 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
     [TestMethod]
     public async Task SectionNineCloseCapstoneOverRealApduTransport()
     {
-        const string RpId = "waveclose-capstone-s9.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        const string RpId = "capstone-s9.example";
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-capstone-s9");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("capstone-s9");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         CtapGetInfoResponse getInfoResponse = await CtapAuthenticatorGetInfoClient.GetInfoAsync(
             harness.Transceive, CtapGetInfoResponseCborReader.Read, pool, cancellationToken).ConfigureAwait(false);
@@ -89,20 +89,20 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
         await EstablishPinAsync(harness, pool, CtapPinUvAuthProtocolId.Two, cancellationToken).ConfigureAwait(false);
         byte[] mcToken = await IssueTokenAsync(harness, pool, CtapPinUvAuthProtocolId.Two, WellKnownCtapPinUvAuthTokenPermissions.Mc, RpId, cancellationToken).ConfigureAwait(false);
         Assert.HasCount(32, mcToken, "getPinUvAuthTokenUsingPinWithPermissions under protocol two must decrypt to a 32-byte token, on the wire.");
-        byte[] mcMessage = CtapWave2AuthenticatorFixtures.BuildFixedBytes(32, 0x10);
-        byte[] mcParam = await CtapWaveConfigFixtures.ComputeSignatureAsync(mcToken, CtapPinUvAuthProtocolId.Two, mcMessage, pool, cancellationToken).ConfigureAwait(false);
+        byte[] mcMessage = CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(32, 0x10);
+        byte[] mcParam = await CtapConfigFixtures.ComputeSignatureAsync(mcToken, CtapPinUvAuthProtocolId.Two, mcMessage, pool, cancellationToken).ConfigureAwait(false);
 
         //A resident-key mc request on a PIN-protected authenticator MUST carry a valid mc-permission
         //pinUvAuthParam (CtapAuthenticatorTransitions' own "ResidentKeyRequiresPinUvAuthToken" gate) --
         //this IS the "PIN + protocol-2 token session" step's token, consumed here rather than left idle.
-        ReadOnlyMemory<byte> mcExtensions = CtapWave2AuthenticatorFixtures.BuildMakeCredentialExtensionsInput(hmacSecret: true);
-        CtapMakeCredentialRequest mcRequest = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(
+        ReadOnlyMemory<byte> mcExtensions = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialExtensionsInput(hmacSecret: true);
+        CtapMakeCredentialRequest mcRequest = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(
             pool, rpId: RpId, options: new CtapCommandOptions(ResidentKey: true), extensions: mcExtensions,
             pinUvAuthParam: mcParam, pinUvAuthProtocol: (int)CtapPinUvAuthProtocolId.Two);
         CtapMakeCredentialResponse mcResponse = await CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
             harness.Transceive, CtapMakeCredentialRequestCborWriter.Write, mcRequest, CtapMakeCredentialResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(mcRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(mcRequest);
 
         byte[] credentialIdBytes;
         using(AuthenticatorData mcAuthenticatorData = AuthenticatorDataReader.Read(mcResponse.AuthData, CredentialPublicKeyCborReader.Read, pool))
@@ -115,22 +115,22 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
             credentialIdBytes = mcAuthenticatorData.AttestedCredentialData!.CredentialId.AsReadOnlySpan().ToArray();
         }
 
-        byte[] salt1 = CtapWave2AuthenticatorFixtures.BuildFixedBytes(32, 0x80);
+        byte[] salt1 = CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(32, 0x80);
 
-        using CtapWave5bPlatformPinSession protocolOneSession = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
+        using CtapPlatformPinSession protocolOneSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.One, pool, cancellationToken).ConfigureAwait(false);
         (byte[] oneSaltEnc, byte[] oneSaltAuth) = await protocolOneSession.BuildHmacSecretSaltsAsync(salt1, null, cancellationToken).ConfigureAwait(false);
-        ReadOnlyMemory<byte> oneSaltExtensions = CtapWave2AuthenticatorFixtures.BuildGetAssertionHmacSecretExtensionsInput(
+        ReadOnlyMemory<byte> oneSaltExtensions = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionHmacSecretExtensionsInput(
             protocolOneSession.PlatformPublicKeyCose, oneSaltEnc, oneSaltAuth, pinUvAuthProtocol: null);
         (byte[] nonUvOutput, _) = await SendHmacSecretGetAssertionAsync(
             harness, pool, RpId, credentialIdBytes, oneSaltExtensions, protocolOneSession, cancellationToken).ConfigureAwait(false);
         Assert.HasCount(32, nonUvOutput, "a one-salt hmac-secret output decrypts to exactly 32 bytes, on the wire.");
 
-        byte[] salt2 = CtapWave2AuthenticatorFixtures.BuildFixedBytes(32, 0x81);
-        using CtapWave5bPlatformPinSession protocolTwoSession = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
+        byte[] salt2 = CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(32, 0x81);
+        using CtapPlatformPinSession protocolTwoSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.Two, pool, cancellationToken).ConfigureAwait(false);
         (byte[] twoSaltEnc, byte[] twoSaltAuth) = await protocolTwoSession.BuildHmacSecretSaltsAsync(salt1, salt2, cancellationToken).ConfigureAwait(false);
-        ReadOnlyMemory<byte> twoSaltExtensions = CtapWave2AuthenticatorFixtures.BuildGetAssertionHmacSecretExtensionsInput(
+        ReadOnlyMemory<byte> twoSaltExtensions = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionHmacSecretExtensionsInput(
             protocolTwoSession.PlatformPublicKeyCose, twoSaltEnc, twoSaltAuth, pinUvAuthProtocol: (int)CtapPinUvAuthProtocolId.Two);
         AssertHmacSecretPinUvAuthProtocolMemberIsPresentOnTheWire(twoSaltExtensions, (int)CtapPinUvAuthProtocolId.Two);
         (byte[] twoSaltOutput, _) = await SendHmacSecretGetAssertionAsync(
@@ -138,49 +138,49 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
         Assert.HasCount(64, twoSaltOutput, "a two-salt hmac-secret output decrypts to exactly 64 bytes, on the wire.");
         Assert.AreSequenceEqual(
             nonUvOutput, twoSaltOutput[..32],
-            "R14(c) linkage: a two-salt output's first 32 bytes must equal the one-salt output for the same salt1.");
+            "linkage: a two-salt output's first 32 bytes must equal the one-salt output for the same salt1.");
 
-        using CtapWave5bPlatformPinSession determinismSession = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
+        using CtapPlatformPinSession determinismSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.One, pool, cancellationToken).ConfigureAwait(false);
         (byte[] determinismSaltEnc, byte[] determinismSaltAuth) = await determinismSession.BuildHmacSecretSaltsAsync(salt1, null, cancellationToken).ConfigureAwait(false);
-        ReadOnlyMemory<byte> determinismExtensions = CtapWave2AuthenticatorFixtures.BuildGetAssertionHmacSecretExtensionsInput(
+        ReadOnlyMemory<byte> determinismExtensions = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionHmacSecretExtensionsInput(
             determinismSession.PlatformPublicKeyCose, determinismSaltEnc, determinismSaltAuth, pinUvAuthProtocol: null);
         (byte[] determinismOutput, _) = await SendHmacSecretGetAssertionAsync(
             harness, pool, RpId, credentialIdBytes, determinismExtensions, determinismSession, cancellationToken).ConfigureAwait(false);
         Assert.AreSequenceEqual(
-            nonUvOutput, determinismOutput, "R14(a) determinism: the same salt and uv posture must decrypt to the identical output every time.");
+            nonUvOutput, determinismOutput, "determinism: the same salt and uv posture must decrypt to the identical output every time.");
 
         byte[] uvToken = await IssueTokenAsync(harness, pool, CtapPinUvAuthProtocolId.Two, WellKnownCtapPinUvAuthTokenPermissions.Ga, RpId, cancellationToken).ConfigureAwait(false);
-        byte[] gaMessage = CtapWave2AuthenticatorFixtures.BuildFixedBytes(32, 0x20);
-        byte[] gaParam = await CtapWaveConfigFixtures.ComputeSignatureAsync(uvToken, CtapPinUvAuthProtocolId.Two, gaMessage, pool, cancellationToken).ConfigureAwait(false);
-        using CtapWave5bPlatformPinSession uvSession = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
+        byte[] gaMessage = CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(32, 0x20);
+        byte[] gaParam = await CtapConfigFixtures.ComputeSignatureAsync(uvToken, CtapPinUvAuthProtocolId.Two, gaMessage, pool, cancellationToken).ConfigureAwait(false);
+        using CtapPlatformPinSession uvSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.One, pool, cancellationToken).ConfigureAwait(false);
         (byte[] uvSaltEnc, byte[] uvSaltAuth) = await uvSession.BuildHmacSecretSaltsAsync(salt1, null, cancellationToken).ConfigureAwait(false);
-        ReadOnlyMemory<byte> uvExtensions = CtapWave2AuthenticatorFixtures.BuildGetAssertionHmacSecretExtensionsInput(
+        ReadOnlyMemory<byte> uvExtensions = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionHmacSecretExtensionsInput(
             uvSession.PlatformPublicKeyCose, uvSaltEnc, uvSaltAuth, pinUvAuthProtocol: null);
         (byte[] uvOutput, _) = await SendHmacSecretGetAssertionAsync(
             harness, pool, RpId, credentialIdBytes, uvExtensions, uvSession, cancellationToken,
             gaParam: gaParam, gaProtocolId: CtapPinUvAuthProtocolId.Two).ConfigureAwait(false);
         Assert.AreNotSequenceEqual(
-            nonUvOutput, uvOutput, "R14(b) uv-separation (trap 4): uv=0 and uv=1 must select different CredRandom values for the same salt.");
+            nonUvOutput, uvOutput, "uv-separation: uv=0 and uv=1 must select different CredRandom values for the same salt.");
 
         byte[] secondCredentialIdBytes = await RegisterHmacSecretCredentialAsync(
-            harness, pool, RpId, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0x91), cancellationToken).ConfigureAwait(false);
-        using CtapWave5bPlatformPinSession isolationSession = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
+            harness, pool, RpId, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x91), cancellationToken).ConfigureAwait(false);
+        using CtapPlatformPinSession isolationSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.One, pool, cancellationToken).ConfigureAwait(false);
         (byte[] isolationSaltEnc, byte[] isolationSaltAuth) = await isolationSession.BuildHmacSecretSaltsAsync(salt1, null, cancellationToken).ConfigureAwait(false);
-        ReadOnlyMemory<byte> isolationExtensions = CtapWave2AuthenticatorFixtures.BuildGetAssertionHmacSecretExtensionsInput(
+        ReadOnlyMemory<byte> isolationExtensions = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionHmacSecretExtensionsInput(
             isolationSession.PlatformPublicKeyCose, isolationSaltEnc, isolationSaltAuth, pinUvAuthProtocol: null);
         (byte[] isolationOutput, _) = await SendHmacSecretGetAssertionAsync(
             harness, pool, RpId, secondCredentialIdBytes, isolationExtensions, isolationSession, cancellationToken).ConfigureAwait(false);
         Assert.AreNotSequenceEqual(
             nonUvOutput, isolationOutput,
-            "R14(d) credential isolation (trap 21): the same salt against two different credentials must decrypt to different outputs.");
+            "credential isolation: the same salt against two different credentials must decrypt to different outputs.");
 
-        using CtapWave5bPlatformPinSession ivSession = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
+        using CtapPlatformPinSession ivSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.Two, pool, cancellationToken).ConfigureAwait(false);
         (byte[] ivSaltEnc, byte[] ivSaltAuth) = await ivSession.BuildHmacSecretSaltsAsync(salt1, null, cancellationToken).ConfigureAwait(false);
-        ReadOnlyMemory<byte> ivExtensions = CtapWave2AuthenticatorFixtures.BuildGetAssertionHmacSecretExtensionsInput(
+        ReadOnlyMemory<byte> ivExtensions = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionHmacSecretExtensionsInput(
             ivSession.PlatformPublicKeyCose, ivSaltEnc, ivSaltAuth, pinUvAuthProtocol: (int)CtapPinUvAuthProtocolId.Two);
         (byte[] firstIvDecrypted, byte[] firstIvCiphertext) = await SendHmacSecretGetAssertionAsync(
             harness, pool, RpId, credentialIdBytes, ivExtensions, ivSession, cancellationToken).ConfigureAwait(false);
@@ -188,54 +188,54 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
             harness, pool, RpId, credentialIdBytes, ivExtensions, ivSession, cancellationToken).ConfigureAwait(false);
         Assert.AreNotSequenceEqual(
             firstIvCiphertext, secondIvCiphertext,
-            "R14(e) protocol-two IV freshness (trap 6): two identical protocol-two requests must produce different wire ciphertext bytes.");
+            "protocol-two IV freshness: two identical protocol-two requests must produce different wire ciphertext bytes.");
         Assert.AreSequenceEqual(
-            firstIvDecrypted, secondIvDecrypted, "R14(e): both requests must decrypt to the identical output despite the different ciphertext.");
+            firstIvDecrypted, secondIvDecrypted, "both requests must decrypt to the identical output despite the different ciphertext.");
 
-        using CtapWave5bPlatformPinSession tamperedSession = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
+        using CtapPlatformPinSession tamperedSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.One, pool, cancellationToken).ConfigureAwait(false);
         (byte[] tamperedSaltEnc, byte[] tamperedSaltAuth) = await tamperedSession.BuildHmacSecretSaltsAsync(salt1, null, cancellationToken).ConfigureAwait(false);
         tamperedSaltAuth[0] ^= 0xFF;
-        ReadOnlyMemory<byte> tamperedExtensions = CtapWave2AuthenticatorFixtures.BuildGetAssertionHmacSecretExtensionsInput(
+        ReadOnlyMemory<byte> tamperedExtensions = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionHmacSecretExtensionsInput(
             tamperedSession.PlatformPublicKeyCose, tamperedSaltEnc, tamperedSaltAuth, pinUvAuthProtocol: null);
-        CtapGetAssertionRequest tamperedRequest = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(
-            pool, rpId: RpId, allowList: CtapWave5AuthenticatorFixtures.BuildAllowList(credentialIdBytes, pool), extensions: tamperedExtensions);
+        CtapGetAssertionRequest tamperedRequest = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionRequest(
+            pool, rpId: RpId, allowList: CtapClientPinFixtures.BuildAllowList(credentialIdBytes, pool), extensions: tamperedExtensions);
         CtapCommandException tamperedException = await Assert.ThrowsExactlyAsync<CtapCommandException>(() =>
             SendGetAssertionOverWireAsync(harness, tamperedRequest, pool, cancellationToken).AsTask());
         Assert.AreEqual(
             WellKnownCtapStatusCodes.PinAuthInvalid, tamperedException.StatusCode,
-            "a tampered saltAuth must reject with CTAP2_ERR_PIN_AUTH_INVALID (trap 2), on the wire.");
+            "a tampered saltAuth must reject with CTAP2_ERR_PIN_AUTH_INVALID, on the wire.");
 
-        using CtapWave5bPlatformPinSession wrongLengthSession = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
+        using CtapPlatformPinSession wrongLengthSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.One, pool, cancellationToken).ConfigureAwait(false);
         (byte[] wrongLengthSaltEnc, byte[] wrongLengthSaltAuth) = await wrongLengthSession.BuildHmacSecretSaltsAsync(
-            CtapWave2AuthenticatorFixtures.BuildFixedBytes(48, 0x82), null, cancellationToken).ConfigureAwait(false);
-        ReadOnlyMemory<byte> wrongLengthExtensions = CtapWave2AuthenticatorFixtures.BuildGetAssertionHmacSecretExtensionsInput(
+            CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(48, 0x82), null, cancellationToken).ConfigureAwait(false);
+        ReadOnlyMemory<byte> wrongLengthExtensions = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionHmacSecretExtensionsInput(
             wrongLengthSession.PlatformPublicKeyCose, wrongLengthSaltEnc, wrongLengthSaltAuth, pinUvAuthProtocol: null);
-        CtapGetAssertionRequest wrongLengthRequest = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(
-            pool, rpId: RpId, allowList: CtapWave5AuthenticatorFixtures.BuildAllowList(credentialIdBytes, pool), extensions: wrongLengthExtensions);
+        CtapGetAssertionRequest wrongLengthRequest = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionRequest(
+            pool, rpId: RpId, allowList: CtapClientPinFixtures.BuildAllowList(credentialIdBytes, pool), extensions: wrongLengthExtensions);
         CtapCommandException wrongLengthException = await Assert.ThrowsExactlyAsync<CtapCommandException>(() =>
             SendGetAssertionOverWireAsync(harness, wrongLengthRequest, pool, cancellationToken).AsTask());
         Assert.AreEqual(
             WellKnownCtapStatusCodes.InvalidParameter, wrongLengthException.StatusCode,
-            "a 48-byte decrypted plaintext must reject with CTAP1_ERR_INVALID_PARAMETER (trap 3), on the wire.");
+            "a 48-byte decrypted plaintext must reject with CTAP1_ERR_INVALID_PARAMETER, on the wire.");
 
-        using CtapWave5bPlatformPinSession unpairedSession = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
+        using CtapPlatformPinSession unpairedSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.One, pool, cancellationToken).ConfigureAwait(false);
-        ReadOnlyMemory<byte> unpairedExtensions = CtapWave2AuthenticatorFixtures.BuildMakeCredentialExtensionsInput(
+        ReadOnlyMemory<byte> unpairedExtensions = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialExtensionsInput(
             hmacSecret: null,
             hmacSecretMc: new CtapGetAssertionHmacSecretInput(
                 unpairedSession.PlatformPublicKeyCose,
-                CtapWave2AuthenticatorFixtures.BuildFixedBytes(32, 0x83),
-                CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0x84),
+                CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(32, 0x83),
+                CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x84),
                 PinUvAuthProtocol: null));
-        CtapMakeCredentialRequest unpairedRequest = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(
-            pool, rpId: RpId, userId: CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0x85), extensions: unpairedExtensions);
+        CtapMakeCredentialRequest unpairedRequest = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(
+            pool, rpId: RpId, userId: CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x85), extensions: unpairedExtensions);
         CtapCommandException unpairedException = await Assert.ThrowsExactlyAsync<CtapCommandException>(() =>
             SendMakeCredentialOverWireAsync(harness, unpairedRequest, pool, cancellationToken).AsTask());
         Assert.AreEqual(
             WellKnownCtapStatusCodes.MissingParameter, unpairedException.StatusCode,
-            "hmac-secret-mc present without a paired hmac-secret: true must reject with CTAP2_ERR_MISSING_PARAMETER (trap 8), on the wire.");
+            "hmac-secret-mc present without a paired hmac-secret: true must reject with CTAP2_ERR_MISSING_PARAMETER, on the wire.");
     }
 
 
@@ -243,33 +243,33 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
     /// The <c>hmac-secret-mc</c> wire flow (CTAP 2.3 §12.8): an <c>authenticatorMakeCredential</c>
     /// carrying BOTH extensions decrypts, on the platform side, to the SAME <c>HMAC-SHA-256(CredRandomWithoutUV,
     /// salt1)</c> value a LATER <c>authenticatorGetAssertion</c> <c>hmac-secret</c> call against the SAME
-    /// credential and salt produces — the linkage property (contract R6) tying mc-time delegation to
+    /// credential and salt produces — the linkage property tying mc-time delegation to
     /// ga's own algorithm, proven from wire bytes on both sides, never by echoing authenticator state.
     /// </summary>
     [TestMethod]
     public async Task HmacSecretMcWireFlowLinksToALaterGetAssertionHmacSecretOverRealApduTransport()
     {
-        const string RpId = "waveclose-capstone-mc.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        const string RpId = "capstone-mc.example";
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
-        byte[] salt1 = CtapWave2AuthenticatorFixtures.BuildFixedBytes(32, 0x86);
+        byte[] salt1 = CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(32, 0x86);
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-capstone-mc");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("capstone-mc");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
-        using CtapWave5bPlatformPinSession mcSession = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
+        using CtapPlatformPinSession mcSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.One, pool, cancellationToken).ConfigureAwait(false);
         (byte[] mcSaltEnc, byte[] mcSaltAuth) = await mcSession.BuildHmacSecretSaltsAsync(salt1, null, cancellationToken).ConfigureAwait(false);
 
-        ReadOnlyMemory<byte> mcExtensions = CtapWave2AuthenticatorFixtures.BuildMakeCredentialExtensionsInput(
+        ReadOnlyMemory<byte> mcExtensions = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialExtensionsInput(
             hmacSecret: true,
             hmacSecretMc: new CtapGetAssertionHmacSecretInput(mcSession.PlatformPublicKeyCose, mcSaltEnc, mcSaltAuth, PinUvAuthProtocol: null));
-        CtapMakeCredentialRequest mcRequest = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(
+        CtapMakeCredentialRequest mcRequest = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(
             pool, rpId: RpId, options: new CtapCommandOptions(ResidentKey: true), extensions: mcExtensions);
         CtapMakeCredentialResponse mcResponse = await CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
             harness.Transceive, CtapMakeCredentialRequestCborWriter.Write, mcRequest, CtapMakeCredentialResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(mcRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(mcRequest);
 
         byte[] mcDecrypted;
         byte[] credentialIdBytes;
@@ -287,10 +287,10 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
         }
         Assert.HasCount(32, mcDecrypted, "a one-salt hmac-secret-mc output decrypts to exactly 32 bytes, on the wire.");
 
-        using CtapWave5bPlatformPinSession gaSession = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
+        using CtapPlatformPinSession gaSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.One, pool, cancellationToken).ConfigureAwait(false);
         (byte[] gaSaltEnc, byte[] gaSaltAuth) = await gaSession.BuildHmacSecretSaltsAsync(salt1, null, cancellationToken).ConfigureAwait(false);
-        ReadOnlyMemory<byte> gaExtensions = CtapWave2AuthenticatorFixtures.BuildGetAssertionHmacSecretExtensionsInput(
+        ReadOnlyMemory<byte> gaExtensions = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionHmacSecretExtensionsInput(
             gaSession.PlatformPublicKeyCose, gaSaltEnc, gaSaltAuth, pinUvAuthProtocol: null);
         (byte[] gaDecrypted, _) = await SendHmacSecretGetAssertionAsync(
             harness, pool, RpId, credentialIdBytes, gaExtensions, gaSession, cancellationToken).ConfigureAwait(false);
@@ -302,7 +302,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
 
 
     /// <summary>
-    /// The R2 credential lifecycle, proven on the wire: a credential minted WITHOUT the <c>hmac-secret</c>
+    /// The credential lifecycle, proven on the wire: a credential minted WITHOUT the <c>hmac-secret</c>
     /// extension still mints its <see cref="CtapCredentialRecord.CredRandomWithUV"/>/
     /// <see cref="CtapCredentialRecord.CredRandomWithoutUV"/> pair unconditionally (snapshot line 13192's
     /// SHOULD, adopted); the pair survives <see cref="CtapAuthenticatorSimulator.PowerCycle"/> — a LATER
@@ -312,19 +312,19 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
     [TestMethod]
     public async Task CredentialMintedWithoutHmacSecretSurvivesPowerCycleThenIsErasedByFactoryResetOverRealApduTransport()
     {
-        const string RpId = "waveclose-capstone-lifecycle.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        const string RpId = "capstone-lifecycle.example";
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-capstone-lifecycle");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("capstone-lifecycle");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
-        CtapMakeCredentialRequest mcRequest = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(
+        CtapMakeCredentialRequest mcRequest = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(
             pool, rpId: RpId, options: new CtapCommandOptions(ResidentKey: true));
         CtapMakeCredentialResponse mcResponse = await CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
             harness.Transceive, CtapMakeCredentialRequestCborWriter.Write, mcRequest, CtapMakeCredentialResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(mcRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(mcRequest);
 
         byte[] credentialIdBytes;
         using(AuthenticatorData mcAuthenticatorData = AuthenticatorDataReader.Read(mcResponse.AuthData, CredentialPublicKeyCborReader.Read, pool))
@@ -335,11 +335,11 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
 
         simulator.PowerCycle();
 
-        byte[] salt1 = CtapWave2AuthenticatorFixtures.BuildFixedBytes(32, 0x87);
-        using CtapWave5bPlatformPinSession gaSession = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
+        byte[] salt1 = CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(32, 0x87);
+        using CtapPlatformPinSession gaSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.One, pool, cancellationToken).ConfigureAwait(false);
         (byte[] saltEnc, byte[] saltAuth) = await gaSession.BuildHmacSecretSaltsAsync(salt1, null, cancellationToken).ConfigureAwait(false);
-        ReadOnlyMemory<byte> gaExtensions = CtapWave2AuthenticatorFixtures.BuildGetAssertionHmacSecretExtensionsInput(
+        ReadOnlyMemory<byte> gaExtensions = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionHmacSecretExtensionsInput(
             gaSession.PlatformPublicKeyCose, saltEnc, saltAuth, pinUvAuthProtocol: null);
         (byte[] decrypted, _) = await SendHmacSecretGetAssertionAsync(
             harness, pool, RpId, credentialIdBytes, gaExtensions, gaSession, cancellationToken).ConfigureAwait(false);
@@ -352,8 +352,8 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
             Assert.AreEqual(WellKnownCtapStatusCodes.Ok, resetResponse.AsReadOnlySpan()[0], "authenticatorReset must return CTAP2_OK, on the wire.");
         }
 
-        CtapGetAssertionRequest postResetRequest = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(
-            pool, rpId: RpId, allowList: CtapWave5AuthenticatorFixtures.BuildAllowList(credentialIdBytes, pool));
+        CtapGetAssertionRequest postResetRequest = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionRequest(
+            pool, rpId: RpId, allowList: CtapClientPinFixtures.BuildAllowList(credentialIdBytes, pool));
         CtapCommandException postResetException = await Assert.ThrowsExactlyAsync<CtapCommandException>(() =>
             SendGetAssertionOverWireAsync(harness, postResetRequest, pool, cancellationToken).AsTask());
         Assert.AreEqual(
@@ -364,9 +364,9 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
 
     /// <summary>Establishes <see cref="Pin"/> as the authenticator's PIN under <paramref name="protocolId"/>, over <paramref name="harness"/>'s real transport.</summary>
     private static async Task EstablishPinAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, CancellationToken cancellationToken)
+        CtapNfcTransportHarness harness, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, CancellationToken cancellationToken)
     {
-        using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
+        using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, protocolId, pool, cancellationToken).ConfigureAwait(false);
         (byte[] newPinEnc, byte[] pinUvAuthParam) = await session.BuildSetPinMessagesAsync(Pin, cancellationToken).ConfigureAwait(false);
 
@@ -386,10 +386,10 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
     /// from wire bytes only, over <paramref name="harness"/>'s real transport.
     /// </summary>
     private static async Task<byte[]> IssueTokenAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, int permissions, string rpId,
+        CtapNfcTransportHarness harness, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, int permissions, string rpId,
         CancellationToken cancellationToken)
     {
-        using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
+        using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, protocolId, pool, cancellationToken).ConfigureAwait(false);
         byte[] pinHashEnc = await session.BuildPinHashEncAsync(Pin, cancellationToken).ConfigureAwait(false);
 
@@ -414,15 +414,15 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
     /// residency.
     /// </summary>
     private static async Task<byte[]> RegisterHmacSecretCredentialAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, string rpId, byte[] userId, CancellationToken cancellationToken)
+        CtapNfcTransportHarness harness, BaseMemoryPool pool, string rpId, byte[] userId, CancellationToken cancellationToken)
     {
-        ReadOnlyMemory<byte> extensions = CtapWave2AuthenticatorFixtures.BuildMakeCredentialExtensionsInput(hmacSecret: true);
-        CtapMakeCredentialRequest request = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(
+        ReadOnlyMemory<byte> extensions = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialExtensionsInput(hmacSecret: true);
+        CtapMakeCredentialRequest request = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(
             pool, rpId: rpId, userId: userId, extensions: extensions);
         CtapMakeCredentialResponse response = await CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
             harness.Transceive, CtapMakeCredentialRequestCborWriter.Write, request, CtapMakeCredentialResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(request);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(request);
 
         using AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(response.AuthData, CredentialPublicKeyCborReader.Read, pool);
 
@@ -439,8 +439,8 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
     /// both the decrypted <c>hmac-secret</c> output and its still-encrypted wire ciphertext.
     /// </summary>
     private static async Task<(byte[] Decrypted, byte[] Ciphertext)> SendHmacSecretGetAssertionAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, string rpId, byte[] credentialIdBytes,
-        ReadOnlyMemory<byte> extensions, CtapWave5bPlatformPinSession session, CancellationToken cancellationToken,
+        CtapNfcTransportHarness harness, BaseMemoryPool pool, string rpId, byte[] credentialIdBytes,
+        ReadOnlyMemory<byte> extensions, CtapPlatformPinSession session, CancellationToken cancellationToken,
         byte[]? gaParam = null, CtapPinUvAuthProtocolId? gaProtocolId = null)
     {
         //Explicit if/else, not a direct byte[]?-to-ReadOnlyMemory<byte>?-argument pass: a null byte[]
@@ -456,14 +456,14 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
             resolvedGaParam = null;
         }
 
-        CtapGetAssertionRequest request = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(
-            pool, rpId: rpId, allowList: CtapWave5AuthenticatorFixtures.BuildAllowList(credentialIdBytes, pool), extensions: extensions,
+        CtapGetAssertionRequest request = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionRequest(
+            pool, rpId: rpId, allowList: CtapClientPinFixtures.BuildAllowList(credentialIdBytes, pool), extensions: extensions,
             pinUvAuthParam: resolvedGaParam, pinUvAuthProtocol: gaProtocolId is CtapPinUvAuthProtocolId protocolId ? (int)protocolId : null);
 
         CtapGetAssertionResponse response = await CtapAuthenticatorGetAssertionClient.GetAssertionAsync(
             harness.Transceive, CtapGetAssertionRequestCborWriter.Write, request, CtapGetAssertionResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeGetAssertionRequest(request);
+        CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(request);
         response.Credential.Id.Dispose();
         response.User?.Id.Dispose();
 
@@ -478,7 +478,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
 
     /// <summary>Sends <paramref name="request"/> through <see cref="CtapAuthenticatorGetAssertionClient.GetAssertionAsync"/> over <paramref name="harness"/>'s real transport, disposing the request either way.</summary>
     private static ValueTask<CtapGetAssertionResponse> SendGetAssertionOverWireAsync(
-        CtapWave2TransportHarness harness, CtapGetAssertionRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapNfcTransportHarness harness, CtapGetAssertionRequest request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         try
         {
@@ -487,14 +487,14 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
         }
         finally
         {
-            CtapWave2AuthenticatorFixtures.DisposeGetAssertionRequest(request);
+            CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(request);
         }
     }
 
 
     /// <summary>Sends <paramref name="request"/> through <see cref="CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync"/> over <paramref name="harness"/>'s real transport, disposing the request either way.</summary>
     private static ValueTask<CtapMakeCredentialResponse> SendMakeCredentialOverWireAsync(
-        CtapWave2TransportHarness harness, CtapMakeCredentialRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapNfcTransportHarness harness, CtapMakeCredentialRequest request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         try
         {
@@ -503,7 +503,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
         }
         finally
         {
-            CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(request);
+            CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(request);
         }
     }
 
@@ -511,7 +511,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
     /// <summary>
     /// Decodes the raw <c>hmac-secret</c> ga extension input bytes about to go over the wire and confirms
     /// they carry the <c>pinUvAuthProtocol</c> member (<c>0x04</c>) with the value
-    /// <paramref name="expectedProtocol"/> (CTAP 2.3 snapshot line 13246, contract R13) — read directly
+    /// <paramref name="expectedProtocol"/> (CTAP 2.3 snapshot line 13246) — read directly
     /// off <paramref name="extensionsCbor"/> with a fresh <see cref="CborReader"/>, not trusted from the
     /// builder call that produced the bytes.
     /// </summary>

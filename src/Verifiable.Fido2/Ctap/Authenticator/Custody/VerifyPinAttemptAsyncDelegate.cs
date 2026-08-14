@@ -6,7 +6,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 
 /// <summary>
 /// Verifies one PIN-guess attempt against the persistent tier's currently provisioned PIN, atomically
-/// recording the outcome in the SAME call (contract R-2, wavepin: "the compare and the counter move are
+/// recording the outcome in the SAME call ("the compare and the counter move are
 /// one atomic TPM command — no TOCTOU between compare and record") — the sole authority for the
 /// current-PIN check once this seam is composed, REPLACING the local constant-time compare
 /// <see cref="Automata.CtapAuthenticatorSimulator"/>'s <c>changePIN</c>/<c>getPinToken</c>/

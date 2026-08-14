@@ -15,12 +15,12 @@ namespace Verifiable.Fido2.Ctap;
 /// serialization-agnostic — mirrors <see cref="DecodeCtapAuthenticatorConfigRequestDelegate"/>'s shape.
 /// The shipped default, <c>Verifiable.Cbor.Ctap.CtapCredentialManagementRequestCborReader.Read</c>, is
 /// method-group-compatible with this delegate. A REQUIRED
-/// <see cref="Ctap.Authenticator.Automata.CtapAuthenticatorSimulator"/> constructor parameter (R1: this
+/// <see cref="Ctap.Authenticator.Automata.CtapAuthenticatorSimulator"/> constructor parameter: this
 /// authenticator advertises <c>credMgmt:true</c> unconditionally, so an advertises-but-cannot-decode
-/// configuration is unrepresentable).
+/// configuration is unrepresentable.
 /// </remarks>
 /// <exception cref="Fido2FormatException">
 /// <paramref name="parametersCbor"/> is not valid CTAP2 canonical CBOR, or omits the Required
 /// <c>subCommand</c> member.
 /// </exception>
-public delegate CtapCredentialManagementRequest DecodeCtapCredentialManagementRequestDelegate(ReadOnlyMemory<byte> parametersCbor, MemoryPool<byte> pool);
+public delegate CtapCredentialManagementRequest DecodeCtapCredentialManagementRequestDelegate(ReadOnlyMemory<byte> parametersCbor, BaseMemoryPool pool);

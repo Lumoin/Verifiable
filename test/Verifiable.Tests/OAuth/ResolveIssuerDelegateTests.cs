@@ -94,7 +94,7 @@ internal sealed class ResolveIssuerDelegateTests
     }
 
 
-    //R9207-002 — RFC 9207 §2: "Its value MUST be a URL that uses the https scheme
+    //RFC 9207 §2: "Its value MUST be a URL that uses the https scheme
     //without any query or fragment components." IssuerIdentifierValidation is the
     //pure shape check; DefaultIssuerResolver wires it in below so every default-path
     //consumer (discovery issuer, Authorize-redirect iss) enforces it.
@@ -169,7 +169,7 @@ internal sealed class ResolveIssuerDelegateTests
     }
 
 
-    //R9207-004 — RFC 9207 §2.3: "The issuer identifier included in the server's metadata
+    //RFC 9207 §2.3: "The issuer identifier included in the server's metadata
     //value issuer MUST be identical to the iss parameter's value." Drives a custom
     //AuthorizationServerIntegration.ResolveIssuerAsync through both the discovery endpoint
     //and a live Authorize redirect and asserts the two emitted issuer values agree
@@ -242,11 +242,11 @@ internal sealed class ResolveIssuerDelegateTests
         string redirectIssuer = Uri.UnescapeDataString(issRaw);
 
         Assert.AreEqual(metadataIssuer, redirectIssuer,
-            "R9207-004: the redirect iss and the discovery issuer must be byte-identical under a custom resolver.");
+            "The redirect iss and the discovery issuer must be byte-identical under a custom resolver.");
     }
 
 
-    //R9207-002 — RFC 9207 §2's https-only issuer shape, proven over the real wire rather than the
+    //RFC 9207 §2's https-only issuer shape, proven over the real wire rather than the
     //in-process dispatch <see cref="CustomResolverProducesByteIdenticalIssuerOnMetadataAndRedirect"/>
     //uses: every loopback test host now serves genuine HTTPS on an ephemeral pinned certificate, so the
     //DEFAULT resolver (no application override) already produces an issuer whose scheme, authority, and
@@ -343,7 +343,7 @@ internal sealed class ResolveIssuerDelegateTests
         string redirectIssuer = Uri.UnescapeDataString(issRaw);
 
         Assert.AreEqual(metadataIssuer, redirectIssuer,
-            "R9207-002: the real-wire redirect iss and the real-wire discovery issuer must be byte-identical.");
+            "The real-wire redirect iss and the real-wire discovery issuer must be byte-identical.");
     }
 
 

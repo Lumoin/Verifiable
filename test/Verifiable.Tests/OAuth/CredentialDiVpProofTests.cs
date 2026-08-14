@@ -49,7 +49,7 @@ internal sealed class CredentialDiVpProofTests
 
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string ClientId = "https://wallet.client.test";
     private static readonly Uri ClientBaseUri = new("https://wallet.client.test");
@@ -295,6 +295,85 @@ internal sealed class CredentialDiVpProofTests
         Assert.AreEqual(400, response.StatusCode, response.Body);
         Assert.Contains(Oid4VciCredentialErrors.InvalidProof, response.Body);
         Assert.IsFalse(seamConsulted, "A non-authentication di_vp proofPurpose must be rejected before the issuance seam.");
+    }
+
+
+    /// <summary>
+    /// Adversarial — controller indirection. The resolved holder document's
+    /// <c>authentication</c> verification method is the SAME key that genuinely signs the
+    /// presentation (so relationship-scoped resolution and the signature both succeed), but the
+    /// resolved method's own <c>controller</c> names a DIFFERENT identity than the presentation's
+    /// <c>holder</c> — the <c>did:web</c>-aliasing / controller-indirection shape the ratified
+    /// controller-RESOLUTION semantics deliberately reject. Appendix F.2's "signed with a key in the
+    /// possession of the Holder" is not enough on its own: the resolved method must also be
+    /// CONTROLLED by the claimed holder. The compile-time seam means
+    /// <see cref="DiVpProofValidationResult.AuthenticatedVerificationMethodId"/> can only ever be
+    /// populated from a <see cref="BoundProvenance"/> the verify path itself minted — there is no
+    /// Asserted fallback to smuggle an unbound identity through even at the type level.
+    /// </summary>
+    [TestMethod]
+    public async Task DiVpWithControllerIndirectionHolderIsRefused()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
+
+        string issuerIdentifier = material.Registration.IssuerUri!.OriginalString;
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyPair =
+            TestKeyMaterialProvider.CreateEd25519KeyMaterial();
+        using PublicKeyMemory holderPublic = keyPair.PublicKey;
+        using PrivateKeyMemory holderPrivate = keyPair.PrivateKey;
+
+        DidDocument honestHolderDocument = await BuildHolderDidDocumentAsync(holderPublic).ConfigureAwait(false);
+
+        //A document identical to the honest one EXCEPT the authentication method's controller names a
+        //DIFFERENT identity. The resolved method is genuinely the holder's own document entry (so
+        //relationship-scoped resolution succeeds, and the genuine key signs), but controller
+        //indirection means it is not actually controlled by the claimed holder -- only a resolver
+        //bug/compromise could hand this back for a real did:key, which is exactly the shape the
+        //controller check defends against regardless of how the mismatch arose.
+        DidDocument controllerIndirectionDocument = new()
+        {
+            Id = honestHolderDocument.Id,
+            VerificationMethod =
+            [
+                new VerificationMethod
+                {
+                    Id = honestHolderDocument.VerificationMethod![0].Id,
+                    Type = honestHolderDocument.VerificationMethod[0].Type,
+                    Controller = "did:example:attacker-controls-this-key",
+                    KeyFormat = honestHolderDocument.VerificationMethod[0].KeyFormat
+                }
+            ],
+            Authentication = honestHolderDocument.Authentication
+        };
+
+        DataIntegritySecuredPresentation signedPresentation = await SignPresentationAsync(
+            honestHolderDocument, holderPrivate, CredentialNonce, issuerIdentifier).ConfigureAwait(false);
+
+        DidResolver controllerIndirectionResolver = BuildCannedKeyDidResolver(controllerIndirectionDocument);
+        WireDiVpExpectationSeam(host, controllerIndirectionResolver);
+        bool seamConsulted = WireSeamTripwire(host);
+
+        ServerHttpResponse response = await DispatchDiVpAsync(host, material, signedPresentation).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.Contains(Oid4VciCredentialErrors.InvalidProof, response.Body);
+        Assert.IsFalse(seamConsulted,
+            "Controller indirection on the resolved holder document must be rejected before the issuance seam.");
+
+        //Direct check: the same controller-indirection document is refused with the specific reason.
+        DiVpProofValidationResult directResult = await CredentialProofValidator.ValidateDiVpAsync(
+            SerializePresentation(signedPresentation),
+            CredentialNonce,
+            issuerIdentifier,
+            BuildDiVpVerification(controllerIndirectionResolver),
+            EmptyContext,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(directResult.IsValid, "A controller-indirection holder document must not verify.");
+        Assert.AreEqual(DiVpProofValidationFailureReason.HolderControllerMismatch, directResult.FailureReason);
     }
 
 
@@ -632,6 +711,17 @@ internal sealed class CredentialDiVpProofTests
             MultikeyVerificationMethodTypeInfo.Instance,
             includeDefaultContext: false,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+
+    //A resolver that hands back the SAME supplied document for any did:key lookup, regardless of
+    //whether it is what a real did:key derivation would produce. Used only to inject a
+    //controller-indirection document a genuine did:key resolution could never yield (did:key is
+    //self-describing) -- isolating the controller check from the resolution mechanics.
+    private static DidResolver BuildCannedKeyDidResolver(DidDocument document) =>
+        new(DidMethodSelectors.FromResolvers(
+            (WellKnownDidMethodPrefixes.KeyDidMethodPrefix,
+             (string did, DidResolutionOptions options, ExchangeContext context, CancellationToken ct) =>
+                 ValueTask.FromResult(DidResolutionResult.Success(document, DidDocumentMetadata.Empty, "application/did+json")))));
 
 
     //Builds a DidResolver whose did:web handler fetches the holder's did.json through the guarded

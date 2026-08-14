@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
@@ -15,7 +14,6 @@ namespace Verifiable.Vcalm;
 /// cryptography: the cryptosuite-specific seams flow in on <see cref="VcalmCredentialDerivation"/> and
 /// <see cref="VcalmPresentationSigning"/>.
 /// </summary>
-[DebuggerDisplay("VcalmHolderService")]
 public static class VcalmHolderService
 {
     /// <summary>

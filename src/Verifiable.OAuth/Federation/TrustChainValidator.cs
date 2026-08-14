@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core.Assessment;
 
 namespace Verifiable.OAuth.Federation;
@@ -27,7 +26,6 @@ namespace Verifiable.OAuth.Federation;
 /// profile.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("TrustChainValidator")]
 public sealed class TrustChainValidator
 {
     private ClaimIssuer<TrustChainValidationContext> Issuer { get; }

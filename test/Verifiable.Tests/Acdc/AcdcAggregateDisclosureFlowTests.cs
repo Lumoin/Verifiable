@@ -86,7 +86,7 @@ internal sealed class AcdcAggregateDisclosureFlowTests
             //Proof of Issuance: the Issuer's KEL anchors the committed top-level SAID.
             string kelJson = await httpClient.GetStringAsync(new Uri(issuer.BaseAddress, "/kel"), cancellationToken).ConfigureAwait(false);
             using AcdcTestSupport.EncodedSerialization kelBytes = AcdcTestSupport.Encode(kelJson);
-            IReadOnlyList<KeriSeal>? anchors = await AcdcFlowKit.VerifyKelAndReadAnchorsAsync(kelBytes.Memory, credentialIssuer, disposables, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
+            IReadOnlyList<KeriAnchoredSeal>? anchors = await AcdcFlowKit.VerifyKelAndReadAnchorsAsync(kelBytes.Memory, credentialIssuer, disposables, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
             Assert.IsNotNull(anchors, "The Issuer KEL MUST verify and be the credential Issuer's.");
             Assert.IsNotNull(AcdcKeriBinding.FindDirectIssuanceSeal(anchors, topSaid), "Proof of Issuance: the Issuer KEL MUST anchor the committed top-level SAID.");
 

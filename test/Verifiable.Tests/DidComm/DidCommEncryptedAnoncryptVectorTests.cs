@@ -17,7 +17,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.DidComm;
 
 /// <summary>
-/// Anchors the DIDComm v2.1 anoncrypt UNPACK (decrypt) path (<see cref="DidCommEncryptedExtensions.UnpackAnoncryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, KeyAgreementDecryptDelegate, KeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, MemoryPool{byte}, System.Threading.CancellationToken)"/>)
+/// Anchors the DIDComm v2.1 anoncrypt UNPACK (decrypt) path (<see cref="DidCommEncryptedExtensions.UnpackAnoncryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, KeyAgreementDecryptDelegate, KeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, BaseMemoryPool, System.Threading.CancellationToken)"/>)
 /// to the two NIST-curve anoncrypt vectors from DIDComm Messaging v2.1 Appendix C.3: example 2
 /// (ECDH-ES P-384, A256CBC-HS512) and example 3 (ECDH-ES P-521, A256GCM). Each vector is decrypted with
 /// Bob's Appendix A static <c>keyAgreement</c> private keys and MUST recover the Appendix C.1 plaintext.
@@ -29,7 +29,7 @@ internal sealed class DidCommEncryptedAnoncryptVectorTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly MemoryPool<byte> Pool = BaseMemoryPool.Shared;
+    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
     private static readonly ExchangeContext Context = new();
@@ -52,7 +52,6 @@ internal sealed class DidCommEncryptedAnoncryptVectorTests
     private const long ExpectedCreatedTime = 1516269022;
     private const long ExpectedExpiresTime = 1516385931;
 
-    //----- Appendix C.3 example 2: ECDH-ES P-384 + A256CBC-HS512 -----
 
     private const string P384Kid1 = "did:example:bob#key-p384-1";
     private const string P384Kid2 = "did:example:bob#key-p384-2";
@@ -69,7 +68,6 @@ internal sealed class DidCommEncryptedAnoncryptVectorTests
         {"ciphertext":"HPnc9w7jK0T73Spifq_dcVJnONbT9MZ9oorDJFEBJAfmwYRqvs1rKue-udrNLTTH0qjjbeuji01xPRF5JiWyy-gSMX4LHdLhPxHxjjQCTkThY0kapofU85EjLPlI4ytbHiGcrPIezqCun4iDkmb50pwiLvL7XY1Ht6zPUUdhiV6qWoPP4qeY_8pfH74Q5u7K4TQ0uU3KP8CVZQuafrkOBbqbqpJV-lWpWIKxil44f1IT_GeIpkWvmkYxTa1MxpYBgOYa5_AUxYBumcIFP-b6g7GQUbN-1SOoP76EzxZU_louspzQ2HdEH1TzXw2LKclN8GdxD7kB0H6lZbZLT3ScDzSVSbvO1w1fXHXOeOzywuAcismmoEXQGbWZm7wJJJ2r","protected":"eyJlcGsiOnsia3R5IjoiRUMiLCJjcnYiOiJQLTM4NCIsIngiOiIxNjFhZ0dlYWhHZW1IZ25qSG1RX0JfU09OeUJWZzhWTGRoVGdWNVc1NFZiYWJ5bGxpc3NuWjZXNzc5SW9VcUtyIiwieSI6ImNDZXFlRmdvYm9fY1ItWTRUc1pCWlg4dTNCa2l5TnMyYi12ZHFPcU9MeUNuVmdPMmpvN25zQV9JQzNhbnQ5T1gifSwiYXB2IjoiTEpBOUVva3M1dGFtVUZWQmFsTXdCaEo2RGtEY0o4SEs0U2xYWldxRHFubyIsInR5cCI6ImFwcGxpY2F0aW9uL2RpZGNvbW0tZW5jcnlwdGVkK2pzb24iLCJlbmMiOiJBMjU2Q0JDLUhTNTEyIiwiYWxnIjoiRUNESC1FUytBMjU2S1cifQ","recipients":[{"encrypted_key":"SlyWCiOaHMMH9CqSs2CHpRd2XwbueZ1-MfYgKVepXWpgmTgtsgNOAaYwV5pxK3D67HV51F-vLBFlAHke7RYp_GeGDFYhAf5s","header":{"kid":"did:example:bob#key-p384-1"}},{"encrypted_key":"5e7ChtaRgIlV4yS4NSD7kEo0iJfFmL_BFgRh3clDKBG_QoPd1eOtFlTxFJh-spE0khoaw8vEEYTcQIg4ReeFT3uQ8aayz1oY","header":{"kid":"did:example:bob#key-p384-2"}}],"tag":"bkodXkuuwRbqksnQNsCM2YLy9f0v0xNgnhSUAoFGtmE","iv":"aE1XaH767m7LY0JTN7RsAA"}
         """;
 
-    //----- Appendix C.3 example 3: ECDH-ES P-521 + A256GCM -----
 
     private const string P521Kid1 = "did:example:bob#key-p521-1";
     private const string P521Kid2 = "did:example:bob#key-p521-2";

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.SecurityEvents;
@@ -32,7 +31,6 @@ namespace Verifiable.OAuth.Logout;
 /// <c>session-revoked</c> event on completion.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("GlobalTokenRevocationEndpoints")]
 public static class GlobalTokenRevocationEndpoints
 {
     /// <summary>

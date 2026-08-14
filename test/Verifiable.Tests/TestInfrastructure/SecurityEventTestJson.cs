@@ -36,7 +36,7 @@ internal static class SecurityEventTestJson
     }
 
 
-    internal static byte[] DecodeSegment(string segment, MemoryPool<byte> pool)
+    internal static byte[] DecodeSegment(string segment, BaseMemoryPool pool)
     {
         using IMemoryOwner<byte> owner = TestSetup.Base64UrlDecoder(segment, pool);
 

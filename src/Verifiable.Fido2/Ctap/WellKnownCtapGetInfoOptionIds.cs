@@ -19,7 +19,7 @@ namespace Verifiable.Fido2.Ctap;
 /// remaining option-ID table entries (<c>uvAcfg</c>, <c>noMcGaPermissionsWithClientPin</c>, and so on)
 /// describe built-in user-verification surface this authenticator does not implement.
 /// <see cref="Ep"/> declares FIRST, ahead of <see cref="Plat"/>/<see cref="Rk"/> even though it is the
-/// NEWEST option modeled — R10: this file's declaration order equals canonical wire order, and
+/// NEWEST option modeled — this file's declaration order equals canonical wire order, and
 /// <c>"ep"</c> (length 2, <c>'e'</c> 0x65) sorts before every other length-2 key (<c>"rk"</c>,
 /// <c>"uv"</c>) and every longer one alike.
 /// </remarks>
@@ -60,8 +60,7 @@ public static class WellKnownCtapGetInfoOptionIds
     /// <summary>
     /// <c>uv</c>: whether the authenticator has a built-in user verification method and, if so, whether
     /// it is presently configured (default "no built-in user verification capability" when absent).
-    /// This simulator reports this option present unconditionally from the wave the fingerprint-
-    /// enrollment surface ships, tri-state on enrollment count.
+    /// This simulator reports this option present unconditionally, tri-state on enrollment count.
     /// </summary>
     public static readonly string Uv = Utf8Constants.ToInternedString(UvUtf8);
 
@@ -102,7 +101,7 @@ public static class WellKnownCtapGetInfoOptionIds
     /// <c>bioEnroll</c>: <c>authenticatorBioEnrollment</c> command support, a THREE-valued tri-state
     /// (present-true: supports the commands and has ≥1 enrollment; present-false: supports the
     /// commands with zero enrollments; absent: commands not supported). This simulator reports this
-    /// option present unconditionally from the wave the fingerprint-enrollment surface ships.
+    /// option present unconditionally, once the fingerprint-enrollment surface ships.
     /// </summary>
     public static readonly string BioEnroll = Utf8Constants.ToInternedString(BioEnrollUtf8);
 

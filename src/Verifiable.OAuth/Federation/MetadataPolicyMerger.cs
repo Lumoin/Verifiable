@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.OAuth.Federation;
 
@@ -39,7 +38,6 @@ namespace Verifiable.OAuth.Federation;
 /// was internally legal.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("MetadataPolicyMerger")]
 public static class MetadataPolicyMerger
 {
     /// <summary>

@@ -32,4 +32,4 @@ public delegate IMemoryOwner<byte> BuildKbtPayloadDelegate(
     string aud,
     long iat,
     string? cnonce,
-    MemoryPool<byte> pool);
+    BaseMemoryPool pool);

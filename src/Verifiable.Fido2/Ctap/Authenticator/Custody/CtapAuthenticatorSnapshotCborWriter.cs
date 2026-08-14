@@ -6,7 +6,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 
 /// <summary>
 /// The shipped default <see cref="EncodeCtapAuthenticatorSnapshotDelegate"/> implementation: writes the
-/// PERSISTENT subset of a <see cref="CtapAuthenticatorState"/> (contract R-2) plus its R-2b
+/// PERSISTENT subset of a <see cref="CtapAuthenticatorState"/> plus its
 /// personalization fingerprint as a versioned, definite-length-only CBOR array.
 /// </summary>
 /// <remarks>
@@ -15,7 +15,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// <see cref="CtapAuthenticatorSnapshotCborReader"/> already agree on every field's position by
 /// construction; a future format change bumps <see cref="CtapAuthenticatorSnapshotFormat.CurrentVersion"/>
 /// rather than growing this one layout, so <see cref="CtapAuthenticatorSnapshotCborReader"/> can keep
-/// rejecting anything but the version it understands (fail closed, R-5).
+/// rejecting anything but the version it understands (fail closed).
 /// </remarks>
 public static class CtapAuthenticatorSnapshotCborWriter
 {
@@ -48,7 +48,7 @@ public static class CtapAuthenticatorSnapshotCborWriter
     /// persist a credential whose signing key has no custody-exportable copy (see that property's own
     /// remarks for why the copy exists and which shipped backend populates it).
     /// </exception>
-    public static PooledMemory Write(CtapAuthenticatorState state, MemoryPool<byte> pool)
+    public static PooledMemory Write(CtapAuthenticatorState state, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(pool);
@@ -99,7 +99,7 @@ public static class CtapAuthenticatorSnapshotCborWriter
         //Copy the built bytes into a scrubbing carrier and zero the scratch buffer's written region (the
         //secret bytes — raw signing keys, PIN digest, credRandom — must not linger in the reusable
         //ArrayBufferWriter backing array after this call). The RETURNED PooledMemory is the only surviving
-        //holder of the plaintext, and it clears itself on dispose (contract R-5).
+        //holder of the plaintext, and it clears itself on dispose.
         PooledMemory payload = PooledMemory.FromBytes(writer.WrittenSpan, pool, CtapAuthenticatorCustodyBufferTags.SnapshotPayload);
         writer.Clear();
 
@@ -108,7 +108,7 @@ public static class CtapAuthenticatorSnapshotCborWriter
 
 
     /// <summary>
-    /// Writes one credential's full persisted field set (contract R-2: "every <c>CtapCredentialRecord</c>
+    /// Writes one credential's full persisted field set ("every <c>CtapCredentialRecord</c>
     /// field") as a fixed 16-item array.
     /// </summary>
     /// <param name="writer">The buffer to append to.</param>

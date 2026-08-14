@@ -193,7 +193,7 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed Name.</returns>
-    public static Tpm2bName Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static Tpm2bName Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ushort size = reader.ReadUInt16();
@@ -221,7 +221,7 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
     /// <param name="bytes">The Name bytes.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The created Name.</returns>
-    public static Tpm2bName Create(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
+    public static Tpm2bName Create(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         if(bytes.IsEmpty)

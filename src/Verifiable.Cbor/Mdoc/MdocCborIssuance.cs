@@ -77,7 +77,7 @@ public sealed class MdocIssuerSigningConfig
 /// encodes each <see cref="MdocLogicalIssuerSignedItem"/> as Tag 24 wire
 /// bytes, hashes those bytes to build the MSO <c>valueDigests</c> map,
 /// encodes the MSO, wraps it in Tag 24, signs the result as COSE_Sign1 via
-/// <see cref="Cose.SignAsync(ReadOnlyMemory{byte}, IReadOnlyDictionary{int, object}?, ReadOnlyMemory{byte}, BuildSigStructureDelegate, PrivateKeyMemory, MemoryPool{byte}, System.Threading.CancellationToken)"/>,
+/// <see cref="Cose.SignAsync(ReadOnlyMemory{byte}, IReadOnlyDictionary{int, object}?, ReadOnlyMemory{byte}, BuildSigStructureDelegate, PrivateKeyMemory, BaseMemoryPool, System.Threading.CancellationToken)"/>,
 /// and returns a wire-valid <see cref="MdocDocument"/> with item wire bytes
 /// filled and <see cref="MdocIssuerSigned.IssuerAuth"/> populated.
 /// </summary>
@@ -137,7 +137,7 @@ public static class MdocCborIssuance
         MdocLogicalDocument logical,
         MdocIssuerSigningConfig config,
         PrivateKeyMemory signingKey,
-        MemoryPool<byte> signaturePool,
+        BaseMemoryPool signaturePool,
         CancellationToken cancellationToken = default)
     {
         (MdocDocument document, _) = await SignVerboseAsync(
@@ -192,7 +192,7 @@ public static class MdocCborIssuance
         MdocLogicalDocument logical,
         MdocIssuerSigningConfig config,
         PrivateKeyMemory signingKey,
-        MemoryPool<byte> signaturePool,
+        BaseMemoryPool signaturePool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(logical);
@@ -285,9 +285,9 @@ public static class MdocCborIssuance
     /// <summary>
     /// Builds the COSE_Sign1 protected header map carrying <c>alg</c> and
     /// optionally <c>kid</c>. Returns a pool-routed carrier the caller
-    /// transfers to <see cref="Cose.SignAsync(EncodedCoseProtectedHeader, IReadOnlyDictionary{int, object}?, ReadOnlyMemory{byte}, BuildSigStructureDelegate, PrivateKeyMemory, MemoryPool{byte}, CancellationToken)"/>.
+    /// transfers to <see cref="Cose.SignAsync(EncodedCoseProtectedHeader, IReadOnlyDictionary{int, object}?, ReadOnlyMemory{byte}, BuildSigStructureDelegate, PrivateKeyMemory, BaseMemoryPool, CancellationToken)"/>.
     /// </summary>
-    private static EncodedCoseProtectedHeader BuildProtectedHeader(int coseAlgorithm, string? kid, MemoryPool<byte> pool)
+    private static EncodedCoseProtectedHeader BuildProtectedHeader(int coseAlgorithm, string? kid, BaseMemoryPool pool)
     {
         var writer = new System.Formats.Cbor.CborWriter(System.Formats.Cbor.CborConformanceMode.Canonical);
 

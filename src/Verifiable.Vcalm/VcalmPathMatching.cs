@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core;
 
 namespace Verifiable.Vcalm;
@@ -10,7 +9,6 @@ namespace Verifiable.Vcalm;
 /// <c>POST /callbacks/{id}</c>). The id is parsed from the trailing path segment when a skin handed the
 /// raw path through, or read from a skin's <see cref="RouteValues"/> when it did template routing.
 /// </summary>
-[DebuggerDisplay("VcalmPathMatching")]
 public static class VcalmPathMatching
 {
     /// <summary>

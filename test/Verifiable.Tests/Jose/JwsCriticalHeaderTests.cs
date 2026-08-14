@@ -21,7 +21,7 @@ internal sealed class JwsCriticalHeaderTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     /// <summary>Serialises a protected header to UTF-8 JSON bytes.</summary>
     private static readonly JwtHeaderSerializer HeaderSerializer =

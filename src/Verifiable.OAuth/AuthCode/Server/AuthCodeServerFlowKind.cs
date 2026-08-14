@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.AuthCode.Server;
@@ -11,7 +10,6 @@ namespace Verifiable.OAuth.AuthCode.Server;
 /// <remarks>
 /// Accessed via <c>FlowKind.AuthCodeServer</c>.
 /// </remarks>
-[DebuggerDisplay("AuthCodeServerFlowKind")]
 public sealed class AuthCodeServerFlowKind: StatefulFlowKind
 {
     /// <summary>The singleton instance.</summary>

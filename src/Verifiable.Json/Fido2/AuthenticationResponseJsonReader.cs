@@ -111,7 +111,7 @@ public static class AuthenticationResponseJsonReader
     /// disagree, a <c>Base64URLString</c> member is padded or is not valid base64url, or nesting
     /// exceeds the depth bound.
     /// </exception>
-    public static WebAuthnAssertionResponseEnvelope Read(ReadOnlyMemory<byte> document, MemoryPool<byte> pool)
+    public static WebAuthnAssertionResponseEnvelope Read(ReadOnlyMemory<byte> document, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -132,7 +132,7 @@ public static class AuthenticationResponseJsonReader
     /// decoding each <c>Base64URLString</c> member straight into the pooled carrier
     /// <see cref="Fido2AssertionVerifier"/> consumes.
     /// </summary>
-    private static WebAuthnAssertionResponseEnvelope ReadObject(ReadOnlySpan<byte> document, MemoryPool<byte> pool)
+    private static WebAuthnAssertionResponseEnvelope ReadObject(ReadOnlySpan<byte> document, BaseMemoryPool pool)
     {
         Utf8JsonReader reader = new(document, ReaderOptions);
         if(!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
@@ -389,7 +389,7 @@ public static class AuthenticationResponseJsonReader
     /// <summary>
     /// Requires <paramref name="memberName"/>'s value to be a JSON object and discards its contents
     /// unread — <c>AuthenticationExtensionsClientOutputsJSON</c> currently defines no members (see the
-    /// type-level remarks) and this wave's ceremony orchestration consumes none of its IANA-registered
+    /// type-level remarks) and this library's ceremony orchestration consumes none of its IANA-registered
     /// extension-specific entries.
     /// </summary>
     private static void RequireObjectAndSkipMembers(ref Utf8JsonReader reader, string memberName)
@@ -428,7 +428,7 @@ public static class AuthenticationResponseJsonReader
     /// </summary>
     /// <param name="decoded">The member's decoded bytes, valid only for the call's duration.</param>
     /// <param name="pool">The memory pool the resulting carrier rents from.</param>
-    private delegate TResult DecodedBase64UrlFactory<TResult>(ReadOnlySpan<byte> decoded, MemoryPool<byte> pool);
+    private delegate TResult DecodedBase64UrlFactory<TResult>(ReadOnlySpan<byte> decoded, BaseMemoryPool pool);
 
 
     /// <summary>
@@ -439,7 +439,7 @@ public static class AuthenticationResponseJsonReader
     /// <paramref name="factory"/> so it lands directly in the caller's pool-backed wire carrier rather
     /// than a standalone heap array.
     /// </summary>
-    private static TResult DecodeBase64Url<TResult>(string encoded, string memberName, MemoryPool<byte> pool, DecodedBase64UrlFactory<TResult> factory)
+    private static TResult DecodeBase64Url<TResult>(string encoded, string memberName, BaseMemoryPool pool, DecodedBase64UrlFactory<TResult> factory)
     {
         if(encoded.Contains('=', StringComparison.Ordinal))
         {
@@ -469,7 +469,7 @@ public static class AuthenticationResponseJsonReader
     /// known at this parse layer — the credential's stored public key resolves it downstream, in
     /// <see cref="Fido2AssertionVerifier"/>.
     /// </summary>
-    private static Signature CreateSignature(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
+    private static Signature CreateSignature(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(bytes.Length);
         try

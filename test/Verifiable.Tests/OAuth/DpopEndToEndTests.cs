@@ -42,7 +42,7 @@ internal sealed class DpopEndToEndTests
     [TestMethod]
     public async Task TokenIssuanceAndResourceCallValidateUnderDpopProtocol()
     {
-        //Phase 9b — proof-point migration to the HTTP-backed factory. Bytes
+        //Proof-point migration to the HTTP-backed factory. Bytes
         //flow through Kestrel ↔ HttpClient over a real socket; the test's
         //wire-level assertions (token_type from response body, cnf.jkt from
         //the JWT) now run against bytes that actually traversed HTTP framing.

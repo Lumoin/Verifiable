@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.Cryptography.Text;
 
@@ -10,7 +9,6 @@ namespace Verifiable.OAuth.Siop.Server;
 /// absolute URL in a produced artifact. The SIOP parallel of
 /// <see cref="Verifiable.OAuth.Oid4Vp.Oid4VpEndpointKeys"/>.
 /// </summary>
-[DebuggerDisplay("SiopVerifierEndpointKeys")]
 public static class SiopVerifierEndpointKeys
 {
     /// <summary>The UTF-8 source literal of <see cref="RequestUri"/>.</summary>

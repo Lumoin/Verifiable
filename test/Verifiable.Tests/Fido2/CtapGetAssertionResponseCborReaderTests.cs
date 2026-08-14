@@ -247,7 +247,7 @@ internal sealed class CtapGetAssertionResponseCborReaderTests
     }
 
 
-    /// <summary>Round-tripping a response carrying <c>largeBlobKey</c> (<c>0x07</c>, wavelb R8) recovers the key bytes verbatim.</summary>
+    /// <summary>Round-tripping a response carrying <c>largeBlobKey</c> (<c>0x07</c>) recovers the key bytes verbatim.</summary>
     [TestMethod]
     public void RoundTripsWithLargeBlobKey()
     {

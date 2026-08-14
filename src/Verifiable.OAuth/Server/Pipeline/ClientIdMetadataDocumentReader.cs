@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using Verifiable.JCose;
 using Verifiable.OAuth.Client;
@@ -136,7 +135,6 @@ public sealed record ClientIdMetadataDocumentReadResult
 /// conformance requirement on such fields.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("ClientIdMetadataDocumentReader")]
 public static class ClientIdMetadataDocumentReader
 {
     /// <summary>
@@ -373,7 +371,7 @@ public static class ClientIdMetadataDocumentReader
     //(javascript:) and their siblings (data:, vbscript:): those are never a legitimate redirect target and
     //a fetched document that carries one — which would then pass the exact-match redirect check and be
     //emitted as the authorization-response target — is treated as defective. post_logout_redirect_uris
-    //reuses this with ClientIdMetadataDocumentDefects.None since this wave's ledger scope gates only
+    //reuses this with ClientIdMetadataDocumentDefects.None since the defect ledger gates only
     //redirect_uris; a dangerous-scheme entry is still dropped rather than registered.
     private static (List<Uri> Values, ClientIdMetadataDocumentDefects Defect) ExtractAbsoluteUris(
         ReadOnlySpan<byte> document, ReadOnlySpan<byte> key, ClientIdMetadataDocumentDefects invalidEntryDefect)
@@ -412,7 +410,7 @@ public static class ClientIdMetadataDocumentReader
         || scheme.Equals("vbscript", StringComparison.OrdinalIgnoreCase);
 
 
-    //Logout URIs carry no CIMD-058 defect gate in this wave's ledger scope; a malformed value is
+    //Logout URIs carry no CIMD-058 defect gate; a malformed value is
     //simply omitted from the extracted metadata.
     private static Uri? ExtractAbsoluteUri(ReadOnlySpan<byte> document, ReadOnlySpan<byte> key)
     {

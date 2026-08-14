@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Oid4Vp;
@@ -22,7 +21,6 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// invoked, so the delegate can compose URLs that incorporate the token.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("Oid4VpContextKeys")]
 public static class Oid4VpContextKeys
 {
     //Input keys — set by the application before dispatching.

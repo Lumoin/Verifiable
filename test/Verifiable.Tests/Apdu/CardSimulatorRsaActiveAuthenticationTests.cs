@@ -67,7 +67,7 @@ internal sealed class CardSimulatorRsaActiveAuthenticationTests
 
 
     /// <summary>
-    /// The wave-7 recoverable-family (ISO/IEC 9796-2) CryptoEvent emission test over the real eMRTD Active
+    /// The recoverable-family (ISO/IEC 9796-2) CryptoEvent emission test over the real eMRTD Active
     /// Authentication path: <see cref="RsaActiveAuthenticationCardResponder.SignChallengeAsync"/> (the chip
     /// side, inside <see cref="CardSimulator"/>) and <see cref="ActiveAuthentication.AuthenticateAsync(ApduDevice, RsaPublicKey, ReadOnlyMemory{byte}, BaseMemoryPool, System.Threading.CancellationToken)"/>'s
     /// private RSA verify helper (the terminal side) both resolve and invoke the

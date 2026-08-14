@@ -54,7 +54,7 @@ public sealed record WebPlusValidationContext
     public required HashedKeyMatcher HashedKeyMatcher { get; init; }
 
     /// <summary>The memory pool for the transient hash, key and signature buffers.</summary>
-    public required MemoryPool<byte> MemoryPool { get; init; }
+    public required BaseMemoryPool MemoryPool { get; init; }
 
     /// <summary>The clock the verification consults for any time-bounded check.</summary>
     public required TimeProvider TimeProvider { get; init; }

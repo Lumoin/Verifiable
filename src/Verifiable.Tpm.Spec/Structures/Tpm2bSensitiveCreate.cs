@@ -49,7 +49,7 @@ public sealed class Tpm2bSensitiveCreate: IDisposable
     /// </summary>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>Empty sensitive creation buffer.</returns>
-    public static Tpm2bSensitiveCreate CreateEmpty(MemoryPool<byte> pool)
+    public static Tpm2bSensitiveCreate CreateEmpty(BaseMemoryPool pool)
     {
         return new Tpm2bSensitiveCreate(TpmsSensitiveCreate.CreateEmpty(pool));
     }
@@ -60,7 +60,7 @@ public sealed class Tpm2bSensitiveCreate: IDisposable
     /// <param name="password">The password string.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>Sensitive creation buffer with the specified auth.</returns>
-    public static Tpm2bSensitiveCreate WithPassword(string password, MemoryPool<byte> pool)
+    public static Tpm2bSensitiveCreate WithPassword(string password, BaseMemoryPool pool)
     {
         return new Tpm2bSensitiveCreate(TpmsSensitiveCreate.WithPassword(password, pool));
     }
@@ -73,7 +73,7 @@ public sealed class Tpm2bSensitiveCreate: IDisposable
     /// <param name="secret">The data to seal.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>Sensitive creation buffer carrying the data to seal.</returns>
-    public static Tpm2bSensitiveCreate ForSealedData(ReadOnlySpan<byte> secret, MemoryPool<byte> pool)
+    public static Tpm2bSensitiveCreate ForSealedData(ReadOnlySpan<byte> secret, BaseMemoryPool pool)
     {
         return new Tpm2bSensitiveCreate(
             new TpmsSensitiveCreate(Tpm2bAuth.CreateEmpty(pool), Tpm2bSensitiveData.Create(secret, pool)));
@@ -88,7 +88,7 @@ public sealed class Tpm2bSensitiveCreate: IDisposable
     /// <param name="userAuth">The authorization value the created object's <c>userAuth</c> is set to.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>Sensitive creation buffer carrying the authorization value and the data to seal.</returns>
-    public static Tpm2bSensitiveCreate ForSealedData(ReadOnlySpan<byte> secret, ReadOnlySpan<byte> userAuth, MemoryPool<byte> pool)
+    public static Tpm2bSensitiveCreate ForSealedData(ReadOnlySpan<byte> secret, ReadOnlySpan<byte> userAuth, BaseMemoryPool pool)
     {
         return new Tpm2bSensitiveCreate(
             new TpmsSensitiveCreate(Tpm2bAuth.Create(userAuth, pool), Tpm2bSensitiveData.Create(secret, pool)));
@@ -119,7 +119,7 @@ public sealed class Tpm2bSensitiveCreate: IDisposable
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed sensitive creation buffer.</returns>
-    public static Tpm2bSensitiveCreate Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static Tpm2bSensitiveCreate Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ushort size = reader.ReadUInt16();
 

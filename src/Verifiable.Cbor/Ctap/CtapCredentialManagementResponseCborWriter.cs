@@ -21,11 +21,11 @@ namespace Verifiable.Cbor.Ctap;
 /// <see cref="CtapClientPinResponseCborWriter"/>'s convention. <c>rp</c>/<c>user</c>/<c>credentialID</c>
 /// reuse the SHARED <see cref="CtapCommandEntityCborCodec"/> writers; <c>publicKey</c> reuses the SAME
 /// <see cref="CredentialPublicKeyCborWriter"/> <c>authenticatorMakeCredential</c>'s
-/// <c>attestedCredentialData</c> already uses (R11) — no new public-key codec. <c>credProtect</c>
-/// (<c>0x0A</c>) is emitted with the REAL persisted level (R11). <c>largeBlobKey</c> (<c>0x0B</c>) is
-/// emitted with the credential's REAL stored key when one exists (wavelb R8). <c>thirdPartyPayment</c>
-/// (<c>0x0C</c>) is NEVER emitted: this authenticator models no third-party payment extension — the
-/// overclaim R8's own convention exists to prevent.
+/// <c>attestedCredentialData</c> already uses — no new public-key codec. <c>credProtect</c>
+/// (<c>0x0A</c>) is emitted with the REAL persisted level. <c>largeBlobKey</c> (<c>0x0B</c>) is
+/// emitted with the credential's REAL stored key when one exists. <c>thirdPartyPayment</c>
+/// (<c>0x0C</c>) is NEVER emitted: this authenticator models no third-party payment extension —
+/// an overclaim this writer is careful never to make.
 /// </remarks>
 public static class CtapCredentialManagementResponseCborWriter
 {

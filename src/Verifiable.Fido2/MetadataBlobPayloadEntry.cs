@@ -39,13 +39,13 @@ namespace Verifiable.Fido2;
 /// otherwise-opaque metadata statement and typed as certificate carriers — the WebAuthn L3 §7.1
 /// step 23 "list of acceptable trust anchors" this AAGUID/AAID/ACKI's attestation chain validates
 /// against, per <see cref="MetadataBlobPayloadQueries.GetAttestationTrustAnchors"/>. The full
-/// metadata statement schema is a separate specification this wave does not model; only this field
+/// metadata statement schema is a separate specification this library does not model; only this field
 /// is typed. <see langword="null"/> when the entry's metadata statement carries no such array.
 /// Owned by this entry; disposed alongside it.
 /// </param>
 /// <param name="RawMetadataStatement">
 /// The entry's <c>metadataStatement</c> value, as the raw encoded JSON bytes — the escape hatch for
-/// every metadata statement field this wave does not type. An independent, GC-managed copy (not a
+/// every metadata statement field this library does not type. An independent, GC-managed copy (not a
 /// pooled carrier and not an alias into any other buffer), mirroring
 /// <c>PackedAttestationStatement.Signature</c>'s plain-array shape — it needs no explicit disposal
 /// and remains valid for this entry's own lifetime.

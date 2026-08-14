@@ -32,7 +32,13 @@ public enum AccessTokenAudPolicy
 
     /// <summary>
     /// The <c>aud</c> claim is never emitted. Useful only during a migration
-    /// where resource servers do not yet enforce the claim.
+    /// where resource servers do not yet enforce the claim. This is the
+    /// deployment's own explicit choice and wins even when
+    /// <see cref="IssuanceContext.Audience"/> is populated from a validated RFC 8707
+    /// <c>resource</c> request — <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">
+    /// RFC 8707 §2</see>'s "the authorization server SHOULD audience-restrict issued access
+    /// tokens" is a recommendation the deployment is entitled to override outright, not a MUST
+    /// that requires reconciling with an aud-suppressing policy.
     /// </summary>
     Suppressed
 }

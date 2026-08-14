@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Assessment;
@@ -52,7 +51,6 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// are not captured at construction.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("HaipOid4VpVerifierExecutor")]
 public static class HaipOid4VpVerifierExecutor
 {
     /// <summary>
@@ -115,7 +113,7 @@ public static class HaipOid4VpVerifierExecutor
         KeyAgreementDecryptDelegate keyAgreementDecryptDelegate,
         KeyDerivationDelegate keyDerivationDelegate,
         AeadDecryptDelegate aeadDecryptDelegate,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         KeyAgreementEncryptDelegate? keyAgreementEncryptDelegate = null,
         AeadEncryptDelegate? aeadEncryptDelegate = null,
         TagToEpkCrvDelegate? tagToEpkCrvConverter = null,
@@ -199,7 +197,7 @@ public static class HaipOid4VpVerifierExecutor
         ComputeSdJwtHashInputDelegate computeSdJwtHashInput,
         ComputeDigestDelegate computeDigest,
         IReadOnlyDictionary<string, ClaimIssuer<ValidationContext>> vpValidators,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         MdocVpVerificationSeams? mdocSeams = null,
         SdCwtVpVerificationSeams? sdCwtSeams = null,
         CommitmentReuseDetectionSeam? saltReuseSeam = null,
@@ -262,7 +260,7 @@ public static class HaipOid4VpVerifierExecutor
         KeyAgreementDecryptDelegate keyAgreementDecryptDelegate,
         KeyDerivationDelegate keyDerivationDelegate,
         AeadDecryptDelegate aeadDecryptDelegate,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         bool useRegistry,
         KeyAgreementEncryptDelegate? keyAgreementEncryptDelegate,
         AeadEncryptDelegate? aeadEncryptDelegate,
@@ -1104,7 +1102,7 @@ public static class HaipOid4VpVerifierExecutor
         string encryptedResponseJwt,
         MdocVpVerificationSeams? mdocSeams,
         DecodeDelegate decoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         if(mdocSeams is null)
         {

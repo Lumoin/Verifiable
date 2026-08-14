@@ -94,7 +94,7 @@ internal sealed class AcdcDi2iChainFlowTests
 
             //Verify the far credential (the delegator's) and capture the delegator's verified KEL anchors. The
             //delegator self-issues, so its KEL carries no delegated event and needs no delegating-seal resolver.
-            (AcdcMessage? farMessage, IReadOnlyList<KeriSeal>? delegatorAnchors) =
+            (AcdcMessage? farMessage, IReadOnlyList<KeriAnchoredSeal>? delegatorAnchors) =
                 await VerifyAcdcAsync(httpClient, BaseOf(delegatorHost, "/acdc"), BaseOf(delegatorHost, "/kel"), resolveDelegationSeal: null, disposables, cancellationToken).ConfigureAwait(false);
             if(farMessage is null || delegatorAnchors is null)
             {
@@ -107,7 +107,8 @@ internal sealed class AcdcDi2iChainFlowTests
             //Verify the near credential (the delegate's) by replaying its delegated inception against the delegator's
             //anchors: the delegate's KEL verifies only when the delegator anchors the delegating seal, so this fetch
             //is the cooperative-delegation check. A broken delegation makes the near credential unverifiable.
-            DelegationSealResolver resolveSeal = delegatedEvent => KeriDelegation.FindDelegationSeal(delegatorAnchors, delegatedEvent);
+            IReadOnlyList<KeriSeal> delegatorSeals = ToSeals(delegatorAnchors);
+            DelegationSealResolver resolveSeal = delegatedEvent => KeriDelegation.FindDelegationSeal(delegatorSeals, delegatedEvent);
             (AcdcMessage? nearMessage, _) =
                 await VerifyAcdcAsync(httpClient, BaseOf(delegateHost, "/acdc"), BaseOf(delegateHost, "/kel"), resolveSeal, disposables, cancellationToken).ConfigureAwait(false);
             if(nearMessage is null)
@@ -152,7 +153,7 @@ internal sealed class AcdcDi2iChainFlowTests
     /// <param name="pool">The pool the reconstructed buffers are rented from.</param>
     /// <param name="cancellationToken">A token to cancel the fetch.</param>
     /// <returns>The confirmed delegator AID, or <see langword="null"/> when the KEL's first event is not the delegate's delegated inception.</returns>
-    private static async Task<string?> ReadConfirmedDelegatorAsync(HttpClient httpClient, Uri delegateKelUri, string delegateAid, List<IDisposable> disposables, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<string?> ReadConfirmedDelegatorAsync(HttpClient httpClient, Uri delegateKelUri, string delegateAid, List<IDisposable> disposables, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         string delegateKelJson = await httpClient.GetStringAsync(delegateKelUri, cancellationToken).ConfigureAwait(false);
         using AcdcTestSupport.EncodedSerialization delegateKelBytes = AcdcTestSupport.Encode(delegateKelJson);
@@ -177,7 +178,7 @@ internal sealed class AcdcDi2iChainFlowTests
     /// <param name="disposables">The list reconstructed buffers are tracked on for disposal.</param>
     /// <param name="cancellationToken">A token to cancel the verification.</param>
     /// <returns>The verified message and the Issuer's anchors, or nulls when a proof fails.</returns>
-    private static async Task<(AcdcMessage? Message, IReadOnlyList<KeriSeal>? Anchors)> VerifyAcdcAsync(HttpClient httpClient, Uri acdcUri, Uri kelUri, DelegationSealResolver? resolveDelegationSeal, List<IDisposable> disposables, CancellationToken cancellationToken)
+    private static async Task<(AcdcMessage? Message, IReadOnlyList<KeriAnchoredSeal>? Anchors)> VerifyAcdcAsync(HttpClient httpClient, Uri acdcUri, Uri kelUri, DelegationSealResolver? resolveDelegationSeal, List<IDisposable> disposables, CancellationToken cancellationToken)
     {
         string acdcJson = await httpClient.GetStringAsync(acdcUri, cancellationToken).ConfigureAwait(false);
         using AcdcTestSupport.EncodedSerialization credential = AcdcTestSupport.Encode(acdcJson);
@@ -192,13 +193,28 @@ internal sealed class AcdcDi2iChainFlowTests
 
         string kelJson = await httpClient.GetStringAsync(kelUri, cancellationToken).ConfigureAwait(false);
         using AcdcTestSupport.EncodedSerialization kelBytes = AcdcTestSupport.Encode(kelJson);
-        IReadOnlyList<KeriSeal>? anchors = await AcdcFlowKit.VerifyKelAndReadAnchorsAsync(kelBytes.Memory, message.Issuer, resolveDelegationSeal, disposables, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<KeriAnchoredSeal>? anchors = await AcdcFlowKit.VerifyKelAndReadAnchorsAsync(kelBytes.Memory, message.Issuer, resolveDelegationSeal, disposables, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
         if(anchors is null || AcdcKeriBinding.FindDirectIssuanceSeal(anchors, message.Said) is null)
         {
             return (null, null);
         }
 
         return (message, anchors);
+    }
+
+
+    /// <summary>Projects AID-paired anchors down to their raw seals for <see cref="KeriDelegation.FindDelegationSeal"/>.</summary>
+    /// <param name="anchors">The AID-paired anchors.</param>
+    /// <returns>The raw seals, in the same order.</returns>
+    private static List<KeriSeal> ToSeals(IReadOnlyList<KeriAnchoredSeal> anchors)
+    {
+        var seals = new List<KeriSeal>(anchors.Count);
+        foreach(KeriAnchoredSeal anchor in anchors)
+        {
+            seals.Add(anchor.Seal);
+        }
+
+        return seals;
     }
 
 

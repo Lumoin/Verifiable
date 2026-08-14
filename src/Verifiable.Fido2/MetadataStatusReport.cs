@@ -28,7 +28,7 @@ namespace Verifiable.Fido2;
 /// <remarks>
 /// Every other <c>StatusReport</c> member (<c>authenticatorVersion</c>, <c>batchCertificate</c>,
 /// <c>url</c>, <c>certificationDescriptor</c>, and the certification/FIPS bookkeeping fields) is
-/// out of scope for this wave's capability surface — this type models only what the status-gating
+/// out of scope for this type's capability surface — this type models only what the status-gating
 /// evaluation in <see cref="MetadataBlobPayloadQueries.EvaluateStatus"/> and the compromise-report
 /// certificate lookup a caller's own policy delegate performs need.
 /// </remarks>

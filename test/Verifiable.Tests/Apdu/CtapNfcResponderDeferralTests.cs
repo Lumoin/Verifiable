@@ -24,7 +24,7 @@ internal sealed class CtapNfcResponderDeferralTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>A <see cref="CtapPayloadTransceiveDelegate"/> that never runs; used where deferral is expected to handle every eligible request.</summary>
-    private static ValueTask<PooledMemory> UnreachablePayload(ReadOnlyMemory<byte> request, MemoryPool<byte> pool, CancellationToken cancellationToken) =>
+    private static ValueTask<PooledMemory> UnreachablePayload(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
         throw new InvalidOperationException("The synchronous payload seam must not be reached for this command.");
 
     /// <summary>A one-byte opaque CTAP2 request envelope carried in the NFCCTAP_MSG data field; opaque to the responder and to every delegate in this file.</summary>
@@ -39,7 +39,7 @@ internal sealed class CtapNfcResponderDeferralTests
     {
         var stub = new DeferralStub(BuildScriptedPayload(10));
         using CtapNfcResponder responder = CtapNfcResponder.Create(UnreachablePayload, stub.TransceiveAsync, stub.PollAsync, stub.CancelAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         await SelectFidoAppletAsync(responder, pool, TestContext.CancellationToken);
 
@@ -56,7 +56,7 @@ internal sealed class CtapNfcResponderDeferralTests
     {
         var stub = new DeferralStub(BuildScriptedPayload(10));
         using CtapNfcResponder responder = CtapNfcResponder.Create(UnreachablePayload, stub.TransceiveAsync, stub.PollAsync, stub.CancelAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         await SelectFidoAppletAsync(responder, pool, TestContext.CancellationToken);
         using(ApduResponse msgResponse = await SendDeferredEligibleMsgAsync(responder, OpaquePayload, useExtended: true, pool, TestContext.CancellationToken))
@@ -79,7 +79,7 @@ internal sealed class CtapNfcResponderDeferralTests
         byte[] scriptedResponse = BuildScriptedPayload(40);
         var stub = new DeferralStub(scriptedResponse);
         using CtapNfcResponder responder = CtapNfcResponder.Create(UnreachablePayload, stub.TransceiveAsync, stub.PollAsync, stub.CancelAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         await SelectFidoAppletAsync(responder, pool, TestContext.CancellationToken);
         using(ApduResponse msgResponse = await SendDeferredEligibleMsgAsync(responder, OpaquePayload, useExtended: true, pool, TestContext.CancellationToken))
@@ -101,12 +101,12 @@ internal sealed class CtapNfcResponderDeferralTests
     public async Task PollCompletionAfterShortFormMsgChunksThroughRealApduExecutor()
     {
         //A response larger than one short-form frame (256 bytes), so the completion path genuinely
-        //exercises EmitChunk's 61xx/GET RESPONSE chaining (trap 8) rather than a single small frame.
+        //exercises EmitChunk's 61xx/GET RESPONSE chaining rather than a single small frame.
         byte[] scriptedResponse = BuildScriptedPayload(600);
         var stub = new DeferralStub(scriptedResponse);
         using CtapNfcResponder responder = CtapNfcResponder.Create(UnreachablePayload, stub.TransceiveAsync, stub.PollAsync, stub.CancelAsync);
         using var device = ApduDevice.Create(responder.TransceiveAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ApduResult<SelectResponse> selectResult = await device.SelectAsync(WellKnownAid.Fido, pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(selectResult.IsSuccess);
@@ -144,7 +144,7 @@ internal sealed class CtapNfcResponderDeferralTests
     {
         var stub = new DeferralStub(BuildScriptedPayload(10));
         using CtapNfcResponder responder = CtapNfcResponder.Create(UnreachablePayload, stub.TransceiveAsync, stub.PollAsync, stub.CancelAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         await SelectFidoAppletAsync(responder, pool, TestContext.CancellationToken);
         using(ApduResponse msgResponse = await SendDeferredEligibleMsgAsync(responder, OpaquePayload, useExtended: true, pool, TestContext.CancellationToken))
@@ -175,15 +175,15 @@ internal sealed class CtapNfcResponderDeferralTests
         //invocation of the deferral seam would be visible via a mismatched response, not just a counter.
         var stub = new DeferralStub(BuildScriptedPayload(99));
 
-        ValueTask<PooledMemory> Payload(ReadOnlyMemory<byte> request, MemoryPool<byte> pool, CancellationToken cancellationToken) =>
+        ValueTask<PooledMemory> Payload(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes(scriptedResponse, pool, CtapTags.ResponseEnvelope));
 
         using CtapNfcResponder responder = CtapNfcResponder.Create(Payload, stub.TransceiveAsync, stub.PollAsync, stub.CancelAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         await SelectFidoAppletAsync(responder, pool, TestContext.CancellationToken);
 
-        //TRAP 1 (:10799-10800): P1=0x00 — the SupportsGetResponseP1Bit (0x80) is deliberately absent,
+        //P1=0x00 (:10799-10800) — the SupportsGetResponseP1Bit (0x80) is deliberately absent,
         //even though this responder has deferral fully wired and the stub would happily park.
         using CommandApdu msg = CommandApdu.BuildCase4(
             WellKnownCtapCommandParameters.ClassByte, WellKnownCtapInstructionCodes.NfcCtapMsg.Code,
@@ -203,7 +203,7 @@ internal sealed class CtapNfcResponderDeferralTests
     {
         var stub = new DeferralStub(BuildScriptedPayload(10));
         using CtapNfcResponder responder = CtapNfcResponder.Create(UnreachablePayload, stub.TransceiveAsync, stub.PollAsync, stub.CancelAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using ApduResponse response = await SendGetResponsePollAsync(responder, 0x00, pool, TestContext.CancellationToken);
 
@@ -215,12 +215,12 @@ internal sealed class CtapNfcResponderDeferralTests
     [TestMethod]
     public async Task GetResponseCancelWithNothingPendingOnDeferralConfiguredResponderReturnsConditionsNotSatisfied()
     {
-        //TRAP 5, extended to the cancel variant: NfcCtapGetResponseOutOfSequenceReturnsConditionsNotSatisfied
-        //covers P1=0x00 against a non-deferring responder; this covers P1=CancelP1 against a
-        //deferral-configured one — the fence holds "regardless of P1" as the contract requires.
+        //Extends NfcCtapGetResponseOutOfSequenceReturnsConditionsNotSatisfied to the cancel variant: that
+        //test covers P1=0x00 against a non-deferring responder; this covers P1=CancelP1 against a
+        //deferral-configured one — the fence holds "regardless of P1" as required.
         var stub = new DeferralStub(BuildScriptedPayload(10));
         using CtapNfcResponder responder = CtapNfcResponder.Create(UnreachablePayload, stub.TransceiveAsync, stub.PollAsync, stub.CancelAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using ApduResponse response = await SendGetResponsePollAsync(responder, WellKnownCtapCommandParameters.CancelP1, pool, TestContext.CancellationToken);
 
@@ -238,7 +238,7 @@ internal sealed class CtapNfcResponderDeferralTests
         var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         var stub = new DeferralStub(BuildScriptedPayload(10));
         using CtapNfcResponder responder = CtapNfcResponder.Create(UnreachablePayload, stub.TransceiveAsync, stub.PollAsync, stub.CancelAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         await SelectFidoAppletAsync(responder, pool, TestContext.CancellationToken);
 
@@ -261,7 +261,7 @@ internal sealed class CtapNfcResponderDeferralTests
     {
         var stub = new DeferralStub(BuildScriptedPayload(10));
         using CtapNfcResponder responder = CtapNfcResponder.Create(UnreachablePayload, stub.TransceiveAsync, stub.PollAsync, stub.CancelAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         await SelectFidoAppletAsync(responder, pool, TestContext.CancellationToken);
         using(ApduResponse msgResponse = await SendDeferredEligibleMsgAsync(responder, OpaquePayload, useExtended: true, pool, TestContext.CancellationToken))
@@ -285,7 +285,7 @@ internal sealed class CtapNfcResponderDeferralTests
     {
         var stub = new DeferralStub(BuildScriptedPayload(10));
         using CtapNfcResponder responder = CtapNfcResponder.Create(UnreachablePayload, stub.TransceiveAsync, stub.PollAsync, stub.CancelAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         await SelectFidoAppletAsync(responder, pool, TestContext.CancellationToken);
         using(ApduResponse firstMsgResponse = await SendDeferredEligibleMsgAsync(responder, OpaquePayload, useExtended: true, pool, TestContext.CancellationToken))
@@ -308,7 +308,7 @@ internal sealed class CtapNfcResponderDeferralTests
     {
         var stub = new DeferralStub(BuildScriptedPayload(10));
         using CtapNfcResponder responder = CtapNfcResponder.Create(UnreachablePayload, stub.TransceiveAsync, stub.PollAsync, stub.CancelAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         await SelectFidoAppletAsync(responder, pool, TestContext.CancellationToken);
         using(ApduResponse msgResponse = await SendDeferredEligibleMsgAsync(responder, OpaquePayload, useExtended: true, pool, TestContext.CancellationToken))
@@ -371,7 +371,7 @@ internal sealed class CtapNfcResponderDeferralTests
 
 
     /// <summary>Selects the FIDO applet and asserts success, discarding the response.</summary>
-    private static async ValueTask SelectFidoAppletAsync(CtapNfcResponder responder, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async ValueTask SelectFidoAppletAsync(CtapNfcResponder responder, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using CommandApdu select = CommandApdu.BuildCase4(
             WellKnownCommandParameters.InterIndustryClassByte, InstructionCode.Select.Code,
@@ -386,7 +386,7 @@ internal sealed class CtapNfcResponderDeferralTests
 
     /// <summary>Sends an NFCCTAP_MSG with <see cref="WellKnownCtapCommandParameters.SupportsGetResponseP1Bit"/> set — the deferral-eligible shape. The caller owns and must dispose the returned response.</summary>
     private static async ValueTask<ApduResponse> SendDeferredEligibleMsgAsync(
-        CtapNfcResponder responder, byte[] payload, bool useExtended, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapNfcResponder responder, byte[] payload, bool useExtended, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using CommandApdu msg = CommandApdu.BuildCase4(
             WellKnownCtapCommandParameters.ClassByte, WellKnownCtapInstructionCodes.NfcCtapMsg.Code,
@@ -399,7 +399,7 @@ internal sealed class CtapNfcResponderDeferralTests
 
     /// <summary>Sends an NFCCTAP_GETRESPONSE with the given P1 (poll when not <see cref="WellKnownCtapCommandParameters.CancelP1"/>, cancel otherwise). The caller owns and must dispose the returned response.</summary>
     private static async ValueTask<ApduResponse> SendGetResponsePollAsync(
-        CtapNfcResponder responder, byte p1, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapNfcResponder responder, byte p1, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using CommandApdu poll = CommandApdu.BuildCase2(
             WellKnownCtapCommandParameters.ClassByte, WellKnownCtapInstructionCodes.NfcCtapGetResponse.Code,
@@ -453,7 +453,7 @@ internal sealed class CtapNfcResponderDeferralTests
         public void Resolve() => resolved = true;
 
         /// <summary>Always parks (the empty-marker convention) — this stub never completes synchronously.</summary>
-        public ValueTask<PooledMemory> TransceiveAsync(ReadOnlyMemory<byte> request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        public ValueTask<PooledMemory> TransceiveAsync(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             TransceiveCallCount++;
 
@@ -461,7 +461,7 @@ internal sealed class CtapNfcResponderDeferralTests
         }
 
         /// <summary>Returns the empty pending marker until <see cref="Resolve"/> has been called, then the scripted completed envelope.</summary>
-        public ValueTask<PooledMemory> PollAsync(MemoryPool<byte> pool, CancellationToken cancellationToken)
+        public ValueTask<PooledMemory> PollAsync(BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             PollCallCount++;
 
@@ -471,7 +471,7 @@ internal sealed class CtapNfcResponderDeferralTests
         }
 
         /// <summary>Always returns the bare <see cref="CtapNfcResponderDeferralTests.KeepaliveCancelEnvelope"/> — a cancel always resolves.</summary>
-        public ValueTask<PooledMemory> CancelAsync(MemoryPool<byte> pool, CancellationToken cancellationToken)
+        public ValueTask<PooledMemory> CancelAsync(BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             CancelCallCount++;
 

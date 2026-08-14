@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.Server;
@@ -27,7 +26,6 @@ namespace Verifiable.Server;
 /// when a matcher actually needs them.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("WellKnownHttpMethods")]
 public static class WellKnownHttpMethods
 {
     /// <summary>The UTF-8 source literal of <see cref="Get"/>.</summary>

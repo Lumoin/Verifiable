@@ -15,17 +15,17 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
-/// OIDC Phase A — UserInfo endpoint per
+/// UserInfo endpoint per
 /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#UserInfo">OIDC Core §5.3</see>.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Chunk 9 shipped the endpoint shell (registration, routing, bearer
-/// header gate). Chunk 10 adds the bearer-token validation: signature,
+/// The endpoint shell (registration, routing, bearer header gate) pairs
+/// with bearer-token validation: signature,
 /// <c>iss</c> match, <c>exp</c> check, and the OIDC Core §5.3.1 mandate
 /// that the access token's scope include <c>openid</c>. The response body
-/// at chunk 10 carries only the validated <c>sub</c>; chunk 11 will
-/// expand the body via the contributor walk.
+/// carries only the validated <c>sub</c>; a future contributor walk will
+/// expand it.
 /// </para>
 /// <para>
 /// Tests dispatch directly against <see cref="AuthorizationServer.DispatchAsync"/>
@@ -140,7 +140,7 @@ internal sealed class UserInfoEndpointTests
     }
 
 
-    //Chunk-10 + chunk-11 token-validation + contributor-walk tests — drive a
+    //Token-validation + contributor-walk tests — drive a
     //full PAR / Authorize / Token exchange to mint a real access token, then
     //present it to /userinfo.
 
@@ -305,7 +305,7 @@ internal sealed class UserInfoEndpointTests
 
 
     /// <summary>
-    /// Contract wave-4 D4: <see cref="UserInfoEndpoints"/>'s <c>openid</c>-in-token-scope check
+    /// <see cref="UserInfoEndpoints"/>'s <c>openid</c>-in-token-scope check
     /// (OIDC Core §5.3.1) is correct only because the token endpoint's scope source guarantees a
     /// <c>client_credentials</c> token — whose <c>sub</c> is the client itself, a machine, not an
     /// End-User — never carries <c>openid</c>: <c>DropIdentityScopesForNonEndUserGrant</c> narrows it

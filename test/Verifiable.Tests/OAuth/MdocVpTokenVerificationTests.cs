@@ -239,7 +239,7 @@ internal sealed class MdocVpTokenVerificationTests
     }
 
 
-    private static PublicKeyMemory ClonePublicKey(PublicKeyMemory source, MemoryPool<byte> pool)
+    private static PublicKeyMemory ClonePublicKey(PublicKeyMemory source, BaseMemoryPool pool)
     {
         ReadOnlySpan<byte> bytes = source.AsReadOnlySpan();
         IMemoryOwner<byte> owner = pool.Rent(bytes.Length);

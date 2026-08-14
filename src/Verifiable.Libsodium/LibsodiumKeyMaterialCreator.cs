@@ -31,7 +31,7 @@ namespace Verifiable.Libsodium
         /// is wrapped directly by this project's own binding rather than by an intermediate managed wrapper,
         /// so the native library's own version string is the meaningful CBOM identifier.
         /// </summary>
-        private static CryptoLibraryInfo CryptoLib { get; } = new("libsodium", LibsodiumNativeMethods.GetVersionString());
+        private static CryptoLibraryInfo CryptoLib { get; } = new("libsodium", LibsodiumCrypto.GetVersionString());
 
         /// <summary>
         /// Identifies this class as the provider class for CBOM/telemetry attribution.
@@ -44,10 +44,10 @@ namespace Verifiable.Libsodium
         /// </summary>
         /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
         /// <returns>A new key pair. The caller is responsible for disposing each key individually.</returns>
-        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateEd25519Keys(MemoryPool<byte> memoryPool)
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateEd25519Keys(BaseMemoryPool memoryPool)
         {
             ArgumentNullException.ThrowIfNull(memoryPool);
-            LibsodiumNativeMethods.EnsureInitialized();
+            LibsodiumCrypto.EnsureInitialized();
 
             ProviderOperation operation = new(nameof(CreateEd25519Keys));
             using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
@@ -60,16 +60,20 @@ namespace Verifiable.Libsodium
                 activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
             }
 
-            IMemoryOwner<byte> publicKeyOwner = memoryPool.Rent(LibsodiumNativeMethods.Ed25519PublicKeyLength);
-            IMemoryOwner<byte> privateKeyOwner = memoryPool.Rent(LibsodiumNativeMethods.Ed25519SeedLength);
+            IMemoryOwner<byte> publicKeyOwner = memoryPool.Rent(LibsodiumCrypto.Ed25519PublicKeyLength);
+            IMemoryOwner<byte> privateKeyOwner = memoryPool.Rent(LibsodiumCrypto.Ed25519SeedLength, AllocationKind.Pinned);
 
-            Span<byte> seed = stackalloc byte[LibsodiumNativeMethods.Ed25519SeedLength];
-            LibsodiumNativeMethods.randombytes_buf(seed, (nuint)seed.Length);
+            //The seed IS the stored private key (libsodium's seed form), so it is generated directly
+            //into the pinned rental and no transient copy of it ever lives in movable memory,
+            //mirroring the X25519 path below. On failure the pool's zero-on-return wipes it at
+            //dispose, so no separate clear may touch the span after the owner is disposed.
+            Span<byte> seed = privateKeyOwner.Memory.Span[..LibsodiumCrypto.Ed25519SeedLength];
+            LibsodiumCrypto.RandomBytes(seed);
 
             try
             {
-                using IMemoryOwner<byte> secretKeyScratchOwner = LibsodiumNativeMethods.AllocateSecretKeyScratch(
-                    "libsodium failed to allocate secure scratch memory for Ed25519 key generation.");
+                using IMemoryOwner<byte> secretKeyScratchOwner = LibsodiumCrypto.AllocateSecretKeyScratch(
+                    SodiumGuardedScratchPool.Instance, "libsodium failed to allocate secure scratch memory for Ed25519 key generation.");
                 using MemoryHandle secretKeyScratchHandle = secretKeyScratchOwner.Memory.Pin();
 
                 nint secretKeyScratch;
@@ -78,24 +82,18 @@ namespace Verifiable.Libsodium
                     secretKeyScratch = (nint)secretKeyScratchHandle.Pointer;
                 }
 
-                int keypairResult = LibsodiumNativeMethods.crypto_sign_seed_keypair(
-                    publicKeyOwner.Memory.Span[..LibsodiumNativeMethods.Ed25519PublicKeyLength], secretKeyScratch, seed);
+                int keypairResult = LibsodiumCrypto.SignSeedKeypair(
+                    publicKeyOwner.Memory.Span[..LibsodiumCrypto.Ed25519PublicKeyLength], secretKeyScratch, seed);
                 if(keypairResult != 0)
                 {
                     throw new CryptographicException("libsodium failed to generate an Ed25519 keypair.");
                 }
-
-                seed.CopyTo(privateKeyOwner.Memory.Span[..LibsodiumNativeMethods.Ed25519SeedLength]);
             }
             catch
             {
                 publicKeyOwner.Dispose();
                 privateKeyOwner.Dispose();
                 throw;
-            }
-            finally
-            {
-                seed.Clear();
             }
 
             var publicKeyMemory = new PublicKeyMemory(publicKeyOwner, CryptoTags.Ed25519PublicKey);
@@ -110,10 +108,10 @@ namespace Verifiable.Libsodium
         /// </summary>
         /// <param name="memoryPool">The memory pool to allocate key buffers from.</param>
         /// <returns>A new key pair. The caller is responsible for disposing each key individually.</returns>
-        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateX25519Keys(MemoryPool<byte> memoryPool)
+        public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateX25519Keys(BaseMemoryPool memoryPool)
         {
             ArgumentNullException.ThrowIfNull(memoryPool);
-            LibsodiumNativeMethods.EnsureInitialized();
+            LibsodiumCrypto.EnsureInitialized();
 
             ProviderOperation operation = new(nameof(CreateX25519Keys));
             using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.KeyGen);
@@ -126,14 +124,13 @@ namespace Verifiable.Libsodium
                 activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
             }
 
-            IMemoryOwner<byte> privateKeyOwner = memoryPool.Rent(LibsodiumNativeMethods.X25519ScalarLength);
-            LibsodiumNativeMethods.randombytes_buf(
-                privateKeyOwner.Memory.Span[..LibsodiumNativeMethods.X25519ScalarLength], (nuint)LibsodiumNativeMethods.X25519ScalarLength);
+            IMemoryOwner<byte> privateKeyOwner = memoryPool.Rent(LibsodiumCrypto.X25519ScalarLength, AllocationKind.Pinned);
+            LibsodiumCrypto.RandomBytes(privateKeyOwner.Memory.Span[..LibsodiumCrypto.X25519ScalarLength]);
 
-            IMemoryOwner<byte> publicKeyOwner = memoryPool.Rent(LibsodiumNativeMethods.X25519PointLength);
-            int scalarMultResult = LibsodiumNativeMethods.crypto_scalarmult_base(
-                publicKeyOwner.Memory.Span[..LibsodiumNativeMethods.X25519PointLength],
-                privateKeyOwner.Memory.Span[..LibsodiumNativeMethods.X25519ScalarLength]);
+            IMemoryOwner<byte> publicKeyOwner = memoryPool.Rent(LibsodiumCrypto.X25519PointLength);
+            int scalarMultResult = LibsodiumCrypto.ScalarMultBase(
+                publicKeyOwner.Memory.Span[..LibsodiumCrypto.X25519PointLength],
+                privateKeyOwner.Memory.Span[..LibsodiumCrypto.X25519ScalarLength]);
             if(scalarMultResult != 0)
             {
                 publicKeyOwner.Dispose();

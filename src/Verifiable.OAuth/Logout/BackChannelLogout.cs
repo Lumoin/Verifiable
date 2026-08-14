@@ -1,7 +1,6 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
@@ -34,7 +33,6 @@ namespace Verifiable.OAuth.Logout;
 /// builder returns the compact token and the verifier takes the already-resolved public key.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("BackChannelLogout")]
 public static class BackChannelLogout
 {
     /// <summary>The UTF-8 source literal of <see cref="BackChannelLogoutEventType"/>.</summary>
@@ -85,7 +83,7 @@ public static class BackChannelLogout
         EncodeDelegate base64UrlEncoder,
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         string? signingKeyId = null,
         CancellationToken cancellationToken = default)
     {
@@ -191,7 +189,7 @@ public static class BackChannelLogout
         string expectedAudience,
         DecodeDelegate base64UrlDecoder,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>?> payloadDeserializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(logoutToken);

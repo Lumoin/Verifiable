@@ -54,7 +54,7 @@ internal sealed class TpmCounterExtensionsTests
     {
         const int IncrementCount = 5;
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
 
@@ -78,7 +78,7 @@ internal sealed class TpmCounterExtensionsTests
     }
 
     /// <summary>
-    /// The wave's flagship rollback-protection positive, driven entirely through the verbs: increments a Counter
+    /// The flagship rollback-protection positive, driven entirely through the verbs: increments a Counter
     /// Index to a known value, undefines it with <see cref="TpmDeviceExtensions.UndefineCounterAsync"/>, redefines
     /// the same handle with <see cref="TpmDeviceExtensions.DefineCounterAsync"/>, and verifies the first
     /// <see cref="TpmDeviceExtensions.IncrementCounterAsync"/> of the redefined Index seeds strictly above (exactly
@@ -90,7 +90,7 @@ internal sealed class TpmCounterExtensionsTests
     {
         const int IncrementsBeforeDelete = 3;
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
 
@@ -136,7 +136,7 @@ internal sealed class TpmCounterExtensionsTests
     [TestMethod]
     public async Task IncrementCounterAsyncWithWrongAuthOnANoDaIndexReturnsBadAuth()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
 
@@ -163,7 +163,7 @@ internal sealed class TpmCounterExtensionsTests
     [TestMethod]
     public async Task DefineCounterAsyncDefaultsToDictionaryAttackProtected()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
 
@@ -191,7 +191,7 @@ internal sealed class TpmCounterExtensionsTests
     [TestMethod]
     public async Task ReadCounterAsyncBeforeFirstIncrementFailsWhileIncrementCounterAsyncOnTheSameFreshIndexSucceeds()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
 
@@ -224,7 +224,7 @@ internal sealed class TpmCounterExtensionsTests
     [TestMethod]
     public async Task RawNvWriteAgainstAVerbDefinedCounterIndexReturnsAttributes()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
 
@@ -258,7 +258,7 @@ internal sealed class TpmCounterExtensionsTests
         var simulator = new TpmSimulator("tpm-in-house-counter-verbs");
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
         using IMemoryOwner<byte> owner = pool.Rent(length);

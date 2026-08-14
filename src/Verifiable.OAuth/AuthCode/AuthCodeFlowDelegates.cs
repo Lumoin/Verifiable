@@ -103,7 +103,13 @@ public delegate ValueTask<FlowState?> LoadFlowStateByRequestUriDelegate(
 /// </para>
 /// </remarks>
 /// <param name="endpoint">The URI to POST to.</param>
-/// <param name="formFields">The form fields as <c>application/x-www-form-urlencoded</c>.</param>
+/// <param name="formFields">
+/// The form field occurrences as <c>application/x-www-form-urlencoded</c>. A key MAY appear
+/// more than once — <see cref="OutgoingFormFields"/> carries a genuinely repeated wire
+/// parameter (for example RFC 8707 §2's <c>resource</c>) as several distinct occurrences of
+/// the same key, never as one occurrence with several values joined by a delimiter — so the
+/// implementation must encode every occurrence rather than assuming one value per key.
+/// </param>
 /// <param name="headers">
 /// Composed request headers. The handler layer attaches scheme-specific
 /// values such as <c>Authorization</c> or <c>DPoP</c> here before
@@ -121,7 +127,7 @@ public delegate ValueTask<FlowState?> LoadFlowStateByRequestUriDelegate(
 /// </returns>
 public delegate ValueTask<HttpResponseData> SendFormPostDelegate(
     Uri endpoint,
-    System.Collections.Generic.IReadOnlyDictionary<string, string> formFields,
+    System.Collections.Generic.IReadOnlyCollection<System.Collections.Generic.KeyValuePair<string, string>> formFields,
     OutgoingHeaders headers,
     ExchangeContext context,
     CancellationToken cancellationToken);

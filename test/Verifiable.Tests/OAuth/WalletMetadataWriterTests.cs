@@ -20,7 +20,7 @@ namespace Verifiable.Tests.OAuth;
 [TestClass]
 internal sealed class WalletMetadataWriterTests
 {
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
     [TestMethod]
@@ -204,7 +204,7 @@ internal sealed class WalletMetadataWriterTests
     /// posted <c>jwks</c>, so the producer and the consumer agree on the wire shape.
     /// </summary>
     private static void AssertExchangeKeyRoundTrips(
-        Func<MemoryPool<byte>, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
+        Func<BaseMemoryPool, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
         string expectedCrv,
         CryptoAlgorithm expectedAlgorithm)
     {

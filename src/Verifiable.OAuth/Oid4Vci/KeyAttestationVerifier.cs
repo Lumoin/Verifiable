@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -31,7 +30,6 @@ namespace Verifiable.OAuth.Oid4Vci;
 /// <see cref="KeyAttestationVerificationFailureReason"/>, never a thrown exception.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("KeyAttestationVerifier")]
 public static class KeyAttestationVerifier
 {
     private static ReadOnlySpan<byte> KidHeaderUtf8 => "kid"u8;
@@ -85,7 +83,7 @@ public static class KeyAttestationVerifier
         ExchangeContext context,
         DecodeDelegate base64UrlDecoder,
         TimeProvider timeProvider,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeSpan clockSkew,
         CancellationToken cancellationToken) =>
         VerifyCoreAsync(
@@ -133,7 +131,7 @@ public static class KeyAttestationVerifier
         ExchangeContext context,
         DecodeDelegate base64UrlDecoder,
         TimeProvider timeProvider,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeSpan clockSkew,
         CancellationToken cancellationToken)
     {
@@ -167,7 +165,7 @@ public static class KeyAttestationVerifier
         ExchangeContext context,
         DecodeDelegate base64UrlDecoder,
         TimeProvider timeProvider,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeSpan clockSkew,
         CancellationToken cancellationToken)
     {

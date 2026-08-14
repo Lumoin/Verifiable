@@ -34,7 +34,7 @@ internal sealed class TokenIntrospectionJwtResponseTests
 
     private static readonly Uri ClientBaseUri = new("https://rs.introspection.client.test");
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private static readonly ImmutableHashSet<CapabilityIdentifier> IntrospectionCapabilities =
         ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthTokenIntrospection);

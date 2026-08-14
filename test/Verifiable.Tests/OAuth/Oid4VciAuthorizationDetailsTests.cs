@@ -48,7 +48,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     private const string DegreeConfigurationId = "UniversityDegree_dc_sd_jwt";
     private const string LicenseConfigurationId = "org.iso.18013.5.1.mDL";
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     /// <summary>The capabilities the Authorization Code flow tests need.</summary>
     private static readonly ImmutableHashSet<CapabilityIdentifier> AuthCodeCapabilities =

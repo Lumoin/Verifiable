@@ -69,7 +69,7 @@ internal sealed class AcdcDisclosureFlowTests
             Assert.IsTrue(await AcdcSaid.VerifyAsync(credential.Memory, message.Said, AcdcTestSupport.AgileDigest, BaseMemoryPool.Shared, cancellationToken), "Proof of Disclosure: the credential's SAID MUST verify over its received bytes.");
 
             //Proof of Issuance: fetch and replay the Issuer's KEL, then confirm it anchors the credential's SAID.
-            KeriDigestSeal? issuanceSeal = await VerifyIssuanceAsync(httpClient, issuer.BaseAddress, message, disposables, cancellationToken).ConfigureAwait(false);
+            KeriAnchoredSeal? issuanceSeal = await VerifyIssuanceAsync(httpClient, issuer.BaseAddress, message, disposables, cancellationToken).ConfigureAwait(false);
             Assert.IsNotNull(issuanceSeal, "Proof of Issuance: the Issuer's KEL MUST anchor a seal committing to the credential's SAID.");
 
             //Both fetches crossed their respective sockets.
@@ -144,7 +144,7 @@ internal sealed class AcdcDisclosureFlowTests
             using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(issuer.Certificate);
             AcdcMessage message = AcdcReader.Read(AcdcJson.DecodeFieldMap(acdc.Serialization));
 
-            KeriDigestSeal? issuanceSeal = await VerifyIssuanceAsync(httpClient, issuer.BaseAddress, message, disposables, cancellationToken).ConfigureAwait(false);
+            KeriAnchoredSeal? issuanceSeal = await VerifyIssuanceAsync(httpClient, issuer.BaseAddress, message, disposables, cancellationToken).ConfigureAwait(false);
 
             Assert.IsNull(issuanceSeal, "A KEL that anchors no seal for the credential's SAID MUST fail Proof of Issuance.");
         }
@@ -165,13 +165,13 @@ internal sealed class AcdcDisclosureFlowTests
     /// <param name="credential">The disclosed credential.</param>
     /// <param name="disposables">The list reconstructed buffers are tracked on for disposal.</param>
     /// <param name="cancellationToken">A token to cancel the verification.</param>
-    /// <returns>The issuance seal, or <see langword="null"/> when the KEL does not anchor the credential.</returns>
-    private static async Task<KeriDigestSeal?> VerifyIssuanceAsync(HttpClient httpClient, Uri issuerBase, AcdcMessage credential, List<IDisposable> disposables, CancellationToken cancellationToken)
+    /// <returns>The AID-paired issuance seal, or <see langword="null"/> when the KEL does not anchor the credential.</returns>
+    private static async Task<KeriAnchoredSeal?> VerifyIssuanceAsync(HttpClient httpClient, Uri issuerBase, AcdcMessage credential, List<IDisposable> disposables, CancellationToken cancellationToken)
     {
         string kelJson = await httpClient.GetStringAsync(new Uri(issuerBase, "/kel"), cancellationToken).ConfigureAwait(false);
         using AcdcTestSupport.EncodedSerialization kelBytes = AcdcTestSupport.Encode(kelJson);
 
-        IReadOnlyList<KeriSeal>? anchors = await AcdcFlowKit.VerifyKelAndReadAnchorsAsync(kelBytes.Memory, credential.Issuer, disposables, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<KeriAnchoredSeal>? anchors = await AcdcFlowKit.VerifyKelAndReadAnchorsAsync(kelBytes.Memory, credential.Issuer, disposables, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
 
         return anchors is null ? null : AcdcKeriBinding.FindDirectIssuanceSeal(anchors, credential.Said);
     }

@@ -55,7 +55,7 @@ public static class CtapMakeCredentialRequestCborReader
     /// </exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The clientDataHash digest's ownership transfers to the returned CtapMakeCredentialRequest on success and is explicitly disposed (alongside user/excludeList) in the surrounding catch blocks on failure — the CA2000 flag is a false positive.")]
-    public static CtapMakeCredentialRequest Read(ReadOnlyMemory<byte> parametersCbor, MemoryPool<byte> pool)
+    public static CtapMakeCredentialRequest Read(ReadOnlyMemory<byte> parametersCbor, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -179,7 +179,7 @@ public static class CtapMakeCredentialRequestCborReader
         }
 
         //Looks up a Required top-level member's still-encoded bytes, failing closed with the member's
-        //wire name if absent — classified MissingRequiredParameter (R7's third bucket), distinct from
+        //wire name if absent — classified MissingRequiredParameter, distinct from
         //a nested structure's own missing member (UnexpectedStructure).
         static ReadOnlyMemory<byte> RequireMember(IReadOnlyDictionary<int, ReadOnlyMemory<byte>> parameters, int key, string memberName)
         {

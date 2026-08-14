@@ -31,7 +31,7 @@ public sealed class CmsSignedData(IMemoryOwner<byte> sensitiveMemory, Tag tag, A
     /// buffer in a <see cref="CmsSignedData"/> carrying <see cref="CryptoTags.CmsEncodedSignedData"/>.
     /// The caller takes ownership of the returned carrier.
     /// </summary>
-    public static CmsSignedData FromBytes(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
+    public static CmsSignedData FromBytes(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

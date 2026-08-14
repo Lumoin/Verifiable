@@ -226,7 +226,7 @@ internal sealed class ChipAuthenticationTests
         /// </summary>
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "ApduResponse takes ownership of the rented buffer; the caller disposes the returned result.")]
         public async ValueTask<ApduResult<ApduResponse>> TransceiveAsync(
-            ReadOnlyMemory<byte> commandApdu, MemoryPool<byte> pool, CancellationToken cancellationToken)
+            ReadOnlyMemory<byte> commandApdu, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             using SecureMessagingCommand command = await session.UnprotectCommandAsync(
                 commandApdu, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);

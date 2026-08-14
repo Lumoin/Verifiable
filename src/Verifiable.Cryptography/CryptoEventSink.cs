@@ -35,7 +35,7 @@ namespace Verifiable.Cryptography;
 /// object around the same key material (the resolver/binder overloads in <c>Verifiable.JCose</c>): a
 /// caller that already holds — or can cheaply construct — a key object gets <see cref="CryptographicKeyEvents.Events"/>
 /// for free through the choke point; a caller that only holds raw, disassembled key material (the APDU
-/// "forced" sites, per the wave-7 emit-surface scout) uses this sink parameter instead, with no
+/// "forced" sites) uses this sink parameter instead, with no
 /// <c>InternalsVisibleTo</c> growth and no new public <c>Emit</c> surface.
 /// </para>
 /// </remarks>

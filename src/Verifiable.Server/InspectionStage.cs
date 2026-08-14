@@ -15,7 +15,6 @@ namespace Verifiable.Server;
 /// <see cref="OutgoingResponseStage"/>. Additional stages may be added as
 /// new pipeline phases gain inspectability needs.
 /// </remarks>
-[DebuggerDisplay("InspectionStage")]
 public abstract record InspectionStage;
 
 
@@ -25,7 +24,6 @@ public abstract record InspectionStage;
 /// server. Always fires, including on requests that go on to fail
 /// validation or match no endpoint.
 /// </summary>
-[DebuggerDisplay("IncomingRequestStage")]
 public sealed record IncomingRequestStage(IncomingRequest Request): InspectionStage;
 
 
@@ -52,7 +50,6 @@ public sealed record MatchedStage(
 /// The natural emission point for replay-determinism event capture; see
 /// <c>documents/AuthorizationServerDesign.md §2.4</c>.
 /// </remarks>
-[DebuggerDisplay("StateTransitionStage")]
 public sealed record StateTransitionStage(
     FlowState Before,
     FlowInput Input,

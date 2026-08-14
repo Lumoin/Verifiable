@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.OAuth.Federation;
 
@@ -31,7 +30,6 @@ namespace Verifiable.OAuth.Federation;
 /// has no historical keys to publish; the endpoint then responds HTTP 404.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("HistoricalKeysContribution")]
 public sealed record HistoricalKeysContribution
 {
     /// <summary>

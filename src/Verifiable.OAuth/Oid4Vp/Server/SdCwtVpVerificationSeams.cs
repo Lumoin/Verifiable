@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.JCose;
 
@@ -27,7 +26,6 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 /// there is no <c>sd_hash</c> and no SessionTranscript, so those axes report N/A.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("SdCwtVpVerificationSeams")]
 public sealed record SdCwtVpVerificationSeams
 {
     /// <summary>Parses the KBT COSE_Sign1. Wired to <c>CoseSerialization.ParseCoseSign1</c>.</summary>

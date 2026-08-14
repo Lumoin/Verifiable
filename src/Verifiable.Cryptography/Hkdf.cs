@@ -36,7 +36,7 @@ namespace Verifiable.Cryptography;
 /// </para>
 /// <para>
 /// The inner HMAC routes through the registered <see cref="ComputeHmacDelegate"/> via
-/// <see cref="CryptographicKeyEvents.ComputeHmacAsync(ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, int, Tag, MemoryPool{byte}, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>
+/// <see cref="CryptographicKeyEvents.ComputeHmacAsync(ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, int, Tag, BaseMemoryPool, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>
 /// - the exact same seam <see cref="Kdfa"/> composes its own HMAC rounds through - so HKDF inherits
 /// the same observability, provenance stamping, and backend-agility (a hardware-bound HMAC backend
 /// serves HKDF exactly as it serves KDFa) without importing a provider assembly or calling
@@ -44,8 +44,11 @@ namespace Verifiable.Cryptography;
 /// </para>
 /// <para>
 /// All intermediate allocations come from the supplied <see cref="MemoryPool{T}"/> and are zeroed
-/// before disposal. The returned owner holds derived (and, for <see cref="ExtractAsync"/>, secret
-/// pseudorandom) key material; the caller must zero and dispose it after use.
+/// before disposal. Every rental here is <see cref="AllocationKind.Pinned"/> — the PRK, the OKM,
+/// the chained <c>T(i-1)</c> block, and the per-round HMAC input all hold secret key material, and
+/// pinning ensures the zeroize-on-dispose actually wipes the memory rather than a GC-moved copy.
+/// The returned owner holds derived (and, for <see cref="ExtractAsync"/>, secret pseudorandom) key
+/// material; the caller must zero and dispose it after use.
 /// </para>
 /// </remarks>
 public static class Hkdf
@@ -72,7 +75,7 @@ public static class Hkdf
         HashAlgorithmName hashAlgorithm,
         ReadOnlyMemory<byte> salt,
         ReadOnlyMemory<byte> ikm,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -85,7 +88,7 @@ public static class Hkdf
         using HmacValue prk = await CryptographicKeyEvents.ComputeHmacAsync(
             ikm, salt, digestSize, tag, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        IMemoryOwner<byte> output = pool.Rent(digestSize);
+        IMemoryOwner<byte> output = pool.Rent(digestSize, AllocationKind.Pinned);
         prk.AsReadOnlySpan().CopyTo(output.Memory.Span);
 
         return output;
@@ -111,7 +114,7 @@ public static class Hkdf
         ReadOnlyMemory<byte> prk,
         ReadOnlyMemory<byte> info,
         int outputLength,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -130,11 +133,11 @@ public static class Hkdf
         Tag tag = HmacTag(hashAlgorithm);
         int iterations = (outputLength + digestSize - 1) / digestSize;
 
-        IMemoryOwner<byte> output = pool.Rent(outputLength);
+        IMemoryOwner<byte> output = pool.Rent(outputLength, AllocationKind.Pinned);
 
         //T(i-1) is carried in this single reusable buffer across rounds; chainLength is 0 before the
         //first round (T(0) is the empty string) and digestSize from the second round onward.
-        using IMemoryOwner<byte> chain = pool.Rent(digestSize);
+        using IMemoryOwner<byte> chain = pool.Rent(digestSize, AllocationKind.Pinned);
         int chainLength = 0;
 
         try
@@ -143,7 +146,7 @@ public static class Hkdf
             for(int counter = 1; counter <= iterations; ++counter)
             {
                 int inputLength = chainLength + info.Length + 1;
-                using IMemoryOwner<byte> inputOwner = pool.Rent(inputLength);
+                using IMemoryOwner<byte> inputOwner = pool.Rent(inputLength, AllocationKind.Pinned);
                 Memory<byte> inputMemory = inputOwner.Memory[..inputLength];
 
                 try
@@ -212,7 +215,7 @@ public static class Hkdf
         ReadOnlyMemory<byte> ikm,
         ReadOnlyMemory<byte> info,
         int outputLength,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(pool);

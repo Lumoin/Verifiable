@@ -42,15 +42,14 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
     /// <summary>The End-User the offered Credential is about — the seam-resolved subject.</summary>
     private const string OfferSubject = "urn:uuid:end-user-42";
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     /// <summary>
     /// The capabilities a truly grant-only tenant needs: the grant capability itself, plus discovery
     /// so the <c>grant_types_supported</c> advertisement can be asserted. No
     /// <see cref="WellKnownCapabilityIdentifiers.OAuthAuthorizationCode"/> — grant-only issuance works
     /// because <see cref="Rfc9068AccessTokenProducer"/>'s <c>RequiredCapability</c> is
-    /// <see langword="null"/>, an optional tenant-feature gate rather than a grant-capability proxy
-    /// (contract wave-4 D2).
+    /// <see langword="null"/>, an optional tenant-feature gate rather than a grant-capability proxy.
     /// </summary>
     private static readonly ImmutableHashSet<CapabilityIdentifier> GrantCapabilities =
         ImmutableHashSet.Create(
@@ -64,8 +63,8 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
     /// access token bound to the offer's subject, echoes the granted scope, carries the §6.2
     /// <c>Cache-Control: no-store</c>, and omits the <c>c_nonce</c> the 1.0 token response no
     /// longer carries. The granted scope is a Credential-issuance scope, not <c>openid</c> — the
-    /// Pre-Authorized Code grant establishes no authenticated End-User session, so contract wave-4
-    /// D4 narrows <c>openid</c> and the OIDC identity scopes away (see
+    /// Pre-Authorized Code grant establishes no authenticated End-User session, so <c>openid</c>
+    /// and the OIDC identity scopes are narrowed away (see
     /// <see cref="OpenidAndIdentityScopesAreDroppedFromPreAuthorizedCodeGrantedScopeWithOtelEvent"/>
     /// for that narrowing proven directly).
     /// </summary>
@@ -357,7 +356,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
 
 
     /// <summary>
-    /// Contract wave-4 D4 source layer: the Pre-Authorized Code grant establishes no authenticated
+    /// The Pre-Authorized Code grant establishes no authenticated
     /// End-User session (there is no prior Authorization Request), so a seam-granted scope carrying
     /// <c>openid</c> and every OIDC Core §5.4 identity scope has them narrowed away (RFC 6749 §3.3)
     /// before the granted scope ever reaches the token — the issued access token's <c>scope</c> claim

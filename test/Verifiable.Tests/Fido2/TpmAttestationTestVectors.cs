@@ -269,7 +269,7 @@ internal static class TpmAttestationTestVectors
         //Ownership of each object transfers into the next (Tpm2bName pair -> TpmsCertifyInfo -> TpmuAttest ->
         //TpmsAttest), whose Dispose() cascades down; the redundant using declarations here satisfy CA2000 and
         //are safe because every disposal in this chain is idempotent.
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using Tpm2bName qualifiedSigner = Tpm2bName.Create(signerName, pool);
         using Tpm2bData extraDataBuffer = Tpm2bData.Create(extraData, pool);
         using Tpm2bName certifiedName = Tpm2bName.Create(certifiedObjectName, pool);
@@ -297,7 +297,7 @@ internal static class TpmAttestationTestVectors
         ArgumentNullException.ThrowIfNull(signerName);
         ArgumentNullException.ThrowIfNull(extraData);
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using Tpm2bName qualifiedSigner = Tpm2bName.Create(signerName, pool);
         using Tpm2bData extraDataBuffer = Tpm2bData.Create(extraData, pool);
         using TpmlPcrSelection pcrSelection = TpmlPcrSelection.Create(TpmAlgIdConstants.TPM_ALG_SHA256, [0], pool);

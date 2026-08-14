@@ -1,3 +1,4 @@
+using Lumoin.Base;
 using System.Buffers;
 using System.Buffers.Text;
 using Verifiable.Cesr.Text;
@@ -70,7 +71,7 @@ public static class CesrPrimitiveCodec
     /// <param name="pool">The memory pool from which to allocate the result.</param>
     /// <param name="soft">The soft value for a special fixed code, exclusive of extra prepad; ignored otherwise.</param>
     /// <returns>Pooled memory holding the qb2 bytes; the caller must dispose it. The length is the full primitive size.</returns>
-    public static IMemoryOwner<byte> EncodeBinary(string code, ReadOnlySpan<byte> raw, MemoryPool<byte> pool, string soft = "")
+    public static IMemoryOwner<byte> EncodeBinary(string code, ReadOnlySpan<byte> raw, BaseMemoryPool pool, string soft = "")
     {
         ArgumentNullException.ThrowIfNull(code);
         ArgumentNullException.ThrowIfNull(pool);
@@ -99,7 +100,7 @@ public static class CesrPrimitiveCodec
     /// <param name="qb64">The fully qualified Base64URL text; only the leading primitive is consumed.</param>
     /// <param name="pool">The memory pool from which to allocate the recovered raw value.</param>
     /// <returns>The decoded code, soft value, and raw value. The caller must dispose the result.</returns>
-    public static CesrParsedPrimitive DecodeText(ReadOnlySpan<char> qb64, MemoryPool<byte> pool) =>
+    public static CesrParsedPrimitive DecodeText(ReadOnlySpan<char> qb64, BaseMemoryPool pool) =>
         DecodeText(qb64, pool, out _);
 
 
@@ -111,7 +112,7 @@ public static class CesrPrimitiveCodec
     /// <param name="pool">The memory pool from which to allocate the recovered raw value.</param>
     /// <param name="consumedChars">The number of leading characters the decoded primitive occupied.</param>
     /// <returns>The decoded code, soft value, and raw value. The caller must dispose the result.</returns>
-    public static CesrParsedPrimitive DecodeText(ReadOnlySpan<char> qb64, MemoryPool<byte> pool, out int consumedChars)
+    public static CesrParsedPrimitive DecodeText(ReadOnlySpan<char> qb64, BaseMemoryPool pool, out int consumedChars)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -191,7 +192,7 @@ public static class CesrPrimitiveCodec
     /// <param name="qb2">The fully qualified binary bytes; only the leading primitive is consumed.</param>
     /// <param name="pool">The memory pool from which to allocate the recovered raw value.</param>
     /// <returns>The decoded code, soft value, and raw value. The caller must dispose the result.</returns>
-    public static CesrParsedPrimitive DecodeBinary(ReadOnlySpan<byte> qb2, MemoryPool<byte> pool) =>
+    public static CesrParsedPrimitive DecodeBinary(ReadOnlySpan<byte> qb2, BaseMemoryPool pool) =>
         DecodeBinary(qb2, pool, out _);
 
 
@@ -203,7 +204,7 @@ public static class CesrPrimitiveCodec
     /// <param name="pool">The memory pool from which to allocate the recovered raw value.</param>
     /// <param name="consumedBytes">The number of leading bytes the decoded primitive occupied.</param>
     /// <returns>The decoded code, soft value, and raw value. The caller must dispose the result.</returns>
-    public static CesrParsedPrimitive DecodeBinary(ReadOnlySpan<byte> qb2, MemoryPool<byte> pool, out int consumedBytes)
+    public static CesrParsedPrimitive DecodeBinary(ReadOnlySpan<byte> qb2, BaseMemoryPool pool, out int consumedBytes)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -258,7 +259,7 @@ public static class CesrPrimitiveCodec
     }
 
 
-    private static CesrParsedPrimitive BuildParsed(string code, string soft, ReadOnlySpan<byte> raw, MemoryPool<byte> pool)
+    private static CesrParsedPrimitive BuildParsed(string code, string soft, ReadOnlySpan<byte> raw, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(Math.Max(raw.Length, 1));
         raw.CopyTo(owner.Memory.Span);

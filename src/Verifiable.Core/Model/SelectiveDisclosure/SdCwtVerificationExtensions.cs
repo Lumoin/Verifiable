@@ -55,7 +55,7 @@ public static class SdCwtVerificationExtensions
         /// <paramref name="verificationDelegate"/>. The signature covers the
         /// protected header and the redacted payload — selective disclosures
         /// in the unprotected header don't participate, so a presentation
-        /// token produced by <see cref="SdToken{TEnvelope}.SelectDisclosures(System.Func{SdDisclosure, bool}, MemoryPool{byte})"/>
+        /// token produced by <see cref="SdToken{TEnvelope}.SelectDisclosures(System.Func{SdDisclosure, bool}, BaseMemoryPool)"/>
         /// verifies under the same issuer key as the original.
         /// </summary>
         /// <param name="issuerVerificationKey">The issuer's public key for signature verification.</param>
@@ -77,7 +77,7 @@ public static class SdCwtVerificationExtensions
         /// </returns>
         public async ValueTask<bool> VerifyIssuerSignatureAsync(
             PublicKeyMemory issuerVerificationKey,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             VerificationDelegate verificationDelegate,
             ParseCoseSign1Delegate parseCoseSign1,
             BuildSigStructureDelegate buildSigStructure,
@@ -130,7 +130,7 @@ public static class SdCwtVerificationExtensions
         /// </returns>
         public ValueTask<bool> VerifyIssuerSignatureAsync(
             PublicKeyMemory issuerVerificationKey,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             ParseCoseSign1Delegate parseCoseSign1,
             BuildSigStructureDelegate buildSigStructure,
             CancellationToken cancellationToken = default)
@@ -195,7 +195,7 @@ public static class SdCwtVerificationExtensions
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The returned SdCwtVerificationContext takes ownership of the parsed message; the caller disposes the context.")]
         public async ValueTask<(SdVerificationResult Result, SdCwtVerificationContext? Context)> VerifyVerboseAsync(
             PublicKeyMemory issuerVerificationKey,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             VerificationDelegate verificationDelegate,
             ParseCoseSign1Delegate parseCoseSign1,
             ExtractSdCwtPathsDelegate extractPaths,
@@ -286,7 +286,7 @@ public static class SdCwtVerificationExtensions
         /// </returns>
         public async ValueTask<SdVerificationResult> VerifyAsync(
             PublicKeyMemory issuerVerificationKey,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             VerificationDelegate verificationDelegate,
             ParseCoseSign1Delegate parseCoseSign1,
             ExtractSdCwtPathsDelegate extractPaths,
@@ -328,7 +328,7 @@ public static class SdCwtVerificationExtensions
         /// <returns>The verification result and, once past the signature check, the context.</returns>
         public ValueTask<(SdVerificationResult Result, SdCwtVerificationContext? Context)> VerifyVerboseAsync(
             PublicKeyMemory issuerVerificationKey,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             ParseCoseSign1Delegate parseCoseSign1,
             ExtractSdCwtPathsDelegate extractPaths,
             BuildSigStructureDelegate buildSigStructure,
@@ -373,7 +373,7 @@ public static class SdCwtVerificationExtensions
         /// <returns>A per-claim <see cref="SdVerificationResult"/>.</returns>
         public ValueTask<SdVerificationResult> VerifyAsync(
             PublicKeyMemory issuerVerificationKey,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             ParseCoseSign1Delegate parseCoseSign1,
             ExtractSdCwtPathsDelegate extractPaths,
             BuildSigStructureDelegate buildSigStructure,

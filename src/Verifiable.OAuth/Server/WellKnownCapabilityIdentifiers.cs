@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.OAuth.Server;
 
@@ -24,7 +23,6 @@ namespace Verifiable.OAuth.Server;
 /// specific additions live near their consuming code.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("WellKnownCapabilityIdentifiers")]
 public static class WellKnownCapabilityIdentifiers
 {
     //OAuth 2.0 core grant types.

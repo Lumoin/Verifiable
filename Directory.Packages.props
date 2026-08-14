@@ -9,26 +9,25 @@
     The build system enforces that core libraries do not have hard dependencies on serialization libraries, making them interchangeable.
   -->
   <ItemGroup Label="Library">
-    <PackageVersion Include="Lumoin.Base" Version="0.0.7" />
-    <PackageVersion Include="Lumoin.Base.Sodium" Version="0.0.7" />
-    <PackageVersion Include="Lumoin.Veridical.Core" Version="0.0.4" />
-    <PackageVersion Include="Lumoin.Veridical.Hashing" Version="0.0.4" />
-    <PackageVersion Include="Lumoin.Veridical.Backends.Managed" Version="0.0.4" />
-    <PackageVersion Include="Lumoin.Veridical.Bbs" Version="0.0.4" />
-    <PackageVersion Include="libsodium" Version="1.0.22" />
+    <PackageVersion Include="Lumoin.Base" Version="0.0.9" />
+    <PackageVersion Include="Lumoin.Base.Libsodium" Version="0.0.9" />
+    <PackageVersion Include="Lumoin.Veridical.Core" Version="0.0.6" />
+    <PackageVersion Include="Lumoin.Veridical.Hashing" Version="0.0.6" />
+    <PackageVersion Include="Lumoin.Veridical.Backends.Managed" Version="0.0.6" />
+    <PackageVersion Include="Lumoin.Veridical.Bbs" Version="0.0.6" />
     <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
-    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Sbom.Targets" Version="4.1.5" />
-    <PackageVersion Include="BouncyCastle.Cryptography" Version="2.6.2" />
-    <PackageVersion Include="System.Collections.Immutable" Version="10.0.10" />
-    <PackageVersion Include="System.Formats.Cbor" Version="10.0.10" />
-    <PackageVersion Include="System.Net.Http.Json" Version="10.0.10" />
-    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.10" />
-    <PackageVersion Include="System.Text.Json" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.8.0" />
-    <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.10" />
-    <PackageVersion Include="SIL.ReleaseTasks" Version="3.2.0" />
+    <PackageVersion Include="BouncyCastle.Cryptography" Version="2.7.0" />
+    <PackageVersion Include="System.Collections.Immutable" Version="10.0.11" />
+    <PackageVersion Include="System.Formats.Cbor" Version="10.0.11" />
+    <PackageVersion Include="System.Net.Http.Json" Version="10.0.11" />
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.11" />
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.11" />
+    <PackageVersion Include="System.Text.Json" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.9.0" />
+    <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.11" />
   </ItemGroup>
   <!--
     CLI tool packages used only by the Verifiable command-line interface.
@@ -38,10 +37,10 @@
   <ItemGroup Label="CLI">
     <PackageVersion Include="dotNetRdf" Version="3.5.2" />
     <!-- Transitive of dotNetRdf, pinned to a patched version to clear GHSA-pgww-w46g-26qg (vulnerable < 1.5.0). -->
-    <PackageVersion Include="AngleSharp" Version="1.5.2" />
-    <PackageVersion Include="SimpleBase" Version="5.6.3" />
-    <PackageVersion Include="System.CommandLine" Version="2.0.10" />
-    <PackageVersion Include="ModelContextProtocol" Version="1.4.1" />
+    <PackageVersion Include="AngleSharp" Version="1.7.1" />
+    <PackageVersion Include="SimpleBase" Version="5.6.4" />
+    <PackageVersion Include="System.CommandLine" Version="2.0.11" />
+    <PackageVersion Include="ModelContextProtocol" Version="2.1.0" />
   </ItemGroup>
   <!--
     Test packages used only in *.Tests projects.
@@ -49,12 +48,12 @@
     can use also any other packages in other projects.
   -->
   <ItemGroup Label="Test">
-    <PackageVersion Include="CsCheck" Version="4.7.0" />
+    <PackageVersion Include="CsCheck" Version="4.8.0" />
     <PackageVersion Include="MessagePack" Version="3.1.8" />
     <PackageVersion Include="LiquidTestReports.Markdown" Version="1.4.3-beta" />
     <PackageVersion Include="System.Reactive" Version="7.0.0" />
     <PackageVersion Include="Microsoft.Reactive.Testing" Version="7.0.0" />
-    <PackageVersion Include="Microsoft.IdentityModel.Tokens" Version="8.21.0" />
+    <PackageVersion Include="Microsoft.IdentityModel.Tokens" Version="8.22.0" />
   </ItemGroup>
   <!--
     Benchmark packages used only in *.Benchmarks projects.

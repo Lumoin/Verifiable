@@ -29,7 +29,8 @@ namespace Verifiable.DidComm.Transport;
 /// <para>
 /// Delivery is one-way (DIDComm v2.1 §HTTPS, §WebSockets: no application reply flows back on the delivery
 /// channel), so the delegate reports only whether the endpoint accepted the message and, if not, the failure
-/// mode — never a reply.
+/// mode — never a reply. The documented exception is <see cref="DidCommExchangeDelegate"/>, used when the
+/// request directs a reply onto the same connection via the Return-Route extension's <c>return_route: all</c>.
 /// </para>
 /// </remarks>
 /// <param name="message">The packed envelope bytes to deliver.</param>

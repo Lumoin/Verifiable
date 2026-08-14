@@ -1,3 +1,4 @@
+using Lumoin.Base;
 using System;
 using System.Buffers;
 using Verifiable.Cesr;
@@ -19,7 +20,7 @@ namespace Verifiable.Acdc;
 /// most compact form SAID</see> derivation: there is one and only one SAID for a compactifiable block, computed on
 /// its block-level expanded form, and a Verifier reverses the process by expanding a block, verifying its SAID,
 /// then expanding and verifying the SAIDs of its enclosed blocks. This is the genus-specific application of the
-/// serialization-neutral <see cref="CesrSaid.RecomputeEmbeddedAsync(ReadOnlyMemory{byte}, string, ComputeDigestDelegate, MemoryPool{byte}, System.Threading.CancellationToken)"/>
+/// serialization-neutral <see cref="CesrSaid.RecomputeEmbeddedAsync(ReadOnlyMemory{byte}, string, ComputeDigestDelegate, BaseMemoryPool, System.Threading.CancellationToken)"/>
 /// primitive: the SAID is reset to its dummy placeholder wherever it appears in the received bytes and the digest
 /// is recomputed with the algorithm named by the SAID's own derivation code, so it works on any serialization and
 /// stays algorithm-agile through the supplied <see cref="ComputeDigestDelegate"/>.
@@ -44,7 +45,7 @@ public static class AcdcSaid
     /// <param name="cancellationToken">Cancels an in-flight digest on a hardware-async backend (TPM2_Hash, KMS).</param>
     /// <returns>The CESR-encoded SAID recomputed over the serialization.</returns>
     /// <exception cref="CesrFormatException">The claimed SAID's leading code is not a supported digest code.</exception>
-    public static ValueTask<string> RecomputeAsync(ReadOnlyMemory<byte> serialization, string said, ComputeDigestDelegate computeDigest, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static ValueTask<string> RecomputeAsync(ReadOnlyMemory<byte> serialization, string said, ComputeDigestDelegate computeDigest, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         return CesrSaid.RecomputeEmbeddedAsync(serialization, said, computeDigest, pool, cancellationToken);
     }
@@ -61,7 +62,7 @@ public static class AcdcSaid
     /// <param name="cancellationToken">Cancels an in-flight digest on a hardware-async backend (TPM2_Hash, KMS).</param>
     /// <returns><see langword="true"/> when the recomputed SAID equals the claimed SAID.</returns>
     /// <exception cref="CesrFormatException">The claimed SAID's leading code is not a supported digest code.</exception>
-    public static ValueTask<bool> VerifyAsync(ReadOnlyMemory<byte> serialization, string said, ComputeDigestDelegate computeDigest, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static ValueTask<bool> VerifyAsync(ReadOnlyMemory<byte> serialization, string said, ComputeDigestDelegate computeDigest, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         return CesrSaid.VerifyEmbeddedAsync(serialization, said, computeDigest, pool, cancellationToken);
     }

@@ -147,12 +147,32 @@ public static class AuthCodeFlowHandlers
     /// <see cref="AuthCodeFlowEndpointResult.RedirectUri"/> set to the authorization
     /// endpoint URI including the PAR <c>request_uri</c>.
     /// </returns>
+    public static ValueTask<AuthCodeFlowEndpointResult> HandleParAsync(
+        IReadOnlyDictionary<string, string> fields,
+        Uri redirectUri,
+        OAuthClientInfrastructure infrastructure,
+        ClientRegistration registration,
+        ExchangeContext context,
+        CancellationToken cancellationToken) =>
+        HandleParAsync(fields, redirectUri, infrastructure, registration, context, resource: null, cancellationToken);
+
+
+    /// <inheritdoc cref="HandleParAsync(IReadOnlyDictionary{string, string}, Uri, OAuthClientInfrastructure, ClientRegistration, ExchangeContext, CancellationToken)"/>
+    /// <param name="resource">
+    /// The RFC 8707 §2 <c>resource</c> indicator(s) to request (RFC 9126 §2.1 pushes them
+    /// alongside the rest of the PAR body). Each entry MUST be one absolute URI — a caller with
+    /// several indicators supplies several list entries, which become that many REPEATED
+    /// <c>resource</c> occurrences on the wire (<see cref="OutgoingFormFields.Add"/>); a single
+    /// entry that itself packs several URIs separated by spaces is a malformed indicator, not a
+    /// shorthand for repetition. <see langword="null"/> or empty omits the parameter entirely.
+    /// </param>
     public static async ValueTask<AuthCodeFlowEndpointResult> HandleParAsync(
         IReadOnlyDictionary<string, string> fields,
         Uri redirectUri,
         OAuthClientInfrastructure infrastructure,
         ClientRegistration registration,
         ExchangeContext context,
+        IReadOnlyList<string>? resource,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(fields);
@@ -191,6 +211,11 @@ public static class AuthCodeFlowHandlers
         };
 
         OutgoingFormFields formFields = EncodeParRequestBody(parBody);
+
+        //RFC 8707 §2 / RFC 9126 §2.1: each resource indicator becomes its OWN occurrence of the
+        //resource key on the wire — the genuine multi-resource wire form — never several
+        //indicators joined by a space into one occurrence.
+        AddResourceOccurrences(formFields, resource);
 
         HttpResponseData parHttpResponse;
         try
@@ -433,12 +458,33 @@ public static class AuthCodeFlowHandlers
     /// <see cref="ClientRegistration.AuthenticationKeyMaterial"/>. Ignored for every other method.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    public static ValueTask<AuthCodeFlowEndpointResult> HandleTokenAsync(
+        IReadOnlyDictionary<string, string> fields,
+        OAuthClientInfrastructure infrastructure,
+        ClientRegistration registration,
+        ExchangeContext context,
+        ClientAssertionOptions? clientAssertionOptions,
+        CancellationToken cancellationToken) =>
+        HandleTokenAsync(fields, infrastructure, registration, context, clientAssertionOptions, resource: null, cancellationToken);
+
+
+    /// <inheritdoc cref="HandleTokenAsync(IReadOnlyDictionary{string, string}, OAuthClientInfrastructure, ClientRegistration, ExchangeContext, ClientAssertionOptions?, CancellationToken)"/>
+    /// <param name="resource">
+    /// The RFC 8707 §2.2 Figure 3 code-redemption <c>resource</c> indicator(s) narrowing the
+    /// minted access token to a subset of what PAR/authorize granted. Each entry MUST be one
+    /// absolute URI — a caller with several indicators supplies several list entries, which
+    /// become that many REPEATED <c>resource</c> occurrences on the wire
+    /// (<see cref="OutgoingFormFields.Add"/>); a single entry that itself packs several URIs
+    /// separated by spaces is a malformed indicator, not a shorthand for repetition.
+    /// <see langword="null"/> or empty omits the parameter, leaving the full granted set in force.
+    /// </param>
     public static async ValueTask<AuthCodeFlowEndpointResult> HandleTokenAsync(
         IReadOnlyDictionary<string, string> fields,
         OAuthClientInfrastructure infrastructure,
         ClientRegistration registration,
         ExchangeContext context,
         ClientAssertionOptions? clientAssertionOptions,
+        IReadOnlyList<string>? resource,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(fields);
@@ -490,11 +536,16 @@ public static class AuthCodeFlowHandlers
             };
         }
 
+        //RFC 8707 §2.2 Figure 3: a resource named at code redemption narrows the minted access
+        //token to a subset of what PAR/authorize granted — each entry becomes its OWN repeated
+        //resource occurrence on the wire, the same convention HandleParAsync (resource) and
+        //RefreshAsync (RefreshTokenRequest.Resource) use on their legs.
         OutgoingFormFields tokenFields = EncodeTokenRequest(
             registration.ClientId.Value,
             codeState.Code,
             codeState.RedirectUri,
-            codeState.Pkce);
+            codeState.Pkce,
+            resource);
 
         OutgoingHeaders authenticationHeaders = await AttachClientAuthenticationAsync(
             tokenFields, registration, metadata.TokenEndpoint!, clientAssertionOptions,
@@ -1030,9 +1081,10 @@ public static class AuthCodeFlowHandlers
         string clientId,
         string code,
         Uri redirectUri,
-        PkceParameters pkce)
+        PkceParameters pkce,
+        IReadOnlyList<string>? resource = null)
     {
-        return new OutgoingFormFields
+        OutgoingFormFields fields = new()
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
             [OAuthRequestParameterNames.ClientId] = clientId,
@@ -1040,6 +1092,10 @@ public static class AuthCodeFlowHandlers
             [OAuthRequestParameterNames.RedirectUri] = redirectUri.ToString(),
             [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier
         };
+
+        AddResourceOccurrences(fields, resource);
+
+        return fields;
     }
 
     private static OutgoingFormFields EncodeRefreshRequest(string clientId, RefreshTokenRequest request)
@@ -1056,7 +1112,33 @@ public static class AuthCodeFlowHandlers
             fields[OAuthRequestParameterNames.Scope] = request.Scope;
         }
 
+        AddResourceOccurrences(fields, request.Resource);
+
         return fields;
+    }
+
+
+    /// <summary>
+    /// Appends each entry of <paramref name="resource"/> as its OWN <c>resource</c> occurrence
+    /// onto <paramref name="fields"/> (<see cref="OutgoingFormFields.Add"/>) — RFC 8707 §2's
+    /// genuine multi-resource wire form, never several indicators joined by a space into one
+    /// occurrence. A <see langword="null"/>, empty, or all-whitespace entry is skipped rather
+    /// than emitted as a blank occurrence.
+    /// </summary>
+    private static void AddResourceOccurrences(OutgoingFormFields fields, IReadOnlyList<string>? resource)
+    {
+        if(resource is null)
+        {
+            return;
+        }
+
+        foreach(string indicator in resource)
+        {
+            if(!string.IsNullOrWhiteSpace(indicator))
+            {
+                fields.Add(OAuthRequestParameterNames.Resource, indicator);
+            }
+        }
     }
 
 

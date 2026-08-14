@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Siop;
@@ -14,7 +13,6 @@ namespace Verifiable.OAuth.Siop;
 /// (Self-Issued) ID Token. The default when neither side states a type is
 /// <see cref="AttesterSignedIdToken"/>.
 /// </remarks>
-[DebuggerDisplay("SiopIdTokenTypes")]
 public static class SiopIdTokenTypes
 {
     /// <summary>The UTF-8 source literal of <see cref="SubjectSignedIdToken"/>.</summary>

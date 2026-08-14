@@ -43,7 +43,7 @@ public static class MdocCborAuthorityIdentifierExtractor
     public static ExtractMdocAuthorityIdentifierDelegate Create(
         ExtractAuthorityKeyIdentifierDelegate extractAuthorityKeyIdentifier,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(extractAuthorityKeyIdentifier);
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);

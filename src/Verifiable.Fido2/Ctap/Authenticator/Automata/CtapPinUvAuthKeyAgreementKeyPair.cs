@@ -12,7 +12,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// CTAP 2.3, section 6.5.6: PIN/UV Auth Protocol One</see>: "a P-256 private key, x, and the
 /// associated public point xB" — <c>initialize()</c>/<c>regenerate()</c>'s state. Each of the two
 /// supported protocols maintains its own key-agreement key material, minted via
-/// <see cref="CryptographicKeyEvents.CreateKeyPair(Context.CryptoAlgorithm, Purpose, System.Buffers.MemoryPool{byte}, string?)"/>
+/// <see cref="CryptographicKeyEvents.CreateKeyPair(Context.CryptoAlgorithm, Purpose, System.Buffers.BaseMemoryPool, string?)"/>
 /// at construction and refreshed by <see cref="CtapAuthenticatorState.PowerCycle"/>'s <c>regenerate()</c>
 /// half — the old pair is disposed there, never independently. Owns its pooled key material, mirroring
 /// <see cref="CtapCredentialRecord"/>'s dispose-walk convention: this record's <see cref="Dispose"/> is

@@ -95,7 +95,7 @@ public static class CtapAuthenticatorTransitions
     /// <summary>
     /// The <c>credProtect</c> wire value for <c>userVerificationOptionalWithCredentialIDList</c> (CTAP
     /// 2.3 §12.1, line 12609's value table): filtered from ga's discoverable-scan (no-<c>allowList</c>)
-    /// path when <c>uv</c> is <see langword="false"/>, but NOT from the <c>allowList</c> path (R10) —
+    /// path when <c>uv</c> is <see langword="false"/>, but NOT from the <c>allowList</c> path —
     /// knowledge of the specific credential ID exempts it.
     /// </summary>
     private static int CredProtectUserVerificationOptionalWithCredentialIdList => 2;
@@ -104,8 +104,8 @@ public static class CtapAuthenticatorTransitions
     /// <summary>
     /// The <c>credProtect</c> wire value for <c>userVerificationRequired</c> (CTAP 2.3 §12.1, line
     /// 12609's value table): excluded from every ga credential-location branch (allowList or
-    /// discoverable-scan alike) when <c>uv</c> is <see langword="false"/> (R10), and exempted — not
-    /// excluded — from mc's excludeList match when <c>uv</c> was not collected in the same call (R9's
+    /// discoverable-scan alike) when <c>uv</c> is <see langword="false"/>, and exempted — not
+    /// excluded — from mc's excludeList match when <c>uv</c> was not collected in the same call (the
     /// inversion).
     /// </summary>
     private static int CredProtectUserVerificationRequired => 3;
@@ -120,7 +120,7 @@ public static class CtapAuthenticatorTransitions
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            //Supersede discipline (R2): ANY new command input arriving while a user-presence wait is
+            //Supersede discipline: ANY new command input arriving while a user-presence wait is
             //parked discards it first (disposing its parked request's carriers), then processes
             //normally. The three inputs that legitimately RESUME a parked wait are exempted — every
             //other input type only ever reaches this dispatch with a non-null PendingUserPresenceWait
@@ -256,7 +256,7 @@ public static class CtapAuthenticatorTransitions
 
     /// <summary>
     /// Discards a remembered <c>authenticatorLargeBlobs</c> <c>set</c> sequence, if any, disposing its
-    /// not-yet-committed pending buffer (R7, seams Q4: the GLOBAL discipline, unlike
+    /// not-yet-committed pending buffer (the GLOBAL discipline, unlike
     /// <see cref="DiscardRememberedBioEnrollment"/>'s own narrower one).
     /// </summary>
     private static CtapAuthenticatorState DiscardRememberedLargeBlobWrite(CtapAuthenticatorState state)
@@ -275,7 +275,7 @@ public static class CtapAuthenticatorTransitions
     /// <summary>
     /// Discards all FOUR remembered stateful-command sequences (<see cref="DiscardRememberedGetAssertion"/>,
     /// <see cref="DiscardRememberedEnumerateRps"/>, <see cref="DiscardRememberedEnumerateCredentials"/>,
-    /// <see cref="DiscardRememberedLargeBlobWrite"/>) — R10's global discard rule (CTAP 2.3, section 6,
+    /// <see cref="DiscardRememberedLargeBlobWrite"/>) — the global discard rule (CTAP 2.3, section 6,
     /// item 2, line 2871: "An authenticator MAY assume this globally"): every command arm OTHER than a
     /// stateful command's own continuation treats any other authenticator operation as invalidating every
     /// remembered sequence. Called at the entry of every command arm except <c>authenticatorGetNextAssertion</c>,
@@ -299,7 +299,7 @@ public static class CtapAuthenticatorTransitions
     /// <see cref="OnLargeBlobsRequested"/> — a <c>get</c>, or a <c>set</c> with <c>offset == 0</c> (which
     /// starts a brand-new sequence per line 7657 regardless) — goes through the full
     /// <see cref="DiscardAllRememberedSequences"/> instead, the same GLOBAL-discipline posture every other
-    /// command's own entry takes (R7).
+    /// command's own entry takes.
     /// </summary>
     private static CtapAuthenticatorState DiscardRememberedSequencesExceptLargeBlobWrite(CtapAuthenticatorState state) =>
         DiscardRememberedEnumerateCredentials(DiscardRememberedEnumerateRps(DiscardRememberedGetAssertion(state)));
@@ -307,7 +307,7 @@ public static class CtapAuthenticatorTransitions
 
     /// <summary>
     /// Discards a parked <c>authenticatorMakeCredential</c>/<c>authenticatorGetAssertion</c>
-    /// user-presence wait, if any, disposing its parked request's carriers (R2) — the choke point every
+    /// user-presence wait, if any, disposing its parked request's carriers — the choke point every
     /// TERMINAL discard path (denied, poll timeout, cancel, supersede, <see cref="CtapAuthenticatorState.PowerCycle"/>,
     /// <see cref="CtapAuthenticatorState.FactoryReset"/>) shares. Never called on a
     /// <see cref="CtapUserPresenceDecision.Granted"/> resume — see <see cref="ClearPendingUserPresenceWait"/>.
@@ -326,8 +326,8 @@ public static class CtapAuthenticatorTransitions
 
 
     /// <summary>
-    /// Clears a resolved user-presence wait WITHOUT disposing its parked request's carriers (R2, trap
-    /// 2): a <see cref="CtapUserPresenceDecision.Granted"/> decision resumes <c>ContinueMakeCredential</c>/
+    /// Clears a resolved user-presence wait WITHOUT disposing its parked request's carriers: a
+    /// <see cref="CtapUserPresenceDecision.Granted"/> decision resumes <c>ContinueMakeCredential</c>/
     /// <c>ContinueGetAssertion</c> using those SAME still-live carriers (and the credential-generation/
     /// assertion-signing effect that follows reads them again later in the same effectful loop) — disposing
     /// them here would be a use-after-dispose. The simulator's own deferred entry points dispose them once
@@ -341,7 +341,7 @@ public static class CtapAuthenticatorTransitions
     /// Discards an in-progress <c>authenticatorBioEnrollment</c> enrollment, if any, disposing its
     /// not-yet-persisted template identifier. UNLIKE <see cref="DiscardAllRememberedSequences"/>'s own
     /// three slots, this is NOT called at the entry of every other command — CTAP 2.3 §6.7 names no
-    /// broader intervening-operation rule for this sequence (R7); only <c>cancelCurrentEnrollment</c>, a
+    /// broader intervening-operation rule for this sequence; only <c>cancelCurrentEnrollment</c>, a
     /// fresh <c>enrollBegin</c>'s own auto-cancel step, <see cref="CtapAuthenticatorState.PowerCycle"/>,
     /// and <see cref="CtapAuthenticatorState.FactoryReset"/> discard it.
     /// </summary>
@@ -361,14 +361,14 @@ public static class CtapAuthenticatorTransitions
     /// <summary>
     /// The <c>authenticatorConfig</c> subcommand values this authenticator implements, in ascending
     /// order, reported as the <c>authenticatorConfigCommands</c> getInfo member (line 4618) —
-    /// STATE-DERIVED (R2), never a fixed literal: <c>[0x01, 0x02, 0x03]</c>
+    /// STATE-DERIVED, never a fixed literal: <c>[0x01, 0x02, 0x03]</c>
     /// (<c>enableEnterpriseAttestation</c>, <c>toggleAlwaysUv</c>, <c>setMinPINLength</c>) when
     /// <paramref name="isEnterpriseAttestationCapable"/>, else <c>[0x02, 0x03]</c>
     /// (<c>enableLongTouchForReset</c>/<c>vendorPrototype</c> stay unsupported and reject via the
     /// command's own step 2 regardless of capability). This is the SAME single predicate
     /// (<see cref="CtapAuthenticatorState.IsEnterpriseAttestationCapable"/>) row 7995 ("the getInfo
     /// member authenticatorConfigCommands MUST contain an array member with the value 0x01 if this
-    /// subcommand is supported") shares with the <c>ep</c> option's own emission (R2's tri-site MUST).
+    /// subcommand is supported") shares with the <c>ep</c> option's own emission (a tri-site MUST).
     /// </summary>
     /// <param name="isEnterpriseAttestationCapable">
     /// Whether the authenticator is enterprise attestation capable
@@ -402,18 +402,18 @@ public static class CtapAuthenticatorTransitions
     /// <paramref name="minPinCodePointLength"/> (the current minimum, line 4459);
     /// <c>remainingDiscoverableCredentials</c> set to <paramref name="remainingDiscoverableCredentials"/>
     /// (member 0x14, ALWAYS present alongside <c>credMgmt</c> — the same live capacity-minus-count value
-    /// <c>getCredsMetadata</c>'s own <c>maxPossibleRemainingResidentCredentialsCount</c> reports, R9's
+    /// <c>getCredsMetadata</c>'s own <c>maxPossibleRemainingResidentCredentialsCount</c> reports, the
     /// single-source-of-truth choice); <c>authenticatorConfigCommands</c> =
     /// <see cref="SupportedAuthenticatorConfigCommands(bool)"/>; <c>maxRPIDsForSetMinPINLength</c> =
     /// <see cref="CtapAuthenticatorState.MaxRpIdsForSetMinPinLengthCapacity"/> (the same fixed constant
     /// <c>setMinPINLength</c>'s own bound check consumes — single-sourced, never two literals).
     /// <c>uv</c> and <c>bioEnroll</c> are BOTH ALWAYS PRESENT, DERIVED from the SAME
-    /// <paramref name="hasProvisionedBioEnrollments"/> source (wavebio R2): <see langword="false"/> with
+    /// <paramref name="hasProvisionedBioEnrollments"/> source: <see langword="false"/> with
     /// zero enrollments, <see langword="true"/> with at least one — closing §9 row 9076's second MUST
     /// ("clientPin and uv MUST have either the values true or false, depending on if a pin has been set
     /// or a biometric template enrolled"). <c>uvBioEnroll:true</c> unconditionally (a static build
     /// capability — 0x06's own <c>be</c> gate bullet is wired). <c>largeBlobs:true</c> unconditionally
-    /// (BINARY, never tri-state — R2; support is a static capability of this build) and
+    /// (BINARY, never tri-state; support is a static capability of this build) and
     /// <c>maxSerializedLargeBlobArray</c> = <see cref="CtapAuthenticatorState.MaxSerializedLargeBlobArrayCapacity"/>
     /// (member <c>0x0B</c>, always emitted alongside — the "MUST be specified iff supported" pair, line
     /// 4434, is always satisfied since this command is always supported). <c>preferredPlatformUvAttempts</c> =
@@ -445,7 +445,7 @@ public static class CtapAuthenticatorTransitions
     /// </param>
     /// <param name="isEnterpriseAttestationCapable">
     /// Whether this authenticator is enterprise attestation capable
-    /// (<see cref="CtapAuthenticatorState.IsEnterpriseAttestationCapable"/>) — the single source (R2)
+    /// (<see cref="CtapAuthenticatorState.IsEnterpriseAttestationCapable"/>) — the single source
     /// gating both <c>ep</c>'s presence and <see cref="SupportedAuthenticatorConfigCommands(bool)"/>'s
     /// conditional inclusion of <c>0x01</c>.
     /// </param>
@@ -453,7 +453,7 @@ public static class CtapAuthenticatorTransitions
     /// Whether the enterprise attestation feature is currently enabled
     /// (<see cref="CtapAuthenticatorState.IsEnterpriseAttestationEnabled"/>) — only consulted when
     /// <paramref name="isEnterpriseAttestationCapable"/>; <c>ep</c>'s tri-state value is
-    /// <c>capable ? enabled : null</c> (R9's getInfo half).
+    /// <c>capable ? enabled : null</c> for the getInfo half.
     /// </param>
     /// <param name="supportedAlgorithms">
     /// The credential-signing backend's supported COSE algorithm identifiers
@@ -471,9 +471,9 @@ public static class CtapAuthenticatorTransitions
     /// This closes CTAP 2.3 §9's full mandatory-feature set for a <c>FIDO_2_3</c> claimant: <c>hmac-secret</c>
     /// (item 1 — the LAST item to close) is processed end to end (§12.7's mc annotation and ga
     /// compound-input pipeline) and unconditionally advertised in
-    /// <see cref="CtapAuthenticatorState.DefaultSupportedExtensions"/> (contract R1); every other item
-    /// closed in an earlier wave — <c>credProtect</c> (item 4) is processed end to end (mc persistence,
-    /// ga/excludeList enforcement, credMgmt enumeration) and likewise unconditionally advertised.
+    /// <see cref="CtapAuthenticatorState.DefaultSupportedExtensions"/>; every other item is likewise
+    /// processed end to end — <c>credProtect</c> (item 4) is processed end to end (mc persistence,
+    /// ga/excludeList enforcement, credMgmt enumeration) and unconditionally advertised.
     /// <c>uvAcfg</c> stays permanently absent (a `getPinUvAuthTokenUsingUvWithPermissions`-only option
     /// this authenticator never grants <c>acfg</c> through). §9 item 8 (line 9088, <c>ep</c> present
     /// implies <c>enableEnterpriseAttestation</c> MUST be supported) closed together with row 7995/8278
@@ -564,12 +564,12 @@ public static class CtapAuthenticatorTransitions
     /// simulator before dispatch), the <c>uv</c>/<c>rk</c>/<c>up</c> option checks with the
     /// <c>pinUvAuthParam</c>-takes-precedence rule (step 5), <c>alwaysUv</c> (step 6, LIVE — see the
     /// remarks), the <c>makeCredUvNotRqd</c>-gated rejection (step 7) and its structurally false sibling
-    /// (step 8), <c>enterpriseAttestation</c>'s full clause tree (step 9, waveep R4-R6: capability/
+    /// (step 8), <c>enterpriseAttestation</c>'s full clause tree (step 9: capability/
     /// enablement gate, value validation, then the ordered vendor-facilitated/platform-managed grant
     /// cases — see the remarks), the <c>makeCredUvNotRqd</c> fast path (step 10),
     /// and step 11's three-way split: a presented <c>pinUvAuthParam</c> declares a
     /// <see cref="CtapVerifyPinUvAuthTokenAction"/> (step 11.1); an effective <c>uv:true</c> declares a
-    /// <see cref="CtapPerformBuiltInUvAction"/> (step 11.2, R11 LIVE); neither resumes at
+    /// <see cref="CtapPerformBuiltInUvAction"/> (step 11.2); neither resumes at
     /// <see cref="ContinueMakeCredential"/> directly with the <c>uv</c> bit false. Every exit eventually
     /// resumes at <see cref="ContinueMakeCredential"/>, which implements the excludeList/keystore/
     /// attestation-format/generate tail (steps 12/14/17) shared by all three paths.
@@ -584,8 +584,8 @@ public static class CtapAuthenticatorTransitions
     /// "evidence of user interaction" procedure step 1.1 invokes (lines 2799-2823, this simulator's
     /// actual transport) resolves the analogous failure to <c>CTAP2_ERR_UP_REQUIRED</c> (line 2817).
     /// This authenticator never has to choose between them: evidence of user interaction is ALWAYS
-    /// granted here (a deterministic simulator with no decline/timeout seam — the wave-2 modeling this
-    /// program has used since <c>authenticatorMakeCredential</c>'s own step 14 evidence collection), so
+    /// granted here (a deterministic simulator with no decline/timeout seam, matching
+    /// <c>authenticatorMakeCredential</c>'s own step 14 evidence collection), so
     /// the probe below goes straight from the length check to the <see cref="WellKnownCtapStatusCodes.PinNotSet"/>/
     /// <see cref="WellKnownCtapStatusCodes.PinInvalid"/> decision (step 1.3) — the decline branch is
     /// structurally unreachable, and no seam is added to make it reachable.
@@ -595,54 +595,54 @@ public static class CtapAuthenticatorTransitions
     /// <c>uv:true</c> (no <c>pinUvAuthParam</c>) rejects with <see cref="WellKnownCtapStatusCodes.InvalidOption"/>
     /// ONLY when the built-in UV method is not yet configured (zero fingerprint enrollments) — once
     /// configured, this early gate does not fire, and <c>effectiveUserVerification</c> flows through to
-    /// step 11.2 below (wavebio's R11 flip of the old, permanently-unconditional reject).
+    /// step 11.2 below (a flip of the old, permanently-unconditional reject).
     /// </para>
     /// <para>
     /// <strong>Step 6 (<c>alwaysUv</c>, lines 3236-3276) is fully LIVE once <c>authenticatorConfig</c>'s
     /// <c>toggleAlwaysUv</c> subcommand enables <see cref="CtapAuthenticatorState.IsAlwaysUvEnabled"/>.</strong>
-    /// Sub-step 6.1 ("treat makeCredUvNotRqd as false", line 3240) needs no code of its own here: R8's
+    /// Sub-step 6.1 ("treat makeCredUvNotRqd as false", line 3240) needs no code of its own here: the
     /// getInfo derivation (<see cref="BuildGetInfoResponse"/>, <c>MakeCredUvNotRqd: !isAlwaysUvEnabled</c>)
     /// already reports it false whenever <c>alwaysUv</c> is true, satisfying line 4951's MUST directly.
     /// Sub-step 6.3 (line 3258) is a REAL FORCING step, re-read against the snapshot's own hrefs: "If
     /// pinUvAuthParam is not present, and THE GETINFO <c>uv</c> OPTION ID is true, let the REQUEST'S
     /// <c>uv</c> option be treated as present-true" — i.e. whenever built-in UV is configured, a
     /// param-absent request under <c>alwaysUv</c> is force-upgraded to <c>uv:true</c> regardless of what
-    /// the platform actually asked for (R11's REQUIRED test: <c>alwaysUv</c> on, an enrollment present,
+    /// the platform actually asked for (a REQUIRED test: <c>alwaysUv</c> on, an enrollment present,
     /// neither <c>pinUvAuthParam</c> nor <c>options.uv</c> requested, the call still succeeds via forced
     /// built-in UV). Sub-step 6.4 (line 3261) then rejects only when, even after 6.3's forcing,
     /// <c>effectiveUserVerification</c> is still false — both this branch and 6.2's not-protected branch
-    /// reject with <see cref="WellKnownCtapStatusCodes.PuatRequired"/> (R2's clientPin-present branch;
+    /// reject with <see cref="WellKnownCtapStatusCodes.PuatRequired"/> (the clientPin-present branch;
     /// <c>OperationDenied</c>'s "clientPin not supported" sibling never fires, since <c>clientPin</c> is
     /// always present once any enrollment exists in this profile).
     /// </para>
     /// <para>
     /// <strong>Step 7</strong> (lines 3277-3300, the <c>makeCredUvNotRqd</c>-present-true, <c>rk</c>-gated
-    /// rejection) is reachable exactly when <c>alwaysUv</c> is disabled (R8's derivation makes
+    /// rejection) is reachable exactly when <c>alwaysUv</c> is disabled (the derivation makes
     /// <c>makeCredUvNotRqd</c> present-true only then) and <c>effectiveUserVerification</c> is false —
-    /// this step's own code needs no further changes for R11, since it already guards on
+    /// this step's own code needs no further changes, since it already guards on
     /// <c>!effectiveUserVerification</c>.
     /// </para>
     /// <para>
     /// <strong>Step 8</strong> (lines 3301-3322, the <c>makeCredUvNotRqd</c> false-or-absent general
-    /// rejection, no <c>rk</c> condition) stays structurally unreachable for the same two-legged reason
-    /// as before R11: under <c>alwaysUv</c> OFF, <c>makeCredUvNotRqd</c> reports present-true (R8); under
+    /// rejection, no <c>rk</c> condition) stays structurally unreachable for the same two-legged reason:
+    /// under <c>alwaysUv</c> OFF, <c>makeCredUvNotRqd</c> reports present-true; under
     /// <c>alwaysUv</c> ON, step 6.4 already rejects every still-not-effectively-verified, param-absent
     /// request first.
     /// </para>
     /// <para>
-    /// <strong>Step 9</strong> (lines 3323-3360, waveep R4-R6 LIVE) sits between steps 7/8 and 10, exactly
+    /// <strong>Step 9</strong> (lines 3323-3360) sits between steps 7/8 and 10, exactly
     /// where the spec places it. Sub-step 1 (not capable, OR capable-but-disabled) rejects with
     /// <see cref="WellKnownCtapStatusCodes.InvalidParameter"/> STRICTLY BEFORE the value is inspected at
-    /// all (R5's order-pin, trap 5) — a non-capable authenticator receiving ANY value, in-range or not,
+    /// all (order-pin) — a non-capable authenticator receiving ANY value, in-range or not,
     /// gets this code. Only once capable-and-enabled does sub-step 2.1 validate the value against
     /// {1, 2}, rejecting with <see cref="WellKnownCtapStatusCodes.InvalidOption"/> otherwise. A legal
-    /// value then resolves the grant CANDIDATE via the two live ordered cases (R4: value 1 with rp.id on
+    /// value then resolves the grant CANDIDATE via the two live ordered cases (value 1 with rp.id on
     /// the pre-configured list, or value 2 unconditionally) — case 1's vendor-facilitated-ONLY antecedent
     /// is documented false, never coded. This candidate is computed EXACTLY ONCE here and threaded,
     /// unchanged, through every one of this method's own exits into <see cref="ContinueMakeCredential"/>
     /// (directly, or via <see cref="CtapMakeCredentialVerifyContinuation"/>/
-    /// <see cref="CtapMakeCredentialBuiltInUvContinuation"/> across the two async continuations, trap 12)
-    /// — where R8's own none-family discretionary decline is the final word on whether an enterprise
+    /// <see cref="CtapMakeCredentialBuiltInUvContinuation"/> across the two async continuations)
+    /// — where the none-family discretionary decline is the final word on whether an enterprise
     /// attestation is actually minted.
     /// </para>
     /// </remarks>
@@ -674,8 +674,8 @@ public static class CtapAuthenticatorTransitions
         bool pinUvAuthParamPresent = request.PinUvAuthParam is not null;
         bool effectiveUserVerification = !pinUvAuthParamPresent && request.Options?.UserVerification == true;
 
-        //Step 5.3 (lines 3208-3214, R11 LIVE): rejects ONLY when built-in UV is not yet configured; a
-        //configured request flows through to step 11.2 below instead of rejecting here (wavebio flip).
+        //Step 5.3 (lines 3208-3214): rejects ONLY when built-in UV is not yet configured; a
+        //configured request flows through to step 11.2 below instead of rejecting here.
         if(effectiveUserVerification && !state.HasProvisionedBioEnrollments)
         {
             return Reject(state, WellKnownCtapStatusCodes.InvalidOption, "MakeCredential:UvNotConfigured");
@@ -686,7 +686,7 @@ public static class CtapAuthenticatorTransitions
             return Reject(state, WellKnownCtapStatusCodes.InvalidOption, "MakeCredential:UpFalseRejected");
         }
 
-        //R5 (getInfo 0x07, snapshot lines 4405-4409, "Maximum number of credentials supported in
+        //getInfo 0x07 (snapshot lines 4405-4409, "Maximum number of credentials supported in
         //credentialID list at a time by the authenticator. MUST be greater than zero if present."): an
         //excludeList carrying more entries than MaxCredentialCountInListCapacity is a capability
         //precondition, rejected with LimitExceeded (0x15, snapshot lines 8897-8899, "Limit for number of
@@ -700,7 +700,7 @@ public static class CtapAuthenticatorTransitions
         bool residentKey = request.Options?.ResidentKey ?? false;
         bool isProtectedByUserVerification = IsProtectedByUserVerification(state);
 
-        //Step 6 (lines 3236-3276, R11 LIVE): sub-step 6.3 force-upgrades a param-absent request to
+        //Step 6 (lines 3236-3276): sub-step 6.3 force-upgrades a param-absent request to
         //effective uv:true whenever built-in UV is configured (see the method's own remarks); 6.4 then
         //rejects only if it is STILL not effectively verified.
         if(state.IsAlwaysUvEnabled)
@@ -721,12 +721,12 @@ public static class CtapAuthenticatorTransitions
             }
         }
 
-        //Step 7 (lines 3277-3300): reachable exactly when alwaysUv is disabled (R8's derivation makes
+        //Step 7 (lines 3277-3300): reachable exactly when alwaysUv is disabled (the derivation makes
         //makeCredUvNotRqd present-true only then; step 6 above already returned for the alwaysUv-on
-        //case). R2: the "clientPin not supported" split never resolves to OperationDenied in this
+        //case). The "clientPin not supported" split never resolves to OperationDenied in this
         //profile — isProtectedByUserVerification true implies clientPin is present-true EITHER directly
         //(a PIN is set) OR because any provisioned enrollment itself required a prior PIN-path be token
-        //(the only route to a first enrollment in this profile, wavebio) — clientPin, once true, is
+        //(the only route to a first enrollment in this profile) — clientPin, once true, is
         //never unset again short of a factory reset. noMcGaPermissionsWithClientPin is never advertised
         //(absent), so PuatRequired is the only reachable outcome.
         if(isProtectedByUserVerification && !effectiveUserVerification && !pinUvAuthParamPresent && residentKey)
@@ -734,12 +734,12 @@ public static class CtapAuthenticatorTransitions
             return Reject(state, WellKnownCtapStatusCodes.PuatRequired, "MakeCredential:ResidentKeyRequiresPinUvAuthToken");
         }
 
-        //Step 9 (lines 3323-3360, R4/R5/R6 LIVE): the grant decision is computed EXACTLY ONCE here and
-        //threaded through every exit below (trap 12) — never recomputed downstream.
+        //Step 9 (lines 3323-3360): the grant decision is computed EXACTLY ONCE here and
+        //threaded through every exit below — never recomputed downstream.
         bool enterpriseAttestationGranted = false;
         if(request.EnterpriseAttestation is int enterpriseAttestationValue)
         {
-            //Sub-step 1 (lines 3329-3331, R5's order-pin, trap 5): capability/enablement is checked
+            //Sub-step 1 (lines 3329-3331, order-pin): capability/enablement is checked
             //STRICTLY BEFORE the value is validated, regardless of what value was supplied — a
             //non-capable authenticator receiving value 7 rejects here with InvalidParameter, never
             //reaching the InvalidOption check below.
@@ -754,9 +754,9 @@ public static class CtapAuthenticatorTransitions
                 return Reject(state, WellKnownCtapStatusCodes.InvalidOption, "MakeCredential:EnterpriseAttestationInvalidValue");
             }
 
-            //Sub-step 2.2's ordered cases (R4): case 1 (line 3342, "supports ONLY vendor-facilitated") is
+            //Sub-step 2.2's ordered cases: case 1 (line 3342, "supports ONLY vendor-facilitated") is
             //antecedent-FALSE in this profile — a capable authenticator here always also supports
-            //platform-managed EA (R13's provisioning record is the single source both flavors share), so
+            //platform-managed EA (the provisioning record is the single source both flavors share), so
             //that antecedent never holds; it is documented here, never coded as a reachable branch. The
             //two LIVE cases: value 1 with rp.id matching the pre-configured list (line 3345), and value 2
             //with NO list check at all (line 3347 — the platform is assumed to have already vetted the
@@ -799,9 +799,9 @@ public static class CtapAuthenticatorTransitions
             return Transition(nextState, "MakeCredential:VerifyPinUvAuthToken");
         }
 
-        //Step 11.2 (lines 3413-3438, R11 LIVE): uv:true, no param, built-in UV configured (guaranteed
+        //Step 11.2 (lines 3413-3438): uv:true, no param, built-in UV configured (guaranteed
         //protected by the widened IsProtectedByUserVerification). internalRetry is HARDCODED true here
-        //(mc 11.2.1 verbatim) — never computed by a helper shared with 0x06 (uv scout trap 2).
+        //(mc 11.2.1 verbatim) — never computed by a helper shared with 0x06.
         if(effectiveUserVerification)
         {
             if(ShouldDragDownUvRetriesOnPinLockout(state))
@@ -881,13 +881,13 @@ public static class CtapAuthenticatorTransitions
     /// <summary>
     /// The <c>authenticatorMakeCredential</c> continuation shared by the <c>makeCredUvNotRqd</c> fast
     /// path, the not-protected fallback, and <see cref="OnMakeCredentialPinUvAuthTokenVerified"/>'s
-    /// success exit (decision 5's continuation helper), in the spec's own literal order: excludeList
-    /// membership (CTAP 2.3 §6.1.2 step 12, R9 LIVE), flag clearing on every success (step 14.4, line
+    /// success exit (this shared continuation helper), in the spec's own literal order: excludeList
+    /// membership (CTAP 2.3 §6.1.2 step 12), flag clearing on every success (step 14.4, line
     /// 3545 — <c>up</c> is always true in-profile by this point, since <c>up=false</c> was already
-    /// rejected in the request arm), extensions processing (op-makecred-step-extensions, lines 3548-3559,
-    /// R6 LIVE: <c>credProtect</c> value validation/default, <c>minPinLength</c> RP-ID authorization,
-    /// §12.7's <c>hmac-secret</c> literal-true gate (snapshot line 13194, contract R3), and §12.3's
-    /// <c>largeBlobKey</c> value/rk validation, wavelb R8), then the step-17 resident-credential
+    /// rejected in the request arm), extensions processing (op-makecred-step-extensions, lines 3548-3559):
+    /// <c>credProtect</c> value validation/default, <c>minPinLength</c> RP-ID authorization,
+    /// §12.7's <c>hmac-secret</c> literal-true gate (snapshot line 13194), and §12.3's
+    /// <c>largeBlobKey</c> value/rk validation), then the step-17 resident-credential
     /// key-store-full decision (line 3579) and attestation format resolution before declaring a
     /// <see cref="CtapGenerateCredentialKeyAction"/> carrying the resolved extension output values
     /// alongside <paramref name="userVerified"/>/<paramref name="userPresent"/>.
@@ -897,14 +897,14 @@ public static class CtapAuthenticatorTransitions
     /// fire.
     /// </summary>
     /// <param name="enterpriseAttestationGranted">
-    /// Step 9's own grant candidate (waveep R6), threaded from <c>OnMakeCredentialRequested</c> (directly,
+    /// Step 9's own grant candidate, threaded from <c>OnMakeCredentialRequested</c> (directly,
     /// or via <see cref="CtapMakeCredentialVerifyContinuation"/>/<see cref="CtapMakeCredentialBuiltInUvContinuation"/>
-    /// across an async round trip) — never recomputed here (trap 12). Combined with this call's own
-    /// attestation-format resolution below (waveep R8): a none-family resolution declines the grant
+    /// across an async round trip) — never recomputed here. Combined with this call's own
+    /// attestation-format resolution below: a none-family resolution declines the grant
     /// regardless of this parameter's value.
     /// </param>
     /// <remarks>
-    /// ExcludeList's credProtect-aware branch (CTAP 2.3 lines 3441-3499, R9): a match at level
+    /// ExcludeList's credProtect-aware branch (CTAP 2.3 lines 3441-3499): a match at level
     /// <see cref="CredProtectUserVerificationOptional"/>/<see cref="CredProtectUserVerificationOptionalWithCredentialIdList"/>,
     /// or at <see cref="CredProtectUserVerificationRequired"/> with <paramref name="userVerified"/>
     /// (threading THIS call's already-resolved value — the spec's own "uv bit... in the response", no
@@ -932,10 +932,10 @@ public static class CtapAuthenticatorTransitions
 
         state = ClearPinUvAuthTokenFlags(state);
 
-        //R6/§12.1 line 12648: absent credProtect defaults to level 1; a present value outside the three
+        //§12.1 line 12648: absent credProtect defaults to level 1; a present value outside the three
         //legal wire values {1, 2, 3} (line 12609's table) is a protection-policy request this
         //authenticator cannot honor and is not ignorable — §12.1 itself defines no error path, so the
-        //general invalid-parameter posture governs (a documented deviation, contract R5/R6). A present,
+        //general invalid-parameter posture governs (a documented deviation). A present,
         //legal value is both the persisted level AND the authData output value (line 12632's MUST: the
         //authenticator never sets a DIFFERENT level than what it "set for the created credential" — this
         //profile never exercises line 12539's stricter unilateral-default MAY).
@@ -955,23 +955,23 @@ public static class CtapAuthenticatorTransitions
             credProtectRequested = true;
         }
 
-        //R6/§12.5: "minPinLength": true authorizes the output only when rp.id is already on the stored
-        //minPinLengthRPIDs list (R7); an unauthorized or absent request resolves to the key being
+        //§12.5: "minPinLength": true authorizes the output only when rp.id is already on the stored
+        //minPinLengthRPIDs list; an unauthorized or absent request resolves to the key being
         //omitted entirely inside an otherwise-successful response — §12.5 defines no error path for
-        //this case (extraction trap 8). "minPinLength": false is semantically not-asking (the reader
+        //this case. "minPinLength": false is semantically not-asking (the reader
         //already preserves the explicit-false-vs-absent distinction; both resolve identically here).
         int? minPinLengthOutputValue = request.MinPinLength == true && IsRpIdAuthorizedForMinPinLength(state.MinPinLengthRpIds, request.Rp.Id)
             ? state.MinPinCodePointLength
             : null;
 
-        //R3/§12.7 line 13194: the mc "hmac-secret" gate is read as "sent with the value true" — a
+        //§12.7 line 13194: the mc "hmac-secret" gate is read as "sent with the value true" — a
         //present false is treated as not-requested (not-emitting the annotation), since answering a
         //false request with "hmac-secret": true would be actively misleading. CredRandom itself is
         //minted unconditionally regardless of this flag (line 13192's SHOULD, adopted) — see
         //GenerateCredentialAsync; this flag only gates the mc authData annotation.
         bool hmacSecretRequested = request.HmacSecret == true;
 
-        //R6/§12.8 lines 13369-13370: the hmac-secret-mc pairing gate runs BEFORE any crypto (trap 8) —
+        //§12.8 lines 13369-13370: the hmac-secret-mc pairing gate runs BEFORE any crypto —
         //present while hmac-secret is absent, or present-but-not-exactly-true (hmacSecretRequested
         //already collapses both negative shapes), is a platform-side protocol violation this
         //authenticator rejects outright rather than silently ignoring.
@@ -980,7 +980,7 @@ public static class CtapAuthenticatorTransitions
             return Reject(state, WellKnownCtapStatusCodes.MissingParameter, "MakeCredential:HmacSecretMcUnpaired");
         }
 
-        //R6/§12.8 line 13402: "processing is the same as the hmac secret extension's getAssertion
+        //§12.8 line 13402: "processing is the same as the hmac secret extension's getAssertion
         //processing" — step 1's protocol resolution (absent defaults to protocol one, snapshot line
         //13279; a present-but-unsupported value is the clientPIN §6.5.5 analog rejection) governs this
         //compound input identically to ContinueGetAssertion's own hmacSecretProtocol resolution. The
@@ -1012,7 +1012,7 @@ public static class CtapAuthenticatorTransitions
 
         bool residentKey = request.Options?.ResidentKey ?? false;
 
-        //R8/§12.3 lines 12845-12849: a present largeBlobKey value that is not exactly true is a
+        //§12.3 lines 12845-12849: a present largeBlobKey value that is not exactly true is a
         //request-shape error (the extension should be omitted rather than asserted false), checked
         //BEFORE the rk co-requirement; a present-true value additionally requires options.rk == true.
         //Absent stays unrequested — no error, no key minted.
@@ -1041,12 +1041,12 @@ public static class CtapAuthenticatorTransitions
 
         CtapAttestationFormatChoice attestationFormat = ResolveAttestationFormat(request.AttestationFormatsPreference);
 
-        //Sub-steps 2.4-2.5 (lines 3352-3354, waveep R8): the ONE adopted additional discretionary
+        //Sub-steps 2.4-2.5 (lines 3352-3354): the ONE adopted additional discretionary
         //constraint this authenticator applies is "none-family formats never carry EA" — a granted
         //request whose OWN attestationFormatsPreference resolution is a none-family choice
         //(NoneWithStatement/NoneOmitted) declines the grant outright and proceeds with that none output,
         //epAtt absent. No other discretionary constraint is adopted. A granted request whose resolution
-        //is PackedSelf upgrades to PackedCertified here — this IS the R9 epAtt decision (the response
+        //is PackedSelf upgrades to PackedCertified here — this IS the epAtt decision (the response
         //writer reads it back from this same field, never a second stored flag).
         if(enterpriseAttestationGranted && attestationFormat == CtapAttestationFormatChoice.PackedSelf)
         {
@@ -1083,7 +1083,7 @@ public static class CtapAuthenticatorTransitions
     /// Erasing array entries is structurally incompatible with line 7704's MUST NOT ("act on the contents
     /// of the serialized large-blob array except for checking the trailing hash"): locating which array
     /// entries belong to an overwritten credential requires trial-decrypting each entry against its
-    /// largeBlobKey, a platform-only operation (Finding 1/4) this authenticator never performs. Line
+    /// largeBlobKey, a platform-only operation this authenticator never performs. Line
     /// 3572's own second sentence anticipates exactly this: "Platforms MUST NOT assume that authenticators
     /// will do this."
     /// </remarks>
@@ -1124,7 +1124,7 @@ public static class CtapAuthenticatorTransitions
     /// regardless of value, per the spec's own unqualified rejection), <c>alwaysUv</c> (step 5, LIVE —
     /// see the remarks), and step 6's three-way split: a presented <c>pinUvAuthParam</c> declares a
     /// <see cref="CtapVerifyPinUvAuthTokenAction"/> (step 6.1); an effective <c>uv:true</c> declares a
-    /// <see cref="CtapPerformBuiltInUvAction"/> (step 6.2, R11 LIVE); neither resumes at
+    /// <see cref="CtapPerformBuiltInUvAction"/> (step 6.2); neither resumes at
     /// <see cref="ContinueGetAssertion"/> directly with the <c>uv</c> bit false — which implements the
     /// locate-credentials/declare-sign tail (step 7) shared by all three paths. A fresh
     /// <c>authenticatorGetAssertion</c> is itself an intervening operation: it discards (and, when it
@@ -1155,11 +1155,11 @@ public static class CtapAuthenticatorTransitions
     /// to <see langword="true"/> BEFORE step 5 is ever reached), so a preflight/silent <c>ga</c> call
     /// (<c>up: false</c>) is NEVER subject to <c>alwaysUv</c> enforcement — the carve-out this
     /// authenticator preserves. When the gate applies: sub-step 5.1 (line 3920) rejects unconditionally
-    /// when not protected (R2's clientPin-present branch — <c>OperationDenied</c>'s sibling never
+    /// when not protected (the clientPin-present branch — <c>OperationDenied</c>'s sibling never
     /// fires); sub-step 5.4 (line 3940-3946) is ga's OWN genuine forcing step — re-read against the
     /// snapshot's own hrefs, its condition is the REQUEST'S own <c>uv</c> option being false AND the
     /// authenticator supporting AND having enabled built-in UV (i.e. configured): force-upgrades to
-    /// <c>uv:true</c> exactly the way mc's step 6.3 does (R11's shared REQUIRED test);
+    /// <c>uv:true</c> exactly the way mc's step 6.3 does (a shared REQUIRED test);
     /// sub-step 5.5 (lines 3948-3959, still not effectively verified after 5.2-5.4) rejects with
     /// <see cref="WellKnownCtapStatusCodes.PuatRequired"/>.
     /// </para>
@@ -1187,7 +1187,7 @@ public static class CtapAuthenticatorTransitions
         bool pinUvAuthParamPresent = request.PinUvAuthParam is not null;
         bool effectiveUserVerification = !pinUvAuthParamPresent && request.Options?.UserVerification == true;
 
-        //Step 4.3 (lines 3896-3902, R11 LIVE): rejects ONLY when built-in UV is not yet configured.
+        //Step 4.3 (lines 3896-3902): rejects ONLY when built-in UV is not yet configured.
         if(effectiveUserVerification && !state.HasProvisionedBioEnrollments)
         {
             return Reject(state, WellKnownCtapStatusCodes.InvalidOption, "GetAssertion:UvNotConfigured");
@@ -1200,7 +1200,7 @@ public static class CtapAuthenticatorTransitions
 
         bool userPresent = request.Options?.UserPresence ?? true;
 
-        //R5 (getInfo 0x07, snapshot lines 4405-4409, "Maximum number of credentials supported in
+        //getInfo 0x07 (snapshot lines 4405-4409, "Maximum number of credentials supported in
         //credentialID list at a time by the authenticator. MUST be greater than zero if present."): an
         //allowList carrying more entries than MaxCredentialCountInListCapacity is a capability
         //precondition, rejected with LimitExceeded (0x15, snapshot lines 8897-8899, "Limit for number of
@@ -1213,7 +1213,7 @@ public static class CtapAuthenticatorTransitions
 
         bool isProtectedByUserVerification = IsProtectedByUserVerification(state);
 
-        //Step 5 (lines 3916-3960, R11 LIVE): gated additionally on the effective "up" value (absent ⇒
+        //Step 5 (lines 3916-3960): gated additionally on the effective "up" value (absent ⇒
         //true, already resolved above) — the up:false carve-out this authenticator preserves. Sub-step
         //5.4 force-upgrades a false/absent request uv option to true whenever built-in UV is configured
         //(see the method's own remarks) — ga's own genuine forcing step, distinct from mc's restatement.
@@ -1254,9 +1254,9 @@ public static class CtapAuthenticatorTransitions
             return Transition(nextState, "GetAssertion:VerifyPinUvAuthToken");
         }
 
-        //Step 6.2 (lines 3997-4023, R11 LIVE): uv effectively true, no param, built-in UV configured.
+        //Step 6.2 (lines 3997-4023): uv effectively true, no param, built-in UV configured.
         //internalRetry is HARDCODED true here (ga 6.2.1 verbatim) — never computed by a helper shared
-        //with 0x06 (uv scout trap 2).
+        //with 0x06.
         if(effectiveUserVerification)
         {
             if(ShouldDragDownUvRetriesOnPinLockout(state))
@@ -1280,7 +1280,7 @@ public static class CtapAuthenticatorTransitions
 
         //Not protected, or protected-but-neither-param-nor-uv-present: proceed with the "uv" bit false
         //(line 4025's note — any junk pinUvAuthParam is ignored when not protected). userPresent gates
-        //the seam (trap 6): up:false is a pre-flight that must never consult the provider.
+        //the seam: up:false is a pre-flight that must never consult the provider.
         return userPresent
             ? CollectUserPresenceForGetAssertion(state, requested, userVerified: false, authenticatingProtocol: null)
             : ContinueGetAssertion(state, requested, request, userVerified: false, userPresent, authenticatingProtocol: null);
@@ -1335,7 +1335,7 @@ public static class CtapAuthenticatorTransitions
 
         bool userPresent = request.Options?.UserPresence ?? true;
 
-        //userPresent gates the seam (trap 6): up:false is a pre-flight that must never consult the provider.
+        //userPresent gates the seam: up:false is a pre-flight that must never consult the provider.
         return userPresent
             ? CollectUserPresenceForGetAssertion(state, requested, userVerified: true, authenticatingProtocol: protocolId)
             : ContinueGetAssertion(state, requested, request, userVerified: true, userPresent, authenticatingProtocol: protocolId);
@@ -1344,10 +1344,10 @@ public static class CtapAuthenticatorTransitions
 
     /// <summary>
     /// The <c>authenticatorGetAssertion</c> continuation shared by the not-protected fallback and
-    /// <see cref="OnGetAssertionPinUvAuthTokenVerified"/>'s success exit (decision 5's continuation
+    /// <see cref="OnGetAssertionPinUvAuthTokenVerified"/>'s success exit (this shared continuation
     /// helper): the CTAP 2.3 §12.7 hmac-secret PURE pre-checks (steps 1-2, below), the credential-location
     /// step (allowList match, or the full applicable-resident-credentials list ordered most-recent-first
-    /// per CTAP 2.3 section 6.2 step 12), R10's credProtect filtering (CTAP 2.3 §12.1, lines 4038-4048,
+    /// per CTAP 2.3 section 6.2 step 12), credProtect filtering (CTAP 2.3 §12.1, lines 4038-4048,
     /// applied AFTER each locate call — see <see cref="IsCredProtectLevelThreeUvExcluded"/> and
     /// <see cref="FilterUnverifiedCredProtectFromDiscoverableScan"/>), flag clearing on every success
     /// whose <paramref name="userPresent"/> is not false (step 9.4, line 4098), and declaring a
@@ -1360,7 +1360,7 @@ public static class CtapAuthenticatorTransitions
     /// 2873).
     /// </summary>
     /// <remarks>
-    /// hmac-secret steps 1-2 (contract R4) run here, ONCE, before either credential-location branch —
+    /// hmac-secret steps 1-2 run here, ONCE, before either credential-location branch —
     /// both checks are pure (no crypto, no credential lookup) and this method is the single funnel both
     /// callers share, so placing them here matches the spec's own step order (protocol/up validated
     /// before the "wait for consent" step this authenticator's uv/up resolution has already completed by
@@ -1413,7 +1413,7 @@ public static class CtapAuthenticatorTransitions
                 return Reject(state, WellKnownCtapStatusCodes.NoCredentials, "GetAssertion:NoCredentials");
             }
 
-            //R8/§12.3 line 12865: a present largeBlobKey value that is not exactly true is a
+            //§12.3 line 12865: a present largeBlobKey value that is not exactly true is a
             //request-shape error, checked once a credential has actually been located (CTAP 2.3's own
             //extension-processing step follows credential location, mirroring mc's own placement).
             if(request.LargeBlobKey is bool allowListLargeBlobKeyValue && allowListLargeBlobKeyValue != true)
@@ -1471,8 +1471,8 @@ public static class CtapAuthenticatorTransitions
 
 
     /// <summary>
-    /// Arms a user-presence wait for an interrupted <c>authenticatorMakeCredential</c> (CTAP 2.3 :2840,
-    /// R1) and declares the <see cref="CtapCollectUserPresenceAction"/> that consults the injected
+    /// Arms a user-presence wait for an interrupted <c>authenticatorMakeCredential</c> (CTAP 2.3 :2840)
+    /// and declares the <see cref="CtapCollectUserPresenceAction"/> that consults the injected
     /// <see cref="SimulateUserPresenceDelegate"/>. Replaces every <c>ContinueMakeCredential</c> call site
     /// that used to hardcode <c>userPresent: true</c> — the actual call to
     /// <see cref="ContinueMakeCredential"/> now happens only once a <see cref="CtapUserPresenceDecision.Granted"/>
@@ -1499,11 +1499,11 @@ public static class CtapAuthenticatorTransitions
 
 
     /// <summary>
-    /// Arms a user-presence wait for an interrupted <c>authenticatorGetAssertion</c> (CTAP 2.3 :2840, R1)
+    /// Arms a user-presence wait for an interrupted <c>authenticatorGetAssertion</c> (CTAP 2.3 :2840)
     /// and declares the <see cref="CtapCollectUserPresenceAction"/> that consults the injected
     /// <see cref="SimulateUserPresenceDelegate"/> — see <see cref="CollectUserPresenceForMakeCredential"/>'s
     /// identical shape. Callers gate this on the request's own resolved <c>up</c> value: <c>up:false</c>
-    /// (a pre-flight) must NOT reach here at all (trap 6), so no such gate lives inside this method.
+    /// (a pre-flight) must NOT reach here at all, so no such gate lives inside this method.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the CtapGetAssertionUserPresenceContinuation transfers to the CtapPendingUserPresenceState stored on the returned state's PendingUserPresenceWait; it is disposed when that wait is resumed, denied, times out, or is discarded by PowerCycle/FactoryReset.")]
@@ -1527,7 +1527,7 @@ public static class CtapAuthenticatorTransitions
 
     /// <summary>
     /// Completes a <see cref="CtapCollectUserPresenceAction"/> once the injected
-    /// <see cref="SimulateUserPresenceDelegate"/> has answered (CTAP 2.3 :2840, R1/R2): resumes the
+    /// <see cref="SimulateUserPresenceDelegate"/> has answered (CTAP 2.3 :2840): resumes the
     /// parked continuation on <see cref="CtapUserPresenceDecision.Granted"/> (byte-identical to today's
     /// hardcoded-<c>true</c> path); rejects with <see cref="WellKnownCtapStatusCodes.OperationDenied"/> on
     /// <see cref="CtapUserPresenceDecision.Denied"/>; on <see cref="CtapUserPresenceDecision.Pending"/>,
@@ -1574,7 +1574,7 @@ public static class CtapAuthenticatorTransitions
 
 
     /// <summary>
-    /// Polls a parked user-presence wait (CTAP 2.3 :2840, R2): discards it with
+    /// Polls a parked user-presence wait (CTAP 2.3 :2840): discards it with
     /// <see cref="WellKnownCtapStatusCodes.UserActionTimeout"/> once <see cref="UserActionTimeoutDuration"/>
     /// has elapsed since it was armed; otherwise declares the SAME <see cref="CtapCollectUserPresenceAction"/>
     /// again — <see cref="OnUserPresenceDecisionCollected"/>'s own handling resumes it identically whether
@@ -1618,7 +1618,7 @@ public static class CtapAuthenticatorTransitions
     private static TransitionResult<CtapAuthenticatorState, CtapAuthenticatorStackSymbol> OnGetNextAssertionRequested(
         CtapAuthenticatorState state, GetNextAssertionRequested requested)
     {
-        //R7: authenticatorGetNextAssertion is "another operation" relative to a pending largeBlobs write
+        //authenticatorGetNextAssertion is "another operation" relative to a pending largeBlobs write
         //(a DIFFERENT stateful sequence, not its own), so it discards RememberedLargeBlobWrite under the
         //GLOBAL discipline exactly as every command other than a largeBlobs continuation itself does —
         //only RememberedGetAssertion, this method's OWN sequence, is preserved.
@@ -1677,7 +1677,7 @@ public static class CtapAuthenticatorTransitions
     /// built-in-UV token-issuance subcommand
     /// (<see cref="WellKnownCtapClientPinSubCommands.GetPinUvAuthTokenUsingUvWithPermissions"/>); every
     /// other <c>subCommand</c> value is rejected with <see cref="WellKnownCtapStatusCodes.InvalidSubcommand"/>
-    /// (R1 ruling: section 6.5.5's own command definition names no subcommand-not-supported status of
+    /// (a ruled reading: section 6.5.5's own command definition names no subcommand-not-supported status of
     /// its own — the general dispatch rule at section 8.1, line 8810, "MUST return
     /// CTAP2_ERR_INVALID_SUBCOMMAND", governs this event by default). <c>authenticatorClientPIN</c> is
     /// an intervening operation like every other command: it discards any remembered
@@ -1775,7 +1775,7 @@ public static class CtapAuthenticatorTransitions
     /// 5563-5570): missing mandatory parameters (<c>pinUvAuthProtocol</c>, <c>keyAgreement</c>,
     /// <c>pinUvAuthParam</c>, <c>newPinEnc</c>) → <see cref="WellKnownCtapStatusCodes.MissingParameter"/>;
     /// an unsupported protocol → <see cref="WellKnownCtapStatusCodes.InvalidParameter"/>; the power-cycle
-    /// latch (decision 7, one of "the four" PIN-auth subcommands) → <see cref="WellKnownCtapStatusCodes.PinAuthBlocked"/>;
+    /// latch (shared across the four PIN-auth subcommands) → <see cref="WellKnownCtapStatusCodes.PinAuthBlocked"/>;
     /// a PIN already set (line 5568) → <see cref="WellKnownCtapStatusCodes.PinAuthInvalid"/>. Once every
     /// check passes, declares a <see cref="CtapEstablishPinAction"/> and returns before the crypto
     /// sequence runs.
@@ -1800,7 +1800,7 @@ public static class CtapAuthenticatorTransitions
 
         if(state.IsPinEstablished)
         {
-            //Wavepin review fix F-1: consults IsPinEstablished (CurrentStoredPin OR the durable tier's own
+            //Consults IsPinEstablished (CurrentStoredPin OR the durable tier's own
             //"provisioned, local hash unknown" signal), never CurrentStoredPin alone — a PIN genuinely
             //provisioned on the persistent tier whose local hash a rehydration never (re)learned must
             //refuse establishment exactly like an ordinarily-known one; setPIN's first-establishment path
@@ -1828,7 +1828,7 @@ public static class CtapAuthenticatorTransitions
     /// <see cref="CtapSetPinOutcomeKind.Success"/> — stores the new PIN hash, its code-point length, and
     /// resets <c>pinRetries</c> to maximum (CTAP 2.3 §6.5.5.5, lines 5590-5593). Does NOT touch
     /// <see cref="CtapAuthenticatorState.UvRetries"/>: line 5071-5072's "each correct PIN entry" reset
-    /// applies to an ALREADY-ESTABLISHED PIN being re-entered (<c>changePIN</c>/token issuance, R10) —
+    /// applies to an ALREADY-ESTABLISHED PIN being re-entered (<c>changePIN</c>/token issuance) —
     /// <c>setPIN</c> is the FIRST PIN ever set, with no prior correct entry to speak of, a documented
     /// reading over the clause's own silence on initial establishment.
     /// </summary>
@@ -1871,12 +1871,12 @@ public static class CtapAuthenticatorTransitions
     /// The pure pre-checks and effectful-action declaration for <c>changePIN</c> (CTAP 2.3 §6.5.5.6, lines
     /// 5651-5658): missing mandatory parameters (<c>pinUvAuthProtocol</c>, <c>keyAgreement</c>,
     /// <c>pinUvAuthParam</c>, <c>newPinEnc</c>, <c>pinHashEnc</c>) → <see cref="WellKnownCtapStatusCodes.MissingParameter"/>;
-    /// an unsupported protocol → <see cref="WellKnownCtapStatusCodes.InvalidParameter"/>; no PIN set (the
-    /// wave-5b no-PIN ruling, decision 6, grounded in §8.2's <c>PIN_NOT_SET</c> semantics and §6.5.5.7.2's
+    /// an unsupported protocol → <see cref="WellKnownCtapStatusCodes.InvalidParameter"/>; no PIN set
+    /// (grounded in §8.2's <c>PIN_NOT_SET</c> semantics and §6.5.5.7.2's
     /// <c>clientPin=true</c> mandate antecedent) → <see cref="WellKnownCtapStatusCodes.PinNotSet"/>,
     /// checked BEFORE any crypto action and never decrementing; <c>pinRetries</c> exhausted (line 5656)
-    /// → <see cref="WellKnownCtapStatusCodes.PinBlocked"/>, checked before the power-cycle latch (decision
-    /// 7: permanent lockout beats the recoverable one) → <see cref="WellKnownCtapStatusCodes.PinAuthBlocked"/>.
+    /// → <see cref="WellKnownCtapStatusCodes.PinBlocked"/>, checked before the power-cycle latch
+    /// (permanent lockout beats the recoverable one) → <see cref="WellKnownCtapStatusCodes.PinAuthBlocked"/>.
     /// Once every check passes, declares a <see cref="CtapChangePinAction"/>, threading the CURRENT
     /// <see cref="CtapAuthenticatorState.IsForcePinChangeRequired"/> value so the effectful sequence can
     /// apply line 5700's same-PIN-under-force rejection at the exact point the spec's own step order
@@ -1905,7 +1905,7 @@ public static class CtapAuthenticatorTransitions
 
         if(!state.IsPinEstablished)
         {
-            //Wavepin review fix F-1/F-2: consults IsPinEstablished, not CurrentStoredPin alone, so
+            //Consults IsPinEstablished, not CurrentStoredPin alone, so
             //changePIN stays available when the persistent tier reports a genuinely provisioned PIN whose
             //local hash a rehydration never learned — its own current-PIN check is custody-verified
             //against the durable tier, so the unknown local hash does not block it.
@@ -1999,8 +1999,8 @@ public static class CtapAuthenticatorTransitions
 
     /// <summary>
     /// Installs a successful <c>changePIN</c>'s new PIN hash and code-point length, restores
-    /// <c>uvRetries</c> to its own maximum (line 5071-5072: a correct PIN entry resets BOTH counters,
-    /// R10), resets every <c>pinUvAuthToken</c> (CTAP 2.3 §6.5.5.6, line 5714 —
+    /// <c>uvRetries</c> to its own maximum (line 5071-5072: a correct PIN entry resets BOTH counters),
+    /// resets every <c>pinUvAuthToken</c> (CTAP 2.3 §6.5.5.6, line 5714 —
     /// <c>resetPersistentPinUvAuthToken()</c>, line 5716, is a structurally-empty operation in this
     /// profile: no <c>persistentPinUvAuthToken</c> exists to clear), clears
     /// <see cref="CtapAuthenticatorState.IsForcePinChangeRequired"/> (line 5708: "sets the value of the
@@ -2024,7 +2024,7 @@ public static class CtapAuthenticatorTransitions
             ProtocolOneToken = completed.FreshProtocolOneToken!,
             ProtocolTwoToken = completed.FreshProtocolTwoToken!,
             IsForcePinChangeRequired = false,
-            //Wavepin review fix F-1: the fresh hash above is now the KNOWN local one — a possible
+            //The fresh hash above is now the KNOWN local one — a possible
             //true-from-rehydration flag no longer describes reality once changePIN itself just learned it.
             IsPinProvisionedWithUnknownLocalHash = false,
             ResponseIntent = new ClientPinResponseReady(new CtapClientPinResponse())
@@ -2040,9 +2040,9 @@ public static class CtapAuthenticatorTransitions
     /// <c>pinHashEnc</c>) → <see cref="WellKnownCtapStatusCodes.MissingParameter"/>; an unsupported
     /// protocol → <see cref="WellKnownCtapStatusCodes.InvalidParameter"/>; <c>permissions</c> present
     /// (lines 5865-5866) or <c>rpId</c> present (lines 5868-5869) → <see cref="WellKnownCtapStatusCodes.InvalidParameter"/>;
-    /// no PIN set (decision 6) → <see cref="WellKnownCtapStatusCodes.PinNotSet"/>; <c>pinRetries</c>
+    /// no PIN set → <see cref="WellKnownCtapStatusCodes.PinNotSet"/>; <c>pinRetries</c>
     /// exhausted (line 5871) → <see cref="WellKnownCtapStatusCodes.PinBlocked"/>; the power-cycle latch
-    /// (decision 7) → <see cref="WellKnownCtapStatusCodes.PinAuthBlocked"/>. Once every check passes,
+    /// → <see cref="WellKnownCtapStatusCodes.PinAuthBlocked"/>. Once every check passes,
     /// declares a <see cref="CtapIssuePinTokenAction"/> with the default <c>mc|ga</c> permissions (line
     /// 5912: <c>noMcGaPermissionsWithClientPin</c> absent under this profile's getInfo ⇒ default
     /// permissions are assigned), no permissions RP ID (lines 5830-5834: a <c>getPinToken</c>-issued
@@ -2082,7 +2082,7 @@ public static class CtapAuthenticatorTransitions
 
         if(!state.IsPinEstablished)
         {
-            //Wavepin review fix F-1/F-2: see OnChangePinRequested's identical IsPinEstablished rationale.
+            //See OnChangePinRequested's identical IsPinEstablished rationale.
             return Reject(state, WellKnownCtapStatusCodes.PinNotSet, "ClientPin:GetPinTokenNoPinSet");
         }
 
@@ -2122,14 +2122,14 @@ public static class CtapAuthenticatorTransitions
     /// <see cref="WellKnownCtapStatusCodes.InvalidParameter"/>; <c>permissions == 0</c> (line 5953) →
     /// <see cref="WellKnownCtapStatusCodes.InvalidParameter"/>; the permission-statement gate (lines
     /// 5955-5971, <see cref="EvaluatePinUvAuthTokenPermissionGate"/>) → <see cref="WellKnownCtapStatusCodes.UnauthorizedPermission"/>;
-    /// no PIN set (decision 6) → <see cref="WellKnownCtapStatusCodes.PinNotSet"/>; <c>pinRetries</c>
+    /// no PIN set → <see cref="WellKnownCtapStatusCodes.PinNotSet"/>; <c>pinRetries</c>
     /// exhausted (line 5973) → <see cref="WellKnownCtapStatusCodes.PinBlocked"/>; the power-cycle latch
-    /// (decision 7) → <see cref="WellKnownCtapStatusCodes.PinAuthBlocked"/>. Once every check passes,
+    /// → <see cref="WellKnownCtapStatusCodes.PinAuthBlocked"/>. Once every check passes,
     /// declares a <see cref="CtapIssuePinTokenAction"/> with the requested permissions masked to this
     /// profile's grantable bits (<c>mc|ga|acfg|cm|be|lbw</c> — <c>acfg</c>/<c>cm</c> join once
     /// <c>authnrCfg</c>/<c>credMgmt</c> are advertised true, <c>be</c> joins once <c>bioEnroll</c> is
     /// advertised present (line 5960), <c>lbw</c> joins once <c>largeBlobs</c> is advertised true (line
-    /// 5962, wavelb R4), undefined bits ignored, line 6022), the
+    /// 5962), undefined bits ignored, line 6022), the
     /// request's <c>rpId</c> as the permissions RP ID (line 6024) — <c>acfg</c>'s own RP ID column is
     /// "Ignored" (line 5814) and <c>cm</c>'s is "Optional" (line 5788), so neither participates in the
     /// <c>mc</c>/<c>ga</c>-only "RP ID Required" check above — and the CURRENT
@@ -2177,7 +2177,7 @@ public static class CtapAuthenticatorTransitions
 
         if(!state.IsPinEstablished)
         {
-            //Wavepin review fix F-1/F-2: see OnChangePinRequested's identical IsPinEstablished rationale.
+            //See OnChangePinRequested's identical IsPinEstablished rationale.
             return Reject(state, WellKnownCtapStatusCodes.PinNotSet, "ClientPin:PinUvAuthTokenNoPinSet");
         }
 
@@ -2214,7 +2214,7 @@ public static class CtapAuthenticatorTransitions
     /// <c>getPinUvAuthTokenUsingUvWithPermissions</c> (CTAP 2.3 §6.5.5.7.3), mirroring
     /// <see cref="OnGetPinUvAuthTokenUsingPinWithPermissionsRequested"/>'s three-piece pipeline shape
     /// with <c>uvRetries</c> substituted for <c>pinRetries</c> and the pinHash decrypt/compare replaced
-    /// by a simulated built-in UV gesture (R9), in the spec's own literal step order: missing mandatory
+    /// by a simulated built-in UV gesture, in the spec's own literal step order: missing mandatory
     /// parameters (<c>pinUvAuthProtocol</c>/<c>keyAgreement</c>/<c>permissions</c> — NO
     /// <c>pinHashEnc</c>, step 3.1) or an <c>mc</c>/<c>ga</c> permission requested without <c>rpId</c>
     /// (the identical conditionally-mandatory rule the PIN path applies) →
@@ -2222,20 +2222,20 @@ public static class CtapAuthenticatorTransitions
     /// <see cref="WellKnownCtapStatusCodes.InvalidParameter"/>; <c>permissions == 0</c> (step 3.3) →
     /// <see cref="WellKnownCtapStatusCodes.InvalidParameter"/>; 0x06's OWN permission-statement gate
     /// (step 3.4, <see cref="EvaluateUvTokenPermissionGate"/> — a SEPARATE statement list from the PIN
-    /// path's, R5) → <see cref="WellKnownCtapStatusCodes.UnauthorizedPermission"/>; zero fingerprint
+    /// path's) → <see cref="WellKnownCtapStatusCodes.UnauthorizedPermission"/>; zero fingerprint
     /// enrollments (step 3.5: "built-in user verification method is supported but not configured") →
     /// <see cref="WellKnownCtapStatusCodes.NotAllowed"/> (DISTINCT from mc/ga's
-    /// <see cref="WellKnownCtapStatusCodes.InvalidOption"/> for the identical underlying state, uv scout
-    /// trap 7); <c>internalRetry</c> COMPUTED from <see cref="CtapAuthenticatorState.PreferredPlatformUvAttempts"/>
+    /// <see cref="WellKnownCtapStatusCodes.InvalidOption"/> for the identical underlying state);
+    /// <c>internalRetry</c> COMPUTED from <see cref="CtapAuthenticatorState.PreferredPlatformUvAttempts"/>
     /// (step 3.6 — <see langword="false"/> here, since this profile's constant is 3; NEVER the mc/ga-shared
-    /// hardcoded-true value, uv scout trap 2); <c>uvRetries == 0</c> (step 3.7) →
+    /// hardcoded-true value); <c>uvRetries == 0</c> (step 3.7) →
     /// <see cref="WellKnownCtapStatusCodes.UvBlocked"/>; step 3.8's display-consent request is a
     /// documented no-op (no display is modeled); <c>performBuiltInUv</c>'s OWN step 3
     /// (<see cref="ShouldDragDownUvRetriesOnPinLockout"/>, evaluated here since step 3.9 calls it
     /// directly) → <see cref="WellKnownCtapStatusCodes.UvBlocked"/> with <c>uvRetries</c> dragged to
-    /// zero (R10's REQUIRED cross-counter test). Once every check passes, masks the requested permissions
-    /// to this subcommand's own grantable set (<c>mc|ga|cm|be|lbw</c> — NOT <c>acfg</c>, R5; <c>lbw</c>
-    /// joins per wavelb R4, the identical line-6070 bullet) and declares a
+    /// zero (a REQUIRED cross-counter test). Once every check passes, masks the requested permissions
+    /// to this subcommand's own grantable set (<c>mc|ga|cm|be|lbw</c> — NOT <c>acfg</c>; <c>lbw</c>
+    /// joins per the identical line-6070 bullet) and declares a
     /// <see cref="CtapIssueUvTokenAction"/>.
     /// </summary>
     private static TransitionResult<CtapAuthenticatorState, CtapAuthenticatorStackSymbol> OnGetPinUvAuthTokenUsingUvWithPermissionsRequested(
@@ -2275,7 +2275,7 @@ public static class CtapAuthenticatorTransitions
         }
 
         //Step 3.6 (lines 6080-6082): computed from preferredPlatformUvAttempts, never shared with mc/ga's
-        //own hardcoded-true value (uv scout trap 2).
+        //own hardcoded-true value.
         bool internalRetry = CtapAuthenticatorState.PreferredPlatformUvAttempts <= 1;
 
         if(state.UvRetries == 0)
@@ -2308,13 +2308,13 @@ public static class CtapAuthenticatorTransitions
     /// <summary>
     /// Evaluates <c>getPinUvAuthTokenUsingUvWithPermissions</c>'s OWN permission-statement gate (CTAP 2.3
     /// §6.5.5.7.3, lines 6063-6075) — a SEPARATE statement list from
-    /// <see cref="EvaluatePinUvAuthTokenPermissionGate"/>'s (R5, never conflated, uv scout trap 4): "The
+    /// <see cref="EvaluatePinUvAuthTokenPermissionGate"/>'s (never conflated): "The
     /// mc and ga permissions are always considered authorized, thus they are not listed below" (line
     /// 6063) — under this profile's <c>authenticatorGetInfo</c> (<c>credMgmt</c>/<c>uvBioEnroll</c>/
     /// <c>largeBlobs</c> always advertised <see langword="true"/>, <c>uvAcfg</c> permanently absent, no
     /// <c>perCredMgmtRO</c>), <c>cm</c>'s statement ("credMgmt is false or absent") and <c>be</c>'s
     /// ("uvBioEnroll is false or absent") never hold, and <c>lbw</c>'s ("largeBlobs is false or absent",
-    /// line 6070 — VERBATIM IDENTICAL to the PIN path's own line 5962 bullet, wavelb R4) never holds
+    /// line 6070 — VERBATIM IDENTICAL to the PIN path's own line 5962 bullet) never holds
     /// either — no <c>uvLargeBlobs</c> analogue exists, so this single getInfo flip grants <c>lbw</c> on
     /// BOTH token paths at once — while <c>acfg</c>'s denial bullet has no antecedent
     /// to fail — <c>uvAcfg</c> is simply absent, so <c>acfg</c> is unconditionally denied — and
@@ -2335,7 +2335,7 @@ public static class CtapAuthenticatorTransitions
     /// <c>performBuiltInUv</c>'s OWN step 3 (CTAP 2.3 §6.5.3.1, line 5108): "If clientPIN is true and
     /// pinRetries is 0, then let the uvRetries counter be set to 0 and return error." A cross-counter
     /// effect — the ONE place <c>performBuiltInUv</c> itself reads <c>pinRetries</c>/<c>clientPin</c>
-    /// (R10) — evaluated purely, without ever declaring an attempt action or consulting
+    /// — evaluated purely, without ever declaring an attempt action or consulting
     /// <see cref="SimulateBuiltInUvDelegate"/>, by every <c>performBuiltInUv</c> call site (0x06, mc, ga)
     /// immediately before it would otherwise declare one.
     /// </summary>
@@ -2405,13 +2405,13 @@ public static class CtapAuthenticatorTransitions
     /// by <see cref="BuiltInUvAttempted.AttemptsConsumed"/> and resolves the mc/ga-specific ladder: a
     /// timeout → <see cref="WellKnownCtapStatusCodes.UserActionTimeout"/>; otherwise, since
     /// <c>clientPin</c> is set whenever this branch is reachable in this profile (the only route to a
-    /// first fingerprint enrollment is the PIN-path <c>be</c> token, uv scout reachability note) →
+    /// first fingerprint enrollment is the PIN-path <c>be</c> token) →
     /// <see cref="WellKnownCtapStatusCodes.PuatRequired"/> (mc line 3428/ga line 4013's own
     /// <c>noMcGaPermissionsWithClientPin</c> conjunct is vacuously satisfied — this option is never
     /// modeled/advertised in this profile). The ladder's remaining two arms —
     /// <c>uvRetries == 0</c> → <see cref="WellKnownCtapStatusCodes.PinBlocked"/>, else →
     /// <see cref="WellKnownCtapStatusCodes.OperationDenied"/> — are coded spec-exact (mc line 3428/3430,
-    /// ga line 4013/4023) but are DOCUMENTED UNREACHABLE in this profile for the same reason (R11): do
+    /// ga line 4013/4023) but are DOCUMENTED UNREACHABLE in this profile for the same reason: do
     /// not assert either fires.
     /// </summary>
     private static TransitionResult<CtapAuthenticatorState, CtapAuthenticatorStackSymbol> OnBuiltInUvAttempted(
@@ -2428,7 +2428,7 @@ public static class CtapAuthenticatorTransitions
             {
                 CtapMakeCredentialBuiltInUvContinuation mc =>
                     CollectUserPresenceForMakeCredential(nextState, mc.Requested, userVerified: true, mc.EnterpriseAttestationGranted),
-                //ga.UserPresent gates the seam (trap 6): a built-in-UV attempt can conclude while the
+                //ga.UserPresent gates the seam: a built-in-UV attempt can conclude while the
                 //request's own "up" resolved false, and a never-granting provider must not affect that
                 //up:false path.
                 CtapGetAssertionBuiltInUvContinuation ga => ga.UserPresent
@@ -2445,7 +2445,7 @@ public static class CtapAuthenticatorTransitions
 
         //MatchFailure: clientPin is set whenever this branch is reachable in this profile (a first
         //enrollment always requires a prior PIN-path be token), so PuatRequired is the sole reachable
-        //arm — the PinBlocked/OperationDenied ladder arms below are documented unreachable (R11).
+        //arm — the PinBlocked/OperationDenied ladder arms below are documented unreachable.
         bool isClientPinSet = nextState.CurrentStoredPin is not null;
         byte status = isClientPinSet
             ? WellKnownCtapStatusCodes.PuatRequired
@@ -2471,7 +2471,7 @@ public static class CtapAuthenticatorTransitions
     /// outcome installs the two freshly reset token states (the selected protocol's already begun-using
     /// and permissioned, CTAP 2.3 lines 5908-5915/6018-6026), resets <c>pinRetries</c> to maximum, ALSO
     /// resets <c>uvRetries</c> to its own maximum (line 5071-5072: "Each correct PIN entry resets the
-    /// pinRetries and the uvRetries counters back to their maximum values" — R10), and returns the
+    /// pinRetries and the uvRetries counters back to their maximum values"), and returns the
     /// encrypted token.
     /// </summary>
     private static TransitionResult<CtapAuthenticatorState, CtapAuthenticatorStackSymbol> OnPinTokenIssuanceCompleted(
@@ -2529,10 +2529,10 @@ public static class CtapAuthenticatorTransitions
     /// branch, which maps a decode failure to <see cref="WellKnownCtapStatusCodes.MissingParameter"/>
     /// before this input is ever built — mirroring how <see cref="CtapClientPinRequest.SubCommand"/>'s
     /// own required-field decode throws); step 2 (unsupported subcommand) →
-    /// <see cref="WellKnownCtapStatusCodes.InvalidSubcommand"/> (R1: line 8810's general dispatch MUST
+    /// <see cref="WellKnownCtapStatusCodes.InvalidSubcommand"/> (line 8810's general dispatch MUST
     /// governs over line 7955's bare-pseudocode <c>InvalidParameter</c>, both anchors cited on
-    /// <see cref="WellKnownCtapStatusCodes.InvalidSubcommand"/> itself) — waveep R12 adds a CAPABILITY-GATED
-    /// third disjunct: <c>enableEnterpriseAttestation</c> is supported exactly when
+    /// <see cref="WellKnownCtapStatusCodes.InvalidSubcommand"/> itself) — a CAPABILITY-GATED
+    /// third disjunct also applies: <c>enableEnterpriseAttestation</c> is supported exactly when
     /// <see cref="CtapAuthenticatorState.IsEnterpriseAttestationCapable"/>, so a non-capable authenticator's
     /// <c>0x01</c> keeps rejecting via this same step (falsification #8); step 3 (the <c>toggleAlwaysUv</c>
     /// bypass, the EXACT three-way conjunction: <c>subCommand==toggleAlwaysUv &amp;&amp; !protected &amp;&amp;
@@ -2548,24 +2548,24 @@ public static class CtapAuthenticatorTransitions
     /// <para>
     /// <strong>Step 3's bypass is NOT "if alwaysUv, skip the gate for toggleAlwaysUv".</strong> Its
     /// second conjunct — the authenticator must NOT already be protected by some form of user
-    /// verification — is load-bearing (trap 2): once a PIN is set, <c>toggleAlwaysUv</c> falls through
+    /// verification — is load-bearing: once a PIN is set, <c>toggleAlwaysUv</c> falls through
     /// to the ordinary step-4 gate exactly like every other subcommand, even with <c>alwaysUv</c>
     /// already true. The bypass exists solely so a factory-default-<c>alwaysUv</c>-enabled device with
     /// NO PIN yet can be turned off (or otherwise configured) once, tokenless.
     /// </para>
     /// <para>
-    /// <strong>Step 4.5's <c>acfg</c> permission check has no RP-ID component at all</strong> (trap 6):
+    /// <strong>Step 4.5's <c>acfg</c> permission check has no RP-ID component at all</strong>:
     /// <c>acfg</c>'s own RP ID column is "Ignored" (line 5814) and this command's own input parameters
     /// have no <c>rpId</c> field (§1.1's table). A token bound to any <c>rpId</c> by an earlier mc/ga
-    /// call still passes this gate. <strong>No flag or permission clearing happens on success</strong>
-    /// (trap 3): <c>authenticatorConfig</c> is not "an operation that tests user presence" in the
+    /// call still passes this gate. <strong>No flag or permission clearing happens on success</strong>:
+    /// <c>authenticatorConfig</c> is not "an operation that tests user presence" in the
     /// line-5828 sense — no <c>clearUserPresentFlag</c>/<c>clearUserVerifiedFlag</c>/
     /// <c>clearPinUvAuthTokenPermissionsExceptLbw</c> reference exists anywhere in §6.11's text — so a
     /// token used to complete <c>authenticatorConfig</c> retains every other permission afterward,
     /// provably by a subsequent mc/ga call succeeding with the SAME token.
     /// </para>
     /// <para>
-    /// <strong>R2 — <c>OperationDenied</c> never fires here</strong>, for the identical reason mc/ga's
+    /// <strong><c>OperationDenied</c> never fires here</strong>, for the identical reason mc/ga's
     /// own "clientPin not supported" splits never resolve to it: <c>clientPin</c> is always present in
     /// this profile, so the not-protected branch's clientPin-present half (→ <c>PuatRequired</c>) is the
     /// only reachable outcome.
@@ -2578,9 +2578,9 @@ public static class CtapAuthenticatorTransitions
 
         CtapAuthenticatorConfigRequest request = requested.Request;
 
-        //Step 2 (line 7955 / R1's 0x3E, line 8810): this authenticator supports toggleAlwaysUv and
-        //setMinPINLength unconditionally (R3), and enableEnterpriseAttestation exactly when the
-        //authenticator is enterprise attestation capable (waveep R12, R2's single-sourced predicate) —
+        //Step 2 (line 7955 / 0x3E, line 8810): this authenticator supports toggleAlwaysUv and
+        //setMinPINLength unconditionally, and enableEnterpriseAttestation exactly when the
+        //authenticator is enterprise attestation capable (a single-sourced predicate) —
         //every other value, including out-of-table integers, is unsupported.
         bool isSupportedSubCommand = WellKnownCtapAuthenticatorConfigSubCommands.IsToggleAlwaysUv(request.SubCommand)
             || WellKnownCtapAuthenticatorConfigSubCommands.IsSetMinPinLength(request.SubCommand)
@@ -2592,7 +2592,7 @@ public static class CtapAuthenticatorTransitions
 
         bool isProtectedByUserVerification = IsProtectedByUserVerification(state);
 
-        //Step 3 (lines 7957-7967): the exact three-way conjunction — trap 2.
+        //Step 3 (lines 7957-7967): the exact three-way conjunction.
         bool bypassesTokenGate = WellKnownCtapAuthenticatorConfigSubCommands.IsToggleAlwaysUv(request.SubCommand)
             && !isProtectedByUserVerification
             && state.IsAlwaysUvEnabled;
@@ -2642,8 +2642,8 @@ public static class CtapAuthenticatorTransitions
     /// <summary>
     /// Completes an <c>authenticatorConfig</c> whose presented <c>pinUvAuthParam</c> has been verified
     /// (CTAP 2.3 §6.11 step 4.4-4.5, lines 7978-7985): verify (already run by the executor) →
-    /// <c>acfg</c> permission → invoke the subcommand. NO RP-ID check (trap 6, <c>acfg</c>'s own RP ID
-    /// column is "Ignored"), NO flag/permission stripping (trap 3, <c>authenticatorConfig</c> is not "an
+    /// <c>acfg</c> permission → invoke the subcommand. NO RP-ID check (<c>acfg</c>'s own RP ID
+    /// column is "Ignored"), NO flag/permission stripping (<c>authenticatorConfig</c> is not "an
     /// operation that tests user presence"). <see cref="CtapPinUvAuthTokenState.LastUsedAt"/> is stamped
     /// on success, mirroring mc/ga's own verified-token bookkeeping — the token remains fully usable for
     /// mc/ga afterward, unlike them the config permission is never cleared here either way.
@@ -2697,7 +2697,7 @@ public static class CtapAuthenticatorTransitions
     /// <c>alwaysUv</c> feature state. Disabled → enable (step 1.2, line 8015); enabled → disabling is
     /// supported in this profile (the line-8032 SHOULD is followed, not merely permitted) → disable
     /// (step 2.1.2, line 8027). <c>makeCredUvNotRqd</c>'s own forced-false-on-enable (step 1.1, line
-    /// 8013)/restored-default-on-disable (step 2.1.1, line 8025) needs no code here at all: R8's getInfo
+    /// 8013)/restored-default-on-disable (step 2.1.1, line 8025) needs no code here at all: the getInfo
     /// derivation (<c>MakeCredUvNotRqd: !isAlwaysUvEnabled</c>) already implements both directions as a
     /// pure function of <see cref="CtapAuthenticatorState.IsAlwaysUvEnabled"/>. Step 2.2's
     /// <c>OperationDenied</c> (line 8030, "disabling is unsupported") is documented-unreachable — this
@@ -2713,7 +2713,7 @@ public static class CtapAuthenticatorTransitions
 
     /// <summary>
     /// <c>enableEnterpriseAttestation</c> (CTAP 2.3 §6.11.1, lines 7999-8002): idempotent-enable, NOT a
-    /// toggle (trap 7/waveep R12) — disabled → re-enable and <c>CTAP2_OK</c> (line 7999); already-enabled
+    /// toggle — disabled → re-enable and <c>CTAP2_OK</c> (line 7999); already-enabled
     /// → no-op and <c>CTAP2_OK</c> (line 8002) — both collapse to the SAME unconditional
     /// <see langword="true"/> assignment, since re-setting an already-<see langword="true"/> flag to
     /// <see langword="true"/> is itself a no-op. Reachable only when
@@ -2721,7 +2721,7 @@ public static class CtapAuthenticatorTransitions
     /// <see cref="OnAuthenticatorConfigRequested"/>'s own step-2 gate before dispatch ever reaches here),
     /// so no capability re-check is needed in this handler's own body. <c>request.SubCommandParams</c> is
     /// deliberately never read (line 7994: "this subcommand does not take any parameters:
-    /// subCommandParams is ignored" — trap 1); line 8000's own note is the observable proof: the very
+    /// subCommandParams is ignored"); line 8000's own note is the observable proof: the very
     /// next <c>authenticatorGetInfo</c> reports <c>ep:true</c>.
     /// </summary>
     private static TransitionResult<CtapAuthenticatorState, CtapAuthenticatorStackSymbol> OnEnableEnterpriseAttestationRequested(CtapAuthenticatorState state)
@@ -2735,16 +2735,16 @@ public static class CtapAuthenticatorTransitions
     /// <summary>
     /// <c>setMinPINLength</c> (CTAP 2.3 §6.11.4, lines 8131-8192), the full nine-step behavioral matrix
     /// in literal order: step 1 (line 8134) defaults an absent <c>newMinPINLength</c> to the current
-    /// minimum; step 2 (lines 8105/8136, R7 LIVE) imposes no rejection — see this method's own remarks;
+    /// minimum; step 2 (lines 8105/8136) imposes no rejection — see this method's own remarks;
     /// step 3 (lines 8138-8141) rejects a DECREASE (equal is a no-op success — "minimum PIN lengths may
     /// only be increased"); step 4 (lines 8143-8149) <c>forceChangePin:true</c> with no PIN set →
     /// <see cref="WellKnownCtapStatusCodes.PinNotSet"/>, else unconditionally forces a change; step 5
-    /// (lines 8152-8166, R3) decodes but IGNORES <c>pinComplexityPolicy</c> — this profile's getInfo
+    /// (lines 8152-8166) decodes but IGNORES <c>pinComplexityPolicy</c> — this profile's getInfo
     /// <c>pinComplexityPolicy</c> member is absent, so it is never configurable via this subcommand (the
-    /// line-8442 MUST); step 6 (line 8169, TRAP 12) forces a change ONLY when the stored PIN is now too
+    /// line-8442 MUST); step 6 (line 8169) forces a change ONLY when the stored PIN is now too
     /// short for the just-raised minimum — raising the minimum to at or below an already-compliant PIN's
     /// own length does NOT force a change on its own; the <c>minPinLengthRPIDs</c> bound check/store
-    /// (step 8, lines 8179-8190, R7 LIVE — evaluated here, ahead of step 7's own effectful fork, since its
+    /// (step 8, lines 8179-8190 — evaluated here, ahead of step 7's own effectful fork, since its
     /// rejection is independent of step 7's entropy-consuming token reset) folds its resulting list into
     /// the same state update step 1/3/4/6 already assemble; step 7 (lines 8171-8177) resets every
     /// <c>pinUvAuthToken</c> (both protocols) whenever the CURRENT <c>forcePINChange</c> value (from step
@@ -2753,7 +2753,7 @@ public static class CtapAuthenticatorTransitions
     /// loop); step 9 (line 8192) returns <c>CTAP2_OK</c>.
     /// </summary>
     /// <remarks>
-    /// Step 2's rejection branch is REMOVED (R7): the line-8136 gate — "If minPinLengthRPIDs is present
+    /// Step 2's rejection branch is REMOVED: the line-8136 gate — "If minPinLengthRPIDs is present
     /// and the authenticator does not support the minPinLength extension or the PIN Complexity Policy
     /// extension, return CTAP1_ERR_INVALID_PARAMETER" — is a disjunctive ("...or...") antecedent read
     /// under De Morgan ("reject iff the authenticator supports NEITHER extension"); this profile now
@@ -2799,18 +2799,18 @@ public static class CtapAuthenticatorTransitions
             forcePinChange = true;
         }
 
-        //Step 5 (lines 8152-8166, R3): pinComplexityPolicy is decoded (request.PinComplexityPolicy) but
+        //Step 5 (lines 8152-8166): pinComplexityPolicy is decoded (request.PinComplexityPolicy) but
         //never consulted here — this profile's getInfo pinComplexityPolicy member is absent, so it is
         //not configurable via this subcommand (line 8442's MUST).
 
-        //Step 6 (line 8169, TRAP 12): forces a change ONLY when the stored PIN is now too short for the
+        //Step 6 (line 8169): forces a change ONLY when the stored PIN is now too short for the
         //just-raised minimum — NOT merely because the minimum was raised.
         if(isClientPinSet && state.PinCodePointLength < newMinPinLength)
         {
             forcePinChange = true;
         }
 
-        //Step 8 (lines 8179-8190, R7): see this method's own remarks for the guard/posture/bound-check
+        //Step 8 (lines 8179-8190): see this method's own remarks for the guard/posture/bound-check
         //derivation. Evaluated here, ahead of step 7's effectful fork below.
         IReadOnlyList<string> minPinLengthRpIds = state.MinPinLengthRpIds;
         if(request.MinPinLengthRpIds is { Count: > 0 } suppliedMinPinLengthRpIds)
@@ -2877,7 +2877,7 @@ public static class CtapAuthenticatorTransitions
 
     /// <summary>
     /// The pure request-arm of <c>authenticatorReset</c> (CTAP 2.3, section 6.6): opens with the
-    /// family-standard <see cref="DiscardAllRememberedSequences"/> call (R10's global-discard convention
+    /// family-standard <see cref="DiscardAllRememberedSequences"/> call (the global-discard convention
     /// applies here like every other command arm), then the power-up-window check (lines 6365-6366/6374)
     /// FIRST — <c>request.Now - state.PoweredOnAt</c> strictly greater than
     /// <see cref="ResetPowerUpWindowDuration"/> rejects with <see cref="WellKnownCtapStatusCodes.NotAllowed"/>
@@ -2951,24 +2951,24 @@ public static class CtapAuthenticatorTransitions
 
     /// <summary>
     /// The pure request-arm of <c>authenticatorCredentialManagement</c> (CTAP 2.3, section 6.8), the
-    /// SIMPLEST of the three token-gated command families in this codebase (R2 — seams §3.7): command
+    /// SIMPLEST of the three token-gated command families in this codebase: command
     /// level, <c>subCommand</c> outside {getCredsMetadata..updateUserInformation} rejects with
     /// <see cref="WellKnownCtapStatusCodes.InvalidSubcommand"/> (§8.1, line 8810 — the sole source, no
     /// two-source conflict exists for this command). <c>enumerateRPsGetNextRP</c>/
     /// <c>enumerateCredentialsGetNextCredential</c> (the two stateful continuations) have NO gate of any
     /// kind — no <c>pinUvAuthParam</c> processing at all, dispatched directly, gate-free, off the
-    /// remembered state (R10). Every other subcommand's own procedure opens IDENTICALLY and
+    /// remembered state. Every other subcommand's own procedure opens IDENTICALLY and
     /// UNCONDITIONALLY (no protected-check, no tokenless fallback, unlike mc/ga/acfg): step 1
     /// (<c>pinUvAuthParam</c> missing) → <see cref="WellKnownCtapStatusCodes.PuatRequired"/> — even when
     /// no PIN is set and even when the store is empty (the gate precedes any no-credentials check); step
     /// 2 (per-subcommand mandatory <c>subCommandParams</c> member absent, or <c>pinUvAuthProtocol</c>
     /// absent) → <see cref="WellKnownCtapStatusCodes.MissingParameter"/>; step 3 (protocol unsupported) →
-    /// <see cref="WellKnownCtapStatusCodes.InvalidParameter"/>; step 4 declares the R4 verify action that
+    /// <see cref="WellKnownCtapStatusCodes.InvalidParameter"/>; step 4 declares the verify action that
     /// interrupts this request to run <see cref="OnCredentialManagementPinUvAuthTokenVerified"/>'s own
-    /// remaining steps (cm permission → R3's RP-ID sub-check → the subcommand's own handler).
+    /// remaining steps (cm permission → the RP-ID sub-check → the subcommand's own handler).
     /// <c>authenticatorCredentialManagement</c> is an intervening operation like every other command:
     /// its FIVE gated subcommands discard ALL THREE remembered stateful-command sequences regardless of
-    /// whether the command itself succeeds (R10's global discard rule); the two GetNext continuations
+    /// whether the command itself succeeds (the global discard rule); the two GetNext continuations
     /// discard only the OTHER two slots, preserving their own.
     /// </summary>
     private static TransitionResult<CtapAuthenticatorState, CtapAuthenticatorStackSymbol> OnCredentialManagementRequested(
@@ -2978,7 +2978,7 @@ public static class CtapAuthenticatorTransitions
 
         if(WellKnownCtapCredentialManagementSubCommands.IsEnumerateRpsGetNextRp(request.SubCommand))
         {
-            //R7: a pending largeBlobs write is a DIFFERENT stateful sequence from this one's own
+            //A pending largeBlobs write is a DIFFERENT stateful sequence from this one's own
             //RememberedEnumerateRps, so it discards under the GLOBAL discipline exactly as every other
             //intervening command does.
             state = DiscardRememberedLargeBlobWrite(DiscardRememberedEnumerateCredentials(DiscardRememberedGetAssertion(state)));
@@ -3080,7 +3080,7 @@ public static class CtapAuthenticatorTransitions
     /// Completes an <c>authenticatorCredentialManagement</c> whose presented <c>pinUvAuthParam</c> has
     /// been verified: verify (already run by the executor) → step 5, the <c>cm</c> permission bit (line
     /// 5958's own bullet has already made <c>cm</c> unconditionally grantable — see
-    /// <see cref="EvaluatePinUvAuthTokenPermissionGate"/>) → step 6, R3's RP-ID sub-check, folded into
+    /// <see cref="EvaluatePinUvAuthTokenPermissionGate"/>) → step 6, the RP-ID sub-check, folded into
     /// each subcommand's own handler. NO flag/permission clearing on success (extraction §2.5 —
     /// <c>authenticatorCredentialManagement</c> is not "an operation that tests user presence"): a token
     /// used to complete any cm subcommand retains every other permission afterward.
@@ -3111,7 +3111,7 @@ public static class CtapAuthenticatorTransitions
 
     /// <summary>
     /// Dispatches to the requested subcommand's own handler after step 5's <c>cm</c> permission check
-    /// (CTAP 2.3 §6.8 step 6, R3): C1 (<c>getCredsMetadata</c>/<c>enumerateRPsBegin</c>/
+    /// (CTAP 2.3 §6.8 step 6): C1 (<c>getCredsMetadata</c>/<c>enumerateRPsBegin</c>/
     /// <c>enumerateCredentialsBegin</c>) rejects a BOUND token unconditionally — INVERTED polarity from
     /// mc/ga, even when the token is bound to the very RP being enumerated; C2 (<c>deleteCredential</c>/
     /// <c>updateUserInformation</c>) accepts an unbound token OR one bound to the ADDRESSED credential's
@@ -3162,8 +3162,8 @@ public static class CtapAuthenticatorTransitions
     /// <c>getCredsMetadata</c> (CTAP 2.3 §6.8.2, lines 7154-7161): no no-credentials rejection exists —
     /// an empty store SUCCEEDS with <c>{existingResidentCredentialsCount: 0,
     /// maxPossibleRemainingResidentCredentialsCount: capacity}</c>. Both counts derive from the SAME
-    /// source <c>getInfo</c>'s own <c>remainingDiscoverableCredentials</c> uses (R9's single-source-of-truth
-    /// choice). R5: the spec's own dual-path verify (lines 7134-7152, <c>persistentPinUvAuthToken</c>
+    /// source <c>getInfo</c>'s own <c>remainingDiscoverableCredentials</c> uses (the single-source-of-truth
+    /// choice). The spec's own dual-path verify (lines 7134-7152, <c>persistentPinUvAuthToken</c>
     /// first, falling back to <c>pinUvAuthToken</c>) is documented-unreachable here — this authenticator
     /// implements the step-6 <c>pinUvAuthToken</c> path directly, since <c>persistentPinUvAuthToken</c>/
     /// <c>pcmr</c>/<c>perCredMgmtRO</c> are unmodeled and issuance of the former is unreachable.
@@ -3184,10 +3184,10 @@ public static class CtapAuthenticatorTransitions
     /// <summary>
     /// <c>enumerateRPsBegin</c> (CTAP 2.3 §6.8.3, lines 7211-7222): step 7, no discoverable credentials →
     /// <see cref="WellKnownCtapStatusCodes.NoCredentials"/>; otherwise initializes the RPs sequence state
-    /// (R9's <see cref="CtapCredentialRecord.CreationSequence"/>-ascending-by-first-created-credential
+    /// (<see cref="CtapCredentialRecord.CreationSequence"/>-ascending-by-first-created-credential
     /// order, <see cref="GroupResidentCredentialsByRpId"/>) and declares
     /// <see cref="CtapEmitCredentialManagementRpAction"/> for the first RP, carrying <c>totalRPs</c>
-    /// (line 7220). R5: the spec's own dual-path verify (lines 7191-7208) is documented-unreachable —
+    /// (line 7220). The spec's own dual-path verify (lines 7191-7208) is documented-unreachable —
     /// see <see cref="OnGetCredsMetadataRequested"/>'s own identical remark.
     /// </summary>
     private static TransitionResult<CtapAuthenticatorState, CtapAuthenticatorStackSymbol> OnEnumerateRpsBeginRequested(
@@ -3266,7 +3266,7 @@ public static class CtapAuthenticatorTransitions
     /// <c>rpIDHash</c> against every resident credential's freshly computed hash (no by-hash index
     /// exists — a fresh compare per candidate). The step-7 no-credentials decision and the response/
     /// remembered-state assembly happen once the match completes, in
-    /// <see cref="OnCredentialManagementCredentialsLocated"/>. R5: the spec's own dual-path verify
+    /// <see cref="OnCredentialManagementCredentialsLocated"/>. The spec's own dual-path verify
     /// (lines 7277-7294) is documented-unreachable — see <see cref="OnGetCredsMetadataRequested"/>'s own
     /// identical remark.
     /// </summary>
@@ -3333,7 +3333,7 @@ public static class CtapAuthenticatorTransitions
 
 
     /// <summary>
-    /// <c>deleteCredential</c> (CTAP 2.3 §6.8.5, lines 7370-7392): R3-C2's existence-and-match
+    /// <c>deleteCredential</c> (CTAP 2.3 §6.8.5, lines 7370-7392): the existence-and-match
     /// conjunction — a BOUND token evaluates "exists and matches" as ONE check (nonexistent or
     /// RP-mismatched ⇒ <see cref="WellKnownCtapStatusCodes.PinAuthInvalid"/>, no existence oracle); an
     /// UNBOUND token reaches step 7 regardless (nonexistent ⇒ <see cref="WellKnownCtapStatusCodes.NoCredentials"/>).
@@ -3341,7 +3341,7 @@ public static class CtapAuthenticatorTransitions
     /// then returns a bare <c>CTAP2_OK</c> (step 9, line 7392; no response map). The 128-bit credential
     /// store state regeneration (line 7390) is NOT modeled — dead state, its only consumer
     /// (<c>encCredStoreState</c>) is <c>persistentPinUvAuthToken</c>-gated and structurally unreachable
-    /// in this profile (R5). A subsequent <c>authenticatorGetAssertion</c> naming this credential is
+    /// in this profile. A subsequent <c>authenticatorGetAssertion</c> naming this credential is
     /// unaffected by any secondary index (there is none): it simply no longer finds a match.
     /// </summary>
     private static TransitionResult<CtapAuthenticatorState, CtapAuthenticatorStackSymbol> OnDeleteCredentialRequested(
@@ -3367,14 +3367,14 @@ public static class CtapAuthenticatorTransitions
 
 
     /// <summary>
-    /// <c>updateUserInformation</c> (CTAP 2.3 §6.8.6, lines 7420-7450): R3-C2's identical
+    /// <c>updateUserInformation</c> (CTAP 2.3 §6.8.6, lines 7420-7450): the identical
     /// existence-and-match conjunction (see <see cref="OnDeleteCredentialRequested"/>'s own remark);
     /// <see cref="WellKnownCtapStatusCodes.KeyStoreFull"/> (line 7442) is documented-unreachable — this
     /// simulator's capacity is credential-COUNT-based, and an in-place field update never grows the
     /// store; the supplied <c>user.id</c> mismatching the matched credential's own stored user ID (line
     /// 7444) → <see cref="WellKnownCtapStatusCodes.InvalidParameter"/> via a PLAIN ordinal byte compare
     /// (user IDs are not secret material); the THREE-WAY <c>name</c>/<c>displayName</c> mapping (line
-    /// 7446, trap 16): absent OR present-and-empty → remove (<see langword="null"/>); present-non-empty →
+    /// 7446): absent OR present-and-empty → remove (<see langword="null"/>); present-non-empty →
     /// replace. Installed via a record-<c>with</c> replacement — the OLD record is NOT disposed, since
     /// its pooled fields (<see cref="CtapCredentialRecord.CredentialId"/>/<see cref="CtapCredentialRecord.UserId"/>/
     /// <see cref="CtapCredentialRecord.CredentialKey"/>) are carried unchanged onto the new record, the
@@ -3457,13 +3457,13 @@ public static class CtapAuthenticatorTransitions
     /// <summary>
     /// Builds <c>enumerateCredentialsBegin</c>/<c>enumerateCredentialsGetNextCredential</c>'s shared
     /// response shape: <c>user</c>/<c>credentialID</c>/<c>publicKey</c>/<c>credProtect</c>/<c>largeBlobKey</c>,
-    /// all borrowed directly from <paramref name="record"/>'s own already-stored fields (R11's
-    /// <see cref="CtapCredentialRecord.CredProtectLevel"/>; wavelb R8's
+    /// all borrowed directly from <paramref name="record"/>'s own already-stored fields (
+    /// <see cref="CtapCredentialRecord.CredProtectLevel"/>;
     /// <see cref="CtapCredentialRecord.LargeBlobKey"/> — "the contents, if any", lines 7312/7341, so
     /// <see langword="null"/> when the credential carries no key), plus <paramref name="totalCredentials"/>
     /// when present (Begin only — line 7220's parallel field, omitted on every GetNext). NO
-    /// <c>thirdPartyPayment</c> (R8). Deliberately no <see cref="CtapCredentialRecord.CredRandomWithUV"/>/
-    /// <see cref="CtapCredentialRecord.CredRandomWithoutUV"/> either (contract R2c, trap 9): unlike
+    /// <c>thirdPartyPayment</c>. Deliberately no <see cref="CtapCredentialRecord.CredRandomWithUV"/>/
+    /// <see cref="CtapCredentialRecord.CredRandomWithoutUV"/> either: unlike
     /// <see cref="CtapCredentialRecord.LargeBlobKey"/>, no CTAP 2.3 §6.8.4 clause spec-mandates echoing
     /// CredRandom back to the platform through <c>authenticatorCredentialManagement</c> — it is SECRET
     /// material that appears in no response this authenticator builds, this one included.
@@ -3480,7 +3480,7 @@ public static class CtapAuthenticatorTransitions
 
     /// <summary>
     /// Groups every resident credential by relying party identifier, returning the distinct RP IDs
-    /// ordered by each RP's OWN first-created credential (R9's <see cref="CtapCredentialRecord.CreationSequence"/>-ascending
+    /// ordered by each RP's OWN first-created credential (<see cref="CtapCredentialRecord.CreationSequence"/>-ascending
     /// choice — an implementation decision, since CTAP 2.3 states no ordering requirement for RP
     /// enumeration). No cached secondary index exists — a fresh scan of the store per call, mirroring
     /// <see cref="LocateApplicableResidentCredentials"/>'s own style.
@@ -3525,14 +3525,14 @@ public static class CtapAuthenticatorTransitions
     /// Applies the mismatch counter/latch semantics shared by <c>changePIN</c>, <c>getPinToken</c>, and
     /// <c>getPinUvAuthTokenUsingPinWithPermissions</c> (CTAP 2.3, lines 5678-5685/5893/5995, identical
     /// structure in all three): decrements <c>pinRetries</c> (or, once a <see cref="CtapPinRetriesCustody"/>
-    /// bundle is composed, mirrors <paramref name="verdict"/>'s own <c>RetriesRemaining</c> instead —
-    /// contract R-4, wavepin), increments the BOOT-SCOPED consecutive-mismatch counter (byte-identical in
-    /// both modes, contract R-1/R-5), disposes the mismatched protocol's stale key-agreement pair and
+    /// bundle is composed, mirrors <paramref name="verdict"/>'s own <c>RetriesRemaining</c> instead),
+    /// increments the BOOT-SCOPED consecutive-mismatch counter (byte-identical in
+    /// both modes), disposes the mismatched protocol's stale key-agreement pair and
     /// installs the freshly regenerated one, and resolves the status code in the spec's own order —
     /// retries exhausted (<see cref="WellKnownCtapStatusCodes.PinBlocked"/>) beats three consecutive
     /// mismatches (<see cref="WellKnownCtapStatusCodes.PinAuthBlocked"/>, which also latches) beats the
-    /// ordinary case (<see cref="WellKnownCtapStatusCodes.PinInvalid"/>) — with custody composed, contract
-    /// R-5's own priority rule reads <paramref name="verdict"/>'s <c>IsBlocked</c> directly rather than
+    /// ordinary case (<see cref="WellKnownCtapStatusCodes.PinInvalid"/>) — with custody composed, the
+    /// priority rule reads <paramref name="verdict"/>'s <c>IsBlocked</c> directly rather than
     /// re-deriving "retries exhausted" from the mirrored count. Every caller applies this identically
     /// whether the triggering condition was a decoded-hash mismatch or a <c>pinHashEnc</c> decrypt error
     /// (CTAP 2.3 lines 5671/5883/5985: "If an error results, or a mismatch is detected") — the caller has
@@ -3598,7 +3598,7 @@ public static class CtapAuthenticatorTransitions
     /// advertised; line 5958: "cm: credMgmt is false or absent" never holds once <c>credMgmt:true</c> is
     /// always advertised; line 5960: "be: bioEnroll is absent" never holds once <c>bioEnroll</c> is
     /// always present; line 5962: "lbw: largeBlobs is false or absent" never holds once
-    /// <c>largeBlobs:true</c> is always advertised, wavelb R4) — so only <see cref="WellKnownCtapPinUvAuthTokenPermissions.Pcmr"/>
+    /// <c>largeBlobs:true</c> is always advertised) — so only <see cref="WellKnownCtapPinUvAuthTokenPermissions.Pcmr"/>
     /// can ever deny, and <c>mc</c>/<c>ga</c>/<c>acfg</c>/
     /// <c>cm</c>/<c>be</c>/<c>lbw</c> are always grantable. Undefined bits (for example <c>0x80</c>) are not
     /// examined here at all: the caller masks them out separately when resolving the granted set, never
@@ -3668,8 +3668,8 @@ public static class CtapAuthenticatorTransitions
         }
 
         //hmac-secret's own crypto request (CTAP 2.3 §12.7 steps 4-9), assembled against THIS resolved
-        //credential's own CredRandom pair — CredRandom selection by the response's own uv bit (step 7,
-        //trap 4) happens in the effect, not here, since it depends on userVerified which is already known
+        //credential's own CredRandom pair — CredRandom selection by the response's own uv bit (step 7)
+        //happens in the effect, not here, since it depends on userVerified which is already known
         //but the effect is where the crypto actually runs.
         CtapGetAssertionHmacSecretRequest? hmacSecretRequest = null;
         if(hmacSecretInput is not null && hmacSecretProtocol is CtapPinUvAuthProtocolId resolvedHmacSecretProtocol)
@@ -3750,7 +3750,7 @@ public static class CtapAuthenticatorTransitions
     /// status code (CTAP 2.3 §12.7, snapshot lines 13304/13307) — shared by
     /// <see cref="OnGetAssertionHmacSecretFailed"/> (the ga effect's own crypto sequence) and
     /// <see cref="OnMakeCredentialHmacSecretMcFailed"/> (the mc-time <c>hmac-secret-mc</c> delegation,
-    /// contract R6: the SAME crypto routine, so the SAME failure-to-status-code mapping applies).
+    /// the SAME crypto routine, so the SAME failure-to-status-code mapping applies).
     /// </summary>
     private static byte MapHmacSecretOutcomeToStatusCode(CtapGetAssertionHmacSecretOutcomeKind kind) => kind switch
     {
@@ -3796,10 +3796,10 @@ public static class CtapAuthenticatorTransitions
     /// section, line 2831-2834): "Either or both clientPin or built-in user verification methods are
     /// supported and enabled" — <c>pinUvAuthToken</c> present-true AND either <c>clientPin</c> or
     /// <c>uv</c> present-true. This authenticator's <c>pinUvAuthToken</c> option is unconditionally
-    /// advertised <see langword="true"/> (wave-5a); <c>clientPin</c> is present-true once a PIN is set
+    /// advertised <see langword="true"/>; <c>clientPin</c> is present-true once a PIN is set
     /// (<paramref name="state"/>'s own <see cref="CtapAuthenticatorState.CurrentStoredPin"/>) and
     /// <c>uv</c> is present-true once at least one fingerprint enrollment is provisioned
-    /// (<see cref="CtapAuthenticatorState.HasProvisionedBioEnrollments"/>, wavebio R2/R11) — this helper
+    /// (<see cref="CtapAuthenticatorState.HasProvisionedBioEnrollments"/>) — this helper
     /// is the ONE seam feeding both, so the widening propagates to mc/ga's protected-block gates, both
     /// <c>alwaysUv</c> gates, and <c>toggleAlwaysUv</c>'s own token-gate derivation without a second edit
     /// anywhere.
@@ -3989,7 +3989,7 @@ public static class CtapAuthenticatorTransitions
     /// — mc Step 9's own vendor-facilitated gate (CTAP 2.3 §7.1, lines 3341-3345: "the request's rp.id
     /// matches an entry on the authenticator's pre-configured RP ID list"). Mirrors
     /// <see cref="IsRpIdAuthorizedForMinPinLength"/>'s identical membership-check shape over a different
-    /// (constructor-fixed, never runtime-settable, trap 8) list.
+    /// (constructor-fixed, never runtime-settable) list.
     /// </summary>
     private static bool IsRpIdOnPreConfiguredList(IReadOnlyList<string> preConfiguredRpIds, string rpId)
     {
@@ -4052,7 +4052,7 @@ public static class CtapAuthenticatorTransitions
     /// Determines whether <paramref name="credential"/> must be treated as not found because it is
     /// protected at level <see cref="CredProtectUserVerificationRequired"/> and <paramref name="userVerified"/>
     /// is <see langword="false"/> (CTAP 2.3 §12.1, lines 4040-4043) — the ONE filter shared by both
-    /// <c>authenticatorGetAssertion</c> credential-location branches (R10). Level
+    /// <c>authenticatorGetAssertion</c> credential-location branches. Level
     /// <see cref="CredProtectUserVerificationOptionalWithCredentialIdList"/> is NEVER excluded by this
     /// predicate: its own filter (lines 4045-4048) applies only to the discoverable-scan branch — see
     /// <see cref="FilterUnverifiedCredProtectFromDiscoverableScan"/> — never to an <c>allowList</c>-resolved
@@ -4064,7 +4064,7 @@ public static class CtapAuthenticatorTransitions
 
     /// <summary>
     /// Filters <paramref name="applicable"/> for the discoverable-scan (no-<c>allowList</c>)
-    /// <c>authenticatorGetAssertion</c> branch (CTAP 2.3 §12.1, lines 4038-4048, R10): removes every
+    /// <c>authenticatorGetAssertion</c> branch (CTAP 2.3 §12.1, lines 4038-4048): removes every
     /// <see cref="CredProtectUserVerificationRequired"/> credential (shared with the <c>allowList</c>
     /// branch via <see cref="IsCredProtectLevelThreeUvExcluded"/>) AND every
     /// <see cref="CredProtectUserVerificationOptionalWithCredentialIdList"/> credential (this branch's
@@ -4143,7 +4143,7 @@ public static class CtapAuthenticatorTransitions
 
 
     /// <summary>
-    /// The pure entry point for <c>authenticatorBioEnrollment</c> (CTAP 2.3 §6.7, bio scout §1.4-§1.6/R12),
+    /// The pure entry point for <c>authenticatorBioEnrollment</c> (CTAP 2.3 §6.7),
     /// in spec dispatch order: (1) <c>getModality:true</c> serves the token-free bio-modality read
     /// IMMEDIATELY (modality = fingerprint) — WINS over any accompanying <c>subCommand</c> (a documented
     /// posture over the spec's own silence on the mixed-member case, snapshot line 6417's own MUST binds
@@ -4154,7 +4154,7 @@ public static class CtapAuthenticatorTransitions
     /// status); (3) the three token-free subcommands — <c>getFingerprintSensorInfo</c> (returns the fixed
     /// sensor statics) and <c>cancelCurrentEnrollment</c> (unconditionally
     /// <see cref="WellKnownCtapStatusCodes.Ok"/>, snapshot line 6799 names no error path at all; discards
-    /// any in-progress capture slot) — are served without ANY authentication (bio scout Finding 5/trap 7);
+    /// any in-progress capture slot) — are served without ANY authentication;
     /// (4) every other <c>subCommand</c> value not one of the five <c>be</c>-permission-gated subcommands
     /// answers <see cref="WellKnownCtapStatusCodes.InvalidSubcommand"/> (credMgmt's allow-list precedent);
     /// (5) the five gated subcommands (<c>enrollBegin</c>/<c>enrollCaptureNextSample</c>/
@@ -4167,13 +4167,13 @@ public static class CtapAuthenticatorTransitions
     /// <c>pinUvAuthProtocol</c> missing → <see cref="WellKnownCtapStatusCodes.MissingParameter"/> →
     /// protocol unsupported → <see cref="WellKnownCtapStatusCodes.InvalidParameter"/> →
     /// <c>setFriendlyName</c> ONLY: the friendly-name byte-length check runs HERE, BEFORE <c>verify()</c>
-    /// (bio scout Finding 7/trap 5 — the pre-auth ordering is spec-mandated by §6.7.7's own step order,
-    /// snapshot lines 6874-6892; <see cref="WellKnownCtapStatusCodes.InvalidLength"/> is the spec's own
-    /// "e.g." example, adopted as this profile's documented choice) → declares
-    /// <see cref="CtapVerifyBioEnrollmentTokenAction"/> (bio scout Finding C: the TWO-byte
+    /// (the pre-auth ordering is spec-mandated by §6.7.7's own step order, snapshot lines 6874-6892;
+    /// <see cref="WellKnownCtapStatusCodes.InvalidLength"/> is the spec's own "e.g." example, adopted as
+    /// this profile's documented choice) → declares
+    /// <see cref="CtapVerifyBioEnrollmentTokenAction"/> (the TWO-byte
     /// <c>modality || subCommand [|| subCommandParams]</c> verify-message prefix, distinct from every
     /// other command's own verify-message shape), resumed by <see cref="OnBioEnrollmentPinUvAuthTokenVerified"/>.
-    /// <c>enrollCaptureNextSample</c> is NOT a GetNext-style pre-verified continuation (R7): every call
+    /// <c>enrollCaptureNextSample</c> is NOT a GetNext-style pre-verified continuation: every call
     /// runs this SAME full preamble, re-verifying its own <c>pinUvAuthParam</c> — only the capture
     /// PROGRESS is remembered on <see cref="CtapAuthenticatorState.RememberedBioEnrollment"/>, never the
     /// authorization.
@@ -4278,8 +4278,8 @@ public static class CtapAuthenticatorTransitions
 
     /// <summary>
     /// Evaluates the gated subcommands' per-subcommand mandatory-parameter requirement (CTAP 2.3 §6.7.4-
-    /// §6.7.8, each gated subcommand's own step 2): <c>modality</c> is mandatory on every gated flow (bio
-    /// scout R12); <c>enrollCaptureNextSample</c> additionally requires <c>templateId</c>;
+    /// §6.7.8, each gated subcommand's own step 2): <c>modality</c> is mandatory on every gated flow;
+    /// <c>enrollCaptureNextSample</c> additionally requires <c>templateId</c>;
     /// <c>setFriendlyName</c> additionally requires BOTH <c>templateId</c> AND <c>templateFriendlyName</c>;
     /// <c>removeEnrollment</c> additionally requires <c>templateId</c>; <c>enrollBegin</c>/
     /// <c>enumerateEnrollments</c> need nothing beyond the envelope's own <c>modality</c>.
@@ -4315,9 +4315,9 @@ public static class CtapAuthenticatorTransitions
 
     /// <summary>
     /// Completes an <c>authenticatorBioEnrollment</c> whose presented <c>pinUvAuthParam</c> has been
-    /// verified: verify (already run by the executor) → the <c>be</c> permission bit (bio scout Finding B
-    /// — the PIN-path unauthorized-gate antecedent, snapshot line 5960, is the ONLY reachable gate this
-    /// profile has) → dispatch to the requested subcommand's own handler.
+    /// verified: verify (already run by the executor) → the <c>be</c> permission bit (the PIN-path
+    /// unauthorized-gate antecedent, snapshot line 5960, is the ONLY reachable gate this profile has) →
+    /// dispatch to the requested subcommand's own handler.
     /// </summary>
     private static TransitionResult<CtapAuthenticatorState, CtapAuthenticatorStackSymbol> OnBioEnrollmentPinUvAuthTokenVerified(
         CtapAuthenticatorState state, bool verified, BioEnrollmentRequested requested)
@@ -4414,18 +4414,18 @@ public static class CtapAuthenticatorTransitions
     /// <c>enrollCaptureNextSample</c> (CTAP 2.3 §6.7.4): no enrollment currently in progress, or the
     /// request's own <c>templateId</c> does not match the in-progress one, →
     /// <see cref="WellKnownCtapStatusCodes.InvalidOption"/> — a DOCUMENTED profile posture over genuine
-    /// spec silence (bio scout trap 6; the spec never states this authenticator's behavior for either
+    /// spec silence (the spec never states this authenticator's behavior for either
     /// case), mirroring the in-family "no enrollment for the passed templateId" analogues
     /// (<c>setFriendlyName</c>/<c>removeEnrollment</c>, snapshot lines 6890/6936). The snapshot's own
     /// algorithm ALSO names a storage-space check here (line 6771: "If there is no space available,
-    /// authenticator returns CTAP2_ERR_FP_DATABASE_FULL") — the contract's own R12 text scopes
+    /// authenticator returns CTAP2_ERR_FP_DATABASE_FULL") — this profile ordinarily scopes
     /// <c>FpDatabaseFull</c> to <c>enrollBegin</c> only, but the snapshot's literal per-subcommand
     /// algorithm names it on THIS subcommand too, so it is implemented spec-exact here as well. It is
     /// PROVABLY UNREACHABLE in this profile: <c>enrollBegin</c>'s own gate already denies admission
     /// whenever <see cref="CtapAuthenticatorState.BioEnrollmentTemplatesByTemplateId"/> is at capacity,
     /// and this profile allows at most ONE in-progress enrollment at a time (auto-cancel forecloses a
     /// second), so the persisted count can never grow between a successful <c>enrollBegin</c> and this
-    /// enrollment's own eventual completion — matching R11's own "documented unreachable arm" precedent
+    /// enrollment's own eventual completion — matching this file's own "documented unreachable arm" precedent
     /// (no test asserts this arm fires). Otherwise declares <see cref="CtapContinueBioEnrollmentCaptureAction"/>,
     /// resumed by <see cref="OnBioEnrollmentSampleCaptured"/>.
     /// </summary>
@@ -4454,7 +4454,7 @@ public static class CtapAuthenticatorTransitions
     /// 8-10): installs the freshly minted template identifier as a new
     /// <see cref="CtapAuthenticatorState.RememberedBioEnrollment"/> sequence, its own
     /// <c>remainingSamples</c> resolved from the first capture's outcome (GOOD → one sample consumed;
-    /// otherwise unchanged, bio scout Finding 9), and responds with <c>templateId</c>/
+    /// otherwise unchanged), and responds with <c>templateId</c>/
     /// <c>lastEnrollSampleStatus</c>/<c>remainingSamples</c> — <c>enrollBegin</c>'s own response is the
     /// ONLY bioEnroll response that ever carries <c>templateId</c> (<see cref="WellKnownCtapBioEnrollmentResponseKeys.TemplateId"/>).
     /// </summary>
@@ -4482,7 +4482,7 @@ public static class CtapAuthenticatorTransitions
     /// <summary>
     /// Folds back <see cref="CtapContinueBioEnrollmentCaptureAction"/>'s effect (CTAP 2.3 §6.7.4):
     /// advances <see cref="CtapAuthenticatorState.RememberedBioEnrollment"/>'s own <c>remainingSamples</c>
-    /// on a GOOD capture only (bio scout Finding 9 — a non-GOOD capture leaves it unchanged, still a
+    /// on a GOOD capture only (a non-GOOD capture leaves it unchanged, still a
     /// successful <see cref="WellKnownCtapStatusCodes.Ok"/> response); once <c>remainingSamples</c> reaches
     /// zero, persists the completed template (friendly name <see langword="null"/> until
     /// <c>setFriendlyName</c> assigns one — the <see cref="CtapRememberedBioEnrollmentState.TemplateId"/>
@@ -4553,7 +4553,7 @@ public static class CtapAuthenticatorTransitions
     /// <see cref="WellKnownCtapStatusCodes.InvalidOption"/> (snapshot line 6890); otherwise renames the
     /// matched template's <see cref="CtapBioEnrollmentTemplateRecord.FriendlyName"/> via the <c>with{}</c>
     /// discipline and responds bare <see cref="WellKnownCtapStatusCodes.Ok"/>. The friendly-name
-    /// byte-length bound was already checked, pre-verify, by the request arm (bio scout Finding 7).
+    /// byte-length bound was already checked, pre-verify, by the request arm.
     /// </summary>
     private static TransitionResult<CtapAuthenticatorState, CtapAuthenticatorStackSymbol> OnSetBioEnrollmentFriendlyNameRequested(
         CtapAuthenticatorState state, CtapBioEnrollmentRequest request)
@@ -4581,7 +4581,7 @@ public static class CtapAuthenticatorTransitions
     /// disposes the matched template record and responds bare <see cref="WellKnownCtapStatusCodes.Ok"/>.
     /// Removing the LAST template flips <see cref="CtapAuthenticatorState.HasProvisionedBioEnrollments"/>
     /// back to <see langword="false"/> — a subsequent <c>authenticatorGetInfo</c> reports
-    /// <c>bioEnroll</c>/<c>uv</c> false, per R2's single-source derivation.
+    /// <c>bioEnroll</c>/<c>uv</c> false, per the single-source derivation.
     /// </summary>
     private static TransitionResult<CtapAuthenticatorState, CtapAuthenticatorStackSymbol> OnRemoveBioEnrollmentRequested(
         CtapAuthenticatorState state, CtapBioEnrollmentRequest request)
@@ -4602,7 +4602,7 @@ public static class CtapAuthenticatorTransitions
     /// <summary>
     /// The fingerprint template store's dictionary key for a <see cref="BioEnrollmentTemplateId"/>: a
     /// lowercase-hex encoding of its bytes, mirroring <see cref="CredentialIdKey"/>'s own keying
-    /// convention exactly (R6).
+    /// convention exactly.
     /// </summary>
     private static string BioEnrollmentTemplateKey(BioEnrollmentTemplateId templateId) => Convert.ToHexStringLower(templateId.AsReadOnlySpan());
 
@@ -4616,30 +4616,30 @@ public static class CtapAuthenticatorTransitions
 
     /// <summary>
     /// <c>authenticatorLargeBlobs</c>' complete §6.10.2 algorithm (CTAP 2.3, lines 7587-7680), pinned to
-    /// the spec's own literal step order throughout (R6): the THREE shared shape checks (steps 1-3),
-    /// <c>get</c>'s FULL algorithm (step 4), then <c>set</c>'s pre-auth checks → the R5 conditional token
+    /// the spec's own literal step order throughout: the THREE shared shape checks (steps 1-3),
+    /// <c>get</c>'s FULL algorithm (step 4), then <c>set</c>'s pre-auth checks → the conditional token
     /// gate → the sum check → append/commit (continued by <see cref="ContinueLargeBlobsSet"/> once the
     /// gate resolves, on either the tokenless or the verified path).
     /// </summary>
     /// <remarks>
     /// <para>
     /// <c>offset</c> absent → <see cref="WellKnownCtapStatusCodes.InvalidParameter"/> (line 7590, via
-    /// <see cref="CtapLargeBlobsRequest.Offset"/>'s nullability rather than a decode-boundary throw —
-    /// trap 6/7); neither <c>get</c> nor <c>set</c> present (line 7592) or both present (line 7594) →
+    /// <see cref="CtapLargeBlobsRequest.Offset"/>'s nullability rather than a decode-boundary throw);
+    /// neither <c>get</c> nor <c>set</c> present (line 7592) or both present (line 7594) →
     /// <see cref="WellKnownCtapStatusCodes.InvalidParameter"/>.
     /// </para>
     /// <para>
     /// <c>get</c> branch: <c>length</c> present (line 7599) or either <c>pinUvAuthParam</c>/
-    /// <c>pinUvAuthProtocol</c> present (line 7601, trap 5 — reads are deliberately public, supplying
+    /// <c>pinUvAuthProtocol</c> present (line 7601 — reads are deliberately public, supplying
     /// auth material is an ERROR not a tolerated no-op) → <see cref="WellKnownCtapStatusCodes.InvalidParameter"/>;
     /// <c>get</c>'s value exceeding <see cref="CtapAuthenticatorState.MaxFragmentLength"/> (line 7603) →
     /// <see cref="WellKnownCtapStatusCodes.InvalidLength"/>; <c>offset</c> greater than the stored
     /// array's length (line 7605) → <see cref="WellKnownCtapStatusCodes.InvalidParameter"/>; otherwise a
     /// substring starting at <c>offset</c>, up to <c>get</c> bytes, SHORT-READ-TRUNCATED if fewer remain
     /// — a ZERO-LENGTH substring when <c>offset</c> equals the stored length is a SUCCESS, not an error
-    /// (line 7607, trap 8). The substring is a zero-copy slice of the already-owned
+    /// (line 7607). The substring is a zero-copy slice of the already-owned
     /// <see cref="CtapAuthenticatorState.SerializedLargeBlobArray"/> — no pool rent, no hashing, fully
-    /// pure (D3).
+    /// pure.
     /// </para>
     /// <para>
     /// <c>set</c> branch (lines 7610-7655): fragment length exceeding
@@ -4649,25 +4649,25 @@ public static class CtapAuthenticatorTransitions
     /// <see cref="WellKnownCtapStatusCodes.InvalidParameter"/>; <c>length</c> &gt; 1024 AND exceeds
     /// <see cref="CtapAuthenticatorState.MaxSerializedLargeBlobArrayCapacity"/> (line 7620) →
     /// <see cref="WellKnownCtapStatusCodes.LargeBlobStorageFull"/>; <c>length</c> &lt; 17 (line 7622, the
-    /// 17-byte minimum a valid serialized large-blob array can ever be, trap 9) →
+    /// 17-byte minimum a valid serialized large-blob array can ever be) →
     /// <see cref="WellKnownCtapStatusCodes.InvalidParameter"/>; otherwise this operation's own
     /// <c>expectedLength</c>/<c>expectedNextOffset</c> resolve to (<c>length</c>, 0) (steps 7624/7626 —
     /// NOT yet persisted onto <see cref="CtapAuthenticatorState.RememberedLargeBlobWrite"/>, which only
-    /// happens once <see cref="ContinueLargeBlobsSet"/>'s own declared action's fold-back returns; D3: no
+    /// happens once <see cref="ContinueLargeBlobsSet"/>'s own declared action's fold-back returns; no
     /// pool op runs here, only two local integers). Else (<c>offset</c> non-zero, line 7632): <c>length</c>
     /// present → <see cref="WellKnownCtapStatusCodes.InvalidParameter"/>; otherwise <c>expectedLength</c>/
     /// <c>expectedNextOffset</c> are read from the already-remembered sequence, defaulting to (0, 0) when
     /// none exists — the "no sequence ever existed" and "an intervening command discarded it" cases
     /// collapse to the identical outcome — after FIRST folding in the 2873 token-expiry discard when the
     /// remembered sequence was gate-armed (mirroring <see cref="OnGetNextAssertionRequested"/>'s own
-    /// <c>AuthenticatingPinUvAuthProtocol</c> expiry-fold pattern, R7: tokenless sequences have no token
+    /// <c>AuthenticatingPinUvAuthProtocol</c> expiry-fold pattern: tokenless sequences have no token
     /// to expire, so this fold is skipped for them). <c>offset != expectedNextOffset</c> (line 7635) →
     /// <see cref="WellKnownCtapStatusCodes.InvalidSeq"/> — reached identically whether the mismatch is a
     /// genuinely wrong offset, a just-discarded sequence, or an expired authenticating token (seams
     /// trap: an interleaved command between fragments produces this exact status on the next fragment).
     /// </para>
     /// <para>
-    /// The R5 gate (line 7637): <c>IsProtectedByUserVerification(state) || state.IsAlwaysUvEnabled</c> —
+    /// The gate (line 7637): <c>IsProtectedByUserVerification(state) || state.IsAlwaysUvEnabled</c> —
     /// mirroring <see cref="OnAuthenticatorConfigRequested"/>'s own step-4 gate WITHOUT its step-3
     /// <c>toggleAlwaysUv</c> bypass, which has no largeBlobs analogue; <see cref="IsProtectedByUserVerification"/>
     /// is consumed AS-IS (zero edits). Unarmed → the write proceeds TOKENLESS via
@@ -4679,7 +4679,7 @@ public static class CtapAuthenticatorTransitions
     /// otherwise a <see cref="CtapVerifyLargeBlobsTokenAction"/> is declared, carrying <c>expectedLength</c>/
     /// <c>expectedNextOffset</c> through <see cref="CtapLargeBlobsVerifyContinuation"/> so
     /// <see cref="OnLargeBlobsPinUvAuthTokenVerified"/> need not re-run the checks above (the sum check,
-    /// line 7655, runs strictly AFTER verification succeeds — never here, trap 6/7 of the seams scout).
+    /// line 7655, runs strictly AFTER verification succeeds — never here).
     /// </para>
     /// </remarks>
     private static TransitionResult<CtapAuthenticatorState, CtapAuthenticatorStackSymbol> OnLargeBlobsRequested(
@@ -4690,7 +4690,7 @@ public static class CtapAuthenticatorTransitions
         //A genuine set continuation (a non-zero offset) preserves RememberedLargeBlobWrite; every other
         //shape reaching this command — a get, or a set with offset == 0, which always starts a brand-new
         //sequence per line 7657 regardless — takes the same GLOBAL discard every other command's entry
-        //takes (R7).
+        //takes.
         bool isContinuationCandidate = request.Set is not null && request.Offset is int candidateOffset && candidateOffset != 0;
         state = isContinuationCandidate ? DiscardRememberedSequencesExceptLargeBlobWrite(state) : DiscardAllRememberedSequences(state);
 
@@ -4838,13 +4838,13 @@ public static class CtapAuthenticatorTransitions
     /// Completes an <c>authenticatorLargeBlobs</c> <c>set</c> whose presented <c>pinUvAuthParam</c> has
     /// been verified (CTAP 2.3 §6.10.2, lines 7646-7655): verify (already run by the executor) →
     /// <c>lbw</c> permission (line 7652 — <see cref="WellKnownCtapStatusCodes.PinAuthInvalid"/>, NOT
-    /// <see cref="WellKnownCtapStatusCodes.UnauthorizedPermission"/>, trap 4; mirrors
+    /// <see cref="WellKnownCtapStatusCodes.UnauthorizedPermission"/>; mirrors
     /// <see cref="OnAuthenticatorConfigPinUvAuthTokenVerified"/>'s identical-shape <c>acfg</c> check) →
     /// <see cref="ContinueLargeBlobsSet"/> for the sum check and append/commit. NO flag/permission
     /// stripping on success: <c>set</c> is not "an operation that tests user presence" (§6.10.2 names no
     /// <c>up</c> test anywhere in its algorithm), so <see cref="ClearPinUvAuthTokenFlags"/> is never
     /// called here — the SAME token, still carrying <c>lbw</c> (and whatever else it holds), remains
-    /// usable for the next fragment, the lbw carve-out's own observable proof (seams Finding C).
+    /// usable for the next fragment, the lbw carve-out's own observable proof.
     /// </summary>
     private static TransitionResult<CtapAuthenticatorState, CtapAuthenticatorStackSymbol> OnLargeBlobsPinUvAuthTokenVerified(
         CtapAuthenticatorState state, bool verified, CtapLargeBlobsVerifyContinuation continuation)
@@ -4878,8 +4878,8 @@ public static class CtapAuthenticatorTransitions
     /// The tail both the tokenless and the verified <c>set</c> path share (CTAP 2.3 §6.10.2, lines
     /// 7655-7661): the sum check — <c>offset + |fragment| &gt; expectedLength</c> (line 7655) →
     /// <see cref="WellKnownCtapStatusCodes.InvalidParameter"/>, run AFTER token verification when the
-    /// gate is armed (trap 6/7) — then declares a <see cref="CtapCommitLargeBlobArrayAction"/> to append
-    /// the fragment (and, once complete, run the commit-time integrity check) — D3: no pool op, no
+    /// gate is armed — then declares a <see cref="CtapCommitLargeBlobArrayAction"/> to append
+    /// the fragment (and, once complete, run the commit-time integrity check) — no pool op, no
     /// hashing, runs here; both live in the executor.
     /// </summary>
     /// <param name="state">The current state, already past every pre-auth and gate check.</param>
@@ -4921,7 +4921,7 @@ public static class CtapAuthenticatorTransitions
     /// UNCHANGED" posture — the pending buffer was independently rented, never aliasing the stored one);
     /// complete and VALID → discards the sequence, disposes the superseded stored array, and adopts
     /// <see cref="CtapLargeBlobArrayCommitAttempted.CommittedArray"/> as the new one, responding with an
-    /// empty success (line 7670). No pool op, no hashing — both already ran in the executor (D3); this
+    /// empty success (line 7670). No pool op, no hashing — both already ran in the executor; this
     /// method only disposes and swaps already-owned references, mirroring <see cref="FactoryReset"/>'s
     /// own direct-disposal shape.
     /// </summary>

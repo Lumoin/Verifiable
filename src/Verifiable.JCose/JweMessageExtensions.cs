@@ -93,7 +93,7 @@ public static class JweMessageExtensions
         KeyAgreementEncryptDelegate agreementDelegate,
         KeyDerivationDelegate keyDerivationDelegate,
         AeadEncryptDelegate aeadEncryptDelegate,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(unencryptedJwe);
@@ -213,7 +213,7 @@ public static class JweMessageExtensions
         KeyAgreementDecryptDelegate agreementDelegate,
         KeyDerivationDelegate keyDerivationDelegate,
         AeadDecryptDelegate aeadDecryptDelegate,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -279,7 +279,7 @@ public static class JweMessageExtensions
     public static ValueTask<DecryptedContent> DecryptAsync(
         this AeadMessage message,
         PrivateKeyMemory privateKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(message);

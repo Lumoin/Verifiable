@@ -65,7 +65,7 @@ internal static class BouncyCastleTpmRsaOaepBackend
         ReadOnlyMemory<byte> label,
         TpmAlgIdConstants lhashAlg,
         TpmAlgIdConstants mgfHashAlg,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -98,7 +98,7 @@ internal static class BouncyCastleTpmRsaOaepBackend
         ReadOnlyMemory<byte> label,
         TpmAlgIdConstants lhashAlg,
         TpmAlgIdConstants mgfHashAlg,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -182,7 +182,7 @@ internal static class BouncyCastleTpmRsaOaepBackend
     /// <param name="bytes">The bytes to copy.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The pooled buffer holding a copy of <paramref name="bytes"/>.</returns>
-    private static IMemoryOwner<byte> CopyToPooled(byte[] bytes, MemoryPool<byte> pool)
+    private static IMemoryOwner<byte> CopyToPooled(byte[] bytes, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(bytes.Length);
         if(owner.Memory.Length != bytes.Length)

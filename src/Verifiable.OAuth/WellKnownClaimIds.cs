@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core.Assessment;
 
 namespace Verifiable.OAuth;
@@ -23,7 +22,6 @@ namespace Verifiable.OAuth;
 ///     OID4VP completion, OID4VCI, SIOPv2, logout, Identity Assurance)</description></item>
 /// </list>
 /// </remarks>
-[DebuggerDisplay("WellKnownClaimIds")]
 public static class WellKnownClaimIds
 {
     //OIDC Core §5.4 standard claim families (codes 1000–1019).

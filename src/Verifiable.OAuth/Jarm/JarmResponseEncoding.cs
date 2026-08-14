@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using Verifiable.Cryptography.Text;
 
@@ -11,7 +10,6 @@ namespace Verifiable.OAuth.Jarm;
 /// fragment (<c>fragment.jwt</c>) component, or an auto-submitting HTML form POST
 /// (<c>form_post.jwt</c>).
 /// </summary>
-[DebuggerDisplay("JarmResponseEncoding")]
 public static class JarmResponseEncoding
 {
     /// <summary>The UTF-8 source literal of <see cref="ResponseParameterName"/>.</summary>

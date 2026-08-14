@@ -40,7 +40,7 @@ internal sealed class FederationHistoricalKeysEndpointTests
     /// <summary>
     /// The memory pool the JWS decode and verify helpers rent from.
     /// </summary>
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
     /// <summary>

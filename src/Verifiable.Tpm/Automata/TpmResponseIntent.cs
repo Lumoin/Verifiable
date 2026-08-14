@@ -132,7 +132,7 @@ public sealed record TpmCreateResponse(
 
 /// <summary>
 /// The successful response to <c>TPM2_Create()</c> over one or two sessions: a <c>TPM_ST_SESSIONS</c>-tagged
-/// response carrying the (unencrypted — response encryption is out of this wave's scope for
+/// response carrying the (unencrypted — response encryption is out of scope for
 /// <c>TPM2_Create()</c>) <c>outPrivate ‖ outPublic ‖ creationData ‖ creationHash ‖ creationTicket</c> parameter
 /// area followed by the response session area, in command-session order — a <c>TPM_RS_PW</c> parent-auth
 /// session's placeholder entry (an empty nonce, echoed attributes, an empty HMAC, since it carries no key) when
@@ -488,8 +488,8 @@ public sealed record TpmPolicySecretResponse(TpmRcConstants ResponseCode): TpmRe
 /// The response always frames an empty <c>TPM2B_TIMEOUT</c> and a NULL <c>TPMT_TK_AUTH</c> (tag
 /// <c>TPM_ST_AUTH_SIGNED</c>, hierarchy <c>TPM_RH_NULL</c>, empty digest — the tag is set even on a NULL ticket,
 /// Part 2, Section 10.7.2's NULL-ticket convention), regardless of the sign of the caller's <c>expiration</c>: the
-/// real <c>TPMT_TK_AUTH</c> mint (a negative expiration on a non-trial session) ships with the future
-/// PolicyTicket/non-immediate-PolicySecret wave — this mirrors PolicySecret's shipped immediate-form slice. The
+/// real <c>TPMT_TK_AUTH</c> mint (a negative expiration on a non-trial session) is deferred future work
+/// (PolicyTicket/non-immediate-PolicySecret) — this mirrors PolicySecret's shipped immediate-form slice. The
 /// intent owns no memory, so nothing is disposed after framing.
 /// </remarks>
 /// <param name="ResponseCode">The command response code (success).</param>

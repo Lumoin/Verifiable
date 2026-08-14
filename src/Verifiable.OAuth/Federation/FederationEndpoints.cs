@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Cryptography;
@@ -39,7 +38,7 @@ namespace Verifiable.OAuth.Federation;
 /// </para>
 /// <para>
 /// <strong>Signing.</strong> The EC is signed via
-/// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, System.Buffers.MemoryPool{byte}, System.Threading.CancellationToken)"/>'s
+/// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, System.Buffers.BaseMemoryPool, System.Threading.CancellationToken)"/>'s
 /// registry-based overload, so the wire <c>alg</c> derives entirely from
 /// the private key's tag through the registered
 /// <see cref="SigningDelegate"/>. No signing algorithm is hardcoded
@@ -55,14 +54,13 @@ namespace Verifiable.OAuth.Federation;
 /// <see cref="EntityStatementJsonBuilder"/> for the rationale.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("FederationEndpoints")]
 public static class FederationEndpoints
 {
     /// <summary>
     /// The endpoint builder delegate. Pass this to
     /// <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
     /// </summary>
-    public static readonly EndpointBuilderDelegate Builder = static (registration, context, ct) =>
+    public static EndpointBuilderDelegate Builder { get; } = static (registration, context, ct) =>
     {
         List<EndpointCandidate> candidates = [];
 
@@ -155,7 +153,7 @@ public static class FederationEndpoints
     /// <para>
     /// Stateless: <see cref="ServerEndpoint.BuildInputAsync"/> assembles
     /// the EC payload, signs it via the registry-based
-    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, System.Buffers.MemoryPool{byte}, System.Threading.CancellationToken)"/>,
+    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, System.Buffers.BaseMemoryPool, System.Threading.CancellationToken)"/>,
     /// and short-circuits the dispatcher with an early
     /// <see cref="ServerHttpResponse.Ok(string, string)"/>. The
     /// <see cref="ServerEndpoint.BuildResponse"/> hook is never reached.
@@ -1179,7 +1177,7 @@ public static class FederationEndpoints
 
     /// <summary>
     /// Builds the <c>federation_registration_endpoint</c> per
-    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-12.2">Federation §12.2</see>.
+    /// <see href="https://openid.net/specs/openid-federation-connect-1_1-final.html#section-12.2">Connect-1.1 §12.2</see>.
     /// Stateless: the RP <c>POST</c>s its signed Entity Configuration in the
     /// request body, the application processes it via
     /// <see cref="AuthorizationServerIntegration.ResolveExplicitRegistrationAsync"/>,

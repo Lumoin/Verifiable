@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core.Assessment;
 using Verifiable.JCose;
 using Verifiable.OAuth.Oidc;
@@ -49,7 +48,6 @@ namespace Verifiable.OAuth;
 /// <see cref="ClaimOutcome.NotApplicable"/>.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("AcrAmrClaimContributor")]
 public static class AcrAmrClaimContributor
 {
     /// <summary>

@@ -120,7 +120,7 @@ public sealed class Tpm2bData: IDisposable
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed data buffer.</returns>
-    public static Tpm2bData Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static Tpm2bData Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ushort size = reader.ReadUInt16();
@@ -148,7 +148,7 @@ public sealed class Tpm2bData: IDisposable
     /// <param name="bytes">The data bytes.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The created data buffer.</returns>
-    public static Tpm2bData Create(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
+    public static Tpm2bData Create(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         if(bytes.IsEmpty)

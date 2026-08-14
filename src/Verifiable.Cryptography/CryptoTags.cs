@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Cryptography;
 
@@ -538,6 +539,39 @@ public static class CryptoTags
 
 
     /// <summary>
+    /// Tag for the wire bytes of a complete <c>COSE_Sign</c> message per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-4.1">RFC 9052 §4.1</see>
+    /// — the CBOR tag(98)-wrapped 4-array carrying body-layer protected header,
+    /// body-layer unprotected header, payload, and the <c>signatures</c> array.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Used by <c>EncodedCoseSign</c> (in <c>Verifiable.JCose</c>) for the bytes that flow
+    /// through <c>CoseSerialization.SerializeCoseSign</c>. Distinct from
+    /// <see cref="CoseEncodedSign1"/>, which tags the single-signer envelope — the two
+    /// structures cannot be converted between each other (RFC 9052 §4).
+    /// </para>
+    /// </remarks>
+    public static Tag CoseEncodedSign { get; } = Tag.Create(Purpose.Signature).With(EncodingScheme.Cose);
+
+
+    /// <summary>
+    /// Tag for the wire bytes of one RFC 9338 version 2 countersignature value — either a
+    /// <c>CounterSignatureV2</c> (the COSE_Signature-shaped full form) or a
+    /// <c>CounterSignature0V2</c> (the bare-<c>bstr</c> abbreviated form).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Used by <c>EncodedCoseCounterSignature</c> (in <c>Verifiable.JCose</c>) for the bytes
+    /// that flow through <c>CoseSerialization.WriteCounterSignatureV2</c>/
+    /// <c>WriteCounterSignature0V2</c>. Never carries a CBOR tag 19 prefix — the tagged form
+    /// is read-tolerated only, never produced.
+    /// </para>
+    /// </remarks>
+    public static Tag CoseEncodedCounterSignature { get; } = Tag.Create(Purpose.Signature).With(EncodingScheme.Cose);
+
+
+    /// <summary>
     /// Tag for signature bytes extracted from a wire-form
     /// <c>COSE_Sign1</c> or similar envelope, where the parser has not yet
     /// determined the signing algorithm.
@@ -583,6 +617,107 @@ public static class CryptoTags
 
 
     /// <summary>
+    /// Tag for the base64url-encoded <c>protected</c> header bytes of a JWS per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-5.1">RFC 7515 §5.1</see> — the ASCII bytes of
+    /// <c>BASE64URL(UTF8(JWS Protected Header))</c> that are integrity-protected by the signature.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Mirrors <see cref="CoseEncodedProtectedHeader"/>'s "preserve the original encoding" rationale: the JWS
+    /// Signing Input is <c>ASCII(BASE64URL(UTF8(JWS Protected Header))) || '.' || BASE64URL(JWS Payload)</c>
+    /// (RFC 7515 §5.1) — the base64url TEXT itself, not a re-derived encoding of the decoded header object.
+    /// JAdES message-imprint algorithms that fold the protected header into a time-stamp input walk this same
+    /// base64url string, never a re-encoding of the decoded model, so preserving the original encoding keeps
+    /// that byte-exact (the same discipline this library applies for <c>etsiU</c> elements).
+    /// </para>
+    /// </remarks>
+    public static Tag JoseEncodedProtectedHeader { get; } = Tag.Create(Purpose.Data).With(EncodingScheme.Jose);
+
+
+    /// <summary>
+    /// Tag for the base64url-encoded JWS Signature Value bytes of a JWS per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-5.1">RFC 7515 §5.1</see> — the ASCII bytes of
+    /// <c>BASE64URL(JWS Signature)</c>.
+    /// </summary>
+    /// <remarks>
+    /// Mirrors <see cref="JoseEncodedProtectedHeader"/>'s "preserve the original encoding" rationale, one JWS
+    /// segment over: JAdES's <c>sigTst</c> (clause 5.3.4, JA-5.3.4-04: "the base64url-encoded JWS Signature
+    /// Value") and <c>arcTst</c>/<c>sigRTst</c> (clause 5.3.6.2.3 step 5, Annex A.1.5.1.2 step 1) message-imprint
+    /// algorithms fold this exact base64url TEXT into their input — the same wire string a JWS JSON
+    /// serialization's own <c>signature</c> member carries, never a re-derived encoding.
+    /// </remarks>
+    public static Tag JoseEncodedSignatureValue { get; } = Tag.Create(Purpose.Data).With(EncodingScheme.Jose);
+
+
+    /// <summary>
+    /// Tag for the CBOR-encoded <c>uHeaders</c> array bytes (label 268) of a CB-AdES <c>COSE_Sign1</c>
+    /// message's unprotected header map, per
+    /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11915201/01.01.01_60/ts_11915201v010101p.pdf">
+    /// ETSI TS 119 152-1 V1.1.1</see>, clause 5.3.1.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Mirrors <see cref="CoseEncodedProtectedHeader"/>'s "preserve the original encoding" rationale: the
+    /// Annex A.1.2.1.2 (<c>sigRTst</c>)
+    /// and A.1.2.2.2 (<c>rfsTst</c>) message-imprint algorithms walk the <c>uHeaders</c> array's own encoded
+    /// wire bytes, never a re-encoding of the decoded model — preserving the original encoding keeps that
+    /// byte-exact.
+    /// </para>
+    /// </remarks>
+    public static Tag CoseEncodedUnsignedHeaders { get; } = Tag.Create(Purpose.Data).With(EncodingScheme.Cose);
+
+
+    /// <summary>
+    /// Tag for the pool-owned wire TEXT of one JAdES <c>etsiU</c> unsigned-component array element, per
+    /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11918201/01.02.01_60/ts_11918201v010201p.pdf">
+    /// ETSI TS 119 182-1 V1.2.1</see>, clause 5.3.1.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Mirrors <see cref="JoseEncodedProtectedHeader"/>'s "preserve the original encoding" rationale: when the
+    /// <c>etsiU</c> array uses base64url
+    /// incorporation, the message-imprint algorithm (clause 5.3.6.2.3) concatenates each element's own
+    /// base64url TEXT verbatim, with no canonicalization step to absorb re-serialization drift — so the text
+    /// this tag labels must be the exact wire string, never a re-derived encoding. The same tag also labels the
+    /// mode-agnostic wire TEXT this tag also carries opaquely for kinds not yet decoded (<c>cSig</c>, and any
+    /// unrecognized <c>etsiU</c> element) under clear-JSON incorporation, where the bytes are that element's
+    /// own raw JSON text rather than base64url.
+    /// </para>
+    /// </remarks>
+    public static Tag JoseEncodedUnsignedHeaderElement { get; } = Tag.Create(Purpose.Data).With(EncodingScheme.Jose);
+
+
+    /// <summary>
+    /// Tag for the pool-owned octets of a JAdES <c>sigPSt</c> signature-policy document (<c>sigPolDoc</c>
+    /// member), per
+    /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11918201/01.02.01_60/ts_11918201v010201p.pdf">
+    /// ETSI TS 119 182-1 V1.2.1, clause 5.3.3</see> (JA-5.3.3-04).
+    /// </summary>
+    /// <remarks>
+    /// Carried pooled per this project's carrier discipline ("no naked bytes" — a deliberate departure
+    /// from the borrowed-view choice <see cref="AdESPkiObject.Val"/>/<see cref="AdESTimestampToken.Val"/>
+    /// made before this project's own carrier discipline was adopted).
+    /// </remarks>
+    public static Tag JAdESSignaturePolicyDocument { get; } = Tag.Create(Purpose.Data).With(EncodingScheme.Raw);
+
+
+    /// <summary>
+    /// Tag for the assembled message-imprint-INPUT octet stream of a JAdES <c>arcTst</c>/<c>sigRTst</c>/
+    /// <c>rfsTst</c> time-stamp, per
+    /// <see href="https://www.etsi.org/deliver/etsi_ts/119100_119199/11918201/01.02.01_60/ts_11918201v010201p.pdf">
+    /// ETSI TS 119 182-1 V1.2.1</see>, clauses 5.3.6.2.3/5.3.6.2.4 and Annex A.1.5.1.2/1.3/2.2/2.3.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="JoseEncodedUnsignedHeaderElement"/>, which tags a single <c>etsiU</c> array
+    /// element's own wire text: this tag labels the FINAL concatenated buffer — raw octets, not itself a JSON
+    /// or JOSE value — that a registered digest delegate hashes to produce the time-stamp request. Also used
+    /// for the intermediate per-branch concatenations (the <c>etsiU</c>-elements contribution alone) a builder
+    /// assembles on the way to that final buffer.
+    /// </remarks>
+    public static Tag JAdESMessageImprintInput { get; } = Tag.Create(Purpose.Data).With(EncodingScheme.Raw);
+
+
+    /// <summary>
     /// Tag for the DER wire bytes of a CMS SignedData structure per
     /// <see href="https://www.rfc-editor.org/rfc/rfc5652">RFC 5652</see> — the signature-envelope
     /// substrate of eMRTD Passive Authentication (EF.SOD) and the CAdES family of EU advanced
@@ -597,6 +732,55 @@ public static class CryptoTags
     /// covers these attributes; surfacing them lets a format layer validate its own rules (CAdES).
     /// </summary>
     public static Tag CmsSignedAttributeValue { get; } = Tag.Create(Purpose.Signature).With(EncodingScheme.Der);
+
+
+    /// <summary>
+    /// Tag for the DER wire bytes of a complete CMS <c>Attribute</c> (RFC 5652 §5.3) — the
+    /// <c>attrType</c> object identifier together with its <c>attrValues</c> set, as the single
+    /// <c>SEQUENCE</c> that goes into a <c>SignerInfo</c>'s <c>signedAttrs</c> or <c>unsignedAttrs</c>.
+    /// Distinct from <see cref="CmsSignedAttributeValue"/>, which tags one attribute's value alone.
+    /// </summary>
+    public static Tag CmsEncodedAttribute { get; } = Tag.Create(Purpose.Signature).With(EncodingScheme.Der);
+
+
+    /// <summary>
+    /// Tag for the DER wire bytes of a CMS <c>SignedAttributes</c> set (RFC 5652 §5.3), in either of the
+    /// two forms the standard uses: the <c>[0] IMPLICIT</c> form carried inside a <c>SignerInfo</c>, and
+    /// the universal <c>SET OF</c> form that is the signature input of RFC 5652 §5.4.
+    /// </summary>
+    public static Tag CmsEncodedSignedAttributes { get; } = Tag.Create(Purpose.Signature).With(EncodingScheme.Der);
+
+
+    /// <summary>
+    /// Tag for the DER wire bytes of a bare CMS <c>SignerInfo</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc5652#section-5.3">RFC 5652 §5.3</see>) standing on its own
+    /// rather than inside a <c>SignedData</c> — which is what a <c>countersignature</c> attribute value is
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc5652#section-11.4">RFC 5652 §11.4</see>:
+    /// <c>Countersignature ::= SignerInfo</c>). Distinct from <see cref="CmsEncodedSignedData"/>, which tags a
+    /// whole signature envelope, and from <see cref="CmsEncodedAttribute"/>, which tags the <c>Attribute</c> such
+    /// a <c>SignerInfo</c> is carried in.
+    /// </summary>
+    public static Tag CmsEncodedSignerInfo { get; } = Tag.Create(Purpose.Signature).With(EncodingScheme.Der);
+
+
+    /// <summary>
+    /// Tag for the DER wire form of one signature value standing alone — a DER <c>Ecdsa-Sig-Value</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc3279#section-2.2.3">RFC 3279 §2.2.3</see>) as
+    /// <see cref="EcdsaSignatureEncoding.ConvertP1363ToDer"/> produces it, ready to occupy a
+    /// <c>SignerInfo.signature</c> OCTET STRING. Distinct from the per-algorithm raw-encoding signature tags
+    /// (for example <see cref="P256Signature"/>), which tag the fixed-width IEEE P1363 form the signing seams
+    /// emit.
+    /// </summary>
+    public static Tag DerEncodedSignatureValue { get; } = Tag.Create(Purpose.Signature).With(EncodingScheme.Der);
+
+
+    /// <summary>
+    /// Tag for a standalone DER-encoded fragment of public certificate content (a <c>Name</c>, a
+    /// <c>TBSCertificate</c>, an extension's <c>extnValue</c>) held in pooled memory before assembly — never
+    /// key or signature material, so <see cref="Context.Purpose.Data"/> is the fitting discriminator.
+    /// Distinct from the CMS tags above, which tag signature-bearing structures.
+    /// </summary>
+    public static Tag DerEncodedCertificateContent { get; } = Tag.Create(Purpose.Data).With(EncodingScheme.Der);
 
 
     /// <summary>
@@ -620,6 +804,17 @@ public static class CryptoTags
 
     //Digest tags. The hash family is carried via HashAlgorithmName per the existing
     //digest dispatch contract (see CryptoFormatConversions / MicrosoftCryptographicFunctions.ComputeDigestAsync).
+
+    /// <summary>
+    /// Tag for SHA-1 digest values. Carries <see cref="HashAlgorithmName.SHA1"/>, <see cref="Purpose.Digest"/>,
+    /// raw encoding. Scoped to the handful of specifications that mandate SHA-1 for object identification rather
+    /// than signature strength — the PAdES DSS/VRI dictionary keying (ETSI EN 319 142-1 clause 5.4.2.2, PA-5.4.2.2-T2)
+    /// and the OCSP <c>CertID.issuerKeyHash</c>/<c>issuerNameHash</c> default (RFC 6960 §4.1.1). Deliberately not
+    /// registered on <see cref="Verifiable.Cryptography.Pki.PkiDigestAlgorithm"/>, whose own remarks explain why
+    /// SHA-1 must stay absent from the signature-relevant digest-resolution surface (the CAdES signing-certificate
+    /// binding and the RFC 3161 message-imprint check) — this tag never reaches either.
+    /// </summary>
+    public static Tag Sha1Digest { get; } = Tag.Create(HashAlgorithmName.SHA1).With(Purpose.Digest).With(EncodingScheme.Raw);
 
     /// <summary>
     /// Tag for SHA-256 digest values. Carries
@@ -757,8 +952,11 @@ public static class CryptoTags
         BrainpoolP512r1ExchangePublicKey, BrainpoolP512r1ExchangePrivateKey,
         MdocIssuerSignedItemRandom, WireDecodedDisclosureSalt, X509CertificateSerialNumber,
         CoseEncodedSign1, AlgorithmAgnosticSignature, CoseEncodedMac0, CoseEncodedProtectedHeader,
-        CmsEncodedSignedData, CmsSignedAttributeValue,
-        Sha256Digest, Sha384Digest, Sha512Digest, Blake3Digest,
+        JoseEncodedProtectedHeader,
+        CoseEncodedUnsignedHeaders, CoseEncodedSign, CoseEncodedCounterSignature,
+        CmsEncodedSignedData, CmsSignedAttributeValue, CmsEncodedAttribute, CmsEncodedSignedAttributes,
+        CmsEncodedSignerInfo, DerEncodedSignatureValue, DerEncodedCertificateContent,
+        Sha1Digest, Sha256Digest, Sha384Digest, Sha512Digest, Blake3Digest,
         HmacSha256Key, HmacSha384Key, HmacSha512Key,
         HmacSha256Value, HmacSha384Value, HmacSha512Value,
         TripleDesCbc, TripleDesCbcDecryptedContent, RetailMac,

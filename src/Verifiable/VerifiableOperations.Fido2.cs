@@ -380,8 +380,8 @@ internal static partial class VerifiableOperations
                     UserVerification = userVerificationRequirement,
                     CredentialId = credentialId,
                     // This verb is verification-only against ONE named credential record (no
-                    // discoverable-credential storage lookup exists in this CLI — scout-cli's
-                    // "no storage lifecycle" finding), so the caller has already identified the
+                    // discoverable-credential storage lookup exists in this CLI — it has
+                    // no storage lifecycle), so the caller has already identified the
                     // credential exactly as WebAuthn L3 step 6's first case describes: an allowlist
                     // naming the one credential this record represents. That is what makes a
                     // userHandle optional here even when --user-handle is not supplied.
@@ -447,7 +447,7 @@ internal static partial class VerifiableOperations
 
     /// <summary>
     /// The COSE algorithm identifiers <see cref="CryptoProviderStartup"/> registers verification
-    /// functions for: ES256/384/512, RS256/384/512, and PS256/384/512. Ruling 2's "verb algorithm
+    /// functions for: ES256/384/512, RS256/384/512, and PS256/384/512. This "verb algorithm
     /// matrix" — EdDSA and ES256K are deliberately absent (see <see cref="CryptoProviderStartup"/>'s
     /// own doc comment) until an Ed25519/secp256k1 backend is referenced from this project.
     /// </summary>
@@ -495,15 +495,15 @@ internal static partial class VerifiableOperations
 
     /// <summary>
     /// A human-readable listing of <see cref="SupportedCoseAlgorithms"/>, for the clean
-    /// unsupported-algorithm verb error ruling 2 requires.
+    /// unsupported-algorithm verb error this surface requires.
     /// </summary>
     private static string SupportedAlgorithmsDescription => "ES256, ES384, ES512, RS256, RS384, RS512, PS256, PS384, PS512";
 
 
     /// <summary>
     /// The step 26 credential-id-uniqueness check every registration verification calls. The CLI has
-    /// no credential storage of its own (verification-only tooling — see scout-cli's "no storage
-    /// lifecycle" finding), so every credential ID is reported unique; a relying party embedding this
+    /// no credential storage of its own (verification-only tooling with no storage
+    /// lifecycle), so every credential ID is reported unique; a relying party embedding this
     /// verb into a real service supplies its own storage-backed check instead.
     /// </summary>
     private static IsCredentialIdUniqueDelegate AlwaysUniqueCredentialId { get; } = static (_, _) => ValueTask.FromResult(true);
@@ -511,8 +511,8 @@ internal static partial class VerifiableOperations
 
     /// <summary>
     /// Determines whether <paramref name="algorithm"/> is one of <see cref="SupportedCoseAlgorithms"/>,
-    /// returning a clean, verb-level error message naming the supported matrix when it is not (ruling
-    /// 2) — checked BEFORE any attestation/assertion verification runs, since the shipped verifiers
+    /// returning a clean, verb-level error message naming the supported matrix when it is not —
+    /// checked BEFORE any attestation/assertion verification runs, since the shipped verifiers
     /// themselves fail closed to a generic rejection for an unregistered algorithm rather than
     /// surfacing this specific, actionable message.
     /// </summary>
@@ -571,8 +571,8 @@ internal static partial class VerifiableOperations
     /// <summary>
     /// Builds the <see cref="SelectAttestationVerifierDelegate"/> registering all four shipped
     /// attestation statement formats (<c>none</c>/<c>packed</c>/<c>android-key</c>/<c>fido-u2f</c>)
-    /// with the Microsoft chain/profile/extension delegates. Per ruling 2, the CLI does not reference
-    /// <c>Verifiable.BouncyCastle</c> this wave, so revocation checking and chain completion are both
+    /// with the Microsoft chain/profile/extension delegates. The CLI does not reference
+    /// <c>Verifiable.BouncyCastle</c>, so revocation checking and chain completion are both
     /// <see langword="null"/> — no revocation source is configured and <c>x5c</c> is validated exactly
     /// as presented.
     /// </summary>
@@ -601,12 +601,12 @@ internal static partial class VerifiableOperations
 
     /// <summary>
     /// Resolves the registration's trust anchors, either from directly supplied certificate files, or
-    /// from a Metadata BLOB per the shipped wave-3 capstone chain: parse → verify → find the entry by
+    /// from a Metadata BLOB: parse → verify → find the entry by
     /// AAGUID → evaluate its status → extract its trust anchors. When the MDS blob does not itself
     /// verify, this is reported as a verb failure; when no matching entry exists or its status is not
     /// accepted, this returns EMPTY anchors so the certified verifier fails closed with
     /// <see cref="Fido2AttestationErrors.NoTrustAnchors"/> rather than the CLI making that trust
-    /// decision itself (ruling 11's documented §7.1 step 23 semantics).
+    /// decision itself (the documented §7.1 step 23 semantics).
     /// </summary>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The matched entry's disposal is subsumed by the enclosing MetadataBlob's Dispose() (a MetadataBlobPayload disposes every entry it owns), which the using declaration on 'blob' below calls — disposing the entry a second time would be redundant, not a leak.")]
@@ -664,7 +664,7 @@ internal static partial class VerifiableOperations
 
             //The CLI verb has no serial-number/revocation storage of its own (a single, stateless
             //invocation) — NotTracked/NotChecked are the explicit, greppable postures for that, not a
-            //silently-defaulted absence; ruling 2's own ValidateChainAsync call above wires no
+            //silently-defaulted absence; the ValidateChainAsync call above wires no
             //revocation delegate either, so Required would fail closed unconditionally here.
             var request = new MetadataBlobVerificationRequest(
                 blobBytes, [mdsRoot], validationTime, MdsVerificationTenantId,
@@ -750,7 +750,7 @@ internal static partial class VerifiableOperations
     /// (<see cref="CryptographicKeyEvents.ComputeDigest"/>) — the same seam every other public-data
     /// hash in this codebase uses, mirroring <c>Fido2ClientDataHash.Compute</c>'s own call shape.
     /// </summary>
-    private static DigestValue ComputeRpIdHash(string rpId, MemoryPool<byte> pool) =>
+    private static DigestValue ComputeRpIdHash(string rpId, BaseMemoryPool pool) =>
         CryptographicKeyEvents.ComputeDigest(Encoding.UTF8.GetBytes(rpId), 32, CryptoTags.Sha256Digest, pool);
 
 
@@ -803,8 +803,8 @@ internal static partial class VerifiableOperations
 
     /// <summary>
     /// Writes the assertion verdict — <c>isAcceptable</c>, <c>signatureValid</c>, and the new
-    /// <c>signCount</c> — as compact UTF-8 JSON via a manual <see cref="Utf8JsonWriter"/> (ruling 13:
-    /// no reflection-based serialization in the AOT-published CLI).
+    /// <c>signCount</c> — as compact UTF-8 JSON via a manual <see cref="Utf8JsonWriter"/> (no
+    /// reflection-based serialization in the AOT-published CLI).
     /// </summary>
     private static string WriteAssertionVerdict(Fido2AssertionOutcome outcome, uint newSignCount)
     {
@@ -828,17 +828,17 @@ internal static partial class VerifiableOperations
     /// signs their transcript through a <see cref="CryptographicKeyFactory"/>-created
     /// <see cref="PrivateKey"/> (so the sign event flows), and verifies through
     /// <see cref="Fido2AssertionVerifier"/> with the shipped codec defaults (so the verify path's
-    /// event and Activity spans both flow) — the "observed FIDO2 provenance" ruling 3 asks
+    /// event and Activity spans both flow) — the "observed FIDO2 provenance" this surface asks
     /// <c>EmitCbom --observe</c> to show.
     /// </summary>
     /// <remarks>
     /// Internal rather than <see langword="private"/> so the integration test tying this workload to
-    /// the <see cref="CryptographicKeyEvents"/> wiring (rulings 3+4) can invoke it directly, in-process,
-    /// without spawning the CLI just to observe the event stream.
+    /// the <see cref="CryptographicKeyEvents"/> wiring can invoke it directly, in-process, without
+    /// spawning the CLI just to observe the event stream.
     /// </remarks>
     internal static async Task RunFido2ObservedWorkloadAsync(CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //Routes through the CreateKeyPair choke point so the observed CBOM's provenance also carries the
         //KeyMaterialGeneratedEvent for this ceremony's mint step, completing mint+sign+verify coverage

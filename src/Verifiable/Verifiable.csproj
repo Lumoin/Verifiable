@@ -47,6 +47,7 @@
     <ProjectReference Include="..\Verifiable.Fido2\Verifiable.Fido2.csproj" />
     <ProjectReference Include="..\Verifiable.Cbor\Verifiable.Cbor.csproj" />
     <ProjectReference Include="..\Verifiable.Json\Verifiable.Json.csproj" />
+    <ProjectReference Include="..\Verifiable.Xml\Verifiable.Xml.csproj" />
   </ItemGroup>
 
 </Project>

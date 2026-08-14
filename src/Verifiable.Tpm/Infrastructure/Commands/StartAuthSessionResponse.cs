@@ -64,7 +64,7 @@ public sealed class StartAuthSessionResponse: ITpmWireType, IDisposable
     /// <param name="sessionHandle">The session handle from the response handle area.</param>
     /// <param name="pool">The memory pool for allocations.</param>
     /// <returns>The parsed response.</returns>
-    public static StartAuthSessionResponse Parse(ref TpmReader reader, TpmiShAuthSession sessionHandle, MemoryPool<byte> pool)
+    public static StartAuthSessionResponse Parse(ref TpmReader reader, TpmiShAuthSession sessionHandle, BaseMemoryPool pool)
     {
         Tpm2bNonce nonceTPM = Tpm2bNonce.Parse(ref reader, pool);
         return new StartAuthSessionResponse(sessionHandle, nonceTPM);

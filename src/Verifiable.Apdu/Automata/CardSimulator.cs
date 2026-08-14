@@ -360,7 +360,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// <param name="pool">The memory pool for the response buffer.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The response. The caller owns the returned response and must dispose it.</returns>
-    public async ValueTask<ApduResult<ApduResponse>> TransceiveAsync(ReadOnlyMemory<byte> commandApdu, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public async ValueTask<ApduResult<ApduResponse>> TransceiveAsync(ReadOnlyMemory<byte> commandApdu, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ObjectDisposedException.ThrowIf(disposed, this);
@@ -391,7 +391,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "ApduResponse takes ownership of the rented buffer and is owned by the returned ApduResult, which the caller disposes.")]
-    private async ValueTask<ApduResult<ApduResponse>> PlaintextTransceiveAsync(ReadOnlyMemory<byte> commandApdu, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private async ValueTask<ApduResult<ApduResponse>> PlaintextTransceiveAsync(ReadOnlyMemory<byte> commandApdu, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         //A structurally malformed command is framed directly without stepping the automaton, so it leaves
         //no trace entry and does not disturb the card state.
@@ -415,7 +415,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "ApduResponse takes ownership of the rented buffer and is owned by the returned ApduResult, which the caller disposes.")]
     private async ValueTask<ApduResult<ApduResponse>> SecureTransceiveAsync(
-        ReadOnlyMemory<byte> protectedCommand, SecureMessagingCardSession session, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> protectedCommand, SecureMessagingCardSession session, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(pool is not BaseMemoryPool basePool)
         {
@@ -464,7 +464,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// plaintext response data and status word to be protected.
     /// </summary>
     private async ValueTask<(IMemoryOwner<byte>? OwnedData, ReadOnlyMemory<byte> Data, StatusWord StatusWord)> DispatchInnerCommandAsync(
-        SecureMessagingCommand inner, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        SecureMessagingCommand inner, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using IMemoryOwner<byte> innerCommand = ReconstructInnerCommand(inner, pool, out int length);
         if(!TryParseCommand(innerCommand.Memory[..length], out CardSimulatorInput? input, out StatusWord malformedStatus))
@@ -484,7 +484,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// Reassembles the plaintext command APDU bytes (<c>header [Lc data] [Le]</c>) from a recovered inner command.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the caller, which disposes it.")]
-    private static IMemoryOwner<byte> ReconstructInnerCommand(SecureMessagingCommand inner, MemoryPool<byte> pool, out int length)
+    private static IMemoryOwner<byte> ReconstructInnerCommand(SecureMessagingCommand inner, BaseMemoryPool pool, out int length)
     {
         ReadOnlySpan<byte> data = inner.Data;
         bool hasData = data.Length > 0;
@@ -586,7 +586,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "ApduResponse takes ownership of the rented buffer and is owned by the returned ApduResult, which the caller disposes.")]
-    private static ApduResult<ApduResponse> WrapResponse(ReadOnlySpan<byte> responseBytes, MemoryPool<byte> pool)
+    private static ApduResult<ApduResponse> WrapResponse(ReadOnlySpan<byte> responseBytes, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(responseBytes.Length);
         try
@@ -609,9 +609,9 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// Drives the automaton through the effectful loop: step, execute any action the new state declares
     /// (drawing card entropy, running the BAC crypto), feed the result back, repeat until no action remains.
     /// </summary>
-    private async ValueTask RunWithEffectsAsync(CardSimulatorInput input, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private async ValueTask RunWithEffectsAsync(CardSimulatorInput input, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
-        _ = await PdaRunner.StepWithEffectsAsync<CardSimulatorState, CardSimulatorInput, MemoryPool<byte>>(
+        _ = await PdaRunner.StepWithEffectsAsync<CardSimulatorState, CardSimulatorInput, BaseMemoryPool>(
             Automaton.CurrentState,
             Automaton.StepCount,
             input,
@@ -627,7 +627,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// <summary>
     /// Executes the effectful work a transition declared and returns the input to feed back.
     /// </summary>
-    private async ValueTask<CardSimulatorInput> ExecuteActionAsync(PdaAction action, MemoryPool<byte> pool, CancellationToken cancellationToken) =>
+    private async ValueTask<CardSimulatorInput> ExecuteActionAsync(PdaAction action, BaseMemoryPool pool, CancellationToken cancellationToken) =>
         action switch
         {
             CardRngAction rngAction => GenerateChallenge(rngAction, pool),
@@ -653,7 +653,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the rented buffer transfers to the returned CardEntropyGenerated, then to the ChallengeResponse intent, and is released by SerializeResponse after framing.")]
-    private CardEntropyGenerated GenerateChallenge(CardRngAction action, MemoryPool<byte> pool)
+    private CardEntropyGenerated GenerateChallenge(CardRngAction action, BaseMemoryPool pool)
     {
         //Rent at least one octet so a zero-length request still yields a valid (empty) buffer.
         IMemoryOwner<byte> owner = pool.Rent(Math.Max(action.ByteCount, 1));
@@ -679,7 +679,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// MRZ, verifies the terminal token against the issued RND.IC, establishes the Secure Messaging session,
     /// and returns the card's response token.
     /// </summary>
-    private async ValueTask<CardSimulatorInput> AuthenticateAsync(BacAuthenticateAction action, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private async ValueTask<CardSimulatorInput> AuthenticateAsync(BacAuthenticateAction action, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(pool is not BaseMemoryPool basePool)
         {
@@ -734,7 +734,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// authentication tokens — abandoning any half-finished PACE exchange first.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented OID buffer transfers to device state, disposed by ResetPaceExchange or Dispose; the catch disposes it on a failure path.")]
-    private PaceMechanismSelected SelectPaceMechanism(PaceSelectMechanismAction action, MemoryPool<byte> pool)
+    private PaceMechanismSelected SelectPaceMechanism(PaceSelectMechanismAction action, BaseMemoryPool pool)
     {
         //A fresh MSE:Set AT abandons any half-finished PACE exchange.
         ResetPaceExchange();
@@ -762,7 +762,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// Runs the PACE encrypted-nonce round: derives the password key from the card's own DG1 MRZ, draws and
     /// encrypts the nonce, retains the nonce for the mapping round, and wraps the cryptogram for the terminal.
     /// </summary>
-    private async ValueTask<CardSimulatorInput> EncryptPaceNonceAsync(MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private async ValueTask<CardSimulatorInput> EncryptPaceNonceAsync(BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(pool is not BaseMemoryPool basePool)
         {
@@ -801,7 +801,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// Runs the PACE nonce-mapping round, dispatching to the mechanism the selected OID names: Generic Mapping
     /// (a mapping key-pair exchange) or Integrated Mapping (a direct map of the terminal's nonce t).
     /// </summary>
-    private async ValueTask<CardSimulatorInput> MapPaceNonceAsync(PaceMapAction action, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private async ValueTask<CardSimulatorInput> MapPaceNonceAsync(PaceMapAction action, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(pool is not BaseMemoryPool basePool)
         {
@@ -912,7 +912,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// token round, and wraps the chip's ephemeral public key for the terminal.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The ephemeral public key and the session keys transfer to device state (disposed by ResetPaceExchange, the Secure Messaging session, or Dispose); the response buffer transfers to the returned input.")]
-    private async ValueTask<CardSimulatorInput> AgreePaceKeysAsync(PaceAgreeAction action, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private async ValueTask<CardSimulatorInput> AgreePaceKeysAsync(PaceAgreeAction action, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(pool is not BaseMemoryPool basePool)
         {
@@ -956,7 +956,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// Runs the PACE mutual-authentication round: verifies the terminal's token, establishes the AES Secure
     /// Messaging session on success, and wraps the chip's token for the terminal.
     /// </summary>
-    private async ValueTask<CardSimulatorInput> AuthenticatePaceAsync(PaceAuthenticateAction action, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private async ValueTask<CardSimulatorInput> AuthenticatePaceAsync(PaceAuthenticateAction action, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(pool is not BaseMemoryPool basePool)
         {
@@ -1104,7 +1104,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The re-keyed session transfers to device state (PendingSecureMessagingSession), disposed by ActivatePendingSecureMessagingSession or Dispose; EstablishSessionAsync disposes its keys on its own failure path.")]
-    private async ValueTask<CardSimulatorInput> ChipAuthenticateAsync(ChipAuthenticateAction action, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private async ValueTask<CardSimulatorInput> ChipAuthenticateAsync(ChipAuthenticateAction action, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(pool is not BaseMemoryPool basePool)
         {
@@ -1164,7 +1164,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the rented signature buffer transfers to the returned ActiveAuthenticationSigned, then to the ActiveAuthenticationResponse intent, and is released after framing; the catch disposes it on failure.")]
-    private async ValueTask<CardSimulatorInput> ActiveAuthenticateAsync(ActiveAuthenticateAction action, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private async ValueTask<CardSimulatorInput> ActiveAuthenticateAsync(ActiveAuthenticateAction action, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(pool is not BaseMemoryPool basePool)
         {
@@ -1247,7 +1247,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The parsed certificate is disposed on a verification failure and transferred to device state (ImportedTerminalCertificate, disposed by Dispose) on success.")]
-    private async ValueTask<CardSimulatorInput> VerifyPresentedCertificateAsync(VerifyCertificateAction action, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private async ValueTask<CardSimulatorInput> VerifyPresentedCertificateAsync(VerifyCertificateAction action, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(pool is not BaseMemoryPool basePool)
         {
@@ -1358,7 +1358,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// without the outer tag and length.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the caller, which disposes it via a using declaration.")]
-    private static IMemoryOwner<byte> WrapCertificate(ReadOnlySpan<byte> content, MemoryPool<byte> pool, out int length)
+    private static IMemoryOwner<byte> WrapCertificate(ReadOnlySpan<byte> content, BaseMemoryPool pool, out int length)
     {
         int total = 2 + BerLengthSize(content.Length) + content.Length;
 
@@ -1419,7 +1419,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// ephemeral public key when PACE established the session, or the MRZ document number from the card's own
     /// EF.DG1 after Basic Access Control (BSI TR-03110-3 §A.2.2.3). The challenge is single-use.
     /// </summary>
-    private async ValueTask<CardSimulatorInput> VerifyTerminalSignatureAsync(TerminalAuthenticateAction action, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private async ValueTask<CardSimulatorInput> VerifyTerminalSignatureAsync(TerminalAuthenticateAction action, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(pool is not BaseMemoryPool basePool)
         {
@@ -1501,7 +1501,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// from the card's own EF.DG1, including its check digit (Doc 9303 Part 11 §7.1.2), as ASCII.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the caller, which disposes it via a using declaration.")]
-    private static IMemoryOwner<byte> BuildChipIdentifier(MachineReadableZone mrz, MemoryPool<byte> pool, out int length)
+    private static IMemoryOwner<byte> BuildChipIdentifier(MachineReadableZone mrz, BaseMemoryPool pool, out int length)
     {
         string identifier = TerminalAuthentication.ChipIdentifierForBasicAccessControl(mrz.DocumentNumber);
         length = Encoding.ASCII.GetByteCount(identifier);
@@ -1598,7 +1598,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// — sizing the BER-TLV lengths for any curve's point or token. Used for every PACE round response.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the caller, then to the PaceRoundCompleted input.")]
-    private static IMemoryOwner<byte> WrapDynamicAuthenticationData(byte innerTag, ReadOnlySpan<byte> value, MemoryPool<byte> pool, out int length)
+    private static IMemoryOwner<byte> WrapDynamicAuthenticationData(byte innerTag, ReadOnlySpan<byte> value, BaseMemoryPool pool, out int length)
     {
         int innerObjectLength = 1 + BerLengthSize(value.Length) + value.Length;
         int total = 1 + BerLengthSize(innerObjectLength) + innerObjectLength;
@@ -1634,7 +1634,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the caller, then to the PaceRoundCompleted input.")]
     private static IMemoryOwner<byte> WrapDynamicAuthenticationDataPair(
-        byte firstTag, ReadOnlySpan<byte> firstValue, byte secondTag, ReadOnlySpan<byte> secondValue, MemoryPool<byte> pool, out int length)
+        byte firstTag, ReadOnlySpan<byte> firstValue, byte secondTag, ReadOnlySpan<byte> secondValue, BaseMemoryPool pool, out int length)
     {
         int firstObjectLength = 1 + BerLengthSize(firstValue.Length) + firstValue.Length;
         int secondObjectLength = 1 + BerLengthSize(secondValue.Length) + secondValue.Length;
@@ -1747,7 +1747,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// <summary>
     /// Retains a copy of the issued challenge RND.IC as device state, disposing any prior one.
     /// </summary>
-    private void RetainIssuedChallenge(ReadOnlySpan<byte> challenge, MemoryPool<byte> pool)
+    private void RetainIssuedChallenge(ReadOnlySpan<byte> challenge, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> retained = pool.Rent(challenge.Length);
         challenge.CopyTo(retained.Memory.Span);
@@ -2453,7 +2453,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "ApduResponse takes ownership of the rented buffer and is owned by the returned ApduResult, which the caller disposes.")]
-    private static ApduResult<ApduResponse> SerializeResponse(CardResponseIntent intent, MemoryPool<byte> pool)
+    private static ApduResult<ApduResponse> SerializeResponse(CardResponseIntent intent, BaseMemoryPool pool)
     {
         //A ChallengeResponse / BacAuthenticateResponse owns the pooled buffer the action executor produced;
         //release it in the finally once its octets are copied into the wire response.

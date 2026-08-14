@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Model.DataIntegrity;
@@ -14,7 +13,6 @@ namespace Verifiable.Vcalm.Exchange;
 /// <see cref="VcalmCredentialVerification"/>, the step decision on the deployment's
 /// <c>ResolveVcalmExchangeStepAsync</c> seam.
 /// </summary>
-[DebuggerDisplay("VcalmExchangeService")]
 public static class VcalmExchangeService
 {
     /// <summary>

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Jarm;
@@ -8,7 +7,6 @@ namespace Verifiable.OAuth.Jarm;
 /// <see href="https://openid.net/specs/oauth-v2-jarm-final.html#section-3">JARM §3</see>,
 /// registered in the IANA OAuth Dynamic Client Registration Metadata registry.
 /// </summary>
-[DebuggerDisplay("JarmClientMetadataParameterNames")]
 public static class JarmClientMetadataParameterNames
 {
     /// <summary>The UTF-8 source literal of <see cref="AuthorizationSignedResponseAlg"/>.</summary>

@@ -39,8 +39,6 @@ internal sealed class DidCommServiceEndpointTests
     private static readonly string[] TwoRoutingKeys = ["did:example:m1", "did:example:m2"];
 
 
-    // ---- parsing -------------------------------------------------------------------------------
-
     [TestMethod]
     public void ParsesObjectArrayAndBareForms()
     {
@@ -93,19 +91,17 @@ internal sealed class DidCommServiceEndpointTests
     }
 
 
-    // ---- delivery resolution -------------------------------------------------------------------
-
     [TestMethod]
     public async Task DirectEndpointResolvesToTransportTarget()
     {
         DidResolver resolver = MapResolver((Recipient, Document(Recipient, ObjectService("https://example.com/path", routingKeys: ["did:example:m1"]))));
 
-        IReadOnlyList<DidCommDeliveryTarget> targets = await DidCommServiceEndpointExtensions
+        DidCommDeliveryTargetResolution resolution = await DidCommServiceEndpointExtensions
             .ResolveDeliveryTargetsAsync(Recipient, resolver, Context, default).ConfigureAwait(false);
 
-        Assert.HasCount(1, targets);
-        Assert.AreEqual("https://example.com/path", targets[0].TransportUri);
-        Assert.AreEqual("did:example:m1", string.Join("|", targets[0].RoutingKeys));
+        Assert.HasCount(1, resolution.Targets);
+        Assert.AreEqual("https://example.com/path", resolution.Targets[0].TransportUri);
+        Assert.AreEqual("did:example:m1", string.Join("|", resolution.Targets[0].RoutingKeys));
     }
 
 
@@ -117,14 +113,14 @@ internal sealed class DidCommServiceEndpointTests
             (Recipient, Document(Recipient, ObjectService(Mediator, routingKeys: [AnotherMediatorKey]))),
             (Mediator, Document(Mediator, ObjectService("https://mediator.example/didcomm"))));
 
-        IReadOnlyList<DidCommDeliveryTarget> targets = await DidCommServiceEndpointExtensions
+        DidCommDeliveryTargetResolution resolution = await DidCommServiceEndpointExtensions
             .ResolveDeliveryTargetsAsync(Recipient, resolver, Context, default).ConfigureAwait(false);
 
-        Assert.HasCount(1, targets);
-        Assert.AreEqual("https://mediator.example/didcomm", targets[0].TransportUri, "The transport URI is the mediator's.");
+        Assert.HasCount(1, resolution.Targets);
+        Assert.AreEqual("https://mediator.example/didcomm", resolution.Targets[0].TransportUri, "The transport URI is the mediator's.");
         Assert.AreEqual(
             $"{Mediator}|{AnotherMediatorKey}",
-            string.Join("|", targets[0].RoutingKeys),
+            string.Join("|", resolution.Targets[0].RoutingKeys),
             "The mediator DID is PREPENDED to the recipient's routingKeys (the outer forward wraps for the mediator's keyAgreement keys).");
     }
 
@@ -140,10 +136,10 @@ internal sealed class DidCommServiceEndpointTests
             (Recipient, Document(Recipient, ObjectService(Mediator, routingKeys: [AnotherMediatorKey]))),
             (Mediator, Document(Mediator, ObjectService("not-an-absolute-uri"))));
 
-        IReadOnlyList<DidCommDeliveryTarget> targets = await DidCommServiceEndpointExtensions
+        DidCommDeliveryTargetResolution resolution = await DidCommServiceEndpointExtensions
             .ResolveDeliveryTargetsAsync(Recipient, resolver, Context, default).ConfigureAwait(false);
 
-        Assert.IsEmpty(targets, "A mediator transport uri that is not an absolute URI MUST drop the target, not carry a bogus one.");
+        Assert.IsEmpty(resolution.Targets, "A mediator transport uri that is not an absolute URI MUST drop the target, not carry a bogus one.");
     }
 
 
@@ -156,10 +152,10 @@ internal sealed class DidCommServiceEndpointTests
             (Recipient, Document(Recipient, ObjectService(Mediator, routingKeys: [AnotherMediatorKey]))),
             (Mediator, Document(Mediator, ObjectService("did:example:deepermediator"))));
 
-        IReadOnlyList<DidCommDeliveryTarget> targets = await DidCommServiceEndpointExtensions
+        DidCommDeliveryTargetResolution resolution = await DidCommServiceEndpointExtensions
             .ResolveDeliveryTargetsAsync(Recipient, resolver, Context, default).ConfigureAwait(false);
 
-        Assert.IsEmpty(targets, "A recursive alternative endpoint yields no usable target, without throwing.");
+        Assert.IsEmpty(resolution.Targets, "A recursive alternative endpoint yields no usable target, without throwing.");
     }
 
 
@@ -171,12 +167,12 @@ internal sealed class DidCommServiceEndpointTests
                 ("https://first.example", OneRoutingKey),
                 ("https://second.example", null)))));
 
-        IReadOnlyList<DidCommDeliveryTarget> targets = await DidCommServiceEndpointExtensions
+        DidCommDeliveryTargetResolution resolution = await DidCommServiceEndpointExtensions
             .ResolveDeliveryTargetsAsync(Recipient, resolver, Context, default).ConfigureAwait(false);
 
         Assert.AreEqual(
             "https://first.example|https://second.example",
-            string.Join("|", targets.Select(t => t.TransportUri)),
+            string.Join("|", resolution.Targets.Select(t => t.TransportUri)),
             "Endpoints are returned in the document's preference order, for failover.");
     }
 
@@ -186,13 +182,13 @@ internal sealed class DidCommServiceEndpointTests
     {
         //Unresolvable recipient -> no targets, no throw.
         DidResolver empty = MapResolver();
-        Assert.IsEmpty(await DidCommServiceEndpointExtensions.ResolveDeliveryTargetsAsync(Recipient, empty, Context, default).ConfigureAwait(false));
+        Assert.IsEmpty((await DidCommServiceEndpointExtensions.ResolveDeliveryTargetsAsync(Recipient, empty, Context, default).ConfigureAwait(false)).Targets);
 
         //A mediator-DID endpoint whose mediator has no didcomm/v2 service -> that target skipped.
         DidResolver mediatorWithoutService = MapResolver(
             (Recipient, Document(Recipient, ObjectService(Mediator))),
             (Mediator, Document(Mediator)));
-        Assert.IsEmpty(await DidCommServiceEndpointExtensions.ResolveDeliveryTargetsAsync(Recipient, mediatorWithoutService, Context, default).ConfigureAwait(false));
+        Assert.IsEmpty((await DidCommServiceEndpointExtensions.ResolveDeliveryTargetsAsync(Recipient, mediatorWithoutService, Context, default).ConfigureAwait(false)).Targets);
     }
 
 
@@ -206,15 +202,15 @@ internal sealed class DidCommServiceEndpointTests
         string[] accept = [WellKnownRoutingNames.Profile, "didcomm/aip2;env=rfc587"];
         DidResolver resolver = MapResolver((Recipient, Document(Recipient, ObjectService("wss://recipient.example/inbox", accept: accept))));
 
-        IReadOnlyList<DidCommDeliveryTarget> targets = await DidCommServiceEndpointExtensions
+        DidCommDeliveryTargetResolution resolution = await DidCommServiceEndpointExtensions
             .ResolveDeliveryTargetsAsync(Recipient, resolver, Context, default).ConfigureAwait(false);
 
-        Assert.HasCount(1, targets);
-        Assert.AreEqual("wss", targets[0].Scheme, "The delivery target exposes the uri scheme so a sender dispatches to the matching transport.");
-        Assert.IsNotNull(targets[0].Accept);
+        Assert.HasCount(1, resolution.Targets);
+        Assert.AreEqual("wss", resolution.Targets[0].Scheme, "The delivery target exposes the uri scheme so a sender dispatches to the matching transport.");
+        Assert.IsNotNull(resolution.Targets[0].Accept);
         Assert.AreEqual(
             "didcomm/v2|didcomm/aip2;env=rfc587",
-            string.Join("|", targets[0].Accept!),
+            string.Join("|", resolution.Targets[0].Accept!),
             "The endpoint's accept media types are carried in preference order.");
     }
 
@@ -229,12 +225,12 @@ internal sealed class DidCommServiceEndpointTests
             (Recipient, Document(Recipient, ObjectService(Mediator))),
             (Mediator, Document(Mediator, ObjectService("wss://mediator.example/inbox", accept: [WellKnownRoutingNames.Profile]))));
 
-        IReadOnlyList<DidCommDeliveryTarget> targets = await DidCommServiceEndpointExtensions
+        DidCommDeliveryTargetResolution resolution = await DidCommServiceEndpointExtensions
             .ResolveDeliveryTargetsAsync(Recipient, resolver, Context, default).ConfigureAwait(false);
 
-        Assert.HasCount(1, targets);
-        Assert.AreEqual("wss", targets[0].Scheme, "The mediator endpoint's scheme is carried.");
-        Assert.AreEqual("didcomm/v2", string.Join("|", targets[0].Accept!), "The mediator endpoint's accept is carried (it is the transport delivered to).");
+        Assert.HasCount(1, resolution.Targets);
+        Assert.AreEqual("wss", resolution.Targets[0].Scheme, "The mediator endpoint's scheme is carried.");
+        Assert.AreEqual("didcomm/v2", string.Join("|", resolution.Targets[0].Accept!), "The mediator endpoint's accept is carried (it is the transport delivered to).");
     }
 
 
@@ -247,8 +243,6 @@ internal sealed class DidCommServiceEndpointTests
         Assert.IsNull(new DidCommDeliveryTarget { TransportUri = "not-an-absolute-uri" }.Scheme, "A non-absolute transport uri has no scheme.");
     }
 
-
-    // ---- routing-forward reconciliation (the closed E divergence) ------------------------------
 
     [TestMethod]
     public async Task ResolveRoutingKeysPrependsMediatorForDidUriEndpoint()
@@ -280,8 +274,6 @@ internal sealed class DidCommServiceEndpointTests
         Assert.AreEqual("did:example:m1|did:example:m2", string.Join("|", keys));
     }
 
-
-    // ---- fail-soft parsing over untrusted documents --------------------------------------------
 
     [TestMethod]
     public void NonStringUriIsSkipped()
@@ -388,18 +380,16 @@ internal sealed class DidCommServiceEndpointTests
                 ObjectService(Mediator))),
             (Mediator, Document(Mediator, ObjectService("https://mediator.example/didcomm"))));
 
-        IReadOnlyList<DidCommDeliveryTarget> targets = await DidCommServiceEndpointExtensions
+        DidCommDeliveryTargetResolution resolution = await DidCommServiceEndpointExtensions
             .ResolveDeliveryTargetsAsync(Recipient, resolver, Context, default).ConfigureAwait(false);
 
-        Assert.HasCount(2, targets);
-        Assert.AreEqual("https://direct.example", targets[0].TransportUri);
-        Assert.AreEqual("did:example:m1", string.Join("|", targets[0].RoutingKeys));
-        Assert.AreEqual("https://mediator.example/didcomm", targets[1].TransportUri);
-        Assert.AreEqual(Mediator, string.Join("|", targets[1].RoutingKeys), "The mediator endpoint prepends the mediator DID (no recipient routingKeys here).");
+        Assert.HasCount(2, resolution.Targets);
+        Assert.AreEqual("https://direct.example", resolution.Targets[0].TransportUri);
+        Assert.AreEqual("did:example:m1", string.Join("|", resolution.Targets[0].RoutingKeys));
+        Assert.AreEqual("https://mediator.example/didcomm", resolution.Targets[1].TransportUri);
+        Assert.AreEqual(Mediator, string.Join("|", resolution.Targets[1].RoutingKeys), "The mediator endpoint prepends the mediator DID (no recipient routingKeys here).");
     }
 
-
-    // ---- helpers -------------------------------------------------------------------------------
 
     private static DidDocument Document(string did, params Service[] services) =>
         new() { Id = new GenericDidMethod(did), Service = services.Length > 0 ? services : null };

@@ -124,7 +124,7 @@ public sealed class DataGroup12
     public static ElementaryFile Write(
         string? issuingAuthority, string? dateOfIssue, string? endorsements,
         string? taxExitRequirements, string? personalizationDateTime, string? personalizationSystemSerialNumber,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

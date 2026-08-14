@@ -137,10 +137,10 @@ internal sealed class OAuthAttackMitigationTests
     }
 
 
-    //R9207-017 / R9207-020 / M2 (MCP 2026-07-28 overlay) — a PRESENT iss must still be
+    //M2 (MCP 2026-07-28 overlay) — a PRESENT iss must still be
     //validated under Rfc6749WithPkce even though this profile does not require iss to be
     //present at all. The overlay's M2 phrasing ("client MUST validate a present iss ...
-    //before redeeming the authorization code") is unconditional, independent of R9207's
+    //before redeeming the authorization code") is unconditional, independent of RFC 9207's
     //own profile-relative MUSTs.
 
     [TestMethod]
@@ -238,7 +238,7 @@ internal sealed class OAuthAttackMitigationTests
     }
 
 
-    //RFC 9207 §2.4 / §4 + R9207-012 — error responses are not exempt from mix-up defense.
+    //RFC 9207 §2.4 / §4 — error responses are not exempt from mix-up defense.
     //
     //Attacker capability: a network attacker able to forge a callback carrying error/
     //error_description (RFC 6749 §4.1.2.1) together with a forged iss, attempting to make

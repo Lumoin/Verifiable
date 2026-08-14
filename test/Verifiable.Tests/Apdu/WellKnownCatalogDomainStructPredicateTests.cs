@@ -7,8 +7,8 @@ namespace Verifiable.Tests.Apdu;
 /// Table-driven coverage for the domain-struct well-known catalog family's predicates (the
 /// WellKnownClaimIds shape: <see langword="static readonly"/> registered-struct fields plus
 /// per-member Is* predicates), covering <see cref="WellKnownCtapInstructionCodes"/> and
-/// <see cref="WellKnownCtapStatusWords"/> after their property-to-field conversion during the
-/// style-conformance wave. Each catalog's own value set is checked so every predicate accepts its
+/// <see cref="WellKnownCtapStatusWords"/> after their property-to-field conversion. Each catalog's own
+/// value set is checked so every predicate accepts its
 /// own value and rejects every sibling value.
 /// </summary>
 [TestClass]

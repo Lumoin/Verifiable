@@ -115,7 +115,7 @@ public static class JoseTokenClassifier
         string token,
         DecodeDelegate base64UrlDecoder,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(token);
@@ -256,7 +256,7 @@ public static class JoseTokenClassifier
         string token,
         DecodeDelegate base64UrlDecoder,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         UnverifiedJwsMessage? parsed = null;
         try
@@ -301,7 +301,7 @@ public static class JoseTokenClassifier
         string token,
         DecodeDelegate base64UrlDecoder,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ReadOnlySpan<char> tokenSpan = token.AsSpan();
         int firstDot = tokenSpan.IndexOf('.');

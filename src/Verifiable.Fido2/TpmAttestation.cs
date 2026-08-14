@@ -27,7 +27,7 @@ namespace Verifiable.Fido2;
 /// <c>certInfo</c> (a marshaled TPMS_ATTEST) and <c>pubArea</c> (a marshaled TPMT_PUBLIC) are parsed
 /// with <c>Verifiable.Tpm</c>'s spec-exact wire types — <see cref="TpmsAttest"/> and
 /// <see cref="TpmtPublic"/> — rather than a hand-rolled duplicate parser: this format is the
-/// FIDO2↔TPM rendezvous the wave's dependency ruling exists for.
+/// FIDO2↔TPM rendezvous point.
 /// </para>
 /// <para>
 /// Unlike <see cref="PackedAttestation"/>'s <c>x5c</c> branch, which returns
@@ -393,7 +393,7 @@ public static class TpmAttestation
     /// for RSA) and comparing algorithm family, mirroring
     /// <see cref="AndroidKeyAttestation"/>'s <c>credCert</c>-key-versus-credentialPublicKey check.
     /// </summary>
-    private static bool PubAreaKeyMatchesCredentialKey(TpmtPublic pubArea, CoseKey credentialPublicKey, MemoryPool<byte> pool)
+    private static bool PubAreaKeyMatchesCredentialKey(TpmtPublic pubArea, CoseKey credentialPublicKey, BaseMemoryPool pool)
     {
         PublicKeyMemory? pubAreaKeyMemory = null;
         try
@@ -431,7 +431,7 @@ public static class TpmAttestation
     /// cannot be the credential's own signing key.
     /// </returns>
     private static bool TryBuildPublicAreaKeyMemory(
-        TpmtPublic pubArea, MemoryPool<byte> pool, [NotNullWhen(true)] out PublicKeyMemory? keyMemory, out CryptoAlgorithm algorithm)
+        TpmtPublic pubArea, BaseMemoryPool pool, [NotNullWhen(true)] out PublicKeyMemory? keyMemory, out CryptoAlgorithm algorithm)
     {
         if(pubArea.Type == TpmAlgIdConstants.TPM_ALG_ECC
             && pubArea.Parameters.EccDetail is { } eccParms
@@ -776,7 +776,7 @@ public static class TpmAttestation
     /// <c>extraData</c> digest covers.
     /// </summary>
     /// <param name="length">The exact number of meaningful bytes in the returned owner's memory.</param>
-    private static IMemoryOwner<byte> RentToBeSigned(ReadOnlyMemory<byte> authenticatorData, DigestValue clientDataHash, MemoryPool<byte> pool, out int length)
+    private static IMemoryOwner<byte> RentToBeSigned(ReadOnlyMemory<byte> authenticatorData, DigestValue clientDataHash, BaseMemoryPool pool, out int length)
     {
         length = authenticatorData.Length + clientDataHash.Length;
         IMemoryOwner<byte> owner = pool.Rent(length);

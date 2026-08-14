@@ -73,7 +73,7 @@ public static class PublicKeyCredentialCreationOptionsJsonReader
     /// repeats, a binary member is not valid base64url, an enum-backed member's wire value is not
     /// registered, or nesting exceeds the depth bound.
     /// </exception>
-    public static PublicKeyCredentialCreationOptions Read(ReadOnlyMemory<byte> document, MemoryPool<byte> pool)
+    public static PublicKeyCredentialCreationOptions Read(ReadOnlyMemory<byte> document, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -88,7 +88,7 @@ public static class PublicKeyCredentialCreationOptionsJsonReader
     }
 
 
-    private static PublicKeyCredentialCreationOptions ReadObject(ReadOnlySpan<byte> document, MemoryPool<byte> pool)
+    private static PublicKeyCredentialCreationOptions ReadObject(ReadOnlySpan<byte> document, BaseMemoryPool pool)
     {
         Utf8JsonReader reader = new(document, ReaderOptions);
         if(!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
@@ -197,7 +197,7 @@ public static class PublicKeyCredentialCreationOptionsJsonReader
             return true;
         }
 
-        static bool AssignUser(ref Utf8JsonReader reader, MemoryPool<byte> pool, out PublicKeyCredentialUserEntity? user)
+        static bool AssignUser(ref Utf8JsonReader reader, BaseMemoryPool pool, out PublicKeyCredentialUserEntity? user)
         {
             user = ReadUserEntity(ref reader, pool);
 
@@ -225,7 +225,7 @@ public static class PublicKeyCredentialCreationOptionsJsonReader
             return true;
         }
 
-        static bool AssignExcludeCredentials(ref Utf8JsonReader reader, string memberName, MemoryPool<byte> pool, out List<PublicKeyCredentialDescriptor>? excludeCredentials)
+        static bool AssignExcludeCredentials(ref Utf8JsonReader reader, string memberName, BaseMemoryPool pool, out List<PublicKeyCredentialDescriptor>? excludeCredentials)
         {
             excludeCredentials = ReadDescriptors(ref reader, memberName, pool);
 
@@ -336,7 +336,7 @@ public static class PublicKeyCredentialCreationOptionsJsonReader
     }
 
 
-    private static PublicKeyCredentialUserEntity ReadUserEntity(ref Utf8JsonReader reader, MemoryPool<byte> pool)
+    private static PublicKeyCredentialUserEntity ReadUserEntity(ref Utf8JsonReader reader, BaseMemoryPool pool)
     {
         if(reader.TokenType != JsonTokenType.StartObject)
         {
@@ -491,7 +491,7 @@ public static class PublicKeyCredentialCreationOptionsJsonReader
     }
 
 
-    private static List<PublicKeyCredentialDescriptor> ReadDescriptors(ref Utf8JsonReader reader, string memberName, MemoryPool<byte> pool)
+    private static List<PublicKeyCredentialDescriptor> ReadDescriptors(ref Utf8JsonReader reader, string memberName, BaseMemoryPool pool)
     {
         if(reader.TokenType != JsonTokenType.StartArray)
         {

@@ -72,7 +72,7 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
     /// <param name="reader">The reader positioned at the auth value.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed auth value.</returns>
-    public static Tpm2bAuth Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static Tpm2bAuth Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ushort length = reader.ReadUInt16();
@@ -82,7 +82,7 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
             return EmptyInstance;
         }
 
-        IMemoryOwner<byte> storage = pool.Rent(length);
+        IMemoryOwner<byte> storage = pool.Rent(length, AllocationKind.Pinned);
 
         //Copy auth bytes into owned storage.
         ReadOnlySpan<byte> sourceBytes = reader.ReadBytes(length);
@@ -110,7 +110,7 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
     /// </summary>
     /// <param name="pool">The memory pool (unused for empty auth values).</param>
     /// <returns>An empty auth value.</returns>
-    public static Tpm2bAuth CreateEmpty(MemoryPool<byte> pool)
+    public static Tpm2bAuth CreateEmpty(BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         return EmptyInstance;
@@ -131,7 +131,7 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
     /// <see cref="string"/> source cannot be cleared once created.
     /// </para>
     /// </remarks>
-    public static Tpm2bAuth Create(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
+    public static Tpm2bAuth Create(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         if(bytes.IsEmpty)
@@ -139,7 +139,7 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
             return EmptyInstance;
         }
 
-        IMemoryOwner<byte> storage = pool.Rent(bytes.Length);
+        IMemoryOwner<byte> storage = pool.Rent(bytes.Length, AllocationKind.Pinned);
         bytes.CopyTo(storage.Memory.Span);
         return new Tpm2bAuth(storage);
     }
@@ -161,10 +161,10 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
     /// managed string that cannot be cleared and lingers on the heap until garbage collected.
     /// Trailing-zero trimming also means a value ending in <c>0x00</c> would not round-trip. For PIN
     /// material, marshal the entry into a pooled buffer and use
-    /// <see cref="Create(ReadOnlySpan{byte}, MemoryPool{byte})"/> instead.
+    /// <see cref="Create(ReadOnlySpan{byte}, BaseMemoryPool)"/> instead.
     /// </para>
     /// </remarks>
-    public static Tpm2bAuth CreateFromPassword(string password, MemoryPool<byte> pool)
+    public static Tpm2bAuth CreateFromPassword(string password, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(password);
@@ -187,7 +187,7 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
             return EmptyInstance;
         }
 
-        IMemoryOwner<byte> storage = pool.Rent(length);
+        IMemoryOwner<byte> storage = pool.Rent(length, AllocationKind.Pinned);
         passwordBytes.AsSpan(0, length).CopyTo(storage.Memory.Span);
 
         //Clear the temporary array.

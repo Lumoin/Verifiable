@@ -14,8 +14,8 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 
 /// <summary>
 /// Composes a <see cref="CtapPinRetriesCustody"/> bundle whose authenticator-global persistent PIN-retry
-/// budget is backed by ONE <c>TPM_NT_PIN_FAIL</c> NV Index on an in-house simulated TPM (contract R-10,
-/// wavepin) — a thin adapter over the <see cref="TpmDeviceExtensions"/> business-capability verbs package A
+/// budget is backed by ONE <c>TPM_NT_PIN_FAIL</c> NV Index on an in-house simulated TPM — a thin
+/// adapter over the <see cref="TpmDeviceExtensions"/> business-capability verbs package A
 /// shipped (<c>DefinePinFailIndexAsync</c>/<c>VerifyPinAsync</c>/<c>ReadPinCountersAsync</c>/
 /// <c>ResetPinCountAsync</c>/<c>UndefinePinIndexAsync</c>), never a raw <c>TPM2_NV_Read</c>/<c>NV_Write</c>
 /// input, the same dogfood posture <see cref="TpmNvSignatureCounterCustody"/> established over
@@ -24,7 +24,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// <remarks>
 /// <para>
 /// <b>One fixed Index, no per-call identity.</b> Unlike <see cref="TpmNvSignatureCounterCustody"/>'s
-/// per-credential Index derivation, the PIN throttle is authenticator-global (contract R-3): <see cref="Create"/>'s
+/// per-credential Index derivation, the PIN throttle is authenticator-global: <see cref="Create"/>'s
 /// caller supplies exactly ONE <c>pinIndexHandle</c>, resolved once at composition time, never derived from a
 /// per-call identity.
 /// </para>
@@ -36,7 +36,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// window. A PIN Fail Index forbids <c>TPMA_NV_AUTHWRITE</c> (TPM 2.0 Library Part 1, Section 37.2.6.1), so
 /// there is no way to change its authValue other than a fresh definition under the same handle — a stale
 /// snapshot's own superseded PIN hash can therefore never again resolve authorization once this adapter has
-/// provisioned a new one (contract R-2's rollback consequence).
+/// provisioned a new one.
 /// </para>
 /// <para>
 /// <b>The TPM does the compare.</b> <see cref="CtapPinRetriesCustody.VerifyPinAttemptAsync"/> composes
@@ -47,16 +47,16 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// <c>ReadPinCountersAsync</c> to report the post-attempt budget (two wire calls on the mismatch path — the
 /// count already moved atomically in the first — and if THAT follow-up read itself fails, the adapter
 /// reports a conservative, never-fail-open mismatch verdict rather than throwing after a burn that already
-/// durably happened, wavepin review fix F-3); at <c>pinLimit</c> even a correct candidate is refused with
+/// durably happened); at <c>pinLimit</c> even a correct candidate is refused with
 /// <c>TPM_RC_AUTH_UNAVAILABLE</c> without moving <c>pinCount</c> further; an absent Index (never
 /// provisioned, or undefined behind this authenticator's back) answers <c>TPM_RC_HANDLE</c>, tolerated
 /// identically to <see cref="CtapPinRetriesCustody.ReadRetriesAsync"/>'s own tolerance rather than thrown
-/// (wavepin review fix F-1/F-2) — <see cref="Automata.CtapAuthenticatorSimulator.CreateWithCustodyAsync"/>'s
+/// — <see cref="Automata.CtapAuthenticatorSimulator.CreateWithCustodyAsync"/>'s
 /// own rehydration reconciliation is what actually resolves the split-brain this signals.
 /// </para>
 /// <para>
 /// <b>Penalize reuses the verify path, never a raw write.</b> <see cref="CtapPinRetriesCustody.PenalizeAttemptAsync"/>
-/// (CTAP's decrypt-failure arm, contract R-3) needs to record a failed attempt without ever having a real
+/// (CTAP's decrypt-failure arm) needs to record a failed attempt without ever having a real
 /// candidate to present. Package A's verb surface has no owner-authorized arbitrary-count write — only
 /// <c>ResetPinCountAsync</c>, which always writes <c>pinCount: 0</c> — so this adapter instead presents a
 /// zero-length sentinel candidate to the SAME <c>VerifyPinAsync</c> verify path
@@ -67,15 +67,15 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// this adapter needing to know, store, or guess it. The Index's own <c>IsPinAuthUnavailable</c> pre-gate
 /// (TPM 2.0 Library Part 1, Section 37.2.6.6) fires identically for this sentinel as for a genuine wrong
 /// guess, so an at-limit penalize correctly reports blocked rather than advancing past <c>pinLimit</c>. This
-/// is the "use the closest verb" resolution the wave contract anticipated for this exact gap — recorded here
-/// and in the wave's own report rather than composing an owner <c>NV_Write</c> outside the verb group's
+/// is the "use the closest verb" resolution for this exact gap, rather than composing an owner
+/// <c>NV_Write</c> outside the verb group's
 /// public surface.
 /// </para>
 /// <para>
 /// <b>Read and retire.</b> <see cref="CtapPinRetriesCustody.ReadRetriesAsync"/> composes the owner-authorized,
 /// no-oracle <c>ReadPinCountersAsync</c> — it never records an attempt, so
 /// <see cref="Automata.CtapAuthenticatorSimulator.CreateWithCustodyAsync"/> can freely re-synchronize the
-/// demoted <see cref="Automata.CtapAuthenticatorState.PinRetries"/> mirror at rehydration (contract R-4)
+/// demoted <see cref="Automata.CtapAuthenticatorState.PinRetries"/> mirror at rehydration
 /// without ever spending a guess. Reading a not-yet-provisioned tier (the Index has never been defined,
 /// because no <c>setPIN</c> has ever run) tolerates <c>TPM_RC_HANDLE</c> and reports the fresh, full budget
 /// rather than throwing — the same composition-at-construction-time call every
@@ -90,7 +90,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// <see cref="TpmNvSignatureCounterCustody"/>'s own posture.
 /// </para>
 /// </remarks>
-[SuppressMessage("Design", "CA1515:Consider making public types internal", Justification = "Staged composition-edge code (layering-split-ledger.md): public by design so the boundary is already the future package's API boundary, per the promotability rules.")]
+[SuppressMessage("Design", "CA1515:Consider making public types internal", Justification = "Staged composition-edge code: public by design so the boundary is already the future package's API boundary, per the promotability rules.")]
 public static class TpmNvPinRetriesCustody
 {
     /// <summary>
@@ -190,7 +190,7 @@ internal sealed class TpmNvPinRetriesCustodyBinding
             //under a GENUINE concurrent ProvisionPinAsync race the authValue installed is whichever
             //attempt's own NV_DefineSpace actually created the Index — CTAP's sequential single-command
             //execution model means this narrow window is not reachable via the shipped CTAP command surface
-            //(documented residual, wavepin-c-report.md §7).
+            //(documented residual).
             TpmResult<NvWriteResponse> resetResult = await Tpm.ResetPinCountAsync(OwnerAuth, PinIndexHandle, PinLimit, cancellationToken).ConfigureAwait(false);
             if(resetResult.IsSuccess)
             {
@@ -286,12 +286,12 @@ internal sealed class TpmNvPinRetriesCustodyBinding
 
     /// <summary>
     /// Composes <c>VerifyPinAsync</c>'s atomic compare-and-move, mapping its outcome onto a
-    /// <see cref="CtapPinAttemptVerdict"/> per contract R-10: success reports the reset budget; a mismatch
+    /// <see cref="CtapPinAttemptVerdict"/>: success reports the reset budget; a mismatch
     /// follows up with the owner-authorized, no-oracle counter read to report the post-attempt budget (a
     /// follow-up read failure there reports a conservative, never-fail-open mismatch verdict rather than
-    /// throwing after the burn already durably recorded — wavepin review fix F-3); an already-exhausted
+    /// throwing after the burn already durably recorded); an already-exhausted
     /// tier reports blocked without a follow-up read; an absent Index (never provisioned, or undefined
-    /// behind this authenticator's back — wavepin review fix F-1/F-2) reports a fail-closed non-match
+    /// behind this authenticator's back) reports a fail-closed non-match
     /// verdict carrying <see cref="CtapPinAttemptVerdict.IsProvisioned"/> <see langword="false"/> rather
     /// than throwing; anything else throws.
     /// </summary>
@@ -312,7 +312,7 @@ internal sealed class TpmNvPinRetriesCustodyBinding
             return new CtapPinAttemptVerdict(IsMatch: false, RetriesRemaining: 0, IsBlocked: true, IsProvisioned: true);
         }
 
-        //Wavepin review fix F-1/F-2: an absent Index — never provisioned, or undefined behind this
+        //An absent Index — never provisioned, or undefined behind this
         //authenticator's back (a crash mid-rotation, or an owner-authorized recovery action) — answers
         //TPM_RC_HANDLE here exactly as ReadRetriesAsync's own tolerance does. Reporting a fail-closed
         //non-match with the fresh full budget (never claiming MORE retries remain than could genuinely
@@ -329,7 +329,7 @@ internal sealed class TpmNvPinRetriesCustodyBinding
             TpmResult<TpmPinCounterParameters> readResult = await Tpm.ReadPinCountersAsync(OwnerAuth, PinIndexHandle, cancellationToken).ConfigureAwait(false);
             if(!readResult.IsSuccess)
             {
-                //Wavepin review fix F-3: the mismatch was ALREADY durably recorded by the atomic verify
+                //The mismatch was ALREADY durably recorded by the atomic verify
                 //above — a throw here would report an opaque exception for a wire-visible attempt that
                 //genuinely happened, and the mirror would never learn of it. Reporting a conservative
                 //mismatch verdict (blocked, zero remaining) never fails open: the true remaining count is

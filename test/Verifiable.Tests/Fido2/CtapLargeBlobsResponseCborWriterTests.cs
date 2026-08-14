@@ -27,7 +27,7 @@ internal sealed class CtapLargeBlobsResponseCborWriterTests
 
 
     /// <summary>
-    /// A ZERO-LENGTH <c>config</c> substring (the <c>offset == stored length</c> success case, trap 8)
+    /// A ZERO-LENGTH <c>config</c> substring (the <c>offset == stored length</c> success case)
     /// still writes the Required member — an empty byte string, never an omitted map entry.
     /// </summary>
     [TestMethod]

@@ -36,7 +36,7 @@ internal sealed class Oid4VciKeyAttestationTests
     private const string ConfigurationId = "UniversityDegree_dc_sd_jwt";
     private const string IssuedCredential = "eyJhbGciOiJFUzI1NiJ9.body.sig";
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private static readonly ImmutableHashSet<CapabilityIdentifier> IssuanceCapabilities =
         ImmutableHashSet.Create(

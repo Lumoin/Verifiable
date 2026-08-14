@@ -22,7 +22,7 @@ internal sealed class CredentialStatusGateTests
     private const int CredentialIndex = 42;
     private static readonly DateTimeOffset Now = TestClock.CanonicalEpoch;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     public TestContext TestContext { get; set; } = null!;
 

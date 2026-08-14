@@ -420,18 +420,18 @@ internal sealed class CtapPinUvAuthTokenStateTests
     [TestMethod]
     public void InitialAndDisposeZeroEveryTrackedBufferBeforeReturningItToThePool()
     {
-        using var trackingPool = new ZeroOnDisposeTrackingMemoryPool(TokenLength);
+        using var trackingPool = new MeteredHousePool();
 
-        CtapPinUvAuthTokenState state = CtapPinUvAuthTokenState.Initial(trackingPool);
+        CtapPinUvAuthTokenState state = CtapPinUvAuthTokenState.Initial(trackingPool.Pool);
 
-        Assert.IsGreaterThanOrEqualTo(1, trackingPool.TrackedDisposalCount,
-            "Minting draws a transient entropy buffer that is disposed within Initial() before it returns.");
-        Assert.IsTrue(trackingPool.AllTrackedDisposalsWereZero);
+        Assert.IsGreaterThanOrEqualTo(2, trackingPool.RentedCountOfSize(TokenLength),
+            "Minting draws a transient entropy buffer at the token length beside the token itself.");
+        Assert.AreEqual(1, trackingPool.OutstandingCount,
+            "The transient entropy draw was returned inside Initial(); only the token itself remains held.");
 
         state.Dispose();
 
-        Assert.IsGreaterThanOrEqualTo(2, trackingPool.TrackedDisposalCount,
-            "Disposing the returned state must also zero and release the final Token buffer.");
-        Assert.IsTrue(trackingPool.AllTrackedDisposalsWereZero);
+        Assert.AreEqual(0, trackingPool.OutstandingCount,
+            "Disposing the returned state releases the final Token buffer; zeroing on return is the house pool's own dispose-time contract.");
     }
 }

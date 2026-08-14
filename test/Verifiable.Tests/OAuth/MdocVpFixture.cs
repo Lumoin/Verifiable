@@ -42,7 +42,7 @@ internal static class MdocVpFixture
     private static readonly string PidDocType = EudiPid.AttestationType;
     private static readonly string PidNamespace = EudiPid.Mdoc.Namespace;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
     /// <summary>The mdoc matrix-format row: name plus the per-run <see cref="FormatRun"/> factory.</summary>
@@ -468,7 +468,7 @@ internal static class MdocVpFixture
     }
 
 
-    private static PublicKeyMemory ClonePublicKey(PublicKeyMemory source, MemoryPool<byte> pool)
+    private static PublicKeyMemory ClonePublicKey(PublicKeyMemory source, BaseMemoryPool pool)
     {
         ReadOnlySpan<byte> bytes = source.AsReadOnlySpan();
         IMemoryOwner<byte> owner = pool.Rent(bytes.Length);

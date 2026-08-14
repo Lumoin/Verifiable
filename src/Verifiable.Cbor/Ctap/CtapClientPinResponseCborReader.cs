@@ -56,7 +56,7 @@ public static class CtapClientPinResponseCborReader
                 entriesRead++;
 
                 //A switch over WellKnownCtapClientPinResponseKeys is not available: its members are
-                //static getters (the wave-2 wire-key convention for request/response member tables),
+                //static getters (the wire-key convention for request/response member tables),
                 //not compile-time constants, so membership is tested with ordinary equality instead.
                 if(key == WellKnownCtapClientPinResponseKeys.KeyAgreement)
                 {

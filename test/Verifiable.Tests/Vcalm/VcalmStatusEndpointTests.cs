@@ -52,7 +52,7 @@ internal sealed class VcalmStatusEndpointTests
 
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string ClientId = "https://status.client.test";
     private static readonly Uri ClientBaseUri = new("https://status.client.test");

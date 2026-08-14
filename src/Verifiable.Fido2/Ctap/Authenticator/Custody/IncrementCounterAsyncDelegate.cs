@@ -6,7 +6,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// <summary>
 /// Atomically advances the counter identified by <paramref name="creationSequence"/> by one and returns the
 /// fresh count — the AUTHORITATIVE value <see cref="Automata.CtapAuthenticatorSimulator"/> embeds in a
-/// signed assertion's <c>authData</c> and persists back into the credential record (contract R-9, wavenv).
+/// signed assertion's <c>authData</c> and persists back into the credential record.
 /// </summary>
 /// <param name="creationSequence">
 /// The asserting credential's own <see cref="Automata.CtapCredentialRecord.CreationSequence"/> value — the
@@ -17,11 +17,11 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// <returns>The counter's fresh count immediately after this call.</returns>
 /// <remarks>
 /// <para>
-/// Contract R-9(3)(a)/(b): the returned value is what the SIGNED authenticator data carries — never the
+/// The returned value is what the SIGNED authenticator data carries — never the
 /// pure transition's own <c>SignCount + 1</c> once this delegate is composed — and this call happens
 /// BEFORE the assertion's response is framed. A thrown exception here fails the whole
 /// <c>authenticatorGetAssertion</c>/<c>authenticatorGetNextAssertion</c> command on the wire: no response
-/// ever carries a count this call did not durably advance to (increment-before-response, the wavect R-4
+/// ever carries a count this call did not durably advance to (increment-before-response, the
 /// persist-then-respond discipline's exact analogue for a per-assertion counter rather than a
 /// whole-snapshot persist).
 /// </para>

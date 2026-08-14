@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Oid4Vp;
@@ -21,7 +20,6 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// this assembly uses that constant directly.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("WellKnownCredentialFormats")]
 public static class WellKnownCredentialFormats
 {
     //W3C VC JWT formats — defined in OID4VP 1.0 Appendix B.1.

@@ -17,7 +17,7 @@ namespace Verifiable.Fido2.Ctap;
 /// response and every <c>authenticatorGetNextAssertion</c> response omits it — CTAP 2.3 section 6.3
 /// itself: "The numberOfCredentials member is omitted." <c>userSelected</c> (<c>0x06</c>) is never
 /// emitted by this headless simulator (no direct-interaction UI exists) but is still decoded if present.
-/// <c>unsignedExtensionOutputs</c> (<c>0x08</c>) is not modeled this wave. <see cref="AuthData"/> and
+/// <c>unsignedExtensionOutputs</c> (<c>0x08</c>) is not modeled. <see cref="AuthData"/> and
 /// <see cref="Signature"/> carry raw wire bytes, mirroring <see cref="CtapMakeCredentialResponse.AuthData"/>'s
 /// own rationale.
 /// </remarks>
@@ -35,7 +35,7 @@ namespace Verifiable.Fido2.Ctap;
 /// </param>
 /// <param name="UserSelected">
 /// Optional (<c>0x06</c>). Whether the user selected the credential via direct authenticator
-/// interaction. Defaults to <see langword="false"/> when omitted. Not modeled as reachable this wave
+/// interaction. Defaults to <see langword="false"/> when omitted. Not modeled as reachable
 /// (no direct-interaction UI exists), but decoded if present.
 /// </param>
 /// <param name="LargeBlobKey">

@@ -32,7 +32,7 @@ namespace Verifiable.Cryptography;
 public delegate ValueTask<EncodedEcPoint> EcMultiplyGeneratorDelegate(
     ReadOnlyMemory<byte> scalar,
     Tag curve,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 
@@ -50,7 +50,7 @@ public delegate ValueTask<EncodedEcPoint> EcMultiplyPointDelegate(
     ReadOnlyMemory<byte> scalar,
     ReadOnlyMemory<byte> point,
     Tag curve,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 
@@ -67,7 +67,7 @@ public delegate ValueTask<EncodedEcPoint> EcAddPointsDelegate(
     ReadOnlyMemory<byte> point,
     ReadOnlyMemory<byte> addend,
     Tag curve,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 
@@ -88,7 +88,7 @@ public delegate ValueTask<EncodedEcPoint> EcAddPointsDelegate(
 public delegate ValueTask<EncodedEcPoint> EcMap2PointDelegate(
     ReadOnlyMemory<byte> pseudoRandom,
     Tag curve,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);
 
 
@@ -115,5 +115,5 @@ public delegate ValueTask<IMemoryOwner<byte>> EcChipAuthenticationDataDelegate(
     ReadOnlyMemory<byte> staticPrivateKey,
     ReadOnlyMemory<byte> ephemeralMappingPrivateKey,
     Tag curve,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);

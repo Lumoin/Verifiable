@@ -10,7 +10,7 @@ namespace Verifiable.Core.Model.Did
     /// <summary>
     /// Delegate for converting a verification method to algorithm representation.
     /// </summary>
-    public delegate (CryptoAlgorithm Algorithm, Purpose Purpose, EncodingScheme Scheme, IMemoryOwner<byte> keyMaterial) VerificationMethodToAlgorithmConverterDelegate(VerificationMethod method, MemoryPool<byte> memoryPool);
+    public delegate (CryptoAlgorithm Algorithm, Purpose Purpose, EncodingScheme Scheme, IMemoryOwner<byte> keyMaterial) VerificationMethodToAlgorithmConverterDelegate(VerificationMethod method, BaseMemoryPool memoryPool);
 
 
     /// <summary>

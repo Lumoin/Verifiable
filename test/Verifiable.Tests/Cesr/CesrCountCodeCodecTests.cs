@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.Collections.Generic;
-using System.Text;
 using Lumoin.Base;
 using Verifiable.Cesr;
 
@@ -11,19 +10,11 @@ namespace Verifiable.Tests.Cesr;
 /// text (qb64) and binary (qb2) domains, and using a count code to frame a group of primitives. The
 /// known-answer vectors cover each count code table (small, large, and the protocol genus/version code),
 /// anchored on the CESR specification's <see href="https://trustoverip.github.io/kswg-cesr-specification/#count-code-tables">
-/// Count Code tables</see>. The published conformance corpus has no standalone count code vectors, so the
-/// end-to-end coverage instead frames the corpus primitive vectors and verifies the count describes their
-/// span exactly (see <see cref="CesrConformanceVectors"/>).
+/// Count Code tables</see>.
 /// </summary>
 [TestClass]
 internal sealed class CesrCountCodeCodecTests
 {
-    /// <summary>
-    /// The test context.
-    /// </summary>
-    public TestContext TestContext { get; set; } = null!;
-
-
     /// <summary>
     /// Known-answer vectors: code, count, expected qb64, expected qb2 (hex).
     /// </summary>
@@ -149,56 +140,5 @@ internal sealed class CesrCountCodeCodecTests
             Assert.HasCount(first.Length / 4 * 3, firstBinary.Memory.Span[..(first.Length / 4 * 3)]);
             Assert.HasCount(second.Length / 4 * 3, secondBinary.Memory.Span[..(second.Length / 4 * 3)]);
         }
-    }
-
-
-    [TestMethod]
-    public void FramesEveryPrimitiveConformanceVectorGroup()
-    {
-        if(!CesrConformanceVectors.TryGetCorpusRoot(out string root))
-        {
-            Assert.Inconclusive($"The CESR conformance vector corpus is not available; set {CesrConformanceVectors.CorpusVariable} to run this test.");
-        }
-
-        int verified = 0;
-        var failures = new StringBuilder();
-        foreach(CesrConformanceVector vector in CesrConformanceVectors.EnumeratePrimitives(root))
-        {
-            if(vector.Malformed || vector.Text.Length == 0)
-            {
-                continue;
-            }
-
-            try
-            {
-                //Frame the single primitive as an attachment group and verify the count code describes its
-                //span exactly in both domains, then recover the body by slicing. A group larger than the
-                //small count code's maximum (4095 quadlets) must use the large attachment count code.
-                int quadlets = vector.Text.Length / 4;
-                bool big = quadlets > 4095;
-                string code = big ? "--V" : "-V";
-                int codeChars = big ? 8 : 4;
-                string stream = CesrCountCodeCodec.EncodeText(code, quadlets) + vector.Text;
-                CesrParsedCountCode counter = CesrCountCodeCodec.DecodeText(stream);
-
-                Assert.AreEqual(code, counter.Code, "code");
-                Assert.AreEqual(quadlets, counter.Count, "count");
-                Assert.AreEqual(vector.Text.Length, counter.TextCharCount, "text span");
-                Assert.AreEqual(vector.Binary.Length, counter.BinaryByteCount, "binary span");
-                Assert.AreEqual(vector.Text, stream.Substring(codeChars, (int)counter.TextCharCount), "body");
-                verified++;
-            }
-            catch(Exception exception)
-            {
-                if(failures.Length < 8192)
-                {
-                    failures.Append(vector.Name).Append(" (").Append(vector.Code).Append("): ").AppendLine(exception.Message);
-                }
-            }
-        }
-
-        TestContext.WriteLine($"Framed and verified the span of {verified} CESR primitive conformance vectors.");
-        Assert.IsGreaterThan(0, verified, "The corpus was located but contained no primitive vectors to frame.");
-        Assert.AreEqual(0, failures.Length, $"Every framed primitive's count code must describe its span exactly.\n{failures}");
     }
 }

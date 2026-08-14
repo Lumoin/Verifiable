@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using Verifiable.OAuth.Trust;
 
 namespace Verifiable.OAuth.Federation;
@@ -36,7 +35,6 @@ namespace Verifiable.OAuth.Federation;
 /// be supplied without changing this composition.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("FederationAutomaticRegistration")]
 public static class FederationAutomaticRegistration
 {
     /// <summary>
@@ -98,7 +96,7 @@ public static class FederationAutomaticRegistration
         ValidateTrustChainAsyncDelegate validateChain,
         EvaluateMetadataPolicyDelegate metadataPolicyEvaluator,
         ApplyMetadataPolicyDelegate metadataPolicyApplicator,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(trustChainValues);

@@ -62,7 +62,7 @@ public static class GeneralJweParsing
         string expectedAlgorithm,
         string expectedEncryption,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(generalJson);
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedAlgorithm);
@@ -207,7 +207,7 @@ public static class GeneralJweParsing
         string expectedAlgorithm,
         string expectedEncryption,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(flattenedJson);
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedAlgorithm);
@@ -450,7 +450,7 @@ public static class GeneralJweParsing
         string expectedEncryption,
         DecodeDelegate base64UrlDecoder,
         EpkCrvToTagDelegate crvToTagConverter,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         out IReadOnlyDictionary<string, object> header,
         out JweContentEncryption contentEncryption)
     {
@@ -612,7 +612,7 @@ public static class GeneralJweParsing
         string crv,
         DecodeDelegate base64UrlDecoder,
         EpkCrvToTagDelegate crvToTagConverter,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         (Tag epkTag, EllipticCurveTypes curveType) = crvToTagConverter(crv);
 
@@ -660,7 +660,7 @@ public static class GeneralJweParsing
         string protectedEncoded,
         string? aadEncoded,
         JweContentEncryptionFamily family,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         string aadString = aadEncoded is null
             ? protectedEncoded
@@ -692,7 +692,7 @@ public static class GeneralJweParsing
         string tagEncoded,
         JweContentEncryption contentEncryption,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         out Ciphertext ciphertext,
         out AuthenticationTag tag)
     {

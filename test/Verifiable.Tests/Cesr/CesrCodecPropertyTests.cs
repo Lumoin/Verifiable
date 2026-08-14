@@ -13,8 +13,6 @@ namespace Verifiable.Tests.Cesr;
 /// type, and the count arithmetic never overflows). The robustness generators mutate known-valid material one edit
 /// at a time rather than sampling blindly, because a codec of this shape rejects almost all blind-random input at
 /// the first selector but a near-valid neighbour reaches the size and slice arithmetic where the defects live.
-/// These run in every build, unlike the external conformance-vector corpus, which is present only when its
-/// environment variable points at it (see <see cref="CesrConformanceVectors"/>).
 /// </summary>
 [TestClass]
 internal sealed class CesrCodecPropertyTests

@@ -65,7 +65,7 @@ internal sealed class CtapMakeCredentialResponseCborReaderTests
     }
 
 
-    /// <summary>Round-tripping a response carrying <c>largeBlobKey</c> (<c>0x05</c>, wavelb R8) recovers the 32-byte key verbatim.</summary>
+    /// <summary>Round-tripping a response carrying <c>largeBlobKey</c> (<c>0x05</c>) recovers the 32-byte key verbatim.</summary>
     [TestMethod]
     public void RoundTripsWithLargeBlobKey()
     {
@@ -166,8 +166,8 @@ internal sealed class CtapMakeCredentialResponseCborReaderTests
     /// <summary>
     /// A response carrying an unrecognized member key (here <c>0x06</c>, the not-modeled
     /// <c>unsignedExtensionOutputs</c>) decodes successfully with the unknown member ignored, per CTAP
-    /// 2.3 section 8's forward-compatibility rule. <c>epAtt</c> (<c>0x04</c>) IS modeled from waveep
-    /// on (see <see cref="RoundTripsWithEpAttTrue"/>), so it no longer serves as this test's example.
+    /// 2.3 section 8's forward-compatibility rule. <c>epAtt</c> (<c>0x04</c>) IS modeled
+    /// (see <see cref="RoundTripsWithEpAttTrue"/>), so it no longer serves as this test's example.
     /// </summary>
     [TestMethod]
     public void IgnoresUnrecognizedTopLevelMemberKey()
@@ -190,7 +190,7 @@ internal sealed class CtapMakeCredentialResponseCborReaderTests
 
 
     /// <summary>
-    /// Round-tripping a response carrying <c>epAtt: true</c> (<c>0x04</c>, waveep R9) recovers the
+    /// Round-tripping a response carrying <c>epAtt: true</c> (<c>0x04</c>) recovers the
     /// boolean value exactly — the enterprise-attestation-granted encoding.
     /// </summary>
     [TestMethod]
@@ -208,7 +208,7 @@ internal sealed class CtapMakeCredentialResponseCborReaderTests
 
     /// <summary>
     /// Round-tripping a response carrying an EXPLICIT <c>epAtt: false</c> recovers present-false, not
-    /// absence — the codec faithfulness half of trap 18: this authenticator itself never emits an
+    /// absence — the codec faithfulness half: this authenticator itself never emits an
     /// explicit false (see <c>CtapAuthenticatorSimulator</c>'s response-build site), but the CODEC must
     /// still round-trip a foreign one exactly, since both encodings are spec-legal for "not returned"
     /// (CTAP 2.3 lines 3623-3625).
@@ -229,8 +229,8 @@ internal sealed class CtapMakeCredentialResponseCborReaderTests
 
     /// <summary>
     /// Round-tripping a response carrying <c>attStmt</c>, <c>epAtt</c>, AND <c>largeBlobKey</c> together
-    /// (the genuinely reachable "enterprise-attested resident credential with a largeBlobKey" combination,
-    /// trap 2/5) recovers all three members exactly, proving the reader's key-order-independent decode
+    /// (the genuinely reachable "enterprise-attested resident credential with a largeBlobKey" combination)
+    /// recovers all three members exactly, proving the reader's key-order-independent decode
     /// loop handles the full three-optional-member case.
     /// </summary>
     [TestMethod]

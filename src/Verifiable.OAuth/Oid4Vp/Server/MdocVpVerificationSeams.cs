@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core.Model.Mdoc;
 using Verifiable.JCose;
 
@@ -22,7 +21,6 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 /// SD-JWT-only deployments.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("MdocVpVerificationSeams")]
 public sealed record MdocVpVerificationSeams
 {
     /// <summary>Resolves the issuer verification key from the IssuerAuth (typically an IACA x5chain resolver). Wired to e.g. <c>MdocCborIacaTrustResolver</c>.</summary>

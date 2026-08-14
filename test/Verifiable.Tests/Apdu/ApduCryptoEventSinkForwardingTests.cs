@@ -12,7 +12,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Apdu;
 
 /// <summary>
-/// Coverage for the wave-7 <see cref="CryptoEventSink"/> widening of the APDU/eMRTD explicit-delegate call
+/// Coverage for the <see cref="CryptoEventSink"/> widening of the APDU/eMRTD explicit-delegate call
 /// sites that resolve and invoke a <see cref="SigningDelegate"/>/<see cref="VerificationDelegate"/>/
 /// <see cref="RecoverableSigningDelegate"/>/<see cref="RecoverableVerificationDelegate"/> directly (there is
 /// no <see cref="PrivateKey"/>/<see cref="PublicKey"/> object at these call sites, only raw key bytes or a
@@ -85,7 +85,7 @@ internal sealed class ApduCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="TerminalAuthenticationSignature.SignAsync(ReadOnlyMemory{byte}, Tag, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, MemoryPool{byte}, CryptoEventSink?, CancellationToken)"/>
+    /// <see cref="TerminalAuthenticationSignature.SignAsync(ReadOnlyMemory{byte}, Tag, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>
     /// (the raw-bytes overload) forwards the <see cref="SignatureProducedEvent"/> to an explicit sink.
     /// </summary>
     [TestMethod]
@@ -109,7 +109,7 @@ internal sealed class ApduCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="TerminalAuthenticationSignature.VerifyAsync(EncodedEcPoint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, MemoryPool{byte}, CryptoEventSink?, CancellationToken)"/>
+    /// <see cref="TerminalAuthenticationSignature.VerifyAsync(EncodedEcPoint, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>
     /// forwards the <see cref="VerificationCompletedEvent"/> to an explicit sink.
     /// </summary>
     [TestMethod]

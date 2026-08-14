@@ -9,12 +9,11 @@ using Verifiable.Cryptography.Context;
 namespace Verifiable.Tests.Cbom;
 
 /// <summary>
-/// Ties the CLI's observed-CBOM FIDO2 workload (<see cref="VerifiableOperations.RunFido2ObservedWorkloadAsync"/>,
-/// wave-4 ruling 3) to the <see cref="CryptographicKeyEvents"/> sign/verify wiring (wave-4 ruling 4): proves the
+/// Ties the CLI's observed-CBOM FIDO2 workload (<see cref="VerifiableOperations.RunFido2ObservedWorkloadAsync"/>)
+/// to the <see cref="CryptographicKeyEvents"/> sign/verify wiring: proves the
 /// workload's <c>PrivateKey.SignAsync</c>/<c>PublicKey.VerifyAsync</c> calls actually flow through the live
 /// <see cref="CryptoEvent"/> subject, not merely through the separate Activity-span mechanism
-/// <see cref="Verifiable.Cryptography.Cbom.CbomObserver"/> reads (the two are distinct observability paths —
-/// scout-cbom's finding this wave's contract binds on).
+/// <see cref="Verifiable.Cryptography.Cbom.CbomObserver"/> reads — the two are distinct observability paths.
 /// </summary>
 /// <remarks>
 /// This test runs the workload in-process (rather than spawning the CLI, as the <c>ToolTests</c> flow tests do)
@@ -57,8 +56,8 @@ internal sealed class Fido2ObservedWorkloadEventTests
     /// <see cref="ConcurrentQueue{T}"/> — <see cref="CryptographicKeyEvents.Events"/> is process-wide and
     /// shared with every concurrently running test, and its dispatch makes no promise about which thread
     /// delivers, so a plain <see cref="List{T}"/> here would risk "Collection was modified" under
-    /// concurrent delivery from unrelated parallel tests (reproduced: wave 7 added more concurrent traffic
-    /// to the shared stream and this observer's prior <c>List&lt;CryptoEvent&gt;</c> started failing
+    /// concurrent delivery from unrelated parallel tests (reproduced when concurrent traffic to the
+    /// shared stream increased and this observer's prior <c>List&lt;CryptoEvent&gt;</c> started failing
     /// intermittently under the 32-way parallel run).
     /// </summary>
     private sealed class CollectingObserver(ConcurrentQueue<CryptoEvent> sink): IObserver<CryptoEvent>

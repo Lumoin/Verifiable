@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.Foundation.Automata;
 
@@ -29,7 +28,6 @@ namespace Verifiable.Server.Pipeline;
 /// that throws does not emit — emission is post-success only.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("FlowRunner")]
 public static class FlowRunner
 {
     /// <summary>

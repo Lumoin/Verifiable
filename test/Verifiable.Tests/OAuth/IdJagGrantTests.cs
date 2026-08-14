@@ -107,7 +107,7 @@ internal sealed class IdJagGrantTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     /// <summary>Serialises a client-assertion protected header to UTF-8 JSON bytes for the OAuthClient.IdJag flow test.</summary>
     private static readonly JwtHeaderSerializer ClientAssertionHeaderSerializer =
@@ -1377,7 +1377,14 @@ internal sealed class IdJagGrantTests
         using JsonDocument redeemDoc = JsonDocument.Parse(redeemBody);
         string accessToken = redeemDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
         using JsonDocument tokenPayload = DecodePayload(accessToken);
-        Assert.AreEqual(grantedResource, tokenPayload.RootElement.GetProperty(WellKnownJwtClaimNames.Aud).GetString());
+
+        //RFC 7519 §4.1.3's general representation of aud is an array of StringOrURI values; this
+        //producer (Rfc9068AccessTokenProducer via JwtPayloadExtensions.ForAccessToken) always emits
+        //it as a JSON array, including a single audience.
+        JsonElement aud = tokenPayload.RootElement.GetProperty(WellKnownJwtClaimNames.Aud);
+        Assert.AreEqual(JsonValueKind.Array, aud.ValueKind);
+        Assert.HasCount(1, aud.EnumerateArray().ToList());
+        Assert.AreEqual(grantedResource, aud[0].GetString());
     }
 
 
@@ -2988,6 +2995,96 @@ internal sealed class IdJagGrantTests
         Assert.IsTrue(redeemResult.IsSuccess, redeemResult.Error?.Support.Summary);
         Assert.AreEqual(WellKnownAuthenticationSchemes.Bearer, redeemResult.Value.TokenType);
         Assert.IsFalse(string.IsNullOrEmpty(redeemResult.Value.AccessToken), "an access token must be issued.");
+    }
+
+
+    /// <summary>
+    /// <see cref="IdJagMintOptions.Resource"/> with more than one entry MUST reach the wire as its OWN
+    /// repeated <c>resource</c> occurrence per <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1.1">RFC
+    /// 8707 §2.1.1</see> — the shape <see cref="Verifiable.OAuth.TokenExchange.TokenExchangeRequestBuilder"/>
+    /// already emits (<see cref="OutgoingFormFields.Add(string, string)"/> per entry) — never one
+    /// occurrence with the entries space-joined into a single value: the authorization server's own
+    /// <c>ReadResource</c> rejects an occurrence carrying embedded whitespace as malformed. This drives
+    /// the mint through the library's own <see cref="OAuthClient"/> ID-JAG sub-client and the library's
+    /// own hosted authorization server end to end, asserting both the mint succeeds and the
+    /// authorization seam observed both resource entries as distinct indicators.
+    /// </summary>
+    [TestMethod]
+    public async Task MintCarriesMultipleResourceEntriesAsRepeatedOccurrences()
+    {
+        const string FirstResource = "https://api.example.com/orders";
+        const string SecondResource = "https://api.example.com/inventory";
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = RegisterIdJagClient(app);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> clientKey =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory clientPublic = clientKey.PublicKey;
+        using PrivateKeyMemory clientPrivate = clientKey.PrivateKey;
+        const string clientSigningKeyId = "id-jag-client-key";
+
+        (OAuthClient oauthClient, ClientRegistration clientRegistration, _) =
+            await app.CreateOAuthClientAndRegistrationAsync(
+                material.Registration, $"{ClientId}/callback", cancellationToken: TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        app.Server.OAuth().ValidateClientCredentialsAsync =
+            async (request, fields, registration, context, ct) =>
+            {
+                if(!fields.TryGetValue(OAuthRequestParameterNames.ClientAssertion, out string? assertion)
+                    || string.IsNullOrEmpty(assertion))
+                {
+                    return false;
+                }
+
+                return await Jws.VerifyAsync(assertion, TestSetup.Base64UrlDecoder, Pool, clientPublic, ct)
+                    .ConfigureAwait(false);
+            };
+
+        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
+            static (token, tokenType, registration, context, ct) =>
+                ValueTask.FromResult<ValidatedSecurityToken?>(
+                    new ValidatedSecurityToken { Subject = SubjectIdentity });
+
+        //Captures exactly what the authorization seam observed, proving both resource entries arrived
+        //as distinct indicators rather than one space-joined (and, upstream, rejected) occurrence.
+        IReadOnlyList<string>? seenResources = null;
+        app.Server.OAuth().AuthorizeTokenExchangeAsync =
+            (subject, actor, request, registration, context, ct) =>
+            {
+                seenResources = request.Resource;
+
+                return ValueTask.FromResult<TokenExchangeAuthorization?>(
+                    new TokenExchangeAuthorization
+                    {
+                        Subject = subject.Subject,
+                        Scope = WellKnownScopes.OpenId,
+                        IssuedTokenType = TokenType.IdJag
+                    });
+            };
+
+        IdJagMintOptions mintOptions = new()
+        {
+            Audience = ResourceAsIssuer,
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.IdToken,
+            SigningKey = clientPrivate,
+            SigningKeyId = clientSigningKeyId,
+            HeaderSerializer = ClientAssertionHeaderSerializer,
+            PayloadSerializer = ClientAssertionPayloadSerializer,
+            Scope = WellKnownScopes.OpenId,
+            Resource = [FirstResource, SecondResource]
+        };
+
+        var mintResult = await oauthClient.IdJag.MintAsync(
+            clientRegistration, mintOptions, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(mintResult.IsSuccess, mintResult.Error?.Support.Summary);
+
+        Assert.IsNotNull(seenResources, "The authorization seam must have run.");
+        Assert.HasCount(2, seenResources!);
+        Assert.Contains(FirstResource, seenResources!);
+        Assert.Contains(SecondResource, seenResources!);
     }
 
 

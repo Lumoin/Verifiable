@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using System.Security;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -41,7 +40,6 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// the same call-site shape; only the delegate slots differ.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("FederationBoundJarKeyResolver")]
 public static class FederationBoundJarKeyResolver
 {
     /// <summary>
@@ -102,7 +100,7 @@ public static class FederationBoundJarKeyResolver
         UnverifiedJwtHeader jarHeader,
         ValidateTrustChainAsyncDelegate validateChain,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(trustChainValues);
@@ -161,7 +159,7 @@ public static class FederationBoundJarKeyResolver
         TrustChain validatedChain,
         UnverifiedJwtHeader jarHeader,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(validatedChain);
         ArgumentNullException.ThrowIfNull(jarHeader);

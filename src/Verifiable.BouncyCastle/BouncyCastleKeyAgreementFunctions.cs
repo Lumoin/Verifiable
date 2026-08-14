@@ -112,7 +112,7 @@ public static class BouncyCastleKeyAgreementFunctions
     /// </returns>
     public static async ValueTask<EphemeralKeyAgreementResult> EcdhKeyAgreementEncryptP256Async(
         PublicKeyMemory recipientPublicKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(recipientPublicKey);
@@ -158,7 +158,7 @@ public static class BouncyCastleKeyAgreementFunctions
             await Task.CompletedTask.ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
 
-            IMemoryOwner<byte> zOwner = pool.Rent(32);
+            IMemoryOwner<byte> zOwner = pool.Rent(32, AllocationKind.Pinned);
             zOwner.Memory.Span.Clear();
 
             if(zRaw.Length < 32)
@@ -214,7 +214,7 @@ public static class BouncyCastleKeyAgreementFunctions
     public static ValueTask<SharedSecret> EcdhKeyAgreementDecryptP256Async(
         ReadOnlyMemory<byte> privateKeyBytes,
         PublicKeyMemory epk,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(epk);
@@ -249,7 +249,7 @@ public static class BouncyCastleKeyAgreementFunctions
         BigInteger z = agreement.CalculateAgreement(epkParam);
         byte[] zRaw = z.ToByteArrayUnsigned();
 
-        IMemoryOwner<byte> zOwner = pool.Rent(32);
+        IMemoryOwner<byte> zOwner = pool.Rent(32, AllocationKind.Pinned);
         zOwner.Memory.Span.Clear();
 
         if(zRaw.Length < 32)
@@ -270,73 +270,73 @@ public static class BouncyCastleKeyAgreementFunctions
 
     /// <summary>Performs ECDH key agreement (encrypt side) using Brainpool P-224r1 (RFC 5639). Matches <see cref="KeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<EphemeralKeyAgreementResult> EcdhKeyAgreementEncryptBrainpoolP224r1Async(
-        PublicKeyMemory recipientPublicKey, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhEncryptBrainpoolAsync("brainpoolP224r1", 28, CryptoTags.BrainpoolP224r1ExchangePublicKey, CryptoTags.BrainpoolP224r1ExchangePrivateKey, recipientPublicKey, pool, cancellationToken);
 
     /// <summary>Performs ECDH key agreement (decrypt side) using Brainpool P-224r1 (RFC 5639). Matches <see cref="KeyAgreementDecryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> EcdhKeyAgreementDecryptBrainpoolP224r1Async(
-        ReadOnlyMemory<byte> privateKeyBytes, PublicKeyMemory epk, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        ReadOnlyMemory<byte> privateKeyBytes, PublicKeyMemory epk, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhDecryptBrainpoolAsync("brainpoolP224r1", 28, CryptoTags.BrainpoolP224r1ExchangePrivateKey, privateKeyBytes, epk, pool, cancellationToken);
 
     /// <summary>Performs ECDH key agreement (encrypt side) using Brainpool P-256r1 (RFC 5639). Matches <see cref="KeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<EphemeralKeyAgreementResult> EcdhKeyAgreementEncryptBrainpoolP256r1Async(
-        PublicKeyMemory recipientPublicKey, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhEncryptBrainpoolAsync("brainpoolP256r1", 32, CryptoTags.BrainpoolP256r1ExchangePublicKey, CryptoTags.BrainpoolP256r1ExchangePrivateKey, recipientPublicKey, pool, cancellationToken);
 
     /// <summary>Performs ECDH key agreement (decrypt side) using Brainpool P-256r1 (RFC 5639). Matches <see cref="KeyAgreementDecryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> EcdhKeyAgreementDecryptBrainpoolP256r1Async(
-        ReadOnlyMemory<byte> privateKeyBytes, PublicKeyMemory epk, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        ReadOnlyMemory<byte> privateKeyBytes, PublicKeyMemory epk, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhDecryptBrainpoolAsync("brainpoolP256r1", 32, CryptoTags.BrainpoolP256r1ExchangePrivateKey, privateKeyBytes, epk, pool, cancellationToken);
 
     /// <summary>Performs ECDH key agreement (encrypt side) using Brainpool P-320r1 (RFC 5639). Matches <see cref="KeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<EphemeralKeyAgreementResult> EcdhKeyAgreementEncryptBrainpoolP320r1Async(
-        PublicKeyMemory recipientPublicKey, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhEncryptBrainpoolAsync("brainpoolP320r1", 40, CryptoTags.BrainpoolP320r1ExchangePublicKey, CryptoTags.BrainpoolP320r1ExchangePrivateKey, recipientPublicKey, pool, cancellationToken);
 
     /// <summary>Performs ECDH key agreement (decrypt side) using Brainpool P-320r1 (RFC 5639). Matches <see cref="KeyAgreementDecryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> EcdhKeyAgreementDecryptBrainpoolP320r1Async(
-        ReadOnlyMemory<byte> privateKeyBytes, PublicKeyMemory epk, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        ReadOnlyMemory<byte> privateKeyBytes, PublicKeyMemory epk, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhDecryptBrainpoolAsync("brainpoolP320r1", 40, CryptoTags.BrainpoolP320r1ExchangePrivateKey, privateKeyBytes, epk, pool, cancellationToken);
 
     /// <summary>Performs ECDH key agreement (encrypt side) using Brainpool P-384r1 (RFC 5639). Matches <see cref="KeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<EphemeralKeyAgreementResult> EcdhKeyAgreementEncryptBrainpoolP384r1Async(
-        PublicKeyMemory recipientPublicKey, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhEncryptBrainpoolAsync("brainpoolP384r1", 48, CryptoTags.BrainpoolP384r1ExchangePublicKey, CryptoTags.BrainpoolP384r1ExchangePrivateKey, recipientPublicKey, pool, cancellationToken);
 
     /// <summary>Performs ECDH key agreement (decrypt side) using Brainpool P-384r1 (RFC 5639). Matches <see cref="KeyAgreementDecryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> EcdhKeyAgreementDecryptBrainpoolP384r1Async(
-        ReadOnlyMemory<byte> privateKeyBytes, PublicKeyMemory epk, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        ReadOnlyMemory<byte> privateKeyBytes, PublicKeyMemory epk, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhDecryptBrainpoolAsync("brainpoolP384r1", 48, CryptoTags.BrainpoolP384r1ExchangePrivateKey, privateKeyBytes, epk, pool, cancellationToken);
 
     /// <summary>Performs ECDH key agreement (encrypt side) using Brainpool P-512r1 (RFC 5639). Matches <see cref="KeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<EphemeralKeyAgreementResult> EcdhKeyAgreementEncryptBrainpoolP512r1Async(
-        PublicKeyMemory recipientPublicKey, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhEncryptBrainpoolAsync("brainpoolP512r1", 64, CryptoTags.BrainpoolP512r1ExchangePublicKey, CryptoTags.BrainpoolP512r1ExchangePrivateKey, recipientPublicKey, pool, cancellationToken);
 
     /// <summary>Performs ECDH key agreement (decrypt side) using Brainpool P-512r1 (RFC 5639). Matches <see cref="KeyAgreementDecryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> EcdhKeyAgreementDecryptBrainpoolP512r1Async(
-        ReadOnlyMemory<byte> privateKeyBytes, PublicKeyMemory epk, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        ReadOnlyMemory<byte> privateKeyBytes, PublicKeyMemory epk, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhDecryptBrainpoolAsync("brainpoolP512r1", 64, CryptoTags.BrainpoolP512r1ExchangePrivateKey, privateKeyBytes, epk, pool, cancellationToken);
 
 
     /// <summary>Performs ECDH key agreement (encrypt side) using NIST P-384 (RFC 7518 §6.2.1.2). Matches <see cref="KeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<EphemeralKeyAgreementResult> EcdhKeyAgreementEncryptP384Async(
-        PublicKeyMemory recipientPublicKey, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhEncryptNistAsync("secp384r1", 48, CryptoTags.P384ExchangePublicKey, CryptoTags.P384ExchangePrivateKey, recipientPublicKey, pool, cancellationToken);
 
     /// <summary>Performs ECDH key agreement (decrypt side) using NIST P-384 (RFC 7518 §6.2.1.2). Matches <see cref="KeyAgreementDecryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> EcdhKeyAgreementDecryptP384Async(
-        ReadOnlyMemory<byte> privateKeyBytes, PublicKeyMemory epk, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        ReadOnlyMemory<byte> privateKeyBytes, PublicKeyMemory epk, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhDecryptNistAsync("secp384r1", 48, CryptoTags.P384ExchangePrivateKey, privateKeyBytes, epk, pool, cancellationToken);
 
     /// <summary>Performs ECDH key agreement (encrypt side) using NIST P-521 (RFC 7518 §6.2.1.3). Matches <see cref="KeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<EphemeralKeyAgreementResult> EcdhKeyAgreementEncryptP521Async(
-        PublicKeyMemory recipientPublicKey, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhEncryptNistAsync("secp521r1", 66, CryptoTags.P521ExchangePublicKey, CryptoTags.P521ExchangePrivateKey, recipientPublicKey, pool, cancellationToken);
 
     /// <summary>Performs ECDH key agreement (decrypt side) using NIST P-521 (RFC 7518 §6.2.1.3). Matches <see cref="KeyAgreementDecryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> EcdhKeyAgreementDecryptP521Async(
-        ReadOnlyMemory<byte> privateKeyBytes, PublicKeyMemory epk, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        ReadOnlyMemory<byte> privateKeyBytes, PublicKeyMemory epk, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhDecryptNistAsync("secp521r1", 66, CryptoTags.P521ExchangePrivateKey, privateKeyBytes, epk, pool, cancellationToken);
 
 
@@ -352,7 +352,7 @@ public static class BouncyCastleKeyAgreementFunctions
     /// </remarks>
     public static async ValueTask<EphemeralKeyAgreementResult> EcdhKeyAgreementEncryptX25519Async(
         PublicKeyMemory recipientPublicKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(recipientPublicKey);
@@ -382,7 +382,7 @@ public static class BouncyCastleKeyAgreementFunctions
 
         //Write the 32-byte shared secret straight into pooled memory the SharedSecret owns
         //and zeroes on dispose — no naked byte[] of secret material at any point.
-        IMemoryOwner<byte> zOwner = pool.Rent(agreement.AgreementSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(agreement.AgreementSize, AllocationKind.Pinned);
         agreement.CalculateAgreement(recipientPublic, zOwner.Memory.Span[..agreement.AgreementSize]);
         var sharedSecret = new SharedSecret(zOwner, CryptoTags.X25519PrivateKey);
 
@@ -420,7 +420,7 @@ public static class BouncyCastleKeyAgreementFunctions
     public static ValueTask<SharedSecret> EcdhKeyAgreementDecryptX25519Async(
         ReadOnlyMemory<byte> privateKeyBytes,
         PublicKeyMemory epk,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(epk);
@@ -444,7 +444,7 @@ public static class BouncyCastleKeyAgreementFunctions
         agreement.Init(privateKeyParam);
 
         //Write the 32-byte shared secret straight into pooled memory — no naked byte[].
-        IMemoryOwner<byte> zOwner = pool.Rent(agreement.AgreementSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(agreement.AgreementSize, AllocationKind.Pinned);
         agreement.CalculateAgreement(epkParam, zOwner.Memory.Span[..agreement.AgreementSize]);
 
         //Reject a degenerate (all-zero) secret from a low-order epk before it derives a key (RFC 7748 §6.1).
@@ -470,7 +470,7 @@ public static class BouncyCastleKeyAgreementFunctions
         Tag epkTag,
         Tag sharedSecretTag,
         PublicKeyMemory recipientPublicKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(recipientPublicKey);
@@ -508,7 +508,7 @@ public static class BouncyCastleKeyAgreementFunctions
             await Task.CompletedTask.ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
 
-            IMemoryOwner<byte> zOwner = pool.Rent(sharedSecretSize);
+            IMemoryOwner<byte> zOwner = pool.Rent(sharedSecretSize, AllocationKind.Pinned);
             zOwner.Memory.Span[..sharedSecretSize].Clear();
             CopyLeftPadded(zRaw, zOwner.Memory.Span[..sharedSecretSize]);
             var sharedSecret = new SharedSecret(zOwner, sharedSecretTag);
@@ -534,7 +534,7 @@ public static class BouncyCastleKeyAgreementFunctions
         Tag sharedSecretTag,
         ReadOnlyMemory<byte> privateKeyBytes,
         PublicKeyMemory epk,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(epk);
@@ -567,7 +567,7 @@ public static class BouncyCastleKeyAgreementFunctions
         BigInteger z = agreement.CalculateAgreement(epkParam);
         byte[] zRaw = z.ToByteArrayUnsigned();
 
-        IMemoryOwner<byte> zOwner = pool.Rent(sharedSecretSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(sharedSecretSize, AllocationKind.Pinned);
         zOwner.Memory.Span[..sharedSecretSize].Clear();
         CopyLeftPadded(zRaw, zOwner.Memory.Span[..sharedSecretSize]);
         CryptographicOperations.ZeroMemory(zRaw);
@@ -586,7 +586,7 @@ public static class BouncyCastleKeyAgreementFunctions
         Tag epkTag,
         Tag sharedSecretTag,
         PublicKeyMemory recipientPublicKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(recipientPublicKey);
@@ -624,7 +624,7 @@ public static class BouncyCastleKeyAgreementFunctions
             await Task.CompletedTask.ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
 
-            IMemoryOwner<byte> zOwner = pool.Rent(sharedSecretSize);
+            IMemoryOwner<byte> zOwner = pool.Rent(sharedSecretSize, AllocationKind.Pinned);
             zOwner.Memory.Span[..sharedSecretSize].Clear();
             CopyLeftPadded(zRaw, zOwner.Memory.Span[..sharedSecretSize]);
             var sharedSecret = new SharedSecret(zOwner, sharedSecretTag);
@@ -650,7 +650,7 @@ public static class BouncyCastleKeyAgreementFunctions
         Tag sharedSecretTag,
         ReadOnlyMemory<byte> privateKeyBytes,
         PublicKeyMemory epk,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(epk);
@@ -683,7 +683,7 @@ public static class BouncyCastleKeyAgreementFunctions
         BigInteger z = agreement.CalculateAgreement(epkParam);
         byte[] zRaw = z.ToByteArrayUnsigned();
 
-        IMemoryOwner<byte> zOwner = pool.Rent(sharedSecretSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(sharedSecretSize, AllocationKind.Pinned);
         zOwner.Memory.Span[..sharedSecretSize].Clear();
         CopyLeftPadded(zRaw, zOwner.Memory.Span[..sharedSecretSize]);
         CryptographicOperations.ZeroMemory(zRaw);
@@ -733,7 +733,7 @@ public static class BouncyCastleKeyAgreementFunctions
         ReadOnlyMemory<byte> plaintext,
         SymmetricKeyMemory key,
         AdditionalData aad,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(key);
@@ -789,7 +789,7 @@ public static class BouncyCastleKeyAgreementFunctions
         Nonce iv,
         AuthenticationTag tag,
         AdditionalData aad,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(ciphertext);
@@ -847,7 +847,7 @@ public static class BouncyCastleKeyAgreementFunctions
         ReadOnlyMemory<byte> plaintext,
         SymmetricKeyMemory key,
         AdditionalData aad,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(key);
@@ -936,7 +936,7 @@ public static class BouncyCastleKeyAgreementFunctions
         Nonce iv,
         AuthenticationTag tag,
         AdditionalData aad,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(ciphertext);
@@ -1102,7 +1102,7 @@ public static class BouncyCastleKeyAgreementFunctions
     public static async ValueTask<EphemeralKeyAgreementResult> Ecdh1PuKeyAgreementEncryptX25519Async(
         PublicKeyMemory recipientPublicKey,
         ReadOnlyMemory<byte> senderPrivateKeyBytes,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(recipientPublicKey);
@@ -1130,7 +1130,7 @@ public static class BouncyCastleKeyAgreementFunctions
 
         //Z = Ze || Zs written straight into pooled memory the SharedSecret owns and
         //zeroes on dispose — no naked byte[] of secret material at any point.
-        IMemoryOwner<byte> zOwner = pool.Rent(2 * X25519SharedSecretSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(2 * X25519SharedSecretSize, AllocationKind.Pinned);
         ephemeralAgreement.CalculateAgreement(recipientPublic, zOwner.Memory.Span[..X25519SharedSecretSize]);
         staticAgreement.CalculateAgreement(recipientPublic, zOwner.Memory.Span[X25519SharedSecretSize..(2 * X25519SharedSecretSize)]);
         var sharedSecret = new SharedSecret(zOwner, CryptoTags.X25519PrivateKey);
@@ -1160,7 +1160,7 @@ public static class BouncyCastleKeyAgreementFunctions
         ReadOnlyMemory<byte> recipientPrivateKeyBytes,
         PublicKeyMemory ephemeralPublicKey,
         PublicKeyMemory senderPublicKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(ephemeralPublicKey);
@@ -1175,7 +1175,7 @@ public static class BouncyCastleKeyAgreementFunctions
         var agreement = new X25519Agreement();
         agreement.Init(privateKeyParam);
 
-        IMemoryOwner<byte> zOwner = pool.Rent(2 * X25519SharedSecretSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(2 * X25519SharedSecretSize, AllocationKind.Pinned);
         agreement.CalculateAgreement(epkParam, zOwner.Memory.Span[..X25519SharedSecretSize]);
 
         //The ephemeral half (Ze) is derived from the attacker-supplied epk; reject a degenerate (all-zero)
@@ -1195,32 +1195,32 @@ public static class BouncyCastleKeyAgreementFunctions
 
     /// <summary>Performs ECDH-1PU key agreement (encrypt side) using NIST P-256 (draft-madden-jose-ecdh-1pu-04 §2.3). Matches <see cref="AuthenticatedKeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<EphemeralKeyAgreementResult> Ecdh1PuKeyAgreementEncryptP256Async(
-        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> senderPrivateKeyBytes, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> senderPrivateKeyBytes, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         Ecdh1PuEncryptNistAsync("secp256r1", 32, CryptoTags.P256ExchangePublicKey, CryptoTags.P256ExchangePrivateKey, recipientPublicKey, senderPrivateKeyBytes, pool, cancellationToken);
 
     /// <summary>Performs ECDH-1PU key agreement (decrypt side) using NIST P-256 (draft-madden-jose-ecdh-1pu-04 §2.3). Matches <see cref="AuthenticatedKeyAgreementDecryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> Ecdh1PuKeyAgreementDecryptP256Async(
-        ReadOnlyMemory<byte> recipientPrivateKeyBytes, PublicKeyMemory ephemeralPublicKey, PublicKeyMemory senderPublicKey, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        ReadOnlyMemory<byte> recipientPrivateKeyBytes, PublicKeyMemory ephemeralPublicKey, PublicKeyMemory senderPublicKey, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         Ecdh1PuDecryptNistAsync("secp256r1", 32, CryptoTags.P256ExchangePrivateKey, recipientPrivateKeyBytes, ephemeralPublicKey, senderPublicKey, pool, cancellationToken);
 
     /// <summary>Performs ECDH-1PU key agreement (encrypt side) using NIST P-384 (draft-madden-jose-ecdh-1pu-04 §2.3). Matches <see cref="AuthenticatedKeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<EphemeralKeyAgreementResult> Ecdh1PuKeyAgreementEncryptP384Async(
-        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> senderPrivateKeyBytes, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> senderPrivateKeyBytes, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         Ecdh1PuEncryptNistAsync("secp384r1", 48, CryptoTags.P384ExchangePublicKey, CryptoTags.P384ExchangePrivateKey, recipientPublicKey, senderPrivateKeyBytes, pool, cancellationToken);
 
     /// <summary>Performs ECDH-1PU key agreement (decrypt side) using NIST P-384 (draft-madden-jose-ecdh-1pu-04 §2.3). Matches <see cref="AuthenticatedKeyAgreementDecryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> Ecdh1PuKeyAgreementDecryptP384Async(
-        ReadOnlyMemory<byte> recipientPrivateKeyBytes, PublicKeyMemory ephemeralPublicKey, PublicKeyMemory senderPublicKey, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        ReadOnlyMemory<byte> recipientPrivateKeyBytes, PublicKeyMemory ephemeralPublicKey, PublicKeyMemory senderPublicKey, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         Ecdh1PuDecryptNistAsync("secp384r1", 48, CryptoTags.P384ExchangePrivateKey, recipientPrivateKeyBytes, ephemeralPublicKey, senderPublicKey, pool, cancellationToken);
 
     /// <summary>Performs ECDH-1PU key agreement (encrypt side) using NIST P-521 (draft-madden-jose-ecdh-1pu-04 §2.3). Matches <see cref="AuthenticatedKeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<EphemeralKeyAgreementResult> Ecdh1PuKeyAgreementEncryptP521Async(
-        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> senderPrivateKeyBytes, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> senderPrivateKeyBytes, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         Ecdh1PuEncryptNistAsync("secp521r1", 66, CryptoTags.P521ExchangePublicKey, CryptoTags.P521ExchangePrivateKey, recipientPublicKey, senderPrivateKeyBytes, pool, cancellationToken);
 
     /// <summary>Performs ECDH-1PU key agreement (decrypt side) using NIST P-521 (draft-madden-jose-ecdh-1pu-04 §2.3). Matches <see cref="AuthenticatedKeyAgreementDecryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> Ecdh1PuKeyAgreementDecryptP521Async(
-        ReadOnlyMemory<byte> recipientPrivateKeyBytes, PublicKeyMemory ephemeralPublicKey, PublicKeyMemory senderPublicKey, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        ReadOnlyMemory<byte> recipientPrivateKeyBytes, PublicKeyMemory ephemeralPublicKey, PublicKeyMemory senderPublicKey, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         Ecdh1PuDecryptNistAsync("secp521r1", 66, CryptoTags.P521ExchangePrivateKey, recipientPrivateKeyBytes, ephemeralPublicKey, senderPublicKey, pool, cancellationToken);
 
 
@@ -1235,7 +1235,7 @@ public static class BouncyCastleKeyAgreementFunctions
         Tag sharedSecretTag,
         PublicKeyMemory recipientPublicKey,
         ReadOnlyMemory<byte> senderPrivateKeyBytes,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(recipientPublicKey);
@@ -1273,7 +1273,7 @@ public static class BouncyCastleKeyAgreementFunctions
             await Task.CompletedTask.ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
 
-            IMemoryOwner<byte> zOwner = pool.Rent(2 * sharedSecretSize);
+            IMemoryOwner<byte> zOwner = pool.Rent(2 * sharedSecretSize, AllocationKind.Pinned);
             zOwner.Memory.Span[..(2 * sharedSecretSize)].Clear();
             CopyLeftPadded(zeRaw, zOwner.Memory.Span[..sharedSecretSize]);
             CopyLeftPadded(zsRaw, zOwner.Memory.Span[sharedSecretSize..(2 * sharedSecretSize)]);
@@ -1306,7 +1306,7 @@ public static class BouncyCastleKeyAgreementFunctions
         ReadOnlyMemory<byte> recipientPrivateKeyBytes,
         PublicKeyMemory ephemeralPublicKey,
         PublicKeyMemory senderPublicKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(ephemeralPublicKey);
@@ -1330,7 +1330,7 @@ public static class BouncyCastleKeyAgreementFunctions
         byte[] zeRaw = agreement.CalculateAgreement(epkParam).ToByteArrayUnsigned();
         byte[] zsRaw = agreement.CalculateAgreement(senderParam).ToByteArrayUnsigned();
 
-        IMemoryOwner<byte> zOwner = pool.Rent(2 * sharedSecretSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(2 * sharedSecretSize, AllocationKind.Pinned);
         zOwner.Memory.Span[..(2 * sharedSecretSize)].Clear();
         CopyLeftPadded(zeRaw, zOwner.Memory.Span[..sharedSecretSize]);
         CopyLeftPadded(zsRaw, zOwner.Memory.Span[sharedSecretSize..(2 * sharedSecretSize)]);
@@ -1354,7 +1354,7 @@ public static class BouncyCastleKeyAgreementFunctions
     public static ValueTask<SharedSecret> EcdhEsMultiRecipientAgreementEncryptX25519Async(
         PublicKeyMemory recipientPublicKey,
         ReadOnlyMemory<byte> ephemeralPrivateKeyBytes,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(recipientPublicKey);
@@ -1370,7 +1370,7 @@ public static class BouncyCastleKeyAgreementFunctions
         agreement.Init(ephemeralPrivate);
 
         //Write the shared secret straight into pooled memory — no naked byte[].
-        IMemoryOwner<byte> zOwner = pool.Rent(X25519SharedSecretSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(X25519SharedSecretSize, AllocationKind.Pinned);
         agreement.CalculateAgreement(recipientPublic, zOwner.Memory.Span[..X25519SharedSecretSize]);
 
         return ValueTask.FromResult(new SharedSecret(zOwner, CryptoTags.X25519PrivateKey));
@@ -1392,7 +1392,7 @@ public static class BouncyCastleKeyAgreementFunctions
         PublicKeyMemory recipientPublicKey,
         ReadOnlyMemory<byte> ephemeralPrivateKeyBytes,
         ReadOnlyMemory<byte> senderPrivateKeyBytes,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(recipientPublicKey);
@@ -1409,7 +1409,7 @@ public static class BouncyCastleKeyAgreementFunctions
         staticAgreement.Init(senderPrivate);
 
         //Z = Ze || Zs written straight into pooled memory — no naked byte[] of secret material.
-        IMemoryOwner<byte> zOwner = pool.Rent(2 * X25519SharedSecretSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(2 * X25519SharedSecretSize, AllocationKind.Pinned);
         ephemeralAgreement.CalculateAgreement(recipientPublic, zOwner.Memory.Span[..X25519SharedSecretSize]);
         staticAgreement.CalculateAgreement(recipientPublic, zOwner.Memory.Span[X25519SharedSecretSize..(2 * X25519SharedSecretSize)]);
 
@@ -1419,32 +1419,32 @@ public static class BouncyCastleKeyAgreementFunctions
 
     /// <summary>Performs multi-recipient ECDH-ES key agreement (encrypt side) with a caller-held ephemeral key using NIST P-256. Matches <see cref="MultiRecipientKeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> EcdhEsMultiRecipientAgreementEncryptP256Async(
-        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhEsMultiRecipientEncryptNistAsync("secp256r1", 32, CryptoTags.P256ExchangePrivateKey, recipientPublicKey, ephemeralPrivateKeyBytes, pool, cancellationToken);
 
     /// <summary>Performs multi-recipient ECDH-ES key agreement (encrypt side) with a caller-held ephemeral key using NIST P-384. Matches <see cref="MultiRecipientKeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> EcdhEsMultiRecipientAgreementEncryptP384Async(
-        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhEsMultiRecipientEncryptNistAsync("secp384r1", 48, CryptoTags.P384ExchangePrivateKey, recipientPublicKey, ephemeralPrivateKeyBytes, pool, cancellationToken);
 
     /// <summary>Performs multi-recipient ECDH-ES key agreement (encrypt side) with a caller-held ephemeral key using NIST P-521. Matches <see cref="MultiRecipientKeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> EcdhEsMultiRecipientAgreementEncryptP521Async(
-        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         EcdhEsMultiRecipientEncryptNistAsync("secp521r1", 66, CryptoTags.P521ExchangePrivateKey, recipientPublicKey, ephemeralPrivateKeyBytes, pool, cancellationToken);
 
     /// <summary>Performs multi-recipient ECDH-1PU key agreement (encrypt side) with a caller-held ephemeral key using NIST P-256. Matches <see cref="MultiRecipientAuthenticatedKeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> Ecdh1PuMultiRecipientAgreementEncryptP256Async(
-        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, ReadOnlyMemory<byte> senderPrivateKeyBytes, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, ReadOnlyMemory<byte> senderPrivateKeyBytes, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         Ecdh1PuMultiRecipientEncryptNistAsync("secp256r1", 32, CryptoTags.P256ExchangePrivateKey, recipientPublicKey, ephemeralPrivateKeyBytes, senderPrivateKeyBytes, pool, cancellationToken);
 
     /// <summary>Performs multi-recipient ECDH-1PU key agreement (encrypt side) with a caller-held ephemeral key using NIST P-384. Matches <see cref="MultiRecipientAuthenticatedKeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> Ecdh1PuMultiRecipientAgreementEncryptP384Async(
-        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, ReadOnlyMemory<byte> senderPrivateKeyBytes, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, ReadOnlyMemory<byte> senderPrivateKeyBytes, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         Ecdh1PuMultiRecipientEncryptNistAsync("secp384r1", 48, CryptoTags.P384ExchangePrivateKey, recipientPublicKey, ephemeralPrivateKeyBytes, senderPrivateKeyBytes, pool, cancellationToken);
 
     /// <summary>Performs multi-recipient ECDH-1PU key agreement (encrypt side) with a caller-held ephemeral key using NIST P-521. Matches <see cref="MultiRecipientAuthenticatedKeyAgreementEncryptDelegate"/>.</summary>
     public static ValueTask<SharedSecret> Ecdh1PuMultiRecipientAgreementEncryptP521Async(
-        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, ReadOnlyMemory<byte> senderPrivateKeyBytes, MemoryPool<byte> pool, CancellationToken cancellationToken = default) =>
+        PublicKeyMemory recipientPublicKey, ReadOnlyMemory<byte> ephemeralPrivateKeyBytes, ReadOnlyMemory<byte> senderPrivateKeyBytes, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
         Ecdh1PuMultiRecipientEncryptNistAsync("secp521r1", 66, CryptoTags.P521ExchangePrivateKey, recipientPublicKey, ephemeralPrivateKeyBytes, senderPrivateKeyBytes, pool, cancellationToken);
 
 
@@ -1457,7 +1457,7 @@ public static class BouncyCastleKeyAgreementFunctions
         Tag sharedSecretTag,
         PublicKeyMemory recipientPublicKey,
         ReadOnlyMemory<byte> ephemeralPrivateKeyBytes,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(recipientPublicKey);
@@ -1477,7 +1477,7 @@ public static class BouncyCastleKeyAgreementFunctions
         agreement.Init(ephemeralPrivate);
         byte[] zeRaw = agreement.CalculateAgreement(recipientParam).ToByteArrayUnsigned();
 
-        IMemoryOwner<byte> zOwner = pool.Rent(sharedSecretSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(sharedSecretSize, AllocationKind.Pinned);
         zOwner.Memory.Span[..sharedSecretSize].Clear();
         CopyLeftPadded(zeRaw, zOwner.Memory.Span[..sharedSecretSize]);
         CryptographicOperations.ZeroMemory(zeRaw);
@@ -1496,7 +1496,7 @@ public static class BouncyCastleKeyAgreementFunctions
         PublicKeyMemory recipientPublicKey,
         ReadOnlyMemory<byte> ephemeralPrivateKeyBytes,
         ReadOnlyMemory<byte> senderPrivateKeyBytes,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(recipientPublicKey);
@@ -1522,7 +1522,7 @@ public static class BouncyCastleKeyAgreementFunctions
         staticAgreement.Init(senderPrivate);
         byte[] zsRaw = staticAgreement.CalculateAgreement(recipientParam).ToByteArrayUnsigned();
 
-        IMemoryOwner<byte> zOwner = pool.Rent(2 * sharedSecretSize);
+        IMemoryOwner<byte> zOwner = pool.Rent(2 * sharedSecretSize, AllocationKind.Pinned);
         zOwner.Memory.Span[..(2 * sharedSecretSize)].Clear();
         CopyLeftPadded(zeRaw, zOwner.Memory.Span[..sharedSecretSize]);
         CopyLeftPadded(zsRaw, zOwner.Memory.Span[sharedSecretSize..(2 * sharedSecretSize)]);
@@ -1541,7 +1541,7 @@ public static class BouncyCastleKeyAgreementFunctions
     public static async ValueTask<Ciphertext> AesKeyWrapAsync(
         SymmetricKeyMemory keyEncryptionKey,
         SymmetricKeyMemory contentEncryptionKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(keyEncryptionKey);
@@ -1592,7 +1592,7 @@ public static class BouncyCastleKeyAgreementFunctions
     public static async ValueTask<SymmetricKeyMemory> AesKeyUnwrapAsync(
         SymmetricKeyMemory keyEncryptionKey,
         ReadOnlyMemory<byte> wrappedKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(keyEncryptionKey);
@@ -1627,7 +1627,7 @@ public static class BouncyCastleKeyAgreementFunctions
                 throw new CryptographicException("AES Key Wrap integrity check failed.", e);
             }
 
-            IMemoryOwner<byte> keyOwner = pool.Rent(unwrapped.Length);
+            IMemoryOwner<byte> keyOwner = pool.Rent(unwrapped.Length, AllocationKind.Pinned);
             unwrapped.CopyTo(keyOwner.Memory.Span);
 
             return new SymmetricKeyMemory(keyOwner, CryptoTags.AesKwUnwrappedKey);
@@ -1663,7 +1663,7 @@ public static class BouncyCastleKeyAgreementFunctions
     /// </remarks>
     public static IMemoryOwner<byte> DeriveX25519PublicKeyFromEd25519(
         ReadOnlySpan<byte> ed25519PublicKey,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         if(ed25519PublicKey.Length != X25519SharedSecretSize)

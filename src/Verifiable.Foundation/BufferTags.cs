@@ -35,4 +35,21 @@ public static class BufferTags
     /// Tag for CBOR-encoded bytes.
     /// </summary>
     public static Tag Cbor { get; } = Tag.Create(BufferKind.Cbor);
+
+    /// <summary>
+    /// Tag for canonical XML octets produced by a canonicalization algorithm.
+    /// </summary>
+    public static Tag XmlCanonical { get; } = Tag.Create(BufferKind.XmlCanonical);
+
+    /// <summary>
+    /// Tag for XML Signature reference-processing output octets: the final octet stream a
+    /// <c>ds:Reference</c>'s dereference-then-transform-chain produces, which <c>DigestMethod</c> digests.
+    /// </summary>
+    public static Tag XmlDigestInput { get; } = Tag.Create(BufferKind.XmlDigestInput);
+
+    /// <summary>
+    /// Tag for octets decoded from XSD <c>base64Binary</c> element content, such as <c>DigestValue</c>,
+    /// <c>SignatureValue</c> and <c>X509Certificate</c>.
+    /// </summary>
+    public static Tag XmlDecodedContent { get; } = Tag.Create(BufferKind.XmlDecodedContent);
 }

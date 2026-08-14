@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core;
 
 namespace Verifiable.OAuth.Server.Pipeline;
@@ -10,7 +9,6 @@ namespace Verifiable.OAuth.Server.Pipeline;
 /// behaviour per OIDC Core §8.1). Pairwise deployments wire a custom
 /// delegate that computes the per-sector hash.
 /// </summary>
-[DebuggerDisplay("DefaultSubjectIdentifierResolver")]
 public static class DefaultSubjectIdentifierResolver
 {
     /// <summary>

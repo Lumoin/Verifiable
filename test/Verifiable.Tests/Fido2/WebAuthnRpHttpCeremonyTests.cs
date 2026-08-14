@@ -19,9 +19,9 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Fido2;
 
 /// <summary>
-/// Real-wire capstone for the WebAuthn RP wire surface (contract decision 3): a CTAP authenticator
+/// Real-wire capstone for the WebAuthn RP wire surface: a CTAP authenticator
 /// simulator, driven over the REAL <see cref="Verifiable.Apdu.ApduExecutor"/>/<see cref="Verifiable.Apdu.ApduDevice"/>
-/// transport (<see cref="CtapWave2TransportHarness"/>), completes a registration ceremony then an
+/// transport (<see cref="CtapNfcTransportHarness"/>), completes a registration ceremony then an
 /// authentication ceremony against <see cref="WebAuthnRelyingPartyCeremonySkin"/> hosted on a genuine
 /// Kestrel loopback listener (<see cref="MinimalHttpHost"/>) and reached only by a real
 /// <see cref="HttpClient"/>. Browser-glue in this class re-encodes the CTAP outputs into the W3C
@@ -51,16 +51,16 @@ internal sealed class WebAuthnRpHttpCeremonyTests
     [TestMethod]
     public async Task RegistrationThenAssertionSucceedOverRealHttpAndApduTransports()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         var skin = new WebAuthnRelyingPartyCeremonySkin(
-            RpId, Origin, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xE0), "alice", "Alice Example", pool);
+            RpId, Origin, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xE0), "alice", "Alice Example", pool);
         await using MinimalHttpHost host = await MinimalHttpHost.StartAsync(skin.HandleAsync, cancellationToken).ConfigureAwait(false);
         using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(host.Certificate, host.BaseAddress);
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("webauthn-rp-http-authenticator");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("webauthn-rp-http-authenticator");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await RegisterOverRealTransportsAsync(httpClient, harness, pool, cancellationToken).ConfigureAwait(false);
         Assert.AreEqual(1, skin.AttestationResultRequestCount, "The RP MUST see exactly one attestation result request cross the socket.");
@@ -81,16 +81,16 @@ internal sealed class WebAuthnRpHttpCeremonyTests
     [TestMethod]
     public async Task TamperedAssertionSignatureFailsVerificationWithExactShape()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         var skin = new WebAuthnRelyingPartyCeremonySkin(
-            RpId, Origin, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xE1), "bob", "Bob Example", pool);
+            RpId, Origin, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xE1), "bob", "Bob Example", pool);
         await using MinimalHttpHost host = await MinimalHttpHost.StartAsync(skin.HandleAsync, cancellationToken).ConfigureAwait(false);
         using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(host.Certificate, host.BaseAddress);
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("webauthn-rp-http-tamper-authenticator");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("webauthn-rp-http-tamper-authenticator");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await RegisterOverRealTransportsAsync(httpClient, harness, pool, cancellationToken).ConfigureAwait(false);
 
@@ -110,16 +110,16 @@ internal sealed class WebAuthnRpHttpCeremonyTests
     [TestMethod]
     public async Task MalformedEnvelopeAtAssertionResultReturnsExactBadRequestShape()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         var skin = new WebAuthnRelyingPartyCeremonySkin(
-            RpId, Origin, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xE2), "carol", "Carol Example", pool);
+            RpId, Origin, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xE2), "carol", "Carol Example", pool);
         await using MinimalHttpHost host = await MinimalHttpHost.StartAsync(skin.HandleAsync, cancellationToken).ConfigureAwait(false);
         using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(host.Certificate, host.BaseAddress);
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("webauthn-rp-http-malformed-authenticator");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("webauthn-rp-http-malformed-authenticator");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await RegisterOverRealTransportsAsync(httpClient, harness, pool, cancellationToken).ConfigureAwait(false);
 
@@ -145,11 +145,11 @@ internal sealed class WebAuthnRpHttpCeremonyTests
     [TestMethod]
     public async Task RequestFailsStructurallyOnceTheHostStops()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         var skin = new WebAuthnRelyingPartyCeremonySkin(
-            RpId, Origin, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xE3), "dave", "Dave Example", pool);
+            RpId, Origin, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xE3), "dave", "Dave Example", pool);
 
         Uri baseAddress;
         System.Security.Cryptography.X509Certificates.X509Certificate2 certificate;
@@ -192,7 +192,7 @@ internal sealed class WebAuthnRpHttpCeremonyTests
     /// as <c>RegistrationResponseJSON</c>, and POSTs it back, asserting the RP accepts it.
     /// </summary>
     private static async Task RegisterOverRealTransportsAsync(
-        HttpClient httpClient, CtapWave2TransportHarness harness, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        HttpClient httpClient, CtapNfcTransportHarness harness, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using HttpResponseMessage optionsResponse = await PostAsync(
             httpClient, WebAuthnRelyingPartyCeremonySkin.AttestationOptionsPath, jsonBody: null, cancellationToken).ConfigureAwait(false);
@@ -204,13 +204,13 @@ internal sealed class WebAuthnRpHttpCeremonyTests
             new ClientData(WellKnownClientDataTypes.Create, creationOptions.Challenge!, Origin));
         DigestValue createClientDataHash = Fido2ClientDataHash.Compute(createClientDataJson, pool);
 
-        CtapMakeCredentialRequest makeCredentialRequest = CtapWave2CapstoneFixtures.BuildMakeCredentialRequest(
+        CtapMakeCredentialRequest makeCredentialRequest = CtapCapstoneFixtures.BuildMakeCredentialRequest(
             creationOptions, createClientDataHash, pool, attestationFormatsPreference: [WellKnownWebAuthnAttestationFormats.None]);
 
         CtapMakeCredentialResponse makeCredentialResponse = await CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
             harness.Transceive, CtapMakeCredentialRequestCborWriter.Write, makeCredentialRequest, CtapMakeCredentialResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(makeCredentialRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(makeCredentialRequest);
 
         TaggedMemory<byte> attestationObject = CtapAuthenticatorMakeCredentialClient.BuildAttestationObject(makeCredentialResponse, AttestationObjectCborWriter.Write);
 
@@ -239,7 +239,7 @@ internal sealed class WebAuthnRpHttpCeremonyTests
     /// back, returning the raw HTTP response for the caller to assert on.
     /// </summary>
     private static async Task<HttpResponseMessage> AssertOverRealTransportsAsync(
-        HttpClient httpClient, CtapWave2TransportHarness harness, MemoryPool<byte> pool, bool tamperSignature, CancellationToken cancellationToken)
+        HttpClient httpClient, CtapNfcTransportHarness harness, BaseMemoryPool pool, bool tamperSignature, CancellationToken cancellationToken)
     {
         using HttpResponseMessage optionsResponse = await PostAsync(
             httpClient, WebAuthnRelyingPartyCeremonySkin.AssertionOptionsPath, jsonBody: null, cancellationToken).ConfigureAwait(false);
@@ -251,12 +251,12 @@ internal sealed class WebAuthnRpHttpCeremonyTests
             new ClientData(WellKnownClientDataTypes.Get, requestOptions.Challenge!, Origin));
         DigestValue getClientDataHash = Fido2ClientDataHash.Compute(getClientDataJson, pool);
 
-        CtapGetAssertionRequest getAssertionRequest = CtapWave2CapstoneFixtures.BuildGetAssertionRequest(requestOptions, getClientDataHash);
+        CtapGetAssertionRequest getAssertionRequest = CtapCapstoneFixtures.BuildGetAssertionRequest(requestOptions, getClientDataHash);
 
         CtapGetAssertionResponse getAssertionResponse = await CtapAuthenticatorGetAssertionClient.GetAssertionAsync(
             harness.Transceive, CtapGetAssertionRequestCborWriter.Write, getAssertionRequest, CtapGetAssertionResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeGetAssertionRequest(getAssertionRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(getAssertionRequest);
 
         using IMemoryOwner<byte> signatureOwner = pool.Rent(getAssertionResponse.Signature.Length);
         Span<byte> signatureSpan = signatureOwner.Memory.Span[..getAssertionResponse.Signature.Length];

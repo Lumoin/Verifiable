@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
@@ -23,7 +22,6 @@ namespace Verifiable.Vcalm;
 /// most-significant-first packing, GZIP+Multibase encode, the 131072-entry herd-privacy minimum) is
 /// the existing <see cref="StatusList"/> / <see cref="BitstringStatusListCodec"/> surface.
 /// </remarks>
-[DebuggerDisplay("VcalmStatusListService")]
 public static class VcalmStatusListService
 {
     /// <summary>

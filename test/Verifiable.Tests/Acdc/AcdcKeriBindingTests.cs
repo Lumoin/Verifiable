@@ -2,7 +2,6 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -23,13 +22,14 @@ namespace Verifiable.Tests.Acdc;
 /// <summary>
 /// Firewalled end-to-end coverage for the ACDC-to-KERI issuer binding (<see cref="AcdcKeriBinding"/>): the central
 /// guarantee that an ACDC is bound to its Issuer's key state because the Issuer's KEL anchors an issuance proof seal
-/// whose digest is the ACDC's SAID. An independent BouncyCastle/Microsoft minter produces a real
-/// <c>icp → ixn</c> Issuer KEL where the interaction anchors a digest seal of the specification's Accreditation
-/// ACDC SAID; each event is signed with no stubbed signatures. The verifier then, from wire bytes alone, verifies
-/// the ACDC's own SAID over its serialization, replays the Issuer's KEL through the production
-/// <see cref="KeriKeyEventLog"/> path, reads the anchored seals from the verified interaction, and confirms the
-/// issuance seal binds the ACDC — the full chain with no backchannel. An unanchored ACDC and a KEL that anchors
-/// nothing for it both fail closed.
+/// whose digest is the ACDC's SAID, under the exact AID a mint rests on. An independent BouncyCastle/Microsoft
+/// minter produces a real <c>icp → ixn</c> Issuer KEL where the interaction anchors a digest seal of the
+/// specification's Accreditation ACDC SAID; each event is signed with no stubbed signatures. The verifier then,
+/// from wire bytes alone, verifies the ACDC's own SAID over its serialization and replays the Issuer's RAW KEL
+/// through the production <see cref="KeriIssuerAnchors.ReplayAsync"/> path — never a caller-supplied anchor set —
+/// confirming the issuance seal binds the ACDC under the AID the replay itself established, the full chain with no
+/// backchannel. An unanchored ACDC, a KEL that anchors nothing for it, and a genuinely-verified KEL belonging to a
+/// different AID than the ACDC's claimed Issuer all fail closed.
 /// </summary>
 [TestClass]
 internal sealed class AcdcKeriBindingTests
@@ -47,10 +47,14 @@ internal sealed class AcdcKeriBindingTests
     public TestContext TestContext { get; set; } = null!;
 
 
+    /// <summary>Decodes a KERI event's JSON bytes into a neutral field map for the production KEL replay.</summary>
+    private static readonly KeriEventFieldMapDecoder JsonDecoder = (serialization, serializationKind) => KeriEventJson.DecodeFieldMap(serialization);
+
+
     /// <summary>
     /// An ACDC whose SAID is anchored by a digest seal in the Issuer's verified KEL binds: the ACDC's own SAID
-    /// verifies over its serialization, the Issuer's KEL replays, and the issuance seal in the verified interaction
-    /// commits to exactly the ACDC's SAID.
+    /// verifies over its serialization, the Issuer's KEL replays through the production path, and the issuance
+    /// seal the replay collects commits to exactly the ACDC's SAID.
     /// </summary>
     [TestMethod]
     public async Task BindsAcdcAnchoredInIssuerKel()
@@ -63,12 +67,13 @@ internal sealed class AcdcKeriBindingTests
             using AcdcTestSupport.EncodedSerialization acdc = AcdcTestSupport.Encode(AcdcExampleVectors.CompactAcdc);
             Assert.IsTrue(await AcdcSaid.VerifyAsync(acdc.Memory, AcdcExampleVectors.AccreditationSaid, AcdcTestSupport.AgileDigest, BaseMemoryPool.Shared, CancellationToken.None), "The ACDC's own SAID must verify before its anchoring is checked.");
 
-            IReadOnlyList<KeriSeal> anchors = await BuildIssuerKelAnchoringAsync(AcdcExampleVectors.AccreditationSaid, disposables, TestContext.CancellationToken).ConfigureAwait(false);
+            (string _, List<KeriKelEvent> kel) = await BuildIssuerKelAnchoringAsync(AcdcExampleVectors.AccreditationSaid, disposables, TestContext.CancellationToken).ConfigureAwait(false);
+            IReadOnlyList<KeriAnchoredSeal> anchors = await ReplayAnchorsAsync(kel, TestContext.CancellationToken).ConfigureAwait(false);
 
-            KeriDigestSeal? seal = AcdcKeriBinding.FindDirectIssuanceSeal(anchors, AcdcExampleVectors.AccreditationSaid);
+            KeriAnchoredSeal? anchor = AcdcKeriBinding.FindDirectIssuanceSeal(anchors, AcdcExampleVectors.AccreditationSaid);
 
-            Assert.IsNotNull(seal, "The Issuer's KEL anchors an issuance seal of the ACDC.");
-            Assert.AreEqual(AcdcExampleVectors.AccreditationSaid, seal.Digest, "The issuance seal commits to exactly the ACDC's SAID.");
+            Assert.IsNotNull(anchor, "The Issuer's KEL anchors an issuance seal of the ACDC.");
+            Assert.AreEqual(AcdcExampleVectors.AccreditationSaid, ((KeriDigestSeal)anchor.Seal).Digest, "The issuance seal commits to exactly the ACDC's SAID.");
         }
         finally
         {
@@ -87,12 +92,13 @@ internal sealed class AcdcKeriBindingTests
         var disposables = new List<IDisposable>();
         try
         {
-            IReadOnlyList<KeriSeal> anchors = await BuildIssuerKelAnchoringAsync(AcdcExampleVectors.AccreditationSaid, disposables, TestContext.CancellationToken).ConfigureAwait(false);
+            (string _, List<KeriKelEvent> kel) = await BuildIssuerKelAnchoringAsync(AcdcExampleVectors.AccreditationSaid, disposables, TestContext.CancellationToken).ConfigureAwait(false);
+            IReadOnlyList<KeriAnchoredSeal> anchors = await ReplayAnchorsAsync(kel, TestContext.CancellationToken).ConfigureAwait(false);
 
             //A different ACDC's SAID (the Transcript ACDC) is not anchored by this KEL.
-            KeriDigestSeal? seal = AcdcKeriBinding.FindDirectIssuanceSeal(anchors, AcdcExampleVectors.TranscriptSaid);
+            KeriAnchoredSeal? anchor = AcdcKeriBinding.FindDirectIssuanceSeal(anchors, AcdcExampleVectors.TranscriptSaid);
 
-            Assert.IsNull(seal, "An ACDC the Issuer's KEL does not anchor must not bind.");
+            Assert.IsNull(anchor, "An ACDC the Issuer's KEL does not anchor must not bind.");
         }
         finally
         {
@@ -104,7 +110,8 @@ internal sealed class AcdcKeriBindingTests
     /// <summary>
     /// A SAID-authentic ACDC anchored in the Issuer's verified KEL mints a <see cref="Verified{T}"/> of
     /// <see cref="AcdcMessage"/> through <see cref="AcdcVerification.VerifyDirectIssuanceAsync"/> — the mint-only
-    /// trust carrier a consumer requires — whose context records the Issuer AID whose key state anchored the issuance.
+    /// trust carrier a consumer requires, whose context records the Issuer AID whose key state anchored the
+    /// issuance. The method is handed the Issuer's RAW KEL, never a pre-vetted anchor: it replays the KEL itself.
     /// </summary>
     [TestMethod]
     public async Task MintsVerifiedAcdcMessageFromDirectIssuance()
@@ -112,17 +119,25 @@ internal sealed class AcdcKeriBindingTests
         var disposables = new List<IDisposable>();
         try
         {
-            using AcdcTestSupport.EncodedSerialization acdc = AcdcTestSupport.Encode(AcdcExampleVectors.CompactAcdc);
-            AcdcMessage message = AcdcReader.Read(AcdcJson.DecodeFieldMap(acdc.Memory));
+            //A self-consistent scenario: the ACDC's own Issuer field IS the freshly minted AID whose KEL anchors
+            //it, exactly what a real deployment looks like -- the fixed specification example vectors used above
+            //name a placeholder Issuer no freshly-replayed KEL could ever legitimately match.
+            (string issuerAid, AcdcFlowKit.MintedAcdc acdc, IReadOnlyList<AcdcFlowKit.SignedEvent> signedKel) =
+                await AcdcFlowKit.MintIssuerAsync(disposables, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
-            IReadOnlyList<KeriSeal> anchors = await BuildIssuerKelAnchoringAsync(AcdcExampleVectors.AccreditationSaid, disposables, TestContext.CancellationToken).ConfigureAwait(false);
+            AcdcMessage message = AcdcReader.Read(AcdcJson.DecodeFieldMap(acdc.Serialization));
+            Assert.AreEqual(issuerAid, message.Issuer, "The minted ACDC's own Issuer field names the KEL's AID.");
+
+            List<KeriKelEvent> kel = ToKelEvents(signedKel, disposables);
 
             Verified<AcdcMessage>? verified = await AcdcVerification.VerifyDirectIssuanceAsync(
-                acdc.Memory, message, anchors, AcdcTestSupport.AgileDigest, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+                acdc.Serialization, message, kel, JsonDecoder, CesrSerializationKind.Json, AcdcTestSupport.AgileDigest, BaseMemoryPool.Shared,
+                new FakeTimeProvider(TestClock.CanonicalEpoch), resolveDelegationSeal: null, TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.IsNotNull(verified, "A SAID-authentic, KEL-anchored ACDC MUST mint a Verified<AcdcMessage>.");
+            Assert.IsNotNull(verified, "A SAID-authentic ACDC whose Issuer's raw KEL genuinely replays and anchors it MUST mint a Verified<AcdcMessage>.");
             Verified<AcdcMessage> trusted = verified.Value;
-            Assert.AreEqual(AcdcExampleVectors.AccreditationSaid, trusted.Value.Said, "The verified value is the ACDC whose SAID was checked over its bytes.");
+            Assert.AreEqual(acdc.Said, trusted.Value.Said, "The verified value is the ACDC whose SAID was checked over its bytes.");
+            Assert.AreEqual(ResolutionSource.KeriAnchor, ((BoundProvenance)trusted.Provenance!).Source, "The mint is Bound via the KERI anchor gate, not merely Asserted.");
             Assert.IsTrue(trusted.Context.TryGet<KeyId>(out KeyId issuer), "The verification context carries the Issuer AID.");
             Assert.AreEqual(message.Issuer, issuer.Value, "The context Issuer AID is the ACDC's issuer.");
         }
@@ -148,10 +163,11 @@ internal sealed class AcdcKeriBindingTests
             AcdcMessage message = AcdcReader.Read(AcdcJson.DecodeFieldMap(acdc.Memory));
 
             //A verified KEL for a DIFFERENT issuance: it anchors the Transcript SAID, not this ACDC's.
-            IReadOnlyList<KeriSeal> anchors = await BuildIssuerKelAnchoringAsync(AcdcExampleVectors.TranscriptSaid, disposables, TestContext.CancellationToken).ConfigureAwait(false);
+            (string _, List<KeriKelEvent> kel) = await BuildIssuerKelAnchoringAsync(AcdcExampleVectors.TranscriptSaid, disposables, TestContext.CancellationToken).ConfigureAwait(false);
 
             Verified<AcdcMessage>? verified = await AcdcVerification.VerifyDirectIssuanceAsync(
-                acdc.Memory, message, anchors, AcdcTestSupport.AgileDigest, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+                acdc.Memory, message, kel, JsonDecoder, CesrSerializationKind.Json, AcdcTestSupport.AgileDigest, BaseMemoryPool.Shared,
+                new FakeTimeProvider(TestClock.CanonicalEpoch), resolveDelegationSeal: null, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsNull(verified, "An ACDC the Issuer's KEL does not anchor MUST NOT mint a Verified<AcdcMessage>.");
         }
@@ -163,16 +179,98 @@ internal sealed class AcdcKeriBindingTests
 
 
     /// <summary>
-    /// Mints a real <c>icp → ixn</c> Issuer KEL where the interaction anchors a digest seal of the given ACDC SAID,
-    /// replays it through the production path asserting both events verify, and returns the anchored seals read from
-    /// the verified interaction. This is the firewalled bridge: only the wire serializations and the ACDC SAID cross
-    /// to the verifier.
+    /// The cross-AID forgery this closes: an ACDC genuinely issued by A (a real, self-certifying
+    /// AID with a real minted KEL and a real ACDC anchored under it) is presented for verification together with a
+    /// SECOND, independently minted, genuinely self-certifying KEL for a DIFFERENT AID (B) that -- coincidentally
+    /// or by attack -- ALSO anchors A's exact ACDC SAID. B's KEL is completely real: it replays and verifies on its
+    /// own terms. It is simply not A's KEL. <see cref="AcdcVerification.VerifyDirectIssuanceAsync"/> MUST NOT mint,
+    /// because <see cref="BoundProvenance.TryBindByKeriAnchor"/> refuses when the replay-established AID disagrees
+    /// with the ACDC's claimed Issuer -- no caller-supplied anchor and no pre-checked "expected AID" shortcut is
+    /// reachable to paper over the mismatch.
+    /// </summary>
+    [TestMethod]
+    public async Task DoesNotMintWhenSuppliedKelIsARealButDifferentIssuersKel()
+    {
+        var disposables = new List<IDisposable>();
+        try
+        {
+            (string issuerA, AcdcFlowKit.MintedAcdc acdcForA, IReadOnlyList<AcdcFlowKit.SignedEvent> _) =
+                await AcdcFlowKit.MintIssuerAsync(disposables, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+
+            AcdcMessage message = AcdcReader.Read(AcdcJson.DecodeFieldMap(acdcForA.Serialization));
+            Assert.AreEqual(issuerA, message.Issuer, "The minted ACDC's own Issuer field names A.");
+
+            //B: an independently minted, genuinely self-certifying KEL that anchors the SAME ACDC SAID as A's, but
+            //under B's own AID -- real signatures, real replay, just not A's KEL.
+            (string issuerB, List<KeriKelEvent> kelB) = await BuildIssuerKelAnchoringAsync(acdcForA.Said, disposables, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreNotEqual(issuerA, issuerB, "A and B must be genuinely different, independently minted AIDs.");
+
+            Verified<AcdcMessage>? verified = await AcdcVerification.VerifyDirectIssuanceAsync(
+                acdcForA.Serialization, message, kelB, JsonDecoder, CesrSerializationKind.Json, AcdcTestSupport.AgileDigest, BaseMemoryPool.Shared,
+                new FakeTimeProvider(TestClock.CanonicalEpoch), resolveDelegationSeal: null, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsNull(verified, "A real, independently verified KEL that anchors the ACDC's SAID under a DIFFERENT AID than its claimed Issuer MUST NOT mint.");
+        }
+        finally
+        {
+            Dispose(disposables);
+        }
+    }
+
+
+    /// <summary>
+    /// Converts a minted, in-memory signed KEL (<see cref="AcdcFlowKit.MintIssuerAsync"/>'s own output) into the
+    /// raw per-event form <see cref="KeriIssuerAnchors.ReplayAsync"/> takes: each event's serialization bytes
+    /// paired with a <see cref="CryptoProof"/> reconstructed from its qualified signer key.
+    /// </summary>
+    /// <param name="kel">The minted, signed KEL events.</param>
+    /// <param name="disposables">The list the reconstructed key material is tracked on for disposal.</param>
+    /// <returns>The raw KEL events.</returns>
+    private static List<KeriKelEvent> ToKelEvents(IReadOnlyList<AcdcFlowKit.SignedEvent> kel, List<IDisposable> disposables)
+    {
+        var events = new List<KeriKelEvent>(kel.Count);
+        foreach(AcdcFlowKit.SignedEvent signed in kel)
+        {
+            using CesrParsedPrimitive parsedKey = CesrPrimitiveCodec.DecodeText(signed.SignerKeyQb64, BaseMemoryPool.Shared);
+            IMemoryOwner<byte> keyOwner = BaseMemoryPool.Shared.Rent(parsedKey.RawLength);
+            parsedKey.Raw.CopyTo(keyOwner.Memory.Span);
+            var publicKey = new PublicKeyMemory(keyOwner, CryptoTags.Ed25519PublicKey);
+            disposables.Add(publicKey);
+
+            events.Add(new KeriKelEvent(signed.Serialization, ImmutableArray.Create(new CryptoProof(signed.Signature, publicKey, CryptoAlgorithm.Ed25519))));
+        }
+
+        return events;
+    }
+
+
+    /// <summary>
+    /// Replays a KEL through the production <see cref="KeriIssuerAnchors.ReplayAsync"/> path and returns its
+    /// collected anchors, asserting the replay itself succeeded.
+    /// </summary>
+    private static async Task<IReadOnlyList<KeriAnchoredSeal>> ReplayAnchorsAsync(List<KeriKelEvent> kel, CancellationToken cancellationToken)
+    {
+        KeriIssuerAnchorReplayResult replay = await KeriIssuerAnchors.ReplayAsync(
+            kel, JsonDecoder, CesrSerializationKind.Json, AcdcTestSupport.AgileDigest, BaseMemoryPool.Shared,
+            new FakeTimeProvider(TestClock.CanonicalEpoch), resolveDelegationSeal: null, cancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(replay.IsVerified, $"The Issuer KEL must verify; error: '{replay.Error}'.");
+
+        return replay.Anchors!;
+    }
+
+
+    /// <summary>
+    /// Mints a real <c>icp → ixn</c> Issuer KEL where the interaction anchors a digest seal of the given ACDC SAID:
+    /// the RAW KEL (its events' own serialization bytes and proofs), not a pre-verified anchor set, so a caller
+    /// exercises the exact input <see cref="AcdcVerification.VerifyDirectIssuanceAsync"/> and
+    /// <see cref="KeriIssuerAnchors.ReplayAsync"/> both take.
     /// </summary>
     /// <param name="acdcSaid">The ACDC SAID the interaction anchors.</param>
     /// <param name="disposables">The list minted key material and events are tracked on for disposal.</param>
-    /// <param name="cancellationToken">A token to cancel the signing and replay.</param>
-    /// <returns>The anchored seals from the verified interaction.</returns>
-    private static async Task<IReadOnlyList<KeriSeal>> BuildIssuerKelAnchoringAsync(string acdcSaid, List<IDisposable> disposables, CancellationToken cancellationToken)
+    /// <param name="cancellationToken">A token to cancel the signing.</param>
+    /// <returns>The Issuer AID the inception establishes, and the raw KEL events.</returns>
+    private static async Task<(string IssuerAid, List<KeriKelEvent> Kel)> BuildIssuerKelAnchoringAsync(string acdcSaid, List<IDisposable> disposables, CancellationToken cancellationToken)
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> current = Fresh(disposables);
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> next = Fresh(disposables);
@@ -190,17 +288,13 @@ internal sealed class AcdcKeriBindingTests
         disposables.Add(inceptionSignature);
         disposables.Add(interactionSignature);
 
-        var entries = new List<LogEntry<KeriKeyEvent, CryptoProof>>
+        var kel = new List<KeriKelEvent>
         {
-            Entry(0, priorSaid: null, inception, [new CryptoProof(inceptionSignature, current.PublicKey, CryptoAlgorithm.Ed25519)], disposables),
-            Entry(1, inception.Said, interaction, [new CryptoProof(interactionSignature, current.PublicKey, CryptoAlgorithm.Ed25519)], disposables)
+            new(inception.Serialization, ImmutableArray.Create(new CryptoProof(inceptionSignature, current.PublicKey, CryptoAlgorithm.Ed25519))),
+            new(interaction.Serialization, ImmutableArray.Create(new CryptoProof(interactionSignature, current.PublicKey, CryptoAlgorithm.Ed25519)))
         };
 
-        List<LogReplayResult<KeriKeyState, KeriKeyEvent, CryptoProof>> results = await ReplayAsync(entries, cancellationToken).ConfigureAwait(false);
-        Assert.IsTrue(results[0].IsSuccess, $"The Issuer inception must verify; error: '{results[0].Error}'.");
-        Assert.IsTrue(results[1].IsSuccess, $"The Issuer interaction must verify; error: '{results[1].Error}'.");
-
-        return KeriSealReader.ReadList(KeriEventJson.DecodeFieldMap(interaction.Serialization)[KeriMessageFields.Anchors]);
+        return (issuerAid, kel);
     }
 
 
@@ -337,60 +431,6 @@ internal sealed class AcdcKeriBindingTests
         (Signature signature, CryptoEvent? _) = await sign(privateKey.AsReadOnlyMemory(), serialization, BaseMemoryPool.Shared, context: null, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return signature;
-    }
-
-
-    private static LogEntry<KeriKeyEvent, CryptoProof> Entry(ulong index, string? priorSaid, MintedEvent minted, ImmutableArray<CryptoProof> proofs, List<IDisposable> disposables) => new()
-    {
-        Index = index,
-        PreviousDigest = priorSaid is null ? null : (ReadOnlyMemory<byte>?)Utf8(priorSaid, disposables),
-        Digest = Utf8(minted.Said, disposables),
-        CanonicalBytes = minted.Serialization,
-        Operation = KeriEventReader.Read(KeriEventJson.DecodeFieldMap(minted.Serialization)),
-        Proofs = proofs
-    };
-
-
-    /// <summary>Rents a pooled buffer for a text's UTF-8 bytes, tracks the owner for disposal, and returns a view over it.</summary>
-    /// <param name="text">The text to encode.</param>
-    /// <param name="disposables">The list the buffer owner is tracked on for disposal.</param>
-    /// <returns>A view over the encoded bytes.</returns>
-    private static ReadOnlyMemory<byte> Utf8(string text, List<IDisposable> disposables)
-    {
-        int length = Encoding.UTF8.GetByteCount(text);
-        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
-        Encoding.UTF8.GetBytes(text, owner.Memory.Span);
-        disposables.Add(owner);
-
-        return owner.Memory[..length];
-    }
-
-
-    private static async Task<List<LogReplayResult<KeriKeyState, KeriKeyEvent, CryptoProof>>> ReplayAsync(List<LogEntry<KeriKeyEvent, CryptoProof>> entries, CancellationToken cancellationToken)
-    {
-        LogReplayContext<KeriKeyState, KeriKeyEvent, CryptoProof, KeriReplayValidationContext> context =
-            KeriKeyEventLog.CreateReplayContext(AcdcTestSupport.AgileDigest, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch));
-
-        var replayer = new LogReplayer<KeriKeyState, KeriKeyEvent, CryptoProof, KeriReplayValidationContext>();
-        var results = new List<LogReplayResult<KeriKeyState, KeriKeyEvent, CryptoProof>>();
-        await foreach(LogReplayResult<KeriKeyState, KeriKeyEvent, CryptoProof> result in replayer.ReplayAsync(ToAsync(entries, cancellationToken), context, cancellationToken).ConfigureAwait(false))
-        {
-            results.Add(result);
-        }
-
-        return results;
-    }
-
-
-    private static async IAsyncEnumerable<LogEntry<KeriKeyEvent, CryptoProof>> ToAsync(List<LogEntry<KeriKeyEvent, CryptoProof>> entries, [EnumeratorCancellation] CancellationToken cancellationToken)
-    {
-        foreach(LogEntry<KeriKeyEvent, CryptoProof> entry in entries)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            yield return entry;
-
-            await Task.CompletedTask.ConfigureAwait(false);
-        }
     }
 
 

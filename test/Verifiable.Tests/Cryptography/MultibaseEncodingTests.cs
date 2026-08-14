@@ -1,5 +1,6 @@
 using SimpleBase;
 using System.Buffers;
+using Lumoin.Base.Libsodium;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Libsodium;
@@ -211,7 +212,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKeyEd25519 = keys.PrivateKey;
 
             using var x25519PublicKeyOwner = LibsodiumKeyConversion.ConvertEd25519PublicKeyToCurve25519PublicKey(publicKeyEd25519.AsReadOnlySpan(), BaseMemoryPool.Shared);
-            using var x25519PrivateKeyOwner = LibsodiumKeyConversion.ConvertEd25519PrivateKeyToCurve25519PrivateKey(privateKeyEd25519.AsReadOnlySpan(), BaseMemoryPool.Shared);
+            using var x25519PrivateKeyOwner = LibsodiumKeyConversion.ConvertEd25519PrivateKeyToCurve25519PrivateKey(privateKeyEd25519.AsReadOnlySpan(), BaseMemoryPool.Shared, SodiumScratchTestPool.Instance);
 
             //Use high-level API for public key encoding.
             var multibaseEncodedPublicKey = MultibaseSerializer.EncodeKey(

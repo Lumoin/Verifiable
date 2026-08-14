@@ -11,7 +11,7 @@ namespace Verifiable.Tests.Cryptography.Aead;
 /// <summary>
 /// Tests for the multi-round single-step Concat KDF of
 /// <see href="https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-56Ar3.pdf">NIST SP 800-56A §5.8.1.1</see>
-/// as implemented by <see cref="ConcatKdf.Derive(ReadOnlySpan{byte}, string, ReadOnlySpan{byte}, ReadOnlySpan{byte}, int, ReadOnlySpan{byte}, Tag, MemoryPool{byte})"/>.
+/// as implemented by <see cref="ConcatKdf.Derive(ReadOnlySpan{byte}, string, ReadOnlySpan{byte}, ReadOnlySpan{byte}, int, ReadOnlySpan{byte}, Tag, BaseMemoryPool)"/>.
 /// The reference oracle recomputes the round hashes with
 /// <see cref="System.Security.Cryptography.SHA256"/> independently, so any perturbation of
 /// the ≤256-bit single-round path or the multi-round concatenation is caught byte for byte.
@@ -23,7 +23,7 @@ internal sealed class ConcatKdfMultiRoundTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     //RFC 7518 Appendix C: the ECDH-ES key agreement output Z (32 octets), the AlgorithmID
     //"A128GCM", empty PartyUInfo/PartyVInfo equivalents replaced here by "Alice"/"Bob", and

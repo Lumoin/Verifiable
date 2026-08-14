@@ -1,20 +1,25 @@
 using System;
+using System.Collections.Generic;
 using System.Formats.Asn1;
 
 namespace Verifiable.Cryptography.Pki;
 
 /// <summary>
-/// A partial managed parse of an X.509 certificate (RFC 5280) — only the fields the managed CMS verifier
-/// needs: the issuer and serial number (for matching a signer identifier), the elliptic-curve public key
-/// (for verifying the signature), and the subject key identifier (the alternative signer-identifier match).
-/// It is not a full certificate model; the encoded bytes are retained for the verified-content output and the
-/// separate certificate-chain trust step.
+/// A partial managed parse of an X.509 certificate (RFC 5280) — the fields the managed CMS verifier and
+/// the managed OCSP response verifier need: the issuer, subject, and validity fields (for name matching and
+/// the certificate's own validity window), the raw <c>subjectPublicKey</c> BIT STRING content and its typed
+/// decomposition (elliptic-curve point, or RSA modulus/exponent — for verifying a signature under the key and
+/// for hashing the raw key material), the subject key identifier (an alternative signer-identifier match), the
+/// Extended Key Usage key purpose identifiers (for an OCSP-signing delegation check), and the raw
+/// <c>tbsCertificate</c> bytes together with the outer <c>signatureAlgorithm</c>/<c>signatureValue</c> (for
+/// verifying that this certificate was itself issued by a candidate issuer). It is not a full certificate
+/// model; the encoded bytes are retained for the verified-content output and the separate certificate-chain
+/// trust step.
 /// </summary>
 /// <remarks>
-/// Parsed with <see cref="System.Formats.Asn1"/> only, no platform certificate type, so the managed CMS
-/// verifier carries no dependency on a certificate library. RSA public keys are recognised (the curve is
-/// <see cref="EllipticCurveTypes.None"/> and the point empty) but not used until the
-/// RSA signer slice.
+/// Parsed with <see cref="System.Formats.Asn1"/> only, no platform certificate type, so the managed
+/// verifiers carry no dependency on a certificate library. RSA public keys are recognised (the curve is
+/// <see cref="EllipticCurveTypes.None"/> and the point empty) but used only by the RSA signer slice.
 /// </remarks>
 internal sealed class ManagedCertificate
 {
@@ -22,41 +27,73 @@ internal sealed class ManagedCertificate
     private const string EcPublicKeyOid = "1.2.840.10045.2.1";
 
     /// <summary>The rsaEncryption key type (RFC 8017).</summary>
-    private const string RsaEncryptionOid = "1.2.840.113549.1.1.1";
+    private const string RsaEncryptionOid = WellKnownOids.RsaEncryption;
 
     /// <summary>The subject key identifier extension (RFC 5280 §4.2.1.2).</summary>
-    private const string SubjectKeyIdentifierOid = "2.5.29.14";
+    private const string SubjectKeyIdentifierOid = WellKnownOids.SubjectKeyIdentifierExtension;
 
 
     private ManagedCertificate(
         ReadOnlyMemory<byte> encoded,
+        ReadOnlyMemory<byte> tbsCertificateDer,
         ReadOnlyMemory<byte> issuerDer,
         ReadOnlyMemory<byte> serialNumber,
+        ReadOnlyMemory<byte> subjectDer,
+        DateTimeOffset notBefore,
+        DateTimeOffset notAfter,
         EllipticCurveTypes ellipticCurve,
         ReadOnlyMemory<byte> publicPoint,
         ReadOnlyMemory<byte> rsaModulus,
         ReadOnlyMemory<byte> rsaExponent,
-        ReadOnlyMemory<byte> subjectKeyIdentifier)
+        string mlDsaAlgorithmOid,
+        ReadOnlyMemory<byte> mlDsaPublicKey,
+        ReadOnlyMemory<byte> subjectPublicKeyBitStringContent,
+        ReadOnlyMemory<byte> subjectKeyIdentifier,
+        IReadOnlyList<string> extendedKeyUsageOids,
+        string signatureAlgorithmOid,
+        ReadOnlyMemory<byte> signatureValue)
     {
         Encoded = encoded;
+        TbsCertificateDer = tbsCertificateDer;
         IssuerDer = issuerDer;
         SerialNumber = serialNumber;
+        SubjectDer = subjectDer;
+        NotBefore = notBefore;
+        NotAfter = notAfter;
         EllipticCurve = ellipticCurve;
         PublicPoint = publicPoint;
         RsaModulus = rsaModulus;
         RsaExponent = rsaExponent;
+        MlDsaAlgorithmOid = mlDsaAlgorithmOid;
+        MlDsaPublicKey = mlDsaPublicKey;
+        SubjectPublicKeyBitStringContent = subjectPublicKeyBitStringContent;
         SubjectKeyIdentifier = subjectKeyIdentifier;
+        ExtendedKeyUsageOids = extendedKeyUsageOids;
+        SignatureAlgorithmOid = signatureAlgorithmOid;
+        SignatureValue = signatureValue;
     }
 
 
     /// <summary>Gets the full DER encoding of the certificate.</summary>
     public ReadOnlyMemory<byte> Encoded { get; }
 
-    /// <summary>Gets the issuer distinguished name as raw DER (for issuer-and-serial-number matching).</summary>
+    /// <summary>Gets the raw DER encoding of the <c>tbsCertificate</c> (tag and length included), for verifying this certificate's own signature.</summary>
+    public ReadOnlyMemory<byte> TbsCertificateDer { get; }
+
+    /// <summary>Gets the issuer distinguished name as raw DER (for issuer-and-serial-number matching, and for matching a candidate issuer's subject).</summary>
     public ReadOnlyMemory<byte> IssuerDer { get; }
 
     /// <summary>Gets the certificate serial number as its DER INTEGER content bytes.</summary>
     public ReadOnlyMemory<byte> SerialNumber { get; }
+
+    /// <summary>Gets the subject distinguished name as raw DER (RFC 5280 §4.1.2.4), tag and length included.</summary>
+    public ReadOnlyMemory<byte> SubjectDer { get; }
+
+    /// <summary>Gets the <c>notBefore</c> validity instant (RFC 5280 §4.1.2.5).</summary>
+    public DateTimeOffset NotBefore { get; }
+
+    /// <summary>Gets the <c>notAfter</c> validity instant (RFC 5280 §4.1.2.5).</summary>
+    public DateTimeOffset NotAfter { get; }
 
     /// <summary>Gets the elliptic curve of the subject public key, or <see cref="EllipticCurveTypes.None"/> when the key is not a recognised elliptic-curve key.</summary>
     public EllipticCurveTypes EllipticCurve { get; }
@@ -70,44 +107,169 @@ internal sealed class ManagedCertificate
     /// <summary>Gets the RSA public exponent as unsigned big-endian bytes; empty when the key is not RSA.</summary>
     public ReadOnlyMemory<byte> RsaExponent { get; }
 
+    /// <summary>
+    /// Gets the ML-DSA parameter-set object identifier the <c>SubjectPublicKeyInfo</c> names
+    /// (<see cref="WellKnownOids.MlDsa44"/>, <see cref="WellKnownOids.MlDsa65"/> or
+    /// <see cref="WellKnownOids.MlDsa87"/>), or the empty string when the key is not ML-DSA. In X.509 the one
+    /// identifier binds the key to its parameter set, so a signature stated under a different set is a
+    /// substitution rather than a variant.
+    /// </summary>
+    public string MlDsaAlgorithmOid { get; }
+
+    /// <summary>Gets the raw ML-DSA public key bytes (FIPS 204 encoding, the <c>subjectPublicKey</c> BIT STRING content); empty when the key is not ML-DSA.</summary>
+    public ReadOnlyMemory<byte> MlDsaPublicKey { get; }
+
+    /// <summary>
+    /// Gets the <c>subjectPublicKey</c> BIT STRING content bytes exactly as encoded — excluding the BIT
+    /// STRING tag, length, and unused-bits count octet — regardless of the key algorithm. This is the input
+    /// an RFC 6960 §4.2.1 <c>KeyHash</c> (SHA-1 over the responder public key) is computed from, independent
+    /// of whether <see cref="PublicPoint"/> or <see cref="RsaModulus"/>/<see cref="RsaExponent"/> apply.
+    /// </summary>
+    public ReadOnlyMemory<byte> SubjectPublicKeyBitStringContent { get; }
+
     /// <summary>Gets the subject key identifier from the certificate extension; empty when absent.</summary>
     public ReadOnlyMemory<byte> SubjectKeyIdentifier { get; }
 
+    /// <summary>Gets the ExtendedKeyUsage key purpose identifiers (RFC 5280 §4.2.1.12), in certificate order; empty when the extension is absent.</summary>
+    public IReadOnlyList<string> ExtendedKeyUsageOids { get; }
+
+    /// <summary>Gets the certificate's own <c>signatureAlgorithm</c> object identifier (RFC 5280 §4.1.1.2).</summary>
+    public string SignatureAlgorithmOid { get; }
+
+    /// <summary>Gets the certificate's own <c>signatureValue</c> BIT STRING content bytes (RFC 5280 §4.1.1.3).</summary>
+    public ReadOnlyMemory<byte> SignatureValue { get; }
 
     /// <summary>
-    /// Parses the fields the CMS verifier needs from an encoded certificate.
+    /// Gets the size in bits of the subject public key — the RSA modulus length, or the named curve's field
+    /// size — or <see langword="null"/> when the key algorithm is not one this parse recognises. This is the
+    /// "size of the key, if applicable, used with that algorithm" a cryptographic constraint is stated about
+    /// (ETSI EN 319 102-1 V1.4.1 clause 5.1.4.3).
+    /// </summary>
+    public int? SubjectPublicKeySizeBits => RsaModulus.IsEmpty
+        ? EllipticCurve switch
+        {
+            EllipticCurveTypes.P256 => 256,
+            EllipticCurveTypes.P384 => 384,
+            EllipticCurveTypes.P521 => 521,
+            EllipticCurveTypes.Secp256k1 => 256,
+            EllipticCurveTypes.BrainpoolP224r1 => 224,
+            EllipticCurveTypes.BrainpoolP256r1 => 256,
+            EllipticCurveTypes.BrainpoolP320r1 => 320,
+            EllipticCurveTypes.BrainpoolP384r1 => 384,
+            EllipticCurveTypes.BrainpoolP512r1 => 512,
+            _ => null
+        }
+        : RsaModulus.Length * 8;
+
+
+    /// <summary>
+    /// Parses the fields the managed CMS and OCSP verifiers need from an encoded certificate, rejecting shapes
+    /// RFC 5280 does not admit for the fields this parse walks (no new field is extracted by these checks —
+    /// they only tighten fields already read): the issuer and subject <c>Name</c> fields must each be a
+    /// SEQUENCE (§4.1.2.4); a present <c>[0]</c> EXPLICIT version wrapper must contain exactly one INTEGER
+    /// valued 0, 1, or 2 (§4.1.2.1); and the <c>tbsCertificate.signature</c> <c>AlgorithmIdentifier</c> must
+    /// begin with an OBJECT IDENTIFIER (§4.1.2.3/§4.1.1.2).
     /// </summary>
     /// <param name="encoded">The DER-encoded certificate.</param>
     /// <returns>The parsed certificate.</returns>
     public static ManagedCertificate Parse(ReadOnlyMemory<byte> encoded)
     {
-        var certificate = new AsnReader(encoded, AsnEncodingRules.DER);
-        AsnReader tbs = certificate.ReadSequence().ReadSequence();
+        var certificateReader = new AsnReader(encoded, AsnEncodingRules.DER);
+        AsnReader certificateSequence = certificateReader.ReadSequence();
+        certificateReader.ThrowIfNotEmpty();
 
-        //version [0] EXPLICIT INTEGER DEFAULT v1, present in practically every certificate.
+        //The exact tbsCertificate bytes (tag and length included) are captured before descending, so a
+        //candidate issuer's key can later verify this certificate's own signature over them.
+        ReadOnlyMemory<byte> tbsCertificateDer = certificateSequence.ReadEncodedValue();
+        AsnReader tbs = new AsnReader(tbsCertificateDer, AsnEncodingRules.DER).ReadSequence();
+
+        //version [0] EXPLICIT INTEGER DEFAULT v1, present in practically every certificate; when present, its
+        //content is exactly one INTEGER valued 0 (v1), 1 (v2), or 2 (v3) (RFC 5280 §4.1.2.1).
         if(tbs.PeekTag() == new Asn1Tag(TagClass.ContextSpecific, 0, isConstructed: true))
         {
-            _ = tbs.ReadSequence(new Asn1Tag(TagClass.ContextSpecific, 0));
+            AsnReader version = tbs.ReadSequence(new Asn1Tag(TagClass.ContextSpecific, 0));
+            if(!version.TryReadInt32(out int versionNumber) || versionNumber is < 0 or > 2)
+            {
+                throw new AsnContentException("The [0] EXPLICIT version wrapper contains a single INTEGER valued 0 (v1), 1 (v2), or 2 (v3) (RFC 5280 §4.1.2.1).");
+            }
+
+            version.ThrowIfNotEmpty();
         }
 
         ReadOnlyMemory<byte> serialNumber = tbs.ReadIntegerBytes();
-        _ = tbs.ReadSequence();                                        //signature AlgorithmIdentifier
-        ReadOnlyMemory<byte> issuer = tbs.ReadEncodedValue();          //issuer Name (raw DER)
-        _ = tbs.ReadSequence();                                        //validity
-        _ = tbs.ReadEncodedValue();                                    //subject Name
+        AsnReader tbsSignatureAlgorithm = tbs.ReadSequence();          //signature AlgorithmIdentifier (RFC 5280 §4.1.2.3)
+        _ = tbsSignatureAlgorithm.ReadObjectIdentifier();              //AlgorithmIdentifier ::= SEQUENCE { algorithm OBJECT IDENTIFIER, ... } (§4.1.1.2)
+        ReadOnlyMemory<byte> issuer = ReadNameOrThrow(tbs);            //issuer Name (raw DER, RFC 5280 §4.1.2.4)
+        AsnReader validity = tbs.ReadSequence();
+        DateTimeOffset notBefore = ReadTime(validity);
+        DateTimeOffset notAfter = ReadTime(validity);
+        validity.ThrowIfNotEmpty();
+        ReadOnlyMemory<byte> subject = ReadNameOrThrow(tbs);           //subject Name (raw DER, RFC 5280 §4.1.2.4)
 
         ParsedPublicKey publicKey = ParseSubjectPublicKeyInfo(tbs.ReadSequence());
 
-        ReadOnlyMemory<byte> subjectKeyIdentifier = ParseSubjectKeyIdentifier(tbs);
+        (ReadOnlyMemory<byte> subjectKeyIdentifier, IReadOnlyList<string> extendedKeyUsageOids) = ParseExtensions(tbs);
+        tbs.ThrowIfNotEmpty();
+
+        AsnReader signatureAlgorithm = certificateSequence.ReadSequence();
+        string signatureAlgorithmOid = signatureAlgorithm.ReadObjectIdentifier();
+        if(!certificateSequence.TryReadPrimitiveBitString(out _, out ReadOnlyMemory<byte> signatureValue))
+        {
+            throw new AsnContentException("A Certificate must close with its signatureValue BIT STRING (RFC 5280 §4.1.1).");
+        }
+
+        certificateSequence.ThrowIfNotEmpty();
 
         return new ManagedCertificate(
-            encoded, issuer, serialNumber, publicKey.Curve, publicKey.Point, publicKey.RsaModulus, publicKey.RsaExponent, subjectKeyIdentifier);
+            encoded, tbsCertificateDer, issuer, serialNumber, subject, notBefore, notAfter,
+            publicKey.Curve, publicKey.Point, publicKey.RsaModulus, publicKey.RsaExponent,
+            publicKey.MlDsaAlgorithmOid, publicKey.MlDsaPublicKey, publicKey.RawBitStringContent,
+            subjectKeyIdentifier, extendedKeyUsageOids, signatureAlgorithmOid, signatureValue);
+    }
+
+
+    /// <summary>
+    /// Reads a <c>Validity</c> time (RFC 5280 §4.1.2.5): a <c>UTCTime</c> for dates through 2049, or a
+    /// <c>GeneralizedTime</c> from 2050 on.
+    /// </summary>
+    private static DateTimeOffset ReadTime(AsnReader validity)
+    {
+        Asn1Tag tag = validity.PeekTag();
+        if(tag.TagClass != TagClass.Universal)
+        {
+            throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5).");
+        }
+
+        return (UniversalTagNumber)tag.TagValue switch
+        {
+            UniversalTagNumber.UtcTime => validity.ReadUtcTime(),
+            UniversalTagNumber.GeneralizedTime => validity.ReadGeneralizedTime(),
+            _ => throw new AsnContentException("A Validity time must be a UTCTime or a GeneralizedTime (RFC 5280 §4.1.2.5).")
+        };
+    }
+
+
+    /// <summary>
+    /// Reads an RFC 5280 §4.1.2.4 <c>Name</c> — a <c>RDNSequence</c>, itself a SEQUENCE — as its raw encoded
+    /// DER, rejecting any other shape before consuming it.
+    /// </summary>
+    /// <param name="tbs">The reader positioned at the <c>Name</c> field.</param>
+    /// <returns>The <c>Name</c>'s raw DER encoding (tag and length included).</returns>
+    private static ReadOnlyMemory<byte> ReadNameOrThrow(AsnReader tbs)
+    {
+        if(tbs.PeekTag() != Asn1Tag.Sequence)
+        {
+            throw new AsnContentException("A Name is an RDNSequence, encoded as a SEQUENCE (RFC 5280 §4.1.2.4).");
+        }
+
+        return tbs.ReadEncodedValue();
     }
 
 
     /// <summary>
     /// Parses the subject public key info: for an elliptic-curve key, the curve and the uncompressed public
-    /// point; for an RSA key, the modulus and exponent; otherwise an unsupported key.
+    /// point; for an RSA key, the modulus and exponent; for an ML-DSA key, the parameter-set identifier and
+    /// the raw key; the raw BIT STRING content is captured regardless of the key algorithm.
     /// </summary>
     private static ParsedPublicKey ParseSubjectPublicKeyInfo(AsnReader subjectPublicKeyInfo)
     {
@@ -119,7 +281,7 @@ internal sealed class ManagedCertificate
             string curveOid = algorithm.ReadObjectIdentifier();
             byte[] point = subjectPublicKeyInfo.ReadBitString(out _);
 
-            return new ParsedPublicKey(CurveFromOid(curveOid), point, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty);
+            return new ParsedPublicKey(CurveFromOid(curveOid), point, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, string.Empty, ReadOnlyMemory<byte>.Empty, point);
         }
 
         if(string.Equals(algorithmOid, RsaEncryptionOid, StringComparison.Ordinal))
@@ -130,11 +292,31 @@ internal sealed class ManagedCertificate
             ReadOnlyMemory<byte> modulus = StripLeadingZero(rsa.ReadIntegerBytes());
             ReadOnlyMemory<byte> exponent = StripLeadingZero(rsa.ReadIntegerBytes());
 
-            return new ParsedPublicKey(EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, modulus, exponent);
+            return new ParsedPublicKey(EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, modulus, exponent, string.Empty, ReadOnlyMemory<byte>.Empty, rsaPublicKey);
         }
 
-        return new ParsedPublicKey(EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty);
+        if(IsMlDsaOid(algorithmOid))
+        {
+            //An ML-DSA SubjectPublicKeyInfo carries the raw FIPS 204 public key directly in the BIT STRING,
+            //with absent AlgorithmIdentifier parameters; the identifier itself pins the parameter set.
+            byte[] mlDsaPublicKey = subjectPublicKeyInfo.ReadBitString(out _);
+
+            return new ParsedPublicKey(EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, algorithmOid, mlDsaPublicKey, mlDsaPublicKey);
+        }
+
+        byte[] unrecognisedKeyBits = subjectPublicKeyInfo.ReadBitString(out _);
+
+        return new ParsedPublicKey(EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, string.Empty, ReadOnlyMemory<byte>.Empty, unrecognisedKeyBits);
     }
+
+
+    /// <summary>Reports whether an object identifier names one of the three ML-DSA parameter sets.</summary>
+    /// <param name="algorithmOid">The dotted-decimal identifier to classify.</param>
+    /// <returns><see langword="true"/> when it is an ML-DSA identifier.</returns>
+    private static bool IsMlDsaOid(string algorithmOid) =>
+        string.Equals(algorithmOid, WellKnownOids.MlDsa44, StringComparison.Ordinal)
+        || string.Equals(algorithmOid, WellKnownOids.MlDsa65, StringComparison.Ordinal)
+        || string.Equals(algorithmOid, WellKnownOids.MlDsa87, StringComparison.Ordinal);
 
 
     /// <summary>
@@ -145,10 +327,10 @@ internal sealed class ManagedCertificate
 
 
     /// <summary>
-    /// Walks the optional unique identifiers and the extensions to the subject-key-identifier extension,
-    /// returning its key identifier, or <see langword="null"/> when absent.
+    /// Walks the optional unique identifiers and the extensions to the subject-key-identifier (RFC 5280
+    /// §4.2.1.2) and ExtendedKeyUsage (RFC 5280 §4.2.1.12) extensions, reading the first occurrence of each.
     /// </summary>
-    private static ReadOnlyMemory<byte> ParseSubjectKeyIdentifier(AsnReader tbs)
+    private static (ReadOnlyMemory<byte> SubjectKeyIdentifier, IReadOnlyList<string> ExtendedKeyUsageOids) ParseExtensions(AsnReader tbs)
     {
         //issuerUniqueID [1] IMPLICIT and subjectUniqueID [2] IMPLICIT are obsolete but allowed before extensions.
         if(tbs.HasData && tbs.PeekTag() == new Asn1Tag(TagClass.ContextSpecific, 1, isConstructed: true))
@@ -161,30 +343,50 @@ internal sealed class ManagedCertificate
             _ = tbs.ReadEncodedValue();
         }
 
-        if(!tbs.HasData || tbs.PeekTag() != new Asn1Tag(TagClass.ContextSpecific, 3, isConstructed: true))
-        {
-            return ReadOnlyMemory<byte>.Empty;
-        }
+        ReadOnlyMemory<byte> subjectKeyIdentifier = ReadOnlyMemory<byte>.Empty;
+        bool subjectKeyIdentifierSeen = false;
+        List<string>? extendedKeyUsageOids = null;
 
-        AsnReader extensions = tbs.ReadSequence(new Asn1Tag(TagClass.ContextSpecific, 3)).ReadSequence();
-        while(extensions.HasData)
+        if(tbs.HasData && tbs.PeekTag() == new Asn1Tag(TagClass.ContextSpecific, 3, isConstructed: true))
         {
-            AsnReader extension = extensions.ReadSequence();
-            string extensionId = extension.ReadObjectIdentifier();
-            if(extension.PeekTag() == new Asn1Tag(UniversalTagNumber.Boolean))
+            AsnReader extensionsWrapper = tbs.ReadSequence(new Asn1Tag(TagClass.ContextSpecific, 3));
+            AsnReader extensions = extensionsWrapper.ReadSequence();
+            while(extensions.HasData)
             {
-                _ = extension.ReadBoolean();
+                AsnReader extension = extensions.ReadSequence();
+                string extensionId = extension.ReadObjectIdentifier();
+                if(extension.PeekTag() == new Asn1Tag(UniversalTagNumber.Boolean))
+                {
+                    _ = extension.ReadBoolean();
+                }
+
+                byte[] extensionValue = extension.ReadOctetString();
+                if(string.Equals(extensionId, SubjectKeyIdentifierOid, StringComparison.Ordinal) && !subjectKeyIdentifierSeen)
+                {
+                    //The extension value wraps a KeyIdentifier ::= OCTET STRING. A bool sentinel (not an
+                    //emptiness check on subjectKeyIdentifier) marks "first occurrence read" — a legal DER
+                    //KeyIdentifier can itself be zero-length, and an emptiness check would then let a second,
+                    //attacker-controlled occurrence silently override it.
+                    subjectKeyIdentifierSeen = true;
+                    subjectKeyIdentifier = new AsnReader(extensionValue, AsnEncodingRules.DER).ReadOctetString();
+                }
+                else if(string.Equals(extensionId, WellKnownOids.ExtendedKeyUsageExtension, StringComparison.Ordinal) && extendedKeyUsageOids is null)
+                {
+                    extendedKeyUsageOids = [];
+                    AsnReader keyPurposes = new AsnReader(extensionValue, AsnEncodingRules.DER).ReadSequence();
+                    while(keyPurposes.HasData)
+                    {
+                        extendedKeyUsageOids.Add(keyPurposes.ReadObjectIdentifier());
+                    }
+                }
+
+                extension.ThrowIfNotEmpty();
             }
 
-            byte[] extensionValue = extension.ReadOctetString();
-            if(string.Equals(extensionId, SubjectKeyIdentifierOid, StringComparison.Ordinal))
-            {
-                //The extension value wraps a KeyIdentifier ::= OCTET STRING.
-                return new AsnReader(extensionValue, AsnEncodingRules.DER).ReadOctetString();
-            }
+            extensionsWrapper.ThrowIfNotEmpty();
         }
 
-        return ReadOnlyMemory<byte>.Empty;
+        return (subjectKeyIdentifier, extendedKeyUsageOids ?? []);
     }
 
 
@@ -206,10 +408,13 @@ internal sealed class ManagedCertificate
     };
 
 
-    /// <summary>A parsed subject public key: an elliptic-curve point, or RSA modulus and exponent.</summary>
+    /// <summary>A parsed subject public key: an elliptic-curve point, RSA modulus and exponent, or an ML-DSA parameter-set identifier and raw key, plus the raw BIT STRING content.</summary>
     private readonly record struct ParsedPublicKey(
         EllipticCurveTypes Curve,
         ReadOnlyMemory<byte> Point,
         ReadOnlyMemory<byte> RsaModulus,
-        ReadOnlyMemory<byte> RsaExponent);
+        ReadOnlyMemory<byte> RsaExponent,
+        string MlDsaAlgorithmOid,
+        ReadOnlyMemory<byte> MlDsaPublicKey,
+        ReadOnlyMemory<byte> RawBitStringContent);
 }

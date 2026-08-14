@@ -7,7 +7,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// <see cref="CtapAuthenticatorSnapshotCborReader"/> share.
 /// </summary>
 /// <remarks>
-/// Contract R-5: a leading format-version integer, checked by the reader before any other field is
+/// A leading format-version integer, checked by the reader before any other field is
 /// parsed; an unrecognized version fails closed rather than attempting a best-effort parse. Every other
 /// bound here defends the reader against a truncated or adversarially crafted snapshot claiming an
 /// unreasonable length/count — generous enough for any legitimate authenticator state this simulator can

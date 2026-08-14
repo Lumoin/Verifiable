@@ -59,7 +59,7 @@ public static class MicrosoftHmacFunctions
         ReadOnlyMemory<byte> keyBytes,
         int outputByteLength,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default) =>
         ComputeHmacAsync(new ReadOnlySequence<byte>(message), keyBytes, outputByteLength, tag, pool, context, cancellationToken);
@@ -76,7 +76,7 @@ public static class MicrosoftHmacFunctions
         ReadOnlyMemory<byte> keyBytes,
         int outputByteLength,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
@@ -107,7 +107,7 @@ public static class MicrosoftHmacFunctions
             activity.SetTag(CryptoTelemetry.Hmac.OutputLength, outputByteLength);
         }
 
-        IMemoryOwner<byte> owner = pool.Rent(outputByteLength);
+        IMemoryOwner<byte> owner = pool.Rent(outputByteLength, AllocationKind.Pinned);
         int written;
         try
         {
@@ -167,7 +167,7 @@ public static class MicrosoftHmacFunctions
         ReadOnlyMemory<byte> keyBytes,
         ReadOnlyMemory<byte> expectedMac,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default) =>
         VerifyHmacAsync(new ReadOnlySequence<byte>(message), keyBytes, expectedMac, tag, pool, context, cancellationToken);
@@ -183,7 +183,7 @@ public static class MicrosoftHmacFunctions
         ReadOnlyMemory<byte> keyBytes,
         ReadOnlyMemory<byte> expectedMac,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
@@ -224,7 +224,7 @@ public static class MicrosoftHmacFunctions
         }
 
         bool isValid;
-        using(IMemoryOwner<byte> tempOwner = pool.Rent(outputByteLength))
+        using(IMemoryOwner<byte> tempOwner = pool.Rent(outputByteLength, AllocationKind.Pinned))
         {
             Span<byte> tempSpan = tempOwner.Memory.Span[..outputByteLength];
 

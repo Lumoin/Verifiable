@@ -84,7 +84,7 @@ public static class AuthCodeRequestObjectExtensions
             //surfaced to the decision seam as UNTRUSTED — §5.1.3 forbids the issuer from assuming it
             //originated here — so the projection neither validates nor interprets it.
             string? issuerState = JwtClaimReaders.OptionalClaim(claims, OAuthRequestParameterNames.IssuerState);
-            string? resource = JwtClaimReaders.OptionalClaim(claims, OAuthRequestParameterNames.Resource);
+            string? resource = ReadResourceClaim(claims);
             int? maxAge = null;
             if(claims.TryGetValue(OAuthRequestParameterNames.MaxAge, out object? maxAgeClaim))
             {
@@ -122,5 +122,61 @@ public static class AuthCodeRequestObjectExtensions
                 Resource = resource
             };
         }
+    }
+
+
+    /// <summary>
+    /// A sentinel returned for a JAR <c>resource</c> claim that is present but does not parse to
+    /// either RFC 8707 §2.1 wire shape (a string not carried through
+    /// <see cref="JwsAccessTokenValidator.TryReadStringList"/>'s string-or-array tolerance, or an
+    /// empty array). Deliberately shaped to fail
+    /// <c>AuthCodeEndpoints.IsAbsoluteResourceIndicatorUri</c> (it carries a fragment, which §2
+    /// forbids) so the SAME downstream <c>ValidateResourceIndicatorsShape</c> gate every other
+    /// malformed resource value goes through rejects this one too, with <c>invalid_target</c>
+    /// rather than a distinct parse-time error code.
+    /// </summary>
+    private const string MalformedResourceClaimSentinel = "urn:invalid-resource-claim#malformed";
+
+
+    /// <summary>
+    /// Reads the RFC 8707 <c>resource</c> claim per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">§2.1</see>: "a single
+    /// resource parameter value is represented as a JSON string while multiple values are
+    /// represented as an array of strings." Reuses
+    /// <see cref="JwsAccessTokenValidator.TryReadStringList"/> — the same string-or-array reader
+    /// the <c>aud</c>/<c>amr</c> claims use for the identical RFC 7519 §4.1.3-family wire
+    /// ambiguity. Each element of the resolved list is itself required to carry no embedded
+    /// whitespace before the set is space-joined into the convention <c>ParseResourceIndicators</c>
+    /// recovers at every other seam (PAR/authorize query strings, the token-exchange grant): a
+    /// resource indicator is one absolute URI (RFC 3986 §2 / Appendix A's ABNF forbids a raw space
+    /// inside one), so an
+    /// array/string element that already carries one is not "several indicators sent as one" to
+    /// recover by splitting, it is malformed. A PRESENT claim that does not parse to either shape,
+    /// OR whose value is empty, OR whose value carries whitespace, is not silently treated as absent: it returns
+    /// <see cref="MalformedResourceClaimSentinel"/>, carrying the defect through to the existing
+    /// shape gate instead of dropping it.
+    /// </summary>
+    private static string? ReadResourceClaim(IReadOnlyDictionary<string, object> claims)
+    {
+        if(!claims.ContainsKey(OAuthRequestParameterNames.Resource))
+        {
+            return null;
+        }
+
+        if(!JwsAccessTokenValidator.TryReadStringList(
+            claims, OAuthRequestParameterNames.Resource, out IReadOnlyList<string> values))
+        {
+            return MalformedResourceClaimSentinel;
+        }
+
+        foreach(string value in values)
+        {
+            if(string.IsNullOrEmpty(value) || value.Any(char.IsWhiteSpace))
+            {
+                return MalformedResourceClaimSentinel;
+            }
+        }
+
+        return string.Join(' ', values);
     }
 }

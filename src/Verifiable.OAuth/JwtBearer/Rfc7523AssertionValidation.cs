@@ -160,7 +160,6 @@ internal enum Rfc7523TemporalOutcome
 /// issuers are trusted at all), and §3 item 7 (<c>jti</c> replay defense — the library's
 /// <see cref="Server.JtiReplayGuard"/> is the reusable surface for that, not this checker).
 /// </remarks>
-[DebuggerDisplay("Rfc7523AssertionValidation")]
 public static class Rfc7523AssertionValidation
 {
     /// <summary>

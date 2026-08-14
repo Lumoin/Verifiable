@@ -82,7 +82,7 @@ namespace Verifiable.Cryptography;
 public delegate ValueTask<(Signature Signature, CryptoEvent? Event)> SigningDelegate(
     ReadOnlyMemory<byte> privateKeyBytes,
     ReadOnlyMemory<byte> dataToSign,
-    MemoryPool<byte> signaturePool,
+    BaseMemoryPool signaturePool,
     FrozenDictionary<string, object>? context = null,
     CancellationToken cancellationToken = default);
 

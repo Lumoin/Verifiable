@@ -57,7 +57,7 @@ public sealed class DataGroup2: IDisposable
     /// <returns>The parsed <see cref="DataGroup2"/>. The caller disposes it.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the structure is not a well-formed DG2.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the FaceImage carrier transfers to the returned DataGroup2, which the caller disposes.")]
-    public static DataGroup2 Parse(ReadOnlySpan<byte> dataGroup2, MemoryPool<byte> pool)
+    public static DataGroup2 Parse(ReadOnlySpan<byte> dataGroup2, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -77,7 +77,7 @@ public sealed class DataGroup2: IDisposable
     /// <param name="format">The image encoding.</param>
     /// <param name="pool">The memory pool for the file carrier.</param>
     /// <returns>The EF.DG2 <see cref="ElementaryFile"/>. The caller disposes it.</returns>
-    public static ElementaryFile Write(ReadOnlySpan<byte> image, FaceImageFormat format, MemoryPool<byte> pool)
+    public static ElementaryFile Write(ReadOnlySpan<byte> image, FaceImageFormat format, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

@@ -34,7 +34,7 @@ public static class WellKnownCtapGetAssertionResponseKeys
     /// <summary>The <c>largeBlobKey</c> member (<c>0x07</c>, Optional): the asserted credential's largeBlobKey extension output (CTAP 2.3 §12.3, line 12867), present iff requested and the credential carries a key.</summary>
     public const int LargeBlobKey = 0x07;
 
-    /// <summary>The <c>unsignedExtensionOutputs</c> member (<c>0x08</c>, Optional): unsigned extension outputs. Not modeled this wave.</summary>
+    /// <summary>The <c>unsignedExtensionOutputs</c> member (<c>0x08</c>, Optional): unsigned extension outputs. Not modeled.</summary>
     public const int UnsignedExtensionOutputs = 0x08;
 
 

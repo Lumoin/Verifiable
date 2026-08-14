@@ -12,7 +12,7 @@ namespace Verifiable.Cbor;
 
 /// <summary>
 /// Verifies a serialized COSE_Sign1 and surfaces the decoded result — the COSE counterpart of
-/// <see cref="Verifiable.JCose.Jws.VerifyAndDecodeAsync(string, DecodeDelegate, JwtPartDecoder, MemoryPool{byte}, PublicKeyMemory, CancellationToken)"/>.
+/// <see cref="Verifiable.JCose.Jws.VerifyAndDecodeAsync(string, DecodeDelegate, JwtPartDecoder, BaseMemoryPool, PublicKeyMemory, CancellationToken)"/>.
 /// </summary>
 /// <remarks>
 /// This lives in Verifiable.Cbor rather than the lower JCose layer because parsing the wire bytes and
@@ -40,7 +40,7 @@ public static class CoseVerification
     public static async ValueTask<CoseVerificationResult> VerifyAndDecodeAsync(
         ReadOnlyMemory<byte> encodedCoseSign1,
         PublicKeyMemory publicKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(publicKey);

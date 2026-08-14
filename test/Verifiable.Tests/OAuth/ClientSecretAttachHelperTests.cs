@@ -127,7 +127,7 @@ internal sealed class ClientSecretAttachHelperTests
 
 
     /// <summary>
-    /// RFC 6749 §2.3 L864 ("The client MUST NOT use more than one authentication method in each
+    /// RFC 6749 §2.3 ("The client MUST NOT use more than one authentication method in each
     /// request") binds the CLIENT; the RFC has no distinct AS-side "MUST reject a double-credentialed
     /// request" sentence in §2.3/§2.3.1. <see cref="ValidateClientCredentialsDelegate"/> receives BOTH
     /// the incoming request (the <c>Authorization</c> header) and the form fields unconditionally, and
@@ -179,7 +179,7 @@ internal sealed class ClientSecretAttachHelperTests
 
 
     /// <summary>
-    /// RFC 6749 §2.3 L860: "the authorization server MUST NOT rely on public client authentication for
+    /// RFC 6749 §2.3: "the authorization server MUST NOT rely on public client authentication for
     /// the purpose of identifying the client." The architecture satisfies this structurally —
     /// <c>LoadClientRegistrationDelegate</c> resolves the <see cref="ClientRecord"/> from
     /// <c>client_id</c>/tenant BEFORE <see cref="ValidateClientCredentialsDelegate"/> ever runs, and

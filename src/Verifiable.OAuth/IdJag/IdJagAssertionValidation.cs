@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 using Verifiable.JCose;
 using Verifiable.OAuth.JwtBearer;
@@ -43,7 +42,6 @@ namespace Verifiable.OAuth.IdJag;
 /// implementation.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("IdJagAssertionValidation")]
 public static class IdJagAssertionValidation
 {
     /// <summary>

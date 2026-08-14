@@ -56,7 +56,7 @@ internal sealed class GlobalLogoutCaepEmitHttpTests
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
     /// <summary>The memory pool used for all transient signing/verification buffers.</summary>
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     /// <summary>The OP / SSF Transmitter issuer the Receiver is configured to expect.</summary>
     private const string OpIssuer = "https://op.example/";

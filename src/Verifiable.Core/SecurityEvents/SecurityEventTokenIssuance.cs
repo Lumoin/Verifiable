@@ -63,7 +63,7 @@ public static class SecurityEventTokenIssuance
         EncodeDelegate base64UrlEncoder,
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         string? signingKeyId = null,
         SubjectIdentifier? subjectId = null,
         DateTimeOffset? timeOfEvent = null,

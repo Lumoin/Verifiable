@@ -88,7 +88,7 @@ internal sealed class CtapGetAssertionResponseCborWriterTests
 
 
     /// <summary>
-    /// A response carrying <c>largeBlobKey</c> (<c>0x07</c>, wavelb R8) writes it, as a byte string,
+    /// A response carrying <c>largeBlobKey</c> (<c>0x07</c>) writes it, as a byte string,
     /// after the three Required members when no other optional member is present.
     /// </summary>
     [TestMethod]

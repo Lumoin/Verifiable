@@ -100,7 +100,7 @@ public sealed class CertifyCreationInput: ITpmCommandInput, IDisposable
         ReadOnlySpan<byte> creationHash,
         TpmtTkCreation creationTicket,
         TpmAlgIdConstants schemeHashAlg,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return Create(signHandle, objectHandle, qualifyingData, creationHash, creationTicket, TpmAlgIdConstants.TPM_ALG_ECDSA, schemeHashAlg, pool);
     }
@@ -123,7 +123,7 @@ public sealed class CertifyCreationInput: ITpmCommandInput, IDisposable
         ReadOnlySpan<byte> creationHash,
         TpmtTkCreation creationTicket,
         TpmAlgIdConstants schemeHashAlg,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return Create(signHandle, objectHandle, qualifyingData, creationHash, creationTicket, TpmAlgIdConstants.TPM_ALG_RSASSA, schemeHashAlg, pool);
     }
@@ -146,7 +146,7 @@ public sealed class CertifyCreationInput: ITpmCommandInput, IDisposable
         ReadOnlySpan<byte> creationHash,
         TpmtTkCreation creationTicket,
         TpmAlgIdConstants schemeHashAlg,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return Create(signHandle, objectHandle, qualifyingData, creationHash, creationTicket, TpmAlgIdConstants.TPM_ALG_RSAPSS, schemeHashAlg, pool);
     }
@@ -171,7 +171,7 @@ public sealed class CertifyCreationInput: ITpmCommandInput, IDisposable
         TpmtTkCreation creationTicket,
         TpmAlgIdConstants signatureScheme,
         TpmAlgIdConstants schemeHashAlg,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(creationTicket);
         ArgumentNullException.ThrowIfNull(pool);

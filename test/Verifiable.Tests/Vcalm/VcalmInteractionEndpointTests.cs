@@ -67,7 +67,7 @@ internal sealed class VcalmInteractionEndpointTests
     }
 
 
-    // ---- §3.7.1 Interaction URL Format ----
+    // §3.7.1 Interaction URL Format
 
     /// <summary>
     /// §3.7.1: the composed interaction URL MUST carry the <c>iuv=1</c> query parameter, and SHOULD be
@@ -105,7 +105,7 @@ internal sealed class VcalmInteractionEndpointTests
     }
 
 
-    // ---- §3.7.2 Interaction QR Code Format (bounds enforcement) ----
+    // §3.7.2 Interaction QR Code Format (bounds enforcement)
 
     /// <summary>
     /// §3.7.2: a within-bounds interaction URL validates with no advisory.
@@ -162,7 +162,7 @@ internal sealed class VcalmInteractionEndpointTests
     }
 
 
-    // ---- §3.7.3 Interaction Scheme Format ----
+    // §3.7.3 Interaction Scheme Format
 
     /// <summary>
     /// §3.7.3: the <c>interaction:</c> scheme string conforms to <c>scheme = "interaction:" interaction-url</c>.
@@ -181,7 +181,7 @@ internal sealed class VcalmInteractionEndpointTests
     }
 
 
-    // ---- §3.7.4 Interaction Protocols Response (content-negotiated) ----
+    // §3.7.4 Interaction Protocols Response (content-negotiated)
 
     /// <summary>
     /// §3.7.4: GET the interaction URL with <c>Accept: application/json</c> MUST return a
@@ -298,7 +298,7 @@ internal sealed class VcalmInteractionEndpointTests
     }
 
 
-    // ---- §3.7.5 inviteRequest Interaction Protocol ----
+    // §3.7.5 inviteRequest Interaction Protocol
 
     /// <summary>
     /// §3.7.5: a well-formed inviteRequest POST is accepted (200) and recorded under the invite id.
@@ -369,7 +369,7 @@ internal sealed class VcalmInteractionEndpointTests
     }
 
 
-    // ---- §3.7.6 vcapi Interaction Protocol (wired to a §3.6 exchange) ----
+    // §3.7.6 vcapi Interaction Protocol (wired to a §3.6 exchange)
 
     /// <summary>
     /// §3.7.6: the vcapi protocol entry in the §3.7.4 protocols map addresses a REAL §3.6.5 participate

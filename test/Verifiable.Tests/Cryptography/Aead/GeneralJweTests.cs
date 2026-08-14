@@ -23,7 +23,7 @@ internal sealed class GeneralJweTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private static readonly JwtHeaderSerializer JwtHeaderSerializer =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
@@ -282,7 +282,7 @@ internal sealed class GeneralJweTests
     //key, serialize to General JSON, reparse, and decrypt every recipient. Also asserts that
     //a non-recipient key fails to find an entry.
     private async Task AuthcryptRoundTripAsync(
-        Func<MemoryPool<byte>, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
+        Func<BaseMemoryPool, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
         MultiRecipientAuthenticatedKeyAgreementEncryptDelegate encryptAgreement,
         AuthenticatedKeyAgreementDecryptDelegate decryptAgreement,
         int recipientCount)
@@ -385,7 +385,7 @@ internal sealed class GeneralJweTests
     //Drives a full anoncrypt round trip: encrypt to N recipients with one shared ephemeral
     //key (no sender key), serialize to General JSON, reparse, and decrypt every recipient.
     private async Task AnoncryptRoundTripAsync(
-        Func<MemoryPool<byte>, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
+        Func<BaseMemoryPool, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
         MultiRecipientKeyAgreementEncryptDelegate encryptAgreement,
         KeyAgreementDecryptDelegate decryptAgreement,
         string contentEncryptionAlgorithm,

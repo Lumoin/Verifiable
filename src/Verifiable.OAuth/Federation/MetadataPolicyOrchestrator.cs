@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core.Assessment;
 using Verifiable.Core.Diagnostics;
 
@@ -43,7 +42,6 @@ namespace Verifiable.OAuth.Federation;
 /// non-critical unknown operator is not fatal, per §6.1.3.2.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("MetadataPolicyOrchestrator")]
 public static class MetadataPolicyOrchestrator
 {
     /// <summary>

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.JCose;
@@ -31,7 +30,6 @@ namespace Verifiable.Vcalm;
 /// body and acknowledges it. §2.4 boundary MUSTs and §3.8 ProblemDetails apply as throughout.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("VcalmWorkflowEndpoints")]
 public static class VcalmWorkflowEndpoints
 {
     /// <summary>

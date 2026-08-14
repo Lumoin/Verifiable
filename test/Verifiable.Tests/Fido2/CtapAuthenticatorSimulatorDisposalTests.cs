@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
-using static Verifiable.Tests.TestInfrastructure.CtapWave2AuthenticatorFixtures;
+using static Verifiable.Tests.TestInfrastructure.CtapMakeCredentialGetAssertionFixtures;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -53,7 +53,7 @@ internal sealed class CtapAuthenticatorSimulatorDisposalTests
     public async Task DisposeReleasesEveryCredentialInTheStore()
     {
         CtapAuthenticatorSimulator simulator = CreateSimulator("dispose-releases-store");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x21), TestContext.CancellationToken, resident: true);
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x22), TestContext.CancellationToken, resident: false);

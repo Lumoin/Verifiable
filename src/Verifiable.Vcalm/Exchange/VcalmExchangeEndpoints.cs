@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using Verifiable.Core;
@@ -37,7 +36,6 @@ namespace Verifiable.Vcalm.Exchange;
 /// endpoints enforce them; §3.8 RFC 9457 ProblemDetails answer a rejected vcapi message (§3.6 4xx).
 /// </para>
 /// </remarks>
-[DebuggerDisplay("VcalmExchangeEndpoints")]
 public static class VcalmExchangeEndpoints
 {
     /// <summary>

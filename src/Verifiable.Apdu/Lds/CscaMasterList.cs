@@ -52,7 +52,7 @@ public static class CscaMasterList
     /// <exception cref="InvalidOperationException">Thrown when the signed content is not an <c>id-icao-cscaMasterList</c> or is malformed.</exception>
     public static async ValueTask<CscaMasterListContent> ParseAsync(
         CmsSignedData masterList,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(masterList);
@@ -81,7 +81,7 @@ public static class CscaMasterList
     /// <see cref="ApduReader"/> ref struct never crosses an <see langword="await"/>.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the signer and certificate carriers transfers to the returned content; the catch disposes them on a partial parse failure.")]
-    private static CscaMasterListContent ParseContent(ReadOnlySpan<byte> content, ReadOnlySpan<byte> signerCertificate, MemoryPool<byte> pool)
+    private static CscaMasterListContent ParseContent(ReadOnlySpan<byte> content, ReadOnlySpan<byte> signerCertificate, BaseMemoryPool pool)
     {
         var reader = new ApduReader(content);
         ExpectTag(ref reader, SequenceTag, "CSCA Master List");
@@ -134,7 +134,7 @@ public static class CscaMasterList
     /// Copies a DER certificate into a pooled <see cref="PkiCertificateMemory"/> tagged as an X.509 certificate.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned PkiCertificateMemory; the catch disposes it on failure.")]
-    private static PkiCertificateMemory CopyCertificate(ReadOnlySpan<byte> der, MemoryPool<byte> pool)
+    private static PkiCertificateMemory CopyCertificate(ReadOnlySpan<byte> der, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(der.Length);
         try

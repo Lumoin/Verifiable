@@ -42,7 +42,7 @@ public static class JwksEpkExtractor
     public static PublicKeyMemory ExtractP256EncryptionKey(
         string jwksJson,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(jwksJson);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
@@ -136,7 +136,7 @@ public static class JwksEpkExtractor
     public static PublicKeyMemory ExtractEcdhEncryptionKey(
         string jwksJson,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(jwksJson);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);

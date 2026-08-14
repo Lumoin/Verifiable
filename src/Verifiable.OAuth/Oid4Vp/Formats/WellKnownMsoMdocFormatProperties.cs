@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Oid4Vp.Formats;
@@ -8,7 +7,6 @@ namespace Verifiable.OAuth.Oid4Vp.Formats;
 /// within <c>vp_formats_supported</c>, as defined in
 /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#appendix-B.2">OID4VP 1.0 Appendix B.2</see>.
 /// </summary>
-[DebuggerDisplay("WellKnownMsoMdocFormatProperties")]
 public static class WellKnownMsoMdocFormatProperties
 {
     /// <summary>The UTF-8 source literal of <see cref="AlgValuesSupported"/>.</summary>

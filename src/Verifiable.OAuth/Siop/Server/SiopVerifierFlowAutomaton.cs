@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Siop.Server.States;
@@ -10,7 +9,6 @@ namespace Verifiable.OAuth.Siop.Server;
 /// RP's two HTTP boundaries — request preparation and Self-Issued ID Token response receipt — one
 /// <c>StepAsync</c> per boundary.
 /// </summary>
-[DebuggerDisplay("SiopVerifierFlowAutomaton")]
 public static class SiopVerifierFlowAutomaton
 {
     /// <summary>Creates a new SIOP RP flow PDA ready to accept its first <see cref="SiopRequestPrepared"/> input.</summary>

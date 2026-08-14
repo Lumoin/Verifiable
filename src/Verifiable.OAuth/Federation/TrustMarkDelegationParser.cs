@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Federation;
@@ -8,7 +7,6 @@ namespace Verifiable.OAuth.Federation;
 /// <see cref="TrustMarkDelegation"/> per OpenID Federation 1.0 §7.2.2's
 /// structural rules.
 /// </summary>
-[DebuggerDisplay("TrustMarkDelegationParser")]
 public static class TrustMarkDelegationParser
 {
     /// <summary>

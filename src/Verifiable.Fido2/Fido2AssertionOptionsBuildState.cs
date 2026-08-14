@@ -20,7 +20,7 @@ public readonly struct Fido2AssertionOptionsBuildState: IEquatable<Fido2Assertio
     public required string RpId { get; init; }
 
     /// <summary>The memory pool the default challenge transformation rents entropy from.</summary>
-    public required MemoryPool<byte> Pool { get; init; }
+    public required BaseMemoryPool Pool { get; init; }
 
     /// <summary>
     /// Credentials acceptable for this assertion, projected into <c>allowCredentials</c> (rows

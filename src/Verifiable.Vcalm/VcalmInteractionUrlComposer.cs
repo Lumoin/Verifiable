@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 
@@ -27,7 +26,6 @@ namespace Verifiable.Vcalm;
 /// the URL's GET response is <see cref="WellKnownVcalmEndpointNames.VcalmInteractionProtocols"/>.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("VcalmInteractionUrlComposer")]
 public static class VcalmInteractionUrlComposer
 {
     /// <summary>

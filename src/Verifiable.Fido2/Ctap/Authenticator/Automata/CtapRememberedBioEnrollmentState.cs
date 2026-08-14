@@ -6,12 +6,12 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// The in-progress fingerprint enrollment an <c>enrollCaptureNextSample</c> command needs remembered
 /// across separate CTAP2 commands, persisted as a data field on
 /// <see cref="CtapAuthenticatorState.RememberedBioEnrollment"/> — the FOURTH remembered-sequence slot on
-/// that record (R7), sibling to <see cref="CtapRememberedGetAssertionState"/>/
+/// that record, sibling to <see cref="CtapRememberedGetAssertionState"/>/
 /// <see cref="CtapRememberedEnumerateRpsState"/>/<see cref="CtapRememberedEnumerateCredentialsState"/>
 /// but structurally distinct from all three: it remembers a not-yet-persisted template's own capture
 /// PROGRESS, never a pre-verified continuation of an already-authorized request. Every
-/// <c>enrollCaptureNextSample</c> call still carries and verifies its OWN <c>pinUvAuthParam</c> (bio scout
-/// §1.5) — this record carries no authenticating-protocol field for that reason, unlike the other three
+/// <c>enrollCaptureNextSample</c> call still carries and verifies its OWN <c>pinUvAuthParam</c> — this
+/// record carries no authenticating-protocol field for that reason, unlike the other three
 /// remembered-sequence records.
 /// </summary>
 /// <remarks>
@@ -31,7 +31,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// <param name="RemainingSamples">
 /// The number of further GOOD samples this enrollment still needs before it completes
 /// (<see cref="CtapAuthenticatorState.MaxCaptureSamplesRequiredForEnroll"/> minus good samples captured so
-/// far). A non-GOOD capture leaves this value unchanged (bio scout Finding 9).
+/// far). A non-GOOD capture leaves this value unchanged.
 /// </param>
 public sealed record CtapRememberedBioEnrollmentState(
     BioEnrollmentTemplateId TemplateId,

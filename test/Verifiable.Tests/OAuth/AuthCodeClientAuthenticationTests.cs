@@ -17,7 +17,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
-/// Contract wave-4 D6 (item 2): the auth-code token leg attaches confidential-client
+/// The auth-code token leg attaches confidential-client
 /// authentication automatically per <see cref="ClientRegistration.AuthenticationMethod"/>, over the
 /// real wire, for every declared method — <c>client_secret_post</c>, <c>client_secret_basic</c>, and
 /// <c>private_key_jwt</c> — through <see cref="AuthCodeFlowDriver.DriveParAuthorizeCallbackAndTokenAsync"/>,
@@ -42,11 +42,13 @@ internal sealed class AuthCodeClientAuthenticationTests
 
     private const string ClientSecret = "s3cret-of-the-confidential-client";
 
+    private const string WrongClientSecret = "wrong-secret-not-matching-the-validator";
+
     private static Uri ClientBaseUri { get; } = new(ClientId);
 
     private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
     /// <summary>
@@ -249,6 +251,169 @@ internal sealed class AuthCodeClientAuthenticationTests
         Assert.AreNotEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
             "A declared confidential client presenting no credential must not be issued a token.");
         Assert.AreEqual(OAuthErrors.InvalidClient, tokenResult.ErrorCode);
+    }
+
+
+    /// <summary>
+    /// RFC 7523 §3.1: "if client credentials are present in the request, the authorization server
+    /// MUST validate them." <see cref="ClientRecord.TokenEndpointAuthMethod"/> is deliberately left
+    /// UNDECLARED (<see cref="DeclareServerSideAuthMethod"/> is never called) — before this fix,
+    /// <c>RequireClientAuthenticationIfDeclaredAsync</c>'s null/None branch returned success
+    /// immediately without ever consulting whether a credential was attached, so a WRONG
+    /// <c>client_secret</c> on an undeclared-method registration was silently ignored and the token
+    /// was minted anyway. The client here attaches a <c>client_secret_post</c> credential that does
+    /// NOT match what the validator seam accepts, so a token must not be issued.
+    /// </summary>
+    [TestMethod]
+    public async Task PresentedWrongSecretOnUndeclaredMethodFailsClosed()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> wrongSecretMaterial = BuildSecretKeyMaterial(WrongClientSecret);
+        try
+        {
+            await using TestHostShell host = new(TimeProvider);
+            using VerifierKeyMaterial material = host.RegisterDpopClient(
+                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+            //TokenEndpointAuthMethod deliberately left unset (null) — DeclareServerSideAuthMethod is
+            //never called, so the registration never declares a confidential method.
+
+            host.Server.OAuth().ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(
+                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+
+            (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+                await host.CreateOAuthClientAndRegistrationAsync(
+                    material.Registration,
+                    RedirectUri.OriginalString,
+                    profile: PolicyProfile.Rfc6749WithPkce,
+                    TestContext.CancellationToken).ConfigureAwait(false);
+            registration = registration with
+            {
+                AuthenticationMethod = ClientAuthenticationMethod.ClientSecretPost,
+                AuthenticationKeyMaterial = wrongSecretMaterial
+            };
+
+            using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(host.ServerCertificate);
+            HostedAuthorizationServer hosted = host.Host("default");
+            string segment = material.Registration.TenantId.Value;
+
+            (string flowId, _) = await AuthCodeFlowDriver.DriveParAuthorizeAndCallbackAsync(
+                hosted, client, registration, clientFlowStore, segment, RedirectUri, SubjectId, browserClient,
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+            AuthCodeFlowEndpointResult tokenResult = await client.AuthCode.ExchangeTokenAsync(
+                registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreNotEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
+                "A wrong client_secret presented on an undeclared token_endpoint_auth_method must not be issued a token.");
+            Assert.AreEqual(OAuthErrors.InvalidClient, tokenResult.ErrorCode);
+        }
+        finally
+        {
+            wrongSecretMaterial.PublicKey.Dispose();
+            wrongSecretMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// RFC 7523 §3.1's "MUST validate them" cuts both ways: a CORRECT credential presented on an
+    /// undeclared <see cref="ClientRecord.TokenEndpointAuthMethod"/> must authenticate the client
+    /// rather than being hard-refused — the fix is validate-if-present, not reject-if-undeclared.
+    /// Otherwise-identical to <see cref="ClientSecretPostAuthenticatesOverRealWire"/> except
+    /// <see cref="DeclareServerSideAuthMethod"/> is never called, proving the token is minted on the
+    /// strength of the validated credential alone, with no server-side declaration in play.
+    /// </summary>
+    [TestMethod]
+    public async Task PresentedCorrectSecretOnUndeclaredMethodAuthenticates()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> secretMaterial = BuildSecretKeyMaterial(ClientSecret);
+        try
+        {
+            await using TestHostShell host = new(TimeProvider);
+            using VerifierKeyMaterial material = host.RegisterDpopClient(
+                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+            //TokenEndpointAuthMethod deliberately left unset (null) — no DeclareServerSideAuthMethod call.
+
+            host.Server.OAuth().ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(
+                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+
+            (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+                await host.CreateOAuthClientAndRegistrationAsync(
+                    material.Registration,
+                    RedirectUri.OriginalString,
+                    profile: PolicyProfile.Rfc6749WithPkce,
+                    TestContext.CancellationToken).ConfigureAwait(false);
+            registration = registration with
+            {
+                AuthenticationMethod = ClientAuthenticationMethod.ClientSecretPost,
+                AuthenticationKeyMaterial = secretMaterial
+            };
+
+            await DriveAndAssertSucceedsAsync(
+                host, client, registration, clientFlowStore, material.Registration.TenantId.Value).ConfigureAwait(false);
+        }
+        finally
+        {
+            secretMaterial.PublicKey.Dispose();
+            secretMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// The hard-fail arm: an undeclared <see cref="ClientRecord.TokenEndpointAuthMethod"/> whose
+    /// request attaches a credential, but the authorization server never wired
+    /// <see cref="AuthorizationServerIntegration.ValidateClientCredentialsAsync"/> at all. RFC 7523
+    /// §3.1's "MUST validate them" cannot be satisfied by an absent validator, so this must fail
+    /// closed rather than silently proceed as if the credential were never presented.
+    /// </summary>
+    [TestMethod]
+    public async Task PresentedCredentialWithUnwiredValidatorOnUndeclaredMethodFailsClosed()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> secretMaterial = BuildSecretKeyMaterial(ClientSecret);
+        try
+        {
+            await using TestHostShell host = new(TimeProvider);
+            using VerifierKeyMaterial material = host.RegisterDpopClient(
+                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+            //TokenEndpointAuthMethod deliberately left unset (null); ValidateClientCredentialsAsync
+            //deliberately left unwired (null) — the seam-unwired hard-fail arm under test.
+
+            (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+                await host.CreateOAuthClientAndRegistrationAsync(
+                    material.Registration,
+                    RedirectUri.OriginalString,
+                    profile: PolicyProfile.Rfc6749WithPkce,
+                    TestContext.CancellationToken).ConfigureAwait(false);
+            registration = registration with
+            {
+                AuthenticationMethod = ClientAuthenticationMethod.ClientSecretPost,
+                AuthenticationKeyMaterial = secretMaterial
+            };
+
+            using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(host.ServerCertificate);
+            HostedAuthorizationServer hosted = host.Host("default");
+            string segment = material.Registration.TenantId.Value;
+
+            (string flowId, _) = await AuthCodeFlowDriver.DriveParAuthorizeAndCallbackAsync(
+                hosted, client, registration, clientFlowStore, segment, RedirectUri, SubjectId, browserClient,
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+            AuthCodeFlowEndpointResult tokenResult = await client.AuthCode.ExchangeTokenAsync(
+                registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreNotEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
+                "A presented credential with no client-authentication seam configured must not be issued a token.");
+            Assert.AreEqual(OAuthErrors.InvalidClient, tokenResult.ErrorCode);
+        }
+        finally
+        {
+            secretMaterial.PublicKey.Dispose();
+            secretMaterial.PrivateKey.Dispose();
+        }
     }
 
 

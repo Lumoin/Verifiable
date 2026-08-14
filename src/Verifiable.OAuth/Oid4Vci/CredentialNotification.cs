@@ -7,7 +7,6 @@ namespace Verifiable.OAuth.Oid4Vci;
 /// The <c>event</c> values of an OID4VCI 1.0 §11.1 Notification Request — the Wallet's
 /// case-sensitive report on what became of the issued Credentials.
 /// </summary>
-[DebuggerDisplay("Oid4VciNotificationEvents")]
 public static class Oid4VciNotificationEvents
 {
     /// <summary>The UTF-8 source literal of <see cref="CredentialAccepted"/>.</summary>

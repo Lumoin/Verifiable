@@ -90,5 +90,5 @@ namespace Verifiable.Cryptography;
 public delegate ValueTask<TResult> WithKeyMaterialDelegate<TResult>(
     Tag tag,
     KeyMaterialOperation<TResult> operation,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);

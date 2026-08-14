@@ -18,7 +18,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Fido2;
 
 /// <summary>
-/// Capstone C: the wavecm real-Kestrel/real-APDU RP-HTTP ceremony proof that
+/// Capstone C: the real-Kestrel/real-APDU RP-HTTP ceremony proof that
 /// <c>authenticatorCredentialManagement</c>'s <c>deleteCredential</c> has an RP-VISIBLE consequence --
 /// composing <see cref="WebAuthnRelyingPartyCeremonySkin"/> exactly like
 /// <see cref="WebAuthnRpHttpCeremonyAlwaysUvTests"/> does, registering a discoverable credential through
@@ -60,17 +60,17 @@ internal sealed class WebAuthnRpHttpCeremonyCredentialManagementTests
     [TestMethod]
     public async Task DeleteCredentialOverTheWireMakesSubsequentAssertionCeremonyFail()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         var skin = new WebAuthnRelyingPartyCeremonySkin(
-            RpId, Origin, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xF5), "wavecm-user", "Wavecm User", pool,
+            RpId, Origin, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xF5), "cm-user", "Cm User", pool,
             residentKey: ResidentKeyRequirement.Required);
         await using MinimalHttpHost host = await MinimalHttpHost.StartAsync(skin.HandleAsync, cancellationToken).ConfigureAwait(false);
         using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(host.Certificate, host.BaseAddress);
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("webauthn-rp-http-cm-authenticator");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("webauthn-rp-http-cm-authenticator");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await EstablishPinAsync(harness, pool, cancellationToken).ConfigureAwait(false);
 
@@ -90,14 +90,14 @@ internal sealed class WebAuthnRpHttpCeremonyCredentialManagementTests
         using(CredentialId deleteCarrier = CredentialId.Create(storedCredentialIdBytes, pool))
         {
             var deleteDescriptor = new PublicKeyCredentialDescriptor { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Id = deleteCarrier };
-            byte[] subCommandParams = CtapWaveCmFixtures.BuildSubCommandParams(credentialId: deleteDescriptor);
-            byte[] message = CtapWaveCmFixtures.BuildMessage(WellKnownCtapCredentialManagementSubCommands.DeleteCredential, subCommandParams);
-            byte[] param = await CtapWaveConfigFixtures.ComputeSignatureAsync(cmToken, ProtocolId, message, pool, cancellationToken).ConfigureAwait(false);
+            byte[] subCommandParams = CtapCredentialManagementFixtures.BuildSubCommandParams(credentialId: deleteDescriptor);
+            byte[] message = CtapCredentialManagementFixtures.BuildMessage(WellKnownCtapCredentialManagementSubCommands.DeleteCredential, subCommandParams);
+            byte[] param = await CtapConfigFixtures.ComputeSignatureAsync(cmToken, ProtocolId, message, pool, cancellationToken).ConfigureAwait(false);
 
             var deleteRequest = new CtapCredentialManagementRequest(
                 SubCommand: WellKnownCtapCredentialManagementSubCommands.DeleteCredential, CredentialId: deleteDescriptor,
                 PinUvAuthProtocol: (int)ProtocolId, PinUvAuthParam: param);
-            byte[] deleteEnvelope = CtapWaveCmFixtures.BuildCredentialManagementEnvelope(deleteRequest);
+            byte[] deleteEnvelope = CtapCredentialManagementFixtures.BuildCredentialManagementEnvelope(deleteRequest);
             using PooledMemory deleteResponse = await harness.Transceive(deleteEnvelope, pool, cancellationToken).ConfigureAwait(false);
             Assert.AreEqual(WellKnownCtapStatusCodes.Ok, deleteResponse.AsReadOnlySpan()[0], "cm deleteCredential must succeed over the wire.");
         }
@@ -113,14 +113,14 @@ internal sealed class WebAuthnRpHttpCeremonyCredentialManagementTests
         byte[] getClientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(new ClientData(WellKnownClientDataTypes.Get, requestOptions.Challenge!, Origin));
         DigestValue getClientDataHash = Fido2ClientDataHash.Compute(getClientDataJson, pool);
         byte[] gaParam = await SignWithTokenAsync(postDeleteAssertionToken, getClientDataHash.AsReadOnlyMemory(), pool, cancellationToken).ConfigureAwait(false);
-        CtapGetAssertionRequest getAssertionRequest = CtapWave2CapstoneFixtures.BuildGetAssertionRequest(
+        CtapGetAssertionRequest getAssertionRequest = CtapCapstoneFixtures.BuildGetAssertionRequest(
             requestOptions, getClientDataHash, pinUvAuthParam: gaParam, pinUvAuthProtocol: (int)ProtocolId);
 
         CtapCommandException deletedAssertionException = await Assert.ThrowsExactlyAsync<CtapCommandException>(() =>
             CtapAuthenticatorGetAssertionClient.GetAssertionAsync(
                 harness.Transceive, CtapGetAssertionRequestCborWriter.Write, getAssertionRequest, CtapGetAssertionResponseCborReader.Read, pool, cancellationToken)
                 .AsTask());
-        CtapWave2AuthenticatorFixtures.DisposeGetAssertionRequest(getAssertionRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(getAssertionRequest);
         Assert.AreEqual(
             WellKnownCtapStatusCodes.NoCredentials, deletedAssertionException.StatusCode,
             "the authenticator must refuse the post-delete authenticatorGetAssertion call with NoCredentials, on the wire.");
@@ -137,7 +137,7 @@ internal sealed class WebAuthnRpHttpCeremonyCredentialManagementTests
     /// <c>RegistrationResponseJSON</c> envelope, asserting the RP accepted it.
     /// </summary>
     private static async Task RegisterOverRealTransportsWithTokenAsync(
-        HttpClient httpClient, CtapWave2TransportHarness harness, MemoryPool<byte> pool, byte[] token, CancellationToken cancellationToken)
+        HttpClient httpClient, CtapNfcTransportHarness harness, BaseMemoryPool pool, byte[] token, CancellationToken cancellationToken)
     {
         using HttpResponseMessage optionsResponse = await PostAsync(
             httpClient, WebAuthnRelyingPartyCeremonySkin.AttestationOptionsPath, jsonBody: null, cancellationToken).ConfigureAwait(false);
@@ -150,7 +150,7 @@ internal sealed class WebAuthnRpHttpCeremonyCredentialManagementTests
         DigestValue createClientDataHash = Fido2ClientDataHash.Compute(createClientDataJson, pool);
 
         byte[] mcParam = await SignWithTokenAsync(token, createClientDataHash.AsReadOnlyMemory(), pool, cancellationToken).ConfigureAwait(false);
-        CtapMakeCredentialRequest makeCredentialRequest = CtapWave2CapstoneFixtures.BuildMakeCredentialRequest(
+        CtapMakeCredentialRequest makeCredentialRequest = CtapCapstoneFixtures.BuildMakeCredentialRequest(
             creationOptions, createClientDataHash, pool,
             attestationFormatsPreference: [WellKnownWebAuthnAttestationFormats.None],
             pinUvAuthParam: mcParam, pinUvAuthProtocol: (int)ProtocolId);
@@ -158,7 +158,7 @@ internal sealed class WebAuthnRpHttpCeremonyCredentialManagementTests
         CtapMakeCredentialResponse makeCredentialResponse = await CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
             harness.Transceive, CtapMakeCredentialRequestCborWriter.Write, makeCredentialRequest, CtapMakeCredentialResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(makeCredentialRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(makeCredentialRequest);
 
         TaggedMemory<byte> attestationObject = CtapAuthenticatorMakeCredentialClient.BuildAttestationObject(makeCredentialResponse, AttestationObjectCborWriter.Write);
         AttestationObjectParts attestationParts = AttestationObjectCborReader.Parse(attestationObject.Memory);
@@ -181,7 +181,7 @@ internal sealed class WebAuthnRpHttpCeremonyCredentialManagementTests
     /// shape for <c>authenticatorGetAssertion</c>, asserting the RP accepted the resulting assertion.
     /// </summary>
     private static async Task AssertOverRealTransportsWithTokenAsync(
-        HttpClient httpClient, CtapWave2TransportHarness harness, MemoryPool<byte> pool, byte[] token, CancellationToken cancellationToken)
+        HttpClient httpClient, CtapNfcTransportHarness harness, BaseMemoryPool pool, byte[] token, CancellationToken cancellationToken)
     {
         using HttpResponseMessage optionsResponse = await PostAsync(
             httpClient, WebAuthnRelyingPartyCeremonySkin.AssertionOptionsPath, jsonBody: null, cancellationToken).ConfigureAwait(false);
@@ -194,13 +194,13 @@ internal sealed class WebAuthnRpHttpCeremonyCredentialManagementTests
         DigestValue getClientDataHash = Fido2ClientDataHash.Compute(getClientDataJson, pool);
 
         byte[] gaParam = await SignWithTokenAsync(token, getClientDataHash.AsReadOnlyMemory(), pool, cancellationToken).ConfigureAwait(false);
-        CtapGetAssertionRequest getAssertionRequest = CtapWave2CapstoneFixtures.BuildGetAssertionRequest(
+        CtapGetAssertionRequest getAssertionRequest = CtapCapstoneFixtures.BuildGetAssertionRequest(
             requestOptions, getClientDataHash, pinUvAuthParam: gaParam, pinUvAuthProtocol: (int)ProtocolId);
 
         CtapGetAssertionResponse getAssertionResponse = await CtapAuthenticatorGetAssertionClient.GetAssertionAsync(
             harness.Transceive, CtapGetAssertionRequestCborWriter.Write, getAssertionRequest, CtapGetAssertionResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeGetAssertionRequest(getAssertionRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(getAssertionRequest);
 
         bool hasUserHandle = getAssertionResponse.User is not null;
         string assertionEnvelopeJson = WebAuthnRelyingPartyCeremonySkin.BuildAssertionResponseJson(
@@ -222,9 +222,9 @@ internal sealed class WebAuthnRpHttpCeremonyCredentialManagementTests
 
 
     /// <summary>Establishes <see cref="Pin"/> on the simulator behind <paramref name="harness"/>'s real transport.</summary>
-    private static async Task EstablishPinAsync(CtapWave2TransportHarness harness, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task EstablishPinAsync(CtapNfcTransportHarness harness, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
-        using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
+        using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
             .ConfigureAwait(false);
         (byte[] newPinEnc, byte[] pinUvAuthParam) = await session.BuildSetPinMessagesAsync(Pin, cancellationToken).ConfigureAwait(false);
 
@@ -243,9 +243,9 @@ internal sealed class WebAuthnRpHttpCeremonyCredentialManagementTests
     /// it from wire bytes only, over <paramref name="harness"/>'s real transport.
     /// </summary>
     private static async Task<byte[]> IssueTokenAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, int permissions, string? rpId, CancellationToken cancellationToken)
+        CtapNfcTransportHarness harness, BaseMemoryPool pool, int permissions, string? rpId, CancellationToken cancellationToken)
     {
-        using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
+        using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
             .ConfigureAwait(false);
         byte[] pinHashEnc = await session.BuildPinHashEncAsync(Pin, cancellationToken).ConfigureAwait(false);
 
@@ -261,7 +261,7 @@ internal sealed class WebAuthnRpHttpCeremonyCredentialManagementTests
 
 
     /// <summary>Computes <c>authenticate(token, message)</c> under <see cref="ProtocolId"/>'s own truncation rule -- the platform-side computation <c>verify</c> checks a presented <c>pinUvAuthParam</c> against.</summary>
-    private static async Task<byte[]> SignWithTokenAsync(byte[] token, ReadOnlyMemory<byte> message, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<byte[]> SignWithTokenAsync(byte[] token, ReadOnlyMemory<byte> message, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         CtapPinUvAuthProtocol protocol = CtapPinUvAuthProtocol.CreateDefault(ProtocolId);
         using IMemoryOwner<byte> signature = await protocol.AuthenticateAsync(token, message, pool, cancellationToken).ConfigureAwait(false);

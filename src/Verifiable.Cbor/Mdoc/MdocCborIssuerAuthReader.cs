@@ -48,7 +48,7 @@ public static class MdocCborIssuerAuthReader
     [System.Diagnostics.CodeAnalysis.SuppressMessage(
         "Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of wireOwner and parsedCose transfers to the returned MdocIssuerAuth; caller disposes the issuerAuth.")]
-    public static MdocIssuerAuth Read(ReadOnlySpan<byte> encodedCoseSign1, MemoryPool<byte> pool)
+    public static MdocIssuerAuth Read(ReadOnlySpan<byte> encodedCoseSign1, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

@@ -50,7 +50,7 @@ public static class SdSerializerDelegates
     /// </remarks>
     public delegate TEncoded SerializeDisclosureDelegate<TEncoded>(
         SdDisclosure disclosure,
-        MemoryPool<byte> pool);
+        BaseMemoryPool pool);
 
 
     /// <summary>
@@ -62,7 +62,7 @@ public static class SdSerializerDelegates
     /// <returns>The parsed disclosure.</returns>
     public delegate SdDisclosure ParseDisclosureDelegate<TEncoded>(
         TEncoded encoded,
-        MemoryPool<byte> pool);
+        BaseMemoryPool pool);
 
 
     /// <summary>
@@ -84,7 +84,7 @@ public static class SdSerializerDelegates
     public delegate IMemoryOwner<byte> ComputeDisclosureDigestDelegate<TEncoded>(
         TEncoded encoded,
         HashAlgorithmName algorithm,
-        MemoryPool<byte> pool);
+        BaseMemoryPool pool);
 
 
     /// <summary>
@@ -107,7 +107,7 @@ public static class SdSerializerDelegates
     public delegate TWire SerializeSdTokenDelegate<TEnvelope, TWire>(
         SdToken<TEnvelope> token,
         SerializeDisclosureDelegate<string> serializeDisclosure,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
         where TEnvelope : notnull;
 
 
@@ -123,7 +123,7 @@ public static class SdSerializerDelegates
     public delegate SdToken<TEnvelope> ParseSdTokenDelegate<TEnvelope, TWire>(
         TWire input,
         ParseDisclosureDelegate<string> parseDisclosure,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
         where TEnvelope : notnull;
 
 
@@ -144,7 +144,7 @@ public static class SdSerializerDelegates
         SdToken<TEnvelope> token,
         SerializeDisclosureDelegate<string> serializeDisclosure,
         HashAlgorithmName algorithm,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
         where TEnvelope : notnull;
 
 
@@ -153,5 +153,5 @@ public static class SdSerializerDelegates
     /// </summary>
     /// <param name="pool">Memory pool for allocation.</param>
     /// <returns>Salt bytes (minimum 128 bits / 16 bytes).</returns>
-    public delegate IMemoryOwner<byte> GenerateSaltDelegate(MemoryPool<byte> pool);
+    public delegate IMemoryOwner<byte> GenerateSaltDelegate(BaseMemoryPool pool);
 }

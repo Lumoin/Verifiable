@@ -41,7 +41,7 @@ public static class WebVhChainVerification
         ComputeDigestDelegate computeDigest,
         EncodeDelegate base58Encoder,
         DecodeDelegate base58Decoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(entryHashInput);
         ArgumentNullException.ThrowIfNull(computeDigest);
@@ -61,7 +61,7 @@ public static class WebVhChainVerification
         ComputeDigestDelegate computeDigest,
         EncodeDelegate base58Encoder,
         DecodeDelegate base58Decoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         if(entry.Operation is not WebVhRawEntry rawEntry)

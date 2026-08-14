@@ -95,7 +95,7 @@ public static class CredentialBbs2023Extensions
             SerializeBbsBaseProofDelegate serializeBaseProof,
             BbsSignDelegate bbsSign,
             EncodeDelegate encoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -175,7 +175,7 @@ public static class CredentialBbs2023Extensions
             SerializeBbsBaseProofDelegate serializeBaseProof,
             BbsSignDelegate bbsSign,
             EncodeDelegate encoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -326,6 +326,15 @@ public static class CredentialBbs2023Extensions
         /// <param name="exchangeContext">The per-operation exchange context.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>The verification result.</returns>
+        /// <remarks>
+        /// This is a bring-your-own-key primitive: <paramref name="bbsVerify"/> is a plain delegate
+        /// already closed over whatever key its caller chose, never resolved or cross-checked against
+        /// the credential's <c>issuer</c> claim by this method, so the result mints an
+        /// <see cref="AssertedProvenance"/>, never a principal authentication. It exists for callers
+        /// whose key trust is established out of band. The resolving overload below — taking a
+        /// <see cref="DidDocument"/> and a <see cref="BbsVerifySignatureFactoryDelegate"/> instead of
+        /// a pre-bound delegate — is the recommended default.
+        /// </remarks>
         public async ValueTask<CredentialVerificationResult<DataIntegritySecuredCredential>> VerifyBaseProofAsync(
             BbsVerifySignatureDelegate bbsVerify,
             ParseBbsBaseProofDelegate parseBaseProof,
@@ -336,7 +345,7 @@ public static class CredentialBbs2023Extensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
             DecodeDelegate decoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -358,8 +367,115 @@ public static class CredentialBbs2023Extensions
 
             return result.IsValid
                 ? CredentialVerificationResult<DataIntegritySecuredCredential>.Success(
-                    new Verified<DataIntegritySecuredCredential>(credential, VerificationContextTag.Create(credential.Proof?.FirstOrDefault()?.VerificationMethod?.Id)))
+                    Verified<DataIntegritySecuredCredential>.CreateAsserted(credential, AssertedProvenance.OfLabel(credential.Proof?.FirstOrDefault()?.VerificationMethod?.Id)))
                 : CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(result.FailureReason);
+        }
+
+
+        /// <summary>
+        /// Verifies the base proof by RESOLVING the issuer's verification method through
+        /// <paramref name="issuerDidDocument"/> — the recommended default shape. Reuses the SAME
+        /// controller-binding gate the embedded-proof Data Integrity credential path uses
+        /// (<see cref="BoundProvenance.TryBindByControllerArtifact"/> via
+        /// <see cref="SelectiveDisclosureIdentityBinding"/>): bbs-2023 folds into that gate rather
+        /// than special-casing selective disclosure.
+        /// </summary>
+        /// <param name="issuerDidDocument">The issuer's DID document, resolved by the caller through its own DID-resolution seam.</param>
+        /// <param name="bbsVerifyFactory">
+        /// Builds the BBS verify delegate closed over the RESOLVED issuer public key —
+        /// <see cref="BbsVerifySignatureDelegate"/> itself carries no key parameter, so this method
+        /// cannot hand the resolved key to a pre-bound delegate the way the ecdsa-sd-2023 resolving
+        /// overload hands it to <c>CryptoFunctionRegistry</c>.
+        /// </param>
+        /// <param name="parseBaseProof">Delegate to parse the base proof value.</param>
+        /// <param name="partitionStatements">Delegate for partitioning statements.</param>
+        /// <param name="canonicalize">Canonicalization function for JSON-LD to N-Quads.</param>
+        /// <param name="contextResolver">Delegate for resolving JSON-LD contexts.</param>
+        /// <param name="serialize">Delegate for serializing credentials.</param>
+        /// <param name="serializeProofOptions">Delegate for serializing proof options.</param>
+        /// <param name="encoder">Base64URL encoder.</param>
+        /// <param name="decoder">Base64URL decoder.</param>
+        /// <param name="memoryPool">Memory pool for allocations.</param>
+        /// <param name="exchangeContext">The per-operation exchange context.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>
+        /// The verification result. On success the <see cref="Verified{T}"/> carried by the result is
+        /// identity-bound (<see cref="Verified{T}.IsIdentityBound"/> is <see langword="true"/>).
+        /// </returns>
+        /// <remarks>
+        /// Every gate below is a fail-closed short-circuit BEFORE the cryptographic check runs:
+        /// <list type="number">
+        /// <item><description>The proof's declared <c>proofPurpose</c> must be <c>assertionMethod</c>.</description></item>
+        /// <item><description>The proof's <c>verificationMethod</c> must resolve under <paramref name="issuerDidDocument"/>'s <c>assertionMethod</c> relationship, not merely the flat verification-method array.</description></item>
+        /// <item><description>The BBS signature must verify under the resolved method's own key material.</description></item>
+        /// <item><description>The resolved method's own <c>controller</c> must equal <see cref="VerifiableCredential.Issuer"/> (controller-RESOLUTION semantics).</description></item>
+        /// </list>
+        /// Only past every gate does <see cref="BoundProvenance.TryBindByControllerArtifact"/> mint a
+        /// <see cref="Verified{T}"/> whose <see cref="Verified{T}.IsIdentityBound"/> is <see langword="true"/>.
+        /// </remarks>
+        /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
+        public async ValueTask<CredentialVerificationResult<DataIntegritySecuredCredential>> VerifyBaseProofAsync(
+            DidDocument issuerDidDocument,
+            BbsVerifySignatureFactoryDelegate bbsVerifyFactory,
+            ParseBbsBaseProofDelegate parseBaseProof,
+            PartitionStatementsDelegate partitionStatements,
+            CanonicalizationDelegate canonicalize,
+            ContextResolverDelegate? contextResolver,
+            CredentialSerializeDelegate serialize,
+            ProofOptionsSerializeDelegate serializeProofOptions,
+            EncodeDelegate encoder,
+            DecodeDelegate decoder,
+            BaseMemoryPool memoryPool,
+            ExchangeContext exchangeContext,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(issuerDidDocument);
+            ArgumentNullException.ThrowIfNull(bbsVerifyFactory);
+            ArgumentNullException.ThrowIfNull(memoryPool);
+
+            var proof = credential.Proof?.FirstOrDefault();
+            if(proof is null || string.IsNullOrEmpty(proof.ProofValue))
+            {
+                return CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(VerificationFailureReason.NoProof);
+            }
+
+            (VerificationMethod? verificationMethod, VerificationFailureReason resolveFailure) =
+                SelectiveDisclosureIdentityBinding.TryResolveIssuerAssertionMethod(proof, issuerDidDocument);
+            if(verificationMethod is null)
+            {
+                return CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(resolveFailure);
+            }
+
+            using PublicKeyMemory issuerPublicKey = verificationMethod.ToPublicKeyMemory(memoryPool);
+            BbsVerifySignatureDelegate bbsVerify = bbsVerifyFactory(issuerPublicKey.AsReadOnlyMemory());
+
+            var (result, context) = await credential.VerifyBaseProofVerboseAsync(
+                bbsVerify,
+                parseBaseProof,
+                partitionStatements,
+                canonicalize,
+                contextResolver,
+                serialize,
+                serializeProofOptions,
+                encoder,
+                decoder,
+                memoryPool,
+                exchangeContext,
+                cancellationToken).ConfigureAwait(false);
+
+            context?.Dispose();
+            if(!result.IsValid)
+            {
+                return CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(result.FailureReason);
+            }
+
+            BoundProvenance? provenance = SelectiveDisclosureIdentityBinding.TryBindIssuer(
+                credential, verificationMethod, proof.ProofPurpose!, credential);
+
+            return provenance is null
+                || Verified<DataIntegritySecuredCredential>.TryCreateBound(credential, provenance) is not { } verified
+                    ? CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(VerificationFailureReason.ControllerMismatch)
+                    : CredentialVerificationResult<DataIntegritySecuredCredential>.Success(verified);
         }
 
 
@@ -389,7 +505,7 @@ public static class CredentialBbs2023Extensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
             DecodeDelegate decoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -550,7 +666,7 @@ public static class CredentialBbs2023Extensions
             BbsProofGenDelegate bbsProofGen,
             EncodeDelegate encoder,
             DecodeDelegate decoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -613,7 +729,7 @@ public static class CredentialBbs2023Extensions
             BbsProofGenDelegate bbsProofGen,
             EncodeDelegate encoder,
             DecodeDelegate decoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -787,6 +903,14 @@ public static class CredentialBbs2023Extensions
         /// <param name="exchangeContext">The per-operation exchange context.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>The verification result.</returns>
+        /// <remarks>
+        /// This is a bring-your-own-key primitive: <paramref name="bbsProofVerify"/> is a plain
+        /// delegate already closed over whatever key its caller chose, never resolved or cross-checked
+        /// against the credential's <c>issuer</c> claim by this method, so the result mints an
+        /// <see cref="AssertedProvenance"/>, never a principal authentication. The resolving overload
+        /// below — taking a <see cref="DidDocument"/> and a <see cref="BbsProofVerifyFactoryDelegate"/>
+        /// instead of a pre-bound delegate — is the recommended default.
+        /// </remarks>
         public async ValueTask<CredentialVerificationResult<DataIntegritySecuredCredential>> VerifyDerivedProofAsync(
             BbsProofVerifyDelegate bbsProofVerify,
             ParseBbsDerivedProofDelegate parseDerivedProof,
@@ -796,7 +920,7 @@ public static class CredentialBbs2023Extensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
             DecodeDelegate decoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {
@@ -817,8 +941,96 @@ public static class CredentialBbs2023Extensions
 
             return result.IsValid
                 ? CredentialVerificationResult<DataIntegritySecuredCredential>.Success(
-                    new Verified<DataIntegritySecuredCredential>(credential, VerificationContextTag.Create(credential.Proof?.FirstOrDefault()?.VerificationMethod?.Id)))
+                    Verified<DataIntegritySecuredCredential>.CreateAsserted(credential, AssertedProvenance.OfLabel(credential.Proof?.FirstOrDefault()?.VerificationMethod?.Id)))
                 : CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(result.FailureReason);
+        }
+
+
+        /// <summary>
+        /// Verifies a derived proof by RESOLVING the issuer's verification method through
+        /// <paramref name="issuerDidDocument"/> — the recommended default shape. See
+        /// <see cref="VerifyBaseProofAsync(DidDocument, BbsVerifySignatureFactoryDelegate, ParseBbsBaseProofDelegate, PartitionStatementsDelegate, CanonicalizationDelegate, ContextResolverDelegate?, CredentialSerializeDelegate, ProofOptionsSerializeDelegate, EncodeDelegate, DecodeDelegate, BaseMemoryPool, ExchangeContext, CancellationToken)"/>
+        /// for the gate sequence; a derived proof's <c>verificationMethod</c> is the same issuer
+        /// method the base proof carried (<see cref="DeriveProofVerboseAsync"/> copies it through
+        /// unchanged), so the same resolve-and-bind recipe applies.
+        /// </summary>
+        /// <param name="issuerDidDocument">The issuer's DID document, resolved by the caller through its own DID-resolution seam.</param>
+        /// <param name="bbsProofVerifyFactory">Builds the BBS proof-verify delegate closed over the RESOLVED issuer public key.</param>
+        /// <param name="parseDerivedProof">Delegate to parse the derived proof value.</param>
+        /// <param name="canonicalize">Canonicalization function for JSON-LD to N-Quads.</param>
+        /// <param name="contextResolver">Delegate for resolving JSON-LD contexts.</param>
+        /// <param name="serialize">Delegate for serializing credentials.</param>
+        /// <param name="serializeProofOptions">Delegate for serializing proof options.</param>
+        /// <param name="encoder">Base64URL encoder.</param>
+        /// <param name="decoder">Base64URL decoder.</param>
+        /// <param name="memoryPool">Memory pool for allocations.</param>
+        /// <param name="exchangeContext">The per-operation exchange context.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>
+        /// The verification result. On success the <see cref="Verified{T}"/> carried by the result is
+        /// identity-bound (<see cref="Verified{T}.IsIdentityBound"/> is <see langword="true"/>).
+        /// </returns>
+        /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
+        public async ValueTask<CredentialVerificationResult<DataIntegritySecuredCredential>> VerifyDerivedProofAsync(
+            DidDocument issuerDidDocument,
+            BbsProofVerifyFactoryDelegate bbsProofVerifyFactory,
+            ParseBbsDerivedProofDelegate parseDerivedProof,
+            CanonicalizationDelegate canonicalize,
+            ContextResolverDelegate? contextResolver,
+            CredentialSerializeDelegate serialize,
+            ProofOptionsSerializeDelegate serializeProofOptions,
+            EncodeDelegate encoder,
+            DecodeDelegate decoder,
+            BaseMemoryPool memoryPool,
+            ExchangeContext exchangeContext,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(issuerDidDocument);
+            ArgumentNullException.ThrowIfNull(bbsProofVerifyFactory);
+            ArgumentNullException.ThrowIfNull(memoryPool);
+
+            var proof = credential.Proof?.FirstOrDefault();
+            if(proof is null || string.IsNullOrEmpty(proof.ProofValue))
+            {
+                return CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(VerificationFailureReason.NoProof);
+            }
+
+            (VerificationMethod? verificationMethod, VerificationFailureReason resolveFailure) =
+                SelectiveDisclosureIdentityBinding.TryResolveIssuerAssertionMethod(proof, issuerDidDocument);
+            if(verificationMethod is null)
+            {
+                return CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(resolveFailure);
+            }
+
+            using PublicKeyMemory issuerPublicKey = verificationMethod.ToPublicKeyMemory(memoryPool);
+            BbsProofVerifyDelegate bbsProofVerify = bbsProofVerifyFactory(issuerPublicKey.AsReadOnlyMemory());
+
+            var (result, context) = await credential.VerifyDerivedProofVerboseAsync(
+                bbsProofVerify,
+                parseDerivedProof,
+                canonicalize,
+                contextResolver,
+                serialize,
+                serializeProofOptions,
+                encoder,
+                decoder,
+                memoryPool,
+                exchangeContext,
+                cancellationToken).ConfigureAwait(false);
+
+            context?.Dispose();
+            if(!result.IsValid)
+            {
+                return CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(result.FailureReason);
+            }
+
+            BoundProvenance? provenance = SelectiveDisclosureIdentityBinding.TryBindIssuer(
+                credential, verificationMethod, proof.ProofPurpose!, credential);
+
+            return provenance is null
+                || Verified<DataIntegritySecuredCredential>.TryCreateBound(credential, provenance) is not { } verified
+                    ? CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(VerificationFailureReason.ControllerMismatch)
+                    : CredentialVerificationResult<DataIntegritySecuredCredential>.Success(verified);
         }
 
 
@@ -846,7 +1058,7 @@ public static class CredentialBbs2023Extensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
             DecodeDelegate decoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext exchangeContext,
             CancellationToken cancellationToken = default)
         {

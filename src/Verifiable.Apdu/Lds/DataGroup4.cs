@@ -50,7 +50,7 @@ public sealed class DataGroup4: IDisposable
     /// <returns>The parsed <see cref="DataGroup4"/>. The caller disposes it.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the structure is not a well-formed DG4.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the BiometricDataBlock carrier transfers to the returned DataGroup4, which the caller disposes.")]
-    public static DataGroup4 Parse(ReadOnlySpan<byte> dataGroup4, MemoryPool<byte> pool)
+    public static DataGroup4 Parse(ReadOnlySpan<byte> dataGroup4, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -72,7 +72,7 @@ public sealed class DataGroup4: IDisposable
     /// <param name="pool">The memory pool for the file carrier.</param>
     /// <returns>The EF.DG4 <see cref="ElementaryFile"/>. The caller disposes it.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the record lacks the ISO/IEC 19794-6 format identifier.</exception>
-    public static ElementaryFile Write(ReadOnlySpan<byte> irisRecord, MemoryPool<byte> pool)
+    public static ElementaryFile Write(ReadOnlySpan<byte> irisRecord, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

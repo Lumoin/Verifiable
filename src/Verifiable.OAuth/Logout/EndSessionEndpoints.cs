@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -39,7 +38,6 @@ namespace Verifiable.OAuth.Logout;
 /// redirect URIs.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("EndSessionEndpoints")]
 public static class EndSessionEndpoints
 {
     /// <summary>

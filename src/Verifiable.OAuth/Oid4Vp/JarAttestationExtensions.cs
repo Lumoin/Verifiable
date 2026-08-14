@@ -62,7 +62,7 @@ public static class JarAttestationExtensions
         string compactJar,
         DecodeDelegate base64UrlDecoder,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         out VerifierAttestationJwt? attestation)
     {
         ArgumentNullException.ThrowIfNull(compactJar);

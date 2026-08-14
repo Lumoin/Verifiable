@@ -42,7 +42,7 @@ internal sealed class Oid4VpFlowSessionTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     /// <summary>
     /// In-memory secret store keyed by <see cref="KeyId"/>. Each test instance has its

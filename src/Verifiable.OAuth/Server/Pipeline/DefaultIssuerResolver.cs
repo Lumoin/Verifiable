@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core;
 
 namespace Verifiable.OAuth.Server.Pipeline;
@@ -45,7 +44,6 @@ namespace Verifiable.OAuth.Server.Pipeline;
 ///   </item>
 /// </list>
 /// </remarks>
-[DebuggerDisplay("DefaultIssuerResolver")]
 internal static class DefaultIssuerResolver
 {
     /// <summary>

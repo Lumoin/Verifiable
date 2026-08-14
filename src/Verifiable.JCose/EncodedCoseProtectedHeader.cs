@@ -37,9 +37,23 @@ public sealed class EncodedCoseProtectedHeader(IMemoryOwner<byte> sensitiveMemor
     /// <see cref="CryptoTags.CoseEncodedProtectedHeader"/>. Caller takes
     /// ownership of the returned carrier.
     /// </summary>
-    public static EncodedCoseProtectedHeader FromBytes(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
+    /// <remarks>
+    /// RFC 9052 §3's <c>empty_or_serialized_map</c> CDDL (<c>bstr .cbor header_map / bstr
+    /// .size 0</c>) legally admits a genuinely zero-length protected header — the second
+    /// arm, distinct from a serialized empty map (which is one byte, <c>0xa0</c>, wrapped
+    /// as a two-byte bstr). <see cref="BaseMemoryPool.Rent"/> refuses a zero-length
+    /// rental, so an empty <paramref name="bytes"/> is backed by the shared
+    /// <see cref="EmptyMemoryOwner"/> singleton instead of a pool rental — no buffer to
+    /// return, so disposing this carrier is a no-op for that case.
+    /// </remarks>
+    public static EncodedCoseProtectedHeader FromBytes(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
+
+        if(bytes.IsEmpty)
+        {
+            return new EncodedCoseProtectedHeader(EmptyMemoryOwner.Instance, CryptoTags.CoseEncodedProtectedHeader);
+        }
 
         IMemoryOwner<byte> owner = pool.Rent(bytes.Length);
         bytes.CopyTo(owner.Memory.Span);

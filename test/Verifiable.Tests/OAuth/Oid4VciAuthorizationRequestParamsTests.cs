@@ -51,7 +51,7 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
     /// <summary>The Credential Issuer Identifier the Wallet sends as the RFC 8707 resource.</summary>
     private const string IssuerResource = "https://credential-issuer.example.com";
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     /// <summary>The capabilities the Authorization Code flow tests need.</summary>
     private static readonly ImmutableHashSet<CapabilityIdentifier> AuthCodeCapabilities =
@@ -252,9 +252,12 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
 
 
     /// <summary>
-    /// RFC 8707 §2: the <c>resource</c> parameter "MAY appear multiple times." Multiple indicators
-    /// (collapsed space-delimited by the skin, as for <c>scope</c>) are read and surfaced as the
-    /// parsed list; an absent parameter surfaces as <see langword="null"/>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>: "Multiple
+    /// 'resource' parameters MAY be used to indicate that the requested token is intended to be
+    /// used at multiple resources" — the genuine multi-resource wire form is the REPEATED
+    /// parameter, not several URIs packed into one occurrence separated by spaces. Every repeated
+    /// occurrence is read and surfaced as the parsed list; an absent parameter surfaces as
+    /// <see langword="null"/>.
     /// </summary>
     [TestMethod]
     public async Task MultipleResourceIndicatorsAreReadAndSurfaced()
@@ -274,7 +277,7 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
 
         const string secondResource = "https://other-issuer.example.com";
         ServerHttpResponse multi = await RunToAuthorizeAsync(
-            host, material, resource: $"{IssuerResource} {secondResource}").ConfigureAwait(false);
+            host, material, issuerState: null, resources: [IssuerResource, secondResource]).ConfigureAwait(false);
         Assert.AreEqual(302, multi.StatusCode, multi.Body);
         Assert.IsNotNull(seenResource);
         Assert.HasCount(2, seenResource!);
@@ -297,11 +300,26 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
     /// optional <paramref name="issuerState"/> and <paramref name="resource"/> so the
     /// authorization-decision seam observes them.
     /// </summary>
-    private async ValueTask<ServerHttpResponse> RunToAuthorizeAsync(
+    private ValueTask<ServerHttpResponse> RunToAuthorizeAsync(
         TestHostShell host,
         VerifierKeyMaterial material,
         string? issuerState = null,
-        string? resource = null)
+        string? resource = null) =>
+        RunToAuthorizeAsync(host, material, issuerState, resource is null ? null : [resource]);
+
+
+    /// <summary>
+    /// Drives PAR → authorize and returns the authorize response (a 302 on success), pushing the
+    /// optional <paramref name="issuerState"/> and <paramref name="resources"/> so the
+    /// authorization-decision seam observes them. Each entry of <paramref name="resources"/>
+    /// becomes its OWN repeated <c>resource</c> field occurrence (<see cref="RequestFields.Add"/>)
+    /// — RFC 8707 §2's actual multi-resource wire form.
+    /// </summary>
+    private async ValueTask<ServerHttpResponse> RunToAuthorizeAsync(
+        TestHostShell host,
+        VerifierKeyMaterial material,
+        string? issuerState,
+        IReadOnlyList<string>? resources)
     {
         string segment = material.Registration.TenantId.Value;
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
@@ -319,9 +337,12 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
             parFields[OAuthRequestParameterNames.IssuerState] = issuerState;
         }
 
-        if(resource is not null)
+        if(resources is not null)
         {
-            parFields[OAuthRequestParameterNames.Resource] = resource;
+            foreach(string resource in resources)
+            {
+                parFields.Add(OAuthRequestParameterNames.Resource, resource);
+            }
         }
 
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(

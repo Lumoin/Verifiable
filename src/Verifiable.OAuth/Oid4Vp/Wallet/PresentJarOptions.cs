@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography;
 
 namespace Verifiable.OAuth.Oid4Vp.Wallet;
@@ -9,7 +8,6 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet;
 /// credential-format machinery (resolution, disclosure selection, presentation
 /// building) lives behind <see cref="Oid4VpWalletConfiguration.ProduceVpTokenPresentations"/>.
 /// </summary>
-[DebuggerDisplay("PresentJarOptions")]
 public sealed record PresentJarOptions
 {
     /// <summary>

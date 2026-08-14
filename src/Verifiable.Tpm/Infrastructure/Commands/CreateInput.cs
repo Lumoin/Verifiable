@@ -154,7 +154,7 @@ public sealed class CreateInput: ITpmCommandInput, IDisposable
         string? password,
         TpmEccCurveConstants curve,
         TpmtEccScheme scheme,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         TpmaObject objectAttributes =
             TpmaObject.FIXED_TPM |

@@ -146,7 +146,7 @@ public static class Bbs2023CborSerializer
     public static Bbs2023BaseProofValue ParseBaseProof(
         string proofValue,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ArgumentException.ThrowIfNullOrEmpty(proofValue);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
@@ -326,7 +326,7 @@ public static class Bbs2023CborSerializer
     public static Bbs2023DerivedProofValue ParseDerivedProof(
         string proofValue,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ArgumentException.ThrowIfNullOrEmpty(proofValue);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);

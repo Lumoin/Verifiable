@@ -37,7 +37,7 @@ namespace Verifiable.Tests.OAuth;
 /// <para>
 /// The token and refresh legs each present a real RFC 9449 DPoP proof for the SAME key, built directly
 /// (not through <see cref="Verifiable.OAuth.AuthCode.AuthCodeClient.RefreshAsync(Verifiable.OAuth.Client.ClientRegistration, Verifiable.OAuth.AuthCode.RefreshTokenRequest, System.Threading.CancellationToken)"/>,
-/// whose current wiring does not attach a DPoP proof — see the integrator notes on this wave). The
+/// whose current wiring does not attach a DPoP proof). The
 /// refresh leg's bound thumbprint forces <c>dpopRequired=true</c> server-side
 /// (<see cref="Verifiable.OAuth.AuthCode.Server.DpopTokenEndpointValidation"/>), so a nonce-less proof
 /// there deterministically draws one RFC 9449 §8.1 <c>use_dpop_nonce</c> challenge; the helper retries

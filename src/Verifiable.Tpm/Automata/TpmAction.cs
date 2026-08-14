@@ -690,7 +690,7 @@ public sealed record TpmStartPolicySessionAction(
 /// <summary>
 /// Declares that the simulator must verify one queued session's command HMAC before the next transition (TPM 2.0
 /// Library Part 1, clause 19.6; Part 3, clause 5.6, check 8) — the shared mechanism every session-authorized
-/// command transition in this wave routes through. Emitted by a command's entry transition (and, while sessions
+/// command transition routes through. Emitted by a command's entry transition (and, while sessions
 /// remain queued, re-emitted by <c>OnCommandHmacVerified</c>); the effectful loop recomputes cpHash over
 /// <see cref="HandleNames"/>/<see cref="ParameterArea"/> and the expected HMAC for <see cref="Current"/>, then
 /// feeds the outcome back as a <see cref="TpmCommandHmacVerified"/> input.
@@ -980,8 +980,8 @@ public sealed record TpmRsaVerifySignatureAction(
 /// hash — independent of <see cref="PolicyHashAlgorithm"/>) through the registered async digest seam, calls the
 /// injected <see cref="TpmEccDigestVerifyDelegate"/>, and feeds the boolean result back as a
 /// <see cref="TpmPolicySignedVerified"/> input. Unlike <see cref="TpmVerifySignatureAction"/>, no
-/// <c>TPMT_TK_VERIFIED</c>/<c>TPMT_TK_AUTH</c> is produced here — PolicySigned's real ticket mint is deferred to a
-/// future wave, so the response always frames a NULL ticket regardless of this action's outcome.
+/// <c>TPMT_TK_VERIFIED</c>/<c>TPMT_TK_AUTH</c> is produced here — PolicySigned's real ticket mint is not yet
+/// implemented, so the response always frames a NULL ticket regardless of this action's outcome.
 /// </summary>
 /// <param name="PolicySession">The policy session to extend on a successful verification.</param>
 /// <param name="AuthObjectName">The authorizing key's Name, folded into the policyDigest fold (<c>arg2</c> of <c>PolicyUpdate</c>).</param>
@@ -1079,7 +1079,7 @@ public sealed record TpmVerifyPolicyAuthorizeTicketAction(
 /// </summary>
 /// <remarks>
 /// <see cref="SessionValue"/> is the decrypt session's <c>sessionKey</c> ALONE (never <c>sessionKey ‖
-/// authValue</c>): the decrypt session in this wave's <c>TPM2_Create()</c> form is always a SEPARATE session that
+/// authValue</c>): the decrypt session in this <c>TPM2_Create()</c> form is always a SEPARATE session that
 /// authorizes no entity of its own, so the binding the encryption formula would otherwise fold in never applies
 /// (Part 1, clause 21.1 — encryption's inclusion rule is keyed on whether the decrypt session ITSELF authorizes
 /// an entity in this command, independent of the command-HMAC bind-omission rule).
@@ -1108,7 +1108,7 @@ public sealed record TpmDecryptCreateSensitiveAction(
 /// <c>inSensitive</c> has been decrypted (if applicable) and decoded; the effectful loop builds the sealed
 /// object's wrapped private blob, exported public area, and creation by-products exactly as
 /// <see cref="TpmSealDataAction"/> does, then rolls a fresh nonceTPM per real session, computes rpHash over the
-/// (unencrypted — response encryption is out of this wave's scope for <c>TPM2_Create()</c>) response parameter
+/// (unencrypted — response encryption is out of scope for <c>TPM2_Create()</c>) response parameter
 /// area, and each real session's own response HMAC keyed on its own <c>sessionKey ‖ authValue</c> (Part 1,
 /// clause 19.6.8).
 /// </summary>

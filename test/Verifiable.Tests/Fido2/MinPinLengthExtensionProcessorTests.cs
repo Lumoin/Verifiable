@@ -16,7 +16,7 @@ namespace Verifiable.Tests.Fido2;
 
 /// <summary>
 /// Tests for <see cref="MinPinLengthExtensionProcessor"/>: the <c>minPinLength</c> extension's RP-side
-/// authenticator-output claim processing (CTAP 2.3 waveext R13).
+/// authenticator-output claim processing (CTAP 2.3 §12.5).
 /// </summary>
 /// <remarks>
 /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#sctn-minpinlength-extension">
@@ -115,7 +115,7 @@ internal sealed class MinPinLengthExtensionProcessorTests
 
 
     /// <summary>
-    /// Establishes a PIN, authorizes <see cref="CtapWave2AuthenticatorFixtures.DefaultRpId"/> for the
+    /// Establishes a PIN, authorizes <see cref="CtapMakeCredentialGetAssertionFixtures.DefaultRpId"/> for the
     /// <c>minPinLength</c> extension via <c>setMinPINLength</c>'s <c>minPinLengthRPIDs</c> parameter,
     /// mints a credential requesting <c>minPinLength</c> through <see cref="CtapAuthenticatorSimulator"/>'s
     /// real, in-process <c>authenticatorMakeCredential</c> pipeline, decodes its authData through
@@ -126,24 +126,24 @@ internal sealed class MinPinLengthExtensionProcessorTests
     /// </summary>
     private static async Task<byte[]> AuthorizeRpAndMintMinPinLengthAuthenticatorOutputBytesAsync(CancellationToken cancellationToken)
     {
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("minpinlength-processor");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("minpinlength-processor");
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
-        await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, cancellationToken);
-        byte[] token = await CtapWaveConfigFixtures.IssueTokenAsync(
+        await CtapConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, cancellationToken);
+        byte[] token = await CtapConfigFixtures.IssueTokenAsync(
             simulator, pool, protocolId, DefaultPin, WellKnownCtapPinUvAuthTokenPermissions.Acfg, rpId: null, cancellationToken);
 
-        byte[] subCommandParams = CtapWaveConfigFixtures.BuildSubCommandParams(minPinLengthRpIds: [CtapWave2AuthenticatorFixtures.DefaultRpId]);
-        byte[] message = CtapWaveConfigFixtures.BuildMessage(WellKnownCtapAuthenticatorConfigSubCommands.SetMinPinLength, subCommandParams);
-        byte[] param = await CtapWaveConfigFixtures.ComputeSignatureAsync(token, protocolId, message, pool, cancellationToken);
+        byte[] subCommandParams = CtapConfigFixtures.BuildSubCommandParams(minPinLengthRpIds: [CtapMakeCredentialGetAssertionFixtures.DefaultRpId]);
+        byte[] message = CtapConfigFixtures.BuildMessage(WellKnownCtapAuthenticatorConfigSubCommands.SetMinPinLength, subCommandParams);
+        byte[] param = await CtapConfigFixtures.ComputeSignatureAsync(token, protocolId, message, pool, cancellationToken);
 
         var configRequest = new CtapAuthenticatorConfigRequest(
             SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.SetMinPinLength,
-            MinPinLengthRpIds: [CtapWave2AuthenticatorFixtures.DefaultRpId],
+            MinPinLengthRpIds: [CtapMakeCredentialGetAssertionFixtures.DefaultRpId],
             PinUvAuthProtocol: (int)protocolId,
             PinUvAuthParam: param);
-        using(PooledMemory configResponse = await CtapWaveConfigFixtures.SendAuthenticatorConfigAsync(simulator, configRequest, pool, cancellationToken))
+        using(PooledMemory configResponse = await CtapConfigFixtures.SendAuthenticatorConfigAsync(simulator, configRequest, pool, cancellationToken))
         {
             if(!WellKnownCtapStatusCodes.IsOk(configResponse.AsReadOnlySpan()[0]))
             {
@@ -151,9 +151,9 @@ internal sealed class MinPinLengthExtensionProcessorTests
             }
         }
 
-        ReadOnlyMemory<byte> extensions = CtapWave2AuthenticatorFixtures.BuildMakeCredentialExtensionsInput(minPinLength: true);
-        CtapMakeCredentialRequest request = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(pool, extensions: extensions);
-        using PooledMemory response = await CtapWave2AuthenticatorFixtures.SendMakeCredentialAsync(simulator, request, pool, cancellationToken);
+        ReadOnlyMemory<byte> extensions = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialExtensionsInput(minPinLength: true);
+        CtapMakeCredentialRequest request = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(pool, extensions: extensions);
+        using PooledMemory response = await CtapMakeCredentialGetAssertionFixtures.SendMakeCredentialAsync(simulator, request, pool, cancellationToken);
 
         CtapMakeCredentialResponse decoded = CtapMakeCredentialResponseCborReader.Read(response.AsReadOnlyMemory()[1..]);
         using AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(decoded.AuthData, CredentialPublicKeyCborReader.Read, pool);

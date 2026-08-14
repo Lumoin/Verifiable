@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using Verifiable.Core;
@@ -80,7 +79,6 @@ namespace Verifiable.OAuth.Oidc;
 /// <c>System.Text.Json</c>.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("UserInfoEndpoints")]
 public static class UserInfoEndpoints
 {
     /// <summary>

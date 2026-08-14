@@ -99,8 +99,8 @@ public sealed record CtapPinUvAuthProtocol(
     /// <summary>
     /// Builds a protocol instance whose six crypto delegates are resolved from the process-wide
     /// crypto provider registries rather than supplied by the caller. This is the default composition
-    /// <see cref="CtapAuthenticatorSimulator"/> uses so <c>getKeyAgreement</c> (the only operation this
-    /// wave calls, itself independent of every injected delegate - see <see cref="GetPublicKey"/>) works
+    /// <see cref="CtapAuthenticatorSimulator"/> uses so <c>getKeyAgreement</c> (the only operation currently
+    /// called, itself independent of every injected delegate - see <see cref="GetPublicKey"/>) works
     /// without every composition root having to hand-wire all six delegates itself; a caller needing a
     /// customized composition (deterministic KATs, a non-default provider) still constructs
     /// <see cref="CtapPinUvAuthProtocol"/> directly.
@@ -178,7 +178,7 @@ public sealed record CtapPinUvAuthProtocol(
     public async ValueTask<IMemoryOwner<byte>> DecapsulateAsync(
         PrivateKeyMemory ownPrivateKey,
         CoseKey peerKeyAgreementKey,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(ownPrivateKey);
@@ -211,7 +211,7 @@ public sealed record CtapPinUvAuthProtocol(
     public ValueTask<Ciphertext> EncryptAsync(
         ReadOnlyMemory<byte> key,
         ReadOnlyMemory<byte> plaintext,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -240,7 +240,7 @@ public sealed record CtapPinUvAuthProtocol(
     public ValueTask<DecryptedContent> DecryptAsync(
         ReadOnlyMemory<byte> key,
         ReadOnlyMemory<byte> ciphertext,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -270,7 +270,7 @@ public sealed record CtapPinUvAuthProtocol(
     public async ValueTask<IMemoryOwner<byte>> AuthenticateAsync(
         ReadOnlyMemory<byte> key,
         ReadOnlyMemory<byte> message,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -323,7 +323,7 @@ public sealed record CtapPinUvAuthProtocol(
         ReadOnlyMemory<byte> key,
         ReadOnlyMemory<byte> message,
         ReadOnlyMemory<byte> signature,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -352,7 +352,7 @@ public sealed record CtapPinUvAuthProtocol(
     /// <summary>
     /// Dispatches to this protocol's <c>kdf(Z)</c> (CTAP 2.3 §6.5.6 line 6154-6156 / §6.5.7 line 6224-6229).
     /// </summary>
-    private ValueTask<IMemoryOwner<byte>> KdfAsync(ReadOnlyMemory<byte> z, MemoryPool<byte> pool, CancellationToken cancellationToken) =>
+    private ValueTask<IMemoryOwner<byte>> KdfAsync(ReadOnlyMemory<byte> z, BaseMemoryPool pool, CancellationToken cancellationToken) =>
         Id switch
         {
             CtapPinUvAuthProtocolId.One => KdfProtocolOneAsync(z, pool, cancellationToken),
@@ -362,7 +362,7 @@ public sealed record CtapPinUvAuthProtocol(
 
 
     /// <summary>Protocol one's <c>kdf(Z) = SHA-256(Z)</c> (CTAP 2.3 §6.5.6, line 6154-6156): a single hash, the whole 32-byte output is the shared secret.</summary>
-    private async ValueTask<IMemoryOwner<byte>> KdfProtocolOneAsync(ReadOnlyMemory<byte> z, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private async ValueTask<IMemoryOwner<byte>> KdfProtocolOneAsync(ReadOnlyMemory<byte> z, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         (DigestValue digest, CryptoEvent? digestEvent) = await ComputeDigest(
             new ReadOnlySequence<byte>(z), Sha256DigestLength, CryptoTags.Sha256Digest, pool,
@@ -371,7 +371,7 @@ public sealed record CtapPinUvAuthProtocol(
 
         using(digest)
         {
-            IMemoryOwner<byte> sharedSecret = pool.Rent(Sha256DigestLength);
+            IMemoryOwner<byte> sharedSecret = pool.Rent(Sha256DigestLength, AllocationKind.Pinned);
             digest.AsReadOnlySpan().CopyTo(sharedSecret.Memory.Span);
 
             return sharedSecret;
@@ -386,7 +386,7 @@ public sealed record CtapPinUvAuthProtocol(
     /// <c>[0,32)</c> from the <c>"CTAP2 HMAC key"</c> info label, bytes <c>[32,64)</c> from
     /// <c>"CTAP2 AES key"</c>.
     /// </summary>
-    private static async ValueTask<IMemoryOwner<byte>> KdfProtocolTwoAsync(ReadOnlyMemory<byte> z, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async ValueTask<IMemoryOwner<byte>> KdfProtocolTwoAsync(ReadOnlyMemory<byte> z, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using IMemoryOwner<byte> zeroSalt = pool.Rent(Sha256DigestLength);
         zeroSalt.Memory.Span[..Sha256DigestLength].Clear();
@@ -402,7 +402,7 @@ public sealed record CtapPinUvAuthProtocol(
                 HashAlgorithmName.SHA256, salt, z, ProtocolTwoAesKeyInfo, Sha256DigestLength, pool, cancellationToken).ConfigureAwait(false);
             try
             {
-                IMemoryOwner<byte> sharedSecret = pool.Rent(ProtocolTwoSharedSecretLength);
+                IMemoryOwner<byte> sharedSecret = pool.Rent(ProtocolTwoSharedSecretLength, AllocationKind.Pinned);
                 hmacKeyHalf.Memory.Span[..ProtocolTwoHmacKeyLength].CopyTo(sharedSecret.Memory.Span);
                 aesKeyHalf.Memory.Span[..Sha256DigestLength].CopyTo(sharedSecret.Memory.Span[ProtocolTwoHmacKeyLength..]);
 
@@ -423,7 +423,7 @@ public sealed record CtapPinUvAuthProtocol(
 
 
     /// <summary>Protocol one's <c>encrypt</c> (CTAP 2.3 §6.5.6, line 6201-6203): AES-256-CBC with an all-zero IV, no padding.</summary>
-    private async ValueTask<Ciphertext> EncryptProtocolOneAsync(ReadOnlyMemory<byte> key, ReadOnlyMemory<byte> plaintext, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private async ValueTask<Ciphertext> EncryptProtocolOneAsync(ReadOnlyMemory<byte> key, ReadOnlyMemory<byte> plaintext, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using IMemoryOwner<byte> zeroIv = pool.Rent(AesBlockLength);
         zeroIv.Memory.Span[..AesBlockLength].Clear();
@@ -442,7 +442,7 @@ public sealed record CtapPinUvAuthProtocol(
     /// leading 32 bytes to select the AES-key half, generates a fresh random 16-byte IV, and returns
     /// <c>iv || AES-256-CBC(plaintext, aesKey, iv)</c>.
     /// </summary>
-    private async ValueTask<Ciphertext> EncryptProtocolTwoAsync(ReadOnlyMemory<byte> key, ReadOnlyMemory<byte> plaintext, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private async ValueTask<Ciphertext> EncryptProtocolTwoAsync(ReadOnlyMemory<byte> key, ReadOnlyMemory<byte> plaintext, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ReadOnlyMemory<byte> aesKey = key[ProtocolTwoHmacKeyLength..];
 
@@ -473,7 +473,7 @@ public sealed record CtapPinUvAuthProtocol(
 
 
     /// <summary>Protocol one's <c>decrypt</c> (CTAP 2.3 §6.5.6, line 6204-6206): AES-256-CBC with an all-zero IV.</summary>
-    private async ValueTask<DecryptedContent> DecryptProtocolOneAsync(ReadOnlyMemory<byte> key, ReadOnlyMemory<byte> ciphertext, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private async ValueTask<DecryptedContent> DecryptProtocolOneAsync(ReadOnlyMemory<byte> key, ReadOnlyMemory<byte> ciphertext, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using IMemoryOwner<byte> zeroIv = pool.Rent(AesBlockLength);
         zeroIv.Memory.Span[..AesBlockLength].Clear();
@@ -493,7 +493,7 @@ public sealed record CtapPinUvAuthProtocol(
     /// leading 32 bytes to select the AES-key half.
     /// </summary>
     /// <exception cref="ArgumentException">Thrown when <paramref name="ciphertext"/> is shorter than 16 bytes.</exception>
-    private async ValueTask<DecryptedContent> DecryptProtocolTwoAsync(ReadOnlyMemory<byte> key, ReadOnlyMemory<byte> ciphertext, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private async ValueTask<DecryptedContent> DecryptProtocolTwoAsync(ReadOnlyMemory<byte> key, ReadOnlyMemory<byte> ciphertext, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(ciphertext.Length < AesBlockLength)
         {

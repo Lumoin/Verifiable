@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.Server;
 
@@ -26,7 +25,6 @@ namespace Verifiable.Vcalm;
 /// unwired OAuth seam fails.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("VcalmIntegration")]
 public sealed class VcalmIntegration: ServerIntegration
 {
     /// <summary>

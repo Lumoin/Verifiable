@@ -17,15 +17,15 @@ namespace Verifiable.Tests.Federation;
 /// Generates fresh P-256 keys per node, mints signed Entity Statements
 /// (both Configurations and Subordinate), and assembles
 /// <see cref="TrustChain"/> instances along with the raw compact JWS list
-/// expected by the chunk-4 chain validator orchestration.
+/// expected by the chain validator orchestration.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Scope: enough to exercise <see cref="EntityStatementValidator"/> and
-/// <see cref="TrustChainValidator"/> against the chunk-3 profiles in the
+/// <see cref="TrustChainValidator"/> against representative profiles in the
 /// happy-path and clearly-malformed cases. The fixture does NOT support
 /// trust marks, federation HTTP fetch, metadata-policy operator
-/// combinations, or pre-baked failure topologies — chunk 9's property
+/// combinations, or pre-baked failure topologies — the property
 /// tests build failure cases by tweaking parameters (negative iat,
 /// wrong sub, missing jwks) or by constructing
 /// <see cref="TrustChain"/> instances directly.
@@ -94,7 +94,7 @@ internal static class FederationTestRing
     /// Mints an Entity Configuration (self-issued) signed by
     /// <paramref name="node"/>. Returns the parsed
     /// <see cref="EntityStatement"/>, the unverified header (for feeding
-    /// into the chunk-3 context), and the compact JWS string (for
+    /// into the trust-chain context), and the compact JWS string (for
     /// signature verification by the orchestrator).
     /// </summary>
     public static async ValueTask<MintedStatement> MintEntityConfigurationAsync(
@@ -309,6 +309,8 @@ internal static class FederationTestRing
         DateTimeOffset issuedAt,
         DateTimeOffset? expiresAt = null,
         IReadOnlyDictionary<string, object>? extraClaims = null,
+        bool includeKid = true,
+        string? kidOverride = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(issuer);
@@ -319,8 +321,20 @@ internal static class FederationTestRing
         {
             [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.TrustMarkJwt,
             [WellKnownJwkMemberNames.Alg] = AlgorithmName,
-            [WellKnownJwkMemberNames.Kid] = issuer.Kid,
         };
+
+        //Federation §7 makes the kid header a MUST on Trust Mark JWTs; the in-chain resolver key-pins on it and
+        //no longer falls back to a first published key when it is absent. Callers that publish their key under
+        //an id the ring node does not carry (e.g. the server's federation signing key id) pass kidOverride so
+        //the mark references the published key; includeKid: false mints the (rejectable) kid-less mark.
+        if(kidOverride is not null)
+        {
+            headerDict[WellKnownJwkMemberNames.Kid] = kidOverride;
+        }
+        else if(includeKid)
+        {
+            headerDict[WellKnownJwkMemberNames.Kid] = issuer.Kid;
+        }
 
         Dictionary<string, object> payloadDict = new(StringComparer.Ordinal)
         {

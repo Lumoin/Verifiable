@@ -1,3 +1,4 @@
+using Lumoin.Base;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
@@ -52,7 +53,7 @@ public static class AcdcCompaction
     /// <param name="cancellationToken">Cancels an in-flight digest on a hardware-async backend (TPM2_Hash, KMS).</param>
     /// <returns>The compacted field map: each section reduced to its SAID (depth-first for a section with nested SAIDed subblocks), the version string restamped to the compacted size, and the top-level <c>d</c> set to the SAID over the compacted form.</returns>
     /// <exception cref="AcdcException">A required top-level field is missing, or a section block has no SAID field to compact against.</exception>
-    public static async ValueTask<MessageFieldMap> ToCompactFormAsync(MessageFieldMap expanded, AcdcSerializer serialize, ComputeDigestDelegate computeDigest, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static async ValueTask<MessageFieldMap> ToCompactFormAsync(MessageFieldMap expanded, AcdcSerializer serialize, ComputeDigestDelegate computeDigest, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(expanded);
         ArgumentNullException.ThrowIfNull(serialize);
@@ -119,7 +120,7 @@ public static class AcdcCompaction
     /// <param name="cancellationToken">Cancels an in-flight digest on a hardware-async backend (TPM2_Hash, KMS).</param>
     /// <returns>The section's SAID, taken over its block-level expanded form with every nested SAIDed subblock compacted to its SAID.</returns>
     /// <exception cref="AcdcException">A SAIDed block has no SAID <c>d</c> field to compact against (for example a schema block, whose SAID field is <c>$id</c>).</exception>
-    public static async ValueTask<string> DeriveSectionSaidAsync(MessageFieldMap sectionBlock, AcdcSerializer serialize, ComputeDigestDelegate computeDigest, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static async ValueTask<string> DeriveSectionSaidAsync(MessageFieldMap sectionBlock, AcdcSerializer serialize, ComputeDigestDelegate computeDigest, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(sectionBlock);
         ArgumentNullException.ThrowIfNull(serialize);
@@ -182,7 +183,7 @@ public static class AcdcCompaction
     /// <param name="pool">The pool the digest buffers are rented from.</param>
     /// <param name="cancellationToken">Cancels an in-flight digest on a hardware-async backend (TPM2_Hash, KMS).</param>
     /// <returns>The CESR-encoded SAID recomputed over the serialization.</returns>
-    private static ValueTask<string> ComputeSaidAsync(MessageFieldMap map, string claimedSaid, AcdcSerializer serialize, ComputeDigestDelegate computeDigest, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static ValueTask<string> ComputeSaidAsync(MessageFieldMap map, string claimedSaid, AcdcSerializer serialize, ComputeDigestDelegate computeDigest, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         var buffer = new ArrayBufferWriter<byte>();
         serialize(map, buffer);

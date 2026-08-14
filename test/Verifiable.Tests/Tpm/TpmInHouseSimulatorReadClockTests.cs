@@ -33,7 +33,7 @@ internal sealed class TpmInHouseSimulatorReadClockTests
     [TestMethod]
     public async Task ReadClockAdvancesByTheDeterministicQuantumAcrossCommands()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = CreatePoweredOff();
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -69,7 +69,7 @@ internal sealed class TpmInHouseSimulatorReadClockTests
     [TestMethod]
     public async Task TimeResetsButClockDoesNotAcrossAShutdownStateStartupClearRestart()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = CreatePoweredOff();
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -104,7 +104,7 @@ internal sealed class TpmInHouseSimulatorReadClockTests
     [TestMethod]
     public async Task ResetCountAndRestartCountTransitionAcrossResetRestartAndResume()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = CreatePoweredOff();
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -153,7 +153,7 @@ internal sealed class TpmInHouseSimulatorReadClockTests
     [TestMethod]
     public async Task ClockSafeIsNoAfterAnUnorderlyResetFollowingPriorOperation()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = CreatePoweredOff();
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -184,7 +184,7 @@ internal sealed class TpmInHouseSimulatorReadClockTests
     /// <param name="registry">The response codec registry.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The current <c>TPMS_TIME_INFO</c>.</returns>
-    private async Task<TpmsTimeInfo> ReadClockAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool)
+    private async Task<TpmsTimeInfo> ReadClockAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
     {
         TpmResult<ReadClockResponse> result = await TpmCommandExecutor.ExecuteAsync<ReadClockResponse>(
             tpm, new ReadClockInput(), [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -203,7 +203,7 @@ internal sealed class TpmInHouseSimulatorReadClockTests
     /// <param name="simulator">The simulator to submit to.</param>
     /// <param name="input">The command input.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task SubmitAndAssertSuccessAsync(TpmSimulator simulator, ITpmCommandInput input, MemoryPool<byte> pool)
+    private async Task SubmitAndAssertSuccessAsync(TpmSimulator simulator, ITpmCommandInput input, BaseMemoryPool pool)
     {
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
         using IMemoryOwner<byte> owner = pool.Rent(length);

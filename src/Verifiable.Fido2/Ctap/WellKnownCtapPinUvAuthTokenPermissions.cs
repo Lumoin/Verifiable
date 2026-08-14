@@ -17,7 +17,7 @@ namespace Verifiable.Fido2.Ctap;
 /// tri-state) — so <see cref="Mc"/>, <see cref="Ga"/>, <see cref="Acfg"/>, <see cref="Cm"/>,
 /// <see cref="Be"/>, and <see cref="Lbw"/> are the only permissions ever grantable (via the PIN path;
 /// <c>getPinUvAuthTokenUsingUvWithPermissions</c>'s own §6.5.5.7.3 statement list denies <see cref="Acfg"/>
-/// while granting the same other five, R5) — <see cref="Pcmr"/> is the sole permission this profile can
+/// while granting the same other five) — <see cref="Pcmr"/> is the sole permission this profile can
 /// never grant on either token path. Every bit's value is spec-fixed regardless of which are reachable.
 /// </remarks>
 public static class WellKnownCtapPinUvAuthTokenPermissions
@@ -74,7 +74,7 @@ public static class WellKnownCtapPinUvAuthTokenPermissions
     /// authenticator always advertises <c>authnrCfg:true</c>, so the permission-statement gate's
     /// <c>acfg</c> bullet (line 5964, "authnrCfg is false or absent") never denies it. Not grantable via
     /// <c>getPinUvAuthTokenUsingUvWithPermissions</c>: <c>uvAcfg</c> stays permanently absent, so 0x06's
-    /// own §6.5.5.7.3 statement list (distinct from the PIN path's, R5) denies <c>acfg</c> outright —
+    /// own §6.5.5.7.3 statement list (distinct from the PIN path's) denies <c>acfg</c> outright —
     /// <c>CTAP2_ERR_UNAUTHORIZED_PERMISSION</c> — regardless of which other permissions accompany the
     /// request.
     /// </summary>

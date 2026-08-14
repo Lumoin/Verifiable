@@ -111,7 +111,7 @@ public sealed class ApduDevice : IDisposable, IObservable<ApduExchange>
     /// <returns>A result containing the response or an error.</returns>
     public async ValueTask<ApduResult<ApduResponse>> TransceiveAsync(
         ReadOnlyMemory<byte> commandApdu,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);

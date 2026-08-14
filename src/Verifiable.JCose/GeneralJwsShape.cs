@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.JCose;
 
@@ -19,5 +18,4 @@ namespace Verifiable.JCose;
 /// </para>
 /// </remarks>
 /// <param name="Value">The raw General JSON JWS wire string.</param>
-[DebuggerDisplay("GeneralJwsShape")]
 public sealed record GeneralJwsShape(string Value): JoseTokenShape;

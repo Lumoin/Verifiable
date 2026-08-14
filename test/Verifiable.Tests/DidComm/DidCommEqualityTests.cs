@@ -25,7 +25,7 @@ internal sealed class DidCommEqualityTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>The pooled-memory source for pack/unpack.</summary>
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
     /// <summary>

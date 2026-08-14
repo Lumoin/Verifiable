@@ -18,7 +18,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The library performs no I/O of its own (contract R-7): this double plays the file/database/dictionary
+/// The library performs no I/O of its own: this double plays the file/database/dictionary
 /// a real deployment would choose. Its three exposed methods are bound INSTANCE methods (house rule: no
 /// closure capture) — the only "context" any of them closes over is the explicit receiver
 /// (<see langword="this"/>), mirroring <see cref="DictionaryBackedCtapStateCustodyStore"/>'s identical
@@ -54,7 +54,7 @@ internal sealed class DictionaryBackedTpmSealedSnapshotBlobStore
     /// <param name="pool">The memory pool the returned carrier rents from.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The stored bytes, copied into a pooled carrier, or <see langword="null"/> when nothing is stored.</returns>
-    public ValueTask<PooledMemory?> TryFetchSealedBlobAsync(string runId, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public ValueTask<PooledMemory?> TryFetchSealedBlobAsync(string runId, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         FetchCallCount++;
 

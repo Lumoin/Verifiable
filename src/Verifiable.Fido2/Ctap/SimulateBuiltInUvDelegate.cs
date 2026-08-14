@@ -9,7 +9,7 @@ namespace Verifiable.Fido2.Ctap;
 /// </returns>
 /// <remarks>
 /// A composition-time <see cref="Ctap.Authenticator.Automata.CtapAuthenticatorSimulator"/> personalization
-/// knob (R8) — the outcome-injection seam mirroring <see cref="SimulateFingerprintCaptureDelegate"/>'s
+/// knob — the outcome-injection seam mirroring <see cref="SimulateFingerprintCaptureDelegate"/>'s
 /// own production-personalization posture, never a test-only hook: the shipped default always reports
 /// <see cref="CtapBuiltInUvAttemptOutcome.Success"/>, and a caller supplies a closure returning a scripted
 /// sequence per call to exercise retry, timeout, or lockout paths. Consumed ONLY by

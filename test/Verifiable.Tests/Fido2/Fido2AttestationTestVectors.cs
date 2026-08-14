@@ -620,7 +620,7 @@ internal static class Fido2AttestationTestVectors
     /// <param name="clientDataBytes">The serialized <c>collectedClientData</c> bytes to hash.</param>
     /// <param name="pool">The pool the digest carrier rents from.</param>
     /// <returns>The 32-byte SHA-256 <see cref="DigestValue"/>; the caller disposes it.</returns>
-    internal static DigestValue ComputeClientDataHash(byte[] clientDataBytes, MemoryPool<byte> pool)
+    internal static DigestValue ComputeClientDataHash(byte[] clientDataBytes, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(clientDataBytes);
 

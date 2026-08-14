@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using Verifiable.Core;
@@ -41,7 +40,6 @@ namespace Verifiable.OAuth;
 /// response payload.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("OidcStandardClaimsContributor")]
 public static class OidcStandardClaimsContributor
 {
     /// <summary>

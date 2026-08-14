@@ -98,7 +98,7 @@ public sealed class CrlRevocationChecker
         PkiCertificateMemory certificate,
         IReadOnlyList<PkiCertificateMemory> issuerCandidates,
         DateTimeOffset validationTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(certificate);

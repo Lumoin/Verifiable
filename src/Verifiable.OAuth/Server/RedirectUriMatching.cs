@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.OAuth.Server;
 
@@ -21,7 +20,6 @@ namespace Verifiable.OAuth.Server;
 /// must not bypass the registered-redirect-URI allowlist. Comparison is therefore on
 /// <see cref="Uri.OriginalString"/>, ordinally, never through <see cref="Uri"/> equality.
 /// </remarks>
-[DebuggerDisplay("RedirectUriMatching")]
 public static class RedirectUriMatching
 {
     /// <summary>

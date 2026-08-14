@@ -48,10 +48,6 @@ internal sealed class AndroidKeyAttestationTests
     private static IsCredentialIdUniqueDelegate AlwaysUnique { get; } = static (_, _) => ValueTask.FromResult(true);
 
 
-    // ---------------------------------------------------------------------------------------
-    // Positive
-    // ---------------------------------------------------------------------------------------
-
     /// <summary>
     /// An ES256 android-key registration — union-mode knob, conformant <c>teeEnforced</c> — minted
     /// as real wire <c>attestationObject</c> CBOR bytes and verified end to end through
@@ -230,10 +226,6 @@ internal sealed class AndroidKeyAttestationTests
         Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
     }
 
-
-    // ---------------------------------------------------------------------------------------
-    // Negative
-    // ---------------------------------------------------------------------------------------
 
     /// <summary>An <c>attestationChallenge</c> not matching <c>clientDataHash</c> is rejected.</summary>
     [TestMethod]
@@ -513,7 +505,7 @@ internal sealed class AndroidKeyAttestationTests
     }
 
 
-    /// <summary>A credCert revoked by a CRL issued by its root is rejected via the wave-2 revocation seam.</summary>
+    /// <summary>A credCert revoked by a CRL issued by its root is rejected via the revocation seam.</summary>
     [TestMethod]
     public async Task RevokedCredCertIsRejectedWithChainValidationFailed()
     {
@@ -556,10 +548,6 @@ internal sealed class AndroidKeyAttestationTests
         Assert.AreEqual(Fido2AttestationErrors.ChainValidationFailed.Code, ((RejectedAttestationResult)result).Error.Code);
     }
 
-
-    // ---------------------------------------------------------------------------------------
-    // Shared vector/verify helpers
-    // ---------------------------------------------------------------------------------------
 
     /// <summary>
     /// Builds and runs a conformant, ES256, EC-keyed android-key statement, applying the given

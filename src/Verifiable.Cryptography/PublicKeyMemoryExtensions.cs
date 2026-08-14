@@ -20,7 +20,7 @@ public static class PublicKeyMemoryExtensions
         /// <param name="tag">The public-key algorithm tag.</param>
         /// <param name="pool">Memory pool for allocation.</param>
         /// <returns>A new <see cref="PublicKeyMemory"/> owning pooled memory. Caller must dispose.</returns>
-        public PublicKeyMemory ToPublicKeyMemory(Tag tag, MemoryPool<byte> pool)
+        public PublicKeyMemory ToPublicKeyMemory(Tag tag, BaseMemoryPool pool)
         {
             ArgumentNullException.ThrowIfNull(tag);
             ArgumentNullException.ThrowIfNull(pool);
@@ -40,7 +40,7 @@ public static class PublicKeyMemoryExtensions
         /// <param name="tag">The public-key algorithm tag.</param>
         /// <param name="pool">Memory pool for allocation.</param>
         /// <returns>A new <see cref="PublicKeyMemory"/> owning pooled memory. Caller must dispose.</returns>
-        public PublicKeyMemory ToPublicKeyMemory(Tag tag, MemoryPool<byte> pool)
+        public PublicKeyMemory ToPublicKeyMemory(Tag tag, BaseMemoryPool pool)
         {
             ArgumentNullException.ThrowIfNull(bytes);
             ArgumentNullException.ThrowIfNull(tag);

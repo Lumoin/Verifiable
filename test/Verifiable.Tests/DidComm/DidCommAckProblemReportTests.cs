@@ -25,7 +25,7 @@ namespace Verifiable.Tests.DidComm;
 [TestClass]
 internal sealed class DidCommAckProblemReportTests
 {
-    private static readonly MemoryPool<byte> Pool = BaseMemoryPool.Shared;
+    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
 
     private const string Alice = "did:example:alice";
     private const string ProblemReportType = "https://didcomm.org/report-problem/2.0/problem-report";
@@ -56,8 +56,6 @@ internal sealed class DidCommAckProblemReportTests
         return string.Join("|", source!.Select(static x => x?.ToString() ?? "<null>"));
     }
 
-
-    // ---- ACK headers + Empty Message ------------------------------------------------------------
 
     [TestMethod]
     public void AckHeadersRoundTripOntoTypedMembers()
@@ -183,8 +181,6 @@ internal sealed class DidCommAckProblemReportTests
     }
 
 
-    // ---- Problem code taxonomy -----------------------------------------------------------------
-
     [TestMethod]
     public void ProblemCodeParsesStructure()
     {
@@ -252,8 +248,6 @@ internal sealed class DidCommAckProblemReportTests
     }
 
 
-    // ---- Comment interpolation -----------------------------------------------------------------
-
     [TestMethod]
     public void InterpolateCommentReplacesPlaceholders()
     {
@@ -299,8 +293,6 @@ internal sealed class DidCommAckProblemReportTests
         Assert.AreEqual("a {x} {0} b", new ProblemReport { Code = Warn(), ParentThreadId = "p", Comment = "a {x} {0} b" }.InterpolateComment());
     }
 
-
-    // ---- Problem report build / interpret ------------------------------------------------------
 
     [TestMethod]
     public void ProblemReportRoundTrips()
@@ -431,8 +423,6 @@ internal sealed class DidCommAckProblemReportTests
         Assert.ThrowsExactly<InvalidOperationException>(() => error.EscalateWarningToError(ProblemCode.Parse("e.p.y")));
     }
 
-
-    // ---- helpers -------------------------------------------------------------------------------
 
     private static ProblemCode Warn() => ProblemCode.Parse("w.p.msg");
 

@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.Core.Model.Dcql;
@@ -21,7 +20,6 @@ namespace Verifiable.Core.Model.Dcql;
 /// the <c>Is*</c> ordinal helpers rather than <c>case</c> labels.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("DcqlTrustedAuthorityTypes")]
 public static class DcqlTrustedAuthorityTypes
 {
     /// <summary>The UTF-8 source literal of <see cref="Aki"/>.</summary>

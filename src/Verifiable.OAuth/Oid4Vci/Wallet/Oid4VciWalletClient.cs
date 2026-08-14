@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -33,7 +32,6 @@ namespace Verifiable.OAuth.Oid4Vci.Wallet;
 /// Credential.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("Oid4VciWalletClient")]
 public sealed class Oid4VciWalletClient
 {
 
@@ -870,7 +868,6 @@ public sealed class Oid4VciWalletClient
 /// against. In deployments the Wallet resolves these from §12.2 Credential Issuer
 /// Metadata; the client takes them pre-resolved so it stays transport-agnostic.
 /// </summary>
-[DebuggerDisplay("Oid4VciIssuanceEndpoints")]
 public sealed record Oid4VciIssuanceEndpoints
 {
     /// <summary>The §6 Token Endpoint URL for the Pre-Authorized Code grant.</summary>

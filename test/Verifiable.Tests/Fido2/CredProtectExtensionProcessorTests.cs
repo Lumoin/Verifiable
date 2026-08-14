@@ -16,7 +16,7 @@ namespace Verifiable.Tests.Fido2;
 
 /// <summary>
 /// Tests for <see cref="CredProtectExtensionProcessor"/>: the <c>credProtect</c> extension's RP-side
-/// authenticator-output claim processing (CTAP 2.3 waveext R13).
+/// authenticator-output claim processing (CTAP 2.3 §12.1).
 /// </summary>
 /// <remarks>
 /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#sctn-credProtect-extension">
@@ -24,7 +24,7 @@ namespace Verifiable.Tests.Fido2;
 /// decodes a REAL authData <c>extensions</c> map minted by <see cref="CtapAuthenticatorSimulator"/>'s
 /// real <c>authenticatorMakeCredential</c> pipeline, through the actual
 /// <see cref="AuthenticatorExtensionOutputsCborReader"/> — never fixture-forged CBOR. The two
-/// out-of-set/malformed tests are the sole exception: R13's own defensive branches guard against a
+/// out-of-set/malformed tests are the sole exception: this reader's own defensive branches guard against a
 /// non-conformant or adversarial authenticator, a wire shape the real, conformant mc pipeline
 /// structurally cannot produce (mc itself rejects an illegal credProtect request before any credential
 /// is minted), mirroring <see cref="AppIdExcludeExtensionProcessorTests"/>'s own unreachable-via-
@@ -139,12 +139,12 @@ internal sealed class CredProtectExtensionProcessorTests
     /// </summary>
     private static async Task<byte[]> MintCredProtectAuthenticatorOutputBytesAsync(int credProtect, CancellationToken cancellationToken)
     {
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator($"credprotect-processor-{credProtect}");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator($"credprotect-processor-{credProtect}");
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
-        ReadOnlyMemory<byte> extensions = CtapWave2AuthenticatorFixtures.BuildMakeCredentialExtensionsInput(credProtect: credProtect);
-        CtapMakeCredentialRequest request = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(pool, extensions: extensions);
-        using PooledMemory response = await CtapWave2AuthenticatorFixtures.SendMakeCredentialAsync(simulator, request, pool, cancellationToken);
+        ReadOnlyMemory<byte> extensions = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialExtensionsInput(credProtect: credProtect);
+        CtapMakeCredentialRequest request = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(pool, extensions: extensions);
+        using PooledMemory response = await CtapMakeCredentialGetAssertionFixtures.SendMakeCredentialAsync(simulator, request, pool, cancellationToken);
 
         CtapMakeCredentialResponse decoded = CtapMakeCredentialResponseCborReader.Read(response.AsReadOnlyMemory()[1..]);
         using AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(decoded.AuthData, CredentialPublicKeyCborReader.Read, pool);

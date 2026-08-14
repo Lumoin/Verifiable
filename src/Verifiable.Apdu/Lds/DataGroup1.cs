@@ -76,7 +76,7 @@ public sealed class DataGroup1
     /// <param name="pool">The memory pool for the file carrier.</param>
     /// <returns>The EF.DG1 <see cref="ElementaryFile"/>. The caller disposes it.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned ElementaryFile, which the caller disposes; the catch disposes it on failure.")]
-    public static ElementaryFile Write(string machineReadableZone, MemoryPool<byte> pool)
+    public static ElementaryFile Write(string machineReadableZone, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(machineReadableZone);
         ArgumentNullException.ThrowIfNull(pool);

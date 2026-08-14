@@ -14,7 +14,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// (snapshot lines 6534-6549): <see cref="TemplateId"/> mirrors that table's own Required
 /// <c>templateId</c> field; <see cref="FriendlyName"/> mirrors its Optional <c>templateFriendlyName</c>
 /// field, <see langword="null"/> until <c>setFriendlyName</c> assigns one (§6.7.7's own body text never
-/// names a default). Structurally sibling to (not derived from) <see cref="CtapCredentialRecord"/> — R6.
+/// names a default). Structurally sibling to (not derived from) <see cref="CtapCredentialRecord"/>.
 /// </remarks>
 /// <param name="TemplateId">
 /// The template's identifier, minted by <c>enrollBegin</c> (CTAP 2.3 §6.7.4 step 8). Owned by this

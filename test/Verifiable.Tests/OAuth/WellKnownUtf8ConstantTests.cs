@@ -53,10 +53,11 @@ internal sealed class WellKnownUtf8ConstantTests
                     }
 
                     string memberName = property.Name[..^"Utf8".Length];
-                    FieldInfo? stringMember = type.GetField(
-                        memberName, BindingFlags.Public | BindingFlags.Static);
-                    if(stringMember?.FieldType != typeof(string)
-                        || stringMember.GetValue(null) is not string text)
+
+                    //The string sibling is either a get-only property (the IRON static-getter form:
+                    //`static string X { get; } = …`) or a legacy `static readonly string X` field. Accept both;
+                    //the getter form is the one the static-getter rule mandates for new and swept members.
+                    if(ReadStaticStringMember(type, memberName) is not string text)
                     {
                         orphans.Add($"{type.FullName}.{property.Name}");
                         continue;
@@ -91,6 +92,26 @@ internal sealed class WellKnownUtf8ConstantTests
             $"Utf8Constants.ToInternedString): {string.Join(", ", uninterned)}");
         Assert.IsGreaterThanOrEqualTo(900, pairCount,
             "The sweep must discover the well-known constant surface; a collapse in pair " +
-            "count means the discovery convention (XUtf8 property + X string field) broke.");
+            "count means the discovery convention (XUtf8 property + X string field or property) broke.");
+
+
+        //Reads a public static string member by name — a get-only property (the static-getter form) or a
+        //static readonly field — or null when neither exists as a string.
+        static string? ReadStaticStringMember(Type type, string name)
+        {
+            PropertyInfo? property = type.GetProperty(name, BindingFlags.Public | BindingFlags.Static);
+            if(property?.PropertyType == typeof(string) && property.GetGetMethod() is { } getter)
+            {
+                return getter.Invoke(null, null) as string;
+            }
+
+            FieldInfo? field = type.GetField(name, BindingFlags.Public | BindingFlags.Static);
+            if(field?.FieldType == typeof(string))
+            {
+                return field.GetValue(null) as string;
+            }
+
+            return null;
+        }
     }
 }

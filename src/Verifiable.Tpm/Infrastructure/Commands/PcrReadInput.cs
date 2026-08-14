@@ -78,7 +78,7 @@ public sealed class PcrReadInput: ITpmCommandInput, IDisposable
     /// <param name="pcrIndices">The PCR indices to read (0-23).</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The input.</returns>
-    public static PcrReadInput ForPcrs(TpmAlgIdConstants hashAlg, ReadOnlySpan<int> pcrIndices, MemoryPool<byte> pool)
+    public static PcrReadInput ForPcrs(TpmAlgIdConstants hashAlg, ReadOnlySpan<int> pcrIndices, BaseMemoryPool pool)
     {
         TpmlPcrSelection selection = TpmlPcrSelection.Create(hashAlg, pcrIndices, pool);
         return new PcrReadInput(selection);
@@ -90,7 +90,7 @@ public sealed class PcrReadInput: ITpmCommandInput, IDisposable
     /// <param name="hashAlg">The hash algorithm (bank).</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The input.</returns>
-    public static PcrReadInput ForAllPcrs(TpmAlgIdConstants hashAlg, MemoryPool<byte> pool)
+    public static PcrReadInput ForAllPcrs(TpmAlgIdConstants hashAlg, BaseMemoryPool pool)
     {
         Span<int> allPcrs = stackalloc int[24];
         for(int i = 0; i < 24; i++)
@@ -107,7 +107,7 @@ public sealed class PcrReadInput: ITpmCommandInput, IDisposable
     /// <param name="hashAlg">The hash algorithm (bank).</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The input.</returns>
-    public static PcrReadInput ForBootPcrs(TpmAlgIdConstants hashAlg, MemoryPool<byte> pool)
+    public static PcrReadInput ForBootPcrs(TpmAlgIdConstants hashAlg, BaseMemoryPool pool)
     {
         Span<int> bootPcrs = stackalloc int[] { 0, 1, 2, 3, 4, 5, 6, 7 };
         return ForPcrs(hashAlg, bootPcrs, pool);

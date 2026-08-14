@@ -41,7 +41,7 @@ internal sealed class FederationEntityConfigurationEndpointTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
     [TestMethod]
@@ -135,7 +135,7 @@ internal sealed class FederationEntityConfigurationEndpointTests
 
 
     /// <summary>
-    /// Regression for R-10 (waveref): the Entity Configuration signing path in
+    /// Regression: the Entity Configuration signing path in
     /// <see cref="FederationEndpoints"/> must rent its signing-input and signature
     /// buffers from a pool that grants EXACT-length rentals. P-384 raw ECDSA
     /// signatures are 96 bytes (<c>2 * <see cref="EllipticCurveConstants.P384"/>.PointArrayLength</c>)

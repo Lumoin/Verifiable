@@ -36,5 +36,5 @@ namespace Verifiable.Cryptography.Aead;
 /// </returns>
 public delegate ValueTask<EphemeralKeyAgreementResult> KeyAgreementEncryptDelegate(
     PublicKeyMemory recipientPublicKey,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);

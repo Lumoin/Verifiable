@@ -152,7 +152,7 @@ internal static partial class VerifiableOperations
     /// <see cref="CryptoEventProvenance.RenderSummary"/> — after the CBOM JSON, separated by
     /// <see cref="CryptoEventProvenance.SectionHeader"/>. The CBOM JSON itself is identical either way;
     /// see <see cref="CryptoEventProvenance"/>'s remarks for why the two mechanisms are never merged.
-    /// Defaults to <see langword="false"/>, which reproduces this method's pre-wave-7 output exactly.
+    /// Defaults to <see langword="false"/>, which reproduces this method's output unchanged.
     /// </param>
     /// <param name="cancellationToken">A token to cancel the workload.</param>
     public static async Task<Result<string, string>> EmitObservedCbomAsync(
@@ -199,7 +199,7 @@ internal static partial class VerifiableOperations
     //registered Microsoft provider rather than System.Security.Cryptography directly.
     private static async Task RunObservableWorkloadAsync(CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] payload = Encoding.UTF8.GetBytes("Verifiable CBOM observed workload payload.");
 
         //Routes through the CreateKeyPair choke point so the observed CBOM's provenance also carries the
@@ -223,8 +223,8 @@ internal static partial class VerifiableOperations
                 payload, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory(), cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
-        //JOSE-signed leg (wave-7 PKG-3): unlike the raw backend call directly above, Jws.SignAsync/
-        //VerifyAsync resolve the registry delegate through the wave-7 CryptoEventSink seam (PKG-1), which
+        //JOSE-signed leg: unlike the raw backend call directly above, Jws.SignAsync/
+        //VerifyAsync resolve the registry delegate through the CryptoEventSink seam, which
         //forwards to CryptographicKeyEvents.DefaultSink when no explicit sink is supplied — no eventSink
         //parameter is even passed here. This leg's SignatureProducedEvent/VerificationCompletedEvent
         //therefore DO reach the global stream by default, demonstrating the widened path alongside the
@@ -264,7 +264,7 @@ internal static partial class VerifiableOperations
     //Pre-built JOSE header/payload JSON for the observed workload's JWS leg. Raw string literals rather
     //than JsonSerializer.Serialize<Dictionary<string, object>> — this project publishes with PublishAot,
     //and this content has no need for a dictionary round trip (nothing downstream inspects header claims;
-    //the sole purpose is to drive a real sign/verify call through the wave-7 CryptoEventSink seam).
+    //the sole purpose is to drive a real sign/verify call through the CryptoEventSink seam).
     private const string ObservedJoseWorkloadHeaderJson = """{"alg":"ES256","typ":"JWT"}""";
     private const string ObservedJoseWorkloadPayloadJson = """{"sub":"cbom-observed-workload"}""";
 

@@ -357,7 +357,7 @@ public static class Fido2BufferTags
     /// <see cref="Ctap.Authenticator.Automata.CtapAuthenticatorState.SerializedLargeBlobArray"/> — the
     /// CBOR-encoded large-blob array concatenated with its trailing 16-byte truncated SHA-256 hash (CTAP
     /// 2.3 §6.10, line 7539). Distinct from <see cref="LargeBlobKind"/> (<c>1010</c>), which tags the
-    /// UNRELATED §10.1.5 WebAuthn client extension's decoded blob payload — trap 11: the two domains must
+    /// UNRELATED §10.1.5 WebAuthn client extension's decoded blob payload: the two domains must
     /// never share a tag.
     /// </summary>
     public static BufferKind CtapSerializedLargeBlobArrayKind { get; } = BufferKind.Create(1034);

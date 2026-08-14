@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Diagnostics;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Model.DataIntegrity;
@@ -32,7 +31,6 @@ namespace Verifiable.Vcalm;
 /// is a 200 with <c>verified:false</c>, per §3.3.1 / §3.3.2.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("VcalmVerifierEndpoints")]
 public static class VcalmVerifierEndpoints
 {
     /// <summary>

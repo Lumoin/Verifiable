@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Text;
 using Verifiable.Server;
 
@@ -13,7 +12,6 @@ namespace Verifiable.Vcalm;
 /// the <c>presentationSchema</c> / <c>openId</c>) and the <c>authorization</c> object ride through with
 /// <see cref="JsonAppender.AppendRawField"/> so they are returned byte-faithful.
 /// </summary>
-[DebuggerDisplay("VcalmWorkflowResponseWriter")]
 public static class VcalmWorkflowResponseWriter
 {
     /// <summary>

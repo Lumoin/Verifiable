@@ -26,7 +26,7 @@ namespace Verifiable.DidComm;
 /// <param name="memoryPool">The pool the returned owned buffer is drawn from.</param>
 /// <returns>An owned buffer holding the value's UTF-8 JSON bytes — exactly the rented length.</returns>
 /// <exception cref="FormatException">The value cannot be serialized to JSON.</exception>
-public delegate IMemoryOwner<byte> JsonValueSerializer(object jsonValue, MemoryPool<byte> memoryPool);
+public delegate IMemoryOwner<byte> JsonValueSerializer(object jsonValue, BaseMemoryPool memoryPool);
 
 
 /// <summary>

@@ -281,7 +281,7 @@ internal sealed class Fido2AssertionOracle: IDisposable
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the signature (re-encoded or passed through) transfers to the returned MintedAssertion, which the test disposes.")]
-    private static Signature ReencodeToDerIfEc(Signature mintedSignature, int? coseAlgorithm, MemoryPool<byte> pool)
+    private static Signature ReencodeToDerIfEc(Signature mintedSignature, int? coseAlgorithm, BaseMemoryPool pool)
     {
         bool isEc = coseAlgorithm is { } alg
             && (WellKnownCoseAlgorithms.IsEs256(alg) || WellKnownCoseAlgorithms.IsEs384(alg) || WellKnownCoseAlgorithms.IsEs512(alg) || WellKnownCoseAlgorithms.IsEs256K(alg));

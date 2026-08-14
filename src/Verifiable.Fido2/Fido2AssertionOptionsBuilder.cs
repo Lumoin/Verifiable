@@ -40,7 +40,7 @@ public sealed class Fido2AssertionOptionsBuilder: Builder<PublicKeyCredentialReq
 
             return ValueTask.FromResult(options);
         })
-        //Second transformation: the challenge, via the wave-4 entropy seam unless the caller supplied one.
+        //Second transformation: the challenge, via the entropy seam unless the caller supplied one.
         .With((options, builder, state) =>
         {
             options.Challenge = state!.Challenge ?? Fido2ChallengeGeneration.Generate(state.Pool);
@@ -107,7 +107,7 @@ public sealed class Fido2AssertionOptionsBuilder: Builder<PublicKeyCredentialReq
     /// <exception cref="System.ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
     public ValueTask<PublicKeyCredentialRequestOptions> BuildAsync(
         string rpId,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         IReadOnlyList<Fido2CredentialRecord>? allowedCredentials = null,
         string? challenge = null,
         uint? timeout = null,

@@ -125,7 +125,8 @@ public static class AuthCodeServerFlowTransitions
                                 Nonce = direct.Nonce,
                                 State = direct.State,
                                 AuthorizationDetails = direct.AuthorizationDetails,
-                                ResponseMode = direct.ResponseMode
+                                ResponseMode = direct.ResponseMode,
+                                Resource = direct.Resource
                             },
                             StackAction<AuthCodeServerStackSymbol>.None,
                             "ServerCodeIssued"),
@@ -151,11 +152,12 @@ public static class AuthCodeServerFlowTransitions
                                 ClientId = received.ClientId,
                                 Nonce = received.Nonce,
                                 State = received.State,
-                                //The pushed authorization_details and response_mode are
+                                //The pushed authorization_details, response_mode, and resource are
                                 //authoritative by construction — copied from the PAR state,
                                 //never from the front channel (RFC 9101 §6.3 via RFC 9126 §4).
                                 AuthorizationDetails = received.AuthorizationDetails,
-                                ResponseMode = received.ResponseMode
+                                ResponseMode = received.ResponseMode,
+                                Resource = received.Resource
                             },
                             StackAction<AuthCodeServerStackSymbol>.None,
                             "ServerCodeIssued"),

@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.Core.Model.Dcql;
@@ -25,7 +24,6 @@ namespace Verifiable.Core.Model.Dcql;
 /// <c>switch</c> rather than <c>case</c> labels.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("DcqlParameterNames")]
 public static class DcqlParameterNames
 {
     /// <summary>The UTF-8 source literal of <see cref="Id"/>.</summary>

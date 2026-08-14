@@ -91,7 +91,7 @@ public static class JweParsing
         string expectedAlgorithm,
         string expectedEncryption,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(compactJwe);
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedAlgorithm);
@@ -178,7 +178,7 @@ public static class JweParsing
             string expectedEncryption,
             DecodeDelegate base64UrlDecoder,
             EpkCrvToTagDelegate crvToTagConverter,
-            MemoryPool<byte> pool)
+            BaseMemoryPool pool)
     {
         string? alg = JwkJsonReader.ExtractStringValue(headerJson, "alg"u8);
         string? enc = JwkJsonReader.ExtractStringValue(headerJson, "enc"u8);
@@ -277,7 +277,7 @@ public static class JweParsing
         string crv,
         DecodeDelegate base64UrlDecoder,
         EpkCrvToTagDelegate crvToTagConverter,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         (Tag epkTag, EllipticCurveTypes curveType) = crvToTagConverter(crv);
 
@@ -323,7 +323,7 @@ public static class JweParsing
     private static Nonce DecodeIv(
         string ivEncoded,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         //Base64url-encoded 12 bytes = 16 characters (no padding).
         int expectedEncodedLength = 16;
@@ -341,7 +341,7 @@ public static class JweParsing
     private static Ciphertext DecodeCiphertext(
         string ciphertextEncoded,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         if(string.IsNullOrEmpty(ciphertextEncoded))
         {
@@ -355,7 +355,7 @@ public static class JweParsing
     private static AuthenticationTag DecodeAuthTag(
         string authTagEncoded,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         //Base64url-encoded 16 bytes = 22 characters (no padding).
         int expectedEncodedLength = 22;

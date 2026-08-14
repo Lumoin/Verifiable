@@ -137,7 +137,7 @@ internal sealed class AcdcEdgeChainFlowTests
 
         string kelJson = await httpClient.GetStringAsync(kelUri, cancellationToken).ConfigureAwait(false);
         using AcdcTestSupport.EncodedSerialization kelBytes = AcdcTestSupport.Encode(kelJson);
-        IReadOnlyList<KeriSeal>? anchors = await AcdcFlowKit.VerifyKelAndReadAnchorsAsync(kelBytes.Memory, message.Issuer, disposables, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<KeriAnchoredSeal>? anchors = await AcdcFlowKit.VerifyKelAndReadAnchorsAsync(kelBytes.Memory, message.Issuer, disposables, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
 
         return anchors is not null && AcdcKeriBinding.FindDirectIssuanceSeal(anchors, message.Said) is not null ? message : null;
     }

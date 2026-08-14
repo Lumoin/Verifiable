@@ -34,7 +34,7 @@ public static class DocumentSecurityObject
     /// <returns>The CMS SignedData. The caller disposes it.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the file is not a well-formed EF.SOD.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the CmsSignedData carrier transfers to the caller, which disposes it.")]
-    public static CmsSignedData ExtractSignedData(ElementaryFile efSod, MemoryPool<byte> pool)
+    public static CmsSignedData ExtractSignedData(ElementaryFile efSod, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(efSod);
         ArgumentNullException.ThrowIfNull(pool);
@@ -60,7 +60,7 @@ public static class DocumentSecurityObject
     /// <param name="pool">The memory pool for the file carrier.</param>
     /// <returns>The EF.SOD <see cref="ElementaryFile"/>. The caller disposes it.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned ElementaryFile, which the caller disposes; the catch disposes it on failure.")]
-    public static ElementaryFile Write(CmsSignedData signedData, MemoryPool<byte> pool)
+    public static ElementaryFile Write(CmsSignedData signedData, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(signedData);
         ArgumentNullException.ThrowIfNull(pool);

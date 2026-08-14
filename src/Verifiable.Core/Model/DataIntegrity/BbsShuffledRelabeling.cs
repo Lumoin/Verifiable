@@ -57,7 +57,7 @@ public static class BbsShuffledRelabeling
         ReadOnlyMemory<byte> hmacKey,
         ComputeHmacDelegate hmacCompute,
         EncodeDelegate encoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(canonicalStatements);
@@ -138,7 +138,7 @@ public static class BbsShuffledRelabeling
         ReadOnlyMemory<byte> hmacKey,
         ComputeHmacDelegate hmacCompute,
         EncodeDelegate encoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         Tag hmacTag = CryptoTags.HmacSha256Value;

@@ -8,26 +8,26 @@ using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
 using Verifiable.Foundation.Automata;
 using Verifiable.Tests.TestInfrastructure;
-using static Verifiable.Tests.TestInfrastructure.CtapWave2AuthenticatorFixtures;
+using static Verifiable.Tests.TestInfrastructure.CtapMakeCredentialGetAssertionFixtures;
 
 namespace Verifiable.Tests.Fido2;
 
 /// <summary>
-/// The PKG-A state-level half of contract R2's <c>hmac-secret</c> CredRandom unconditional-mint proof
+/// The state-level half of the <c>hmac-secret</c> CredRandom unconditional-mint proof
 /// (CTAP 2.3 §12.7, snapshot line 13191's declarative generation step, line 13192's SHOULD, adopted):
 /// <c>authenticatorMakeCredential</c> mints <see cref="CtapCredentialRecord.CredRandomWithUV"/>/
 /// <see cref="CtapCredentialRecord.CredRandomWithoutUV"/> on EVERY credential regardless of whether the
 /// request's own <c>extensions</c> map ever names <c>hmac-secret</c>.
 /// </summary>
 /// <remarks>
-/// CredRandom is never echoed on any response (trap 9;
+/// CredRandom is never echoed on any response (
 /// <see cref="CtapAuthenticatorTransitions.BuildCredentialEnumerationResponse"/>'s documented omission
 /// of it despite echoing <c>largeBlobKey</c>), so decoding wire bytes alone cannot observe it — unlike
 /// <see cref="CtapAuthenticatorLargeBlobKeyExtensionTests"/>'s wire-only convention, this file subscribes
 /// to <see cref="CtapAuthenticatorSimulator"/>'s <see cref="TraceEntry{TState, TInput}.StateAfter"/>
 /// stream, the same "state is otherwise unobservable" seam
 /// <see cref="CtapAuthenticatorPinTokenIssuanceTests"/> already uses for token state. The full
-/// mint-without-then-ga-serves proof (contract R2c) lives in
+/// mint-without-then-ga-serves proof lives in
 /// <see cref="CtapAuthenticatorHmacSecretGetAssertionFlowTests.HmacSecretServesAssertionForCredentialMintedWithoutTheExtension"/>,
 /// which drives <c>authenticatorGetAssertion</c>'s own hmac-secret processing to consume the pair on the
 /// wire; this file's own coverage is the state-level half alone.
@@ -43,15 +43,15 @@ internal sealed class CtapAuthenticatorHmacSecretCredRandomStateTests
     /// An <c>authenticatorMakeCredential</c> request that never mentions <c>hmac-secret</c> still stores
     /// a credential whose <see cref="CtapCredentialRecord.CredRandomWithUV"/>/
     /// <see cref="CtapCredentialRecord.CredRandomWithoutUV"/> are both populated, exactly 32 bytes each,
-    /// and mutually distinct — contract R2's unconditional mint, made observable through the trace
+    /// and mutually distinct — the unconditional mint, made observable through the trace
     /// stream rather than any response, since a credential minted here MUST be able to serve a LATER
     /// <c>hmac-secret</c> assertion the note's own rationale describes (snapshot line 13192).
     /// </summary>
     [TestMethod]
     public async Task MakeCredentialWithoutHmacSecretExtensionStillMintsDistinctCredRandomPair()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("waveclose-credrandom-unconditional-mint");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("credrandom-unconditional-mint");
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var trace = new TestObserver<TraceEntry<CtapAuthenticatorState, CtapAuthenticatorInput>>();
         byte[] credentialIdBytes;
@@ -86,8 +86,8 @@ internal sealed class CtapAuthenticatorHmacSecretCredRandomStateTests
     [TestMethod]
     public async Task MakeCredentialMintsDistinctCredRandomPairsAcrossTwoCredentials()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("waveclose-credrandom-distinct-per-credential");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("credrandom-distinct-per-credential");
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var trace = new TestObserver<TraceEntry<CtapAuthenticatorState, CtapAuthenticatorInput>>();
         byte[] firstCredentialIdBytes;

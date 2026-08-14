@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Siop;
@@ -20,7 +19,6 @@ namespace Verifiable.OAuth.Siop;
 /// Values for <c>id_token_type</c> live in <see cref="SiopIdTokenTypes"/>.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("SiopAuthorizationRequestParameterNames")]
 public static class SiopAuthorizationRequestParameterNames
 {
     /// <summary>The UTF-8 source literal of <see cref="IdTokenType"/>.</summary>

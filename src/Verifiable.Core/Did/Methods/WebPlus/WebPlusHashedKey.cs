@@ -40,7 +40,7 @@ public static class WebPlusHashedKey
         ComputeDigestDelegate computeDigest,
         Tag digestTag,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(mbPubKey);
@@ -75,7 +75,7 @@ public static class WebPlusHashedKey
         ComputeDigestDelegate computeDigest,
         Tag digestTag,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(computeDigest);
         ArgumentNullException.ThrowIfNull(digestTag);

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth;
@@ -26,7 +25,6 @@ namespace Verifiable.OAuth;
 /// speculatively — they appear here when a call site actually needs them.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("WellKnownAuthenticationSchemes")]
 public static class WellKnownAuthenticationSchemes
 {
     /// <summary>The UTF-8 source literal of <see cref="Bearer"/>.</summary>

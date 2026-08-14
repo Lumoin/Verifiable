@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.OAuth.Pkce;
 
 namespace Verifiable.OAuth.AuthCode.States;
@@ -10,7 +9,6 @@ namespace Verifiable.OAuth.AuthCode.States;
 /// <remarks>
 /// Transitions to <see cref="TokenReceivedState"/> after a successful token exchange.
 /// </remarks>
-[DebuggerDisplay("AuthorizationCodeReceived FlowId={FlowId}")]
 public sealed record AuthorizationCodeReceivedState: FlowState
 {
     /// <summary>

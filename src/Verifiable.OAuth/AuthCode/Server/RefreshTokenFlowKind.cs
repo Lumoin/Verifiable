@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.OAuth.AuthCode.Server;
 
@@ -24,7 +23,6 @@ namespace Verifiable.OAuth.AuthCode.Server;
 /// route to the right tier.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("RefreshTokenFlowKind")]
 public sealed class RefreshTokenFlowKind: FlowKind
 {
     /// <summary>The singleton instance.</summary>

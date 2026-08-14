@@ -17,11 +17,11 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.DidComm;
 
 /// <summary>
-/// The wave-7 DIDComm symmetry fix (contract §PKG-1 "Fix the DIDComm asymmetry"): before this wave,
+/// The DIDComm symmetry fix: previously,
 /// <c>DidCommFromPriorExtensions.VerifyFromPriorAsync</c> emitted (via its own <c>InternalsVisibleTo</c>
 /// access to <c>CryptographicKeyEvents.Emit</c>) while the sibling sign side
-/// (<c>PackFromPriorAsync</c>/<c>PackSignedAsync</c>, which route through <c>Verifiable.JCose</c>) discarded
-/// — the wave-7 scout's sharpest concrete finding (§2.3 of <c>scout-emit-surface.md</c>). Now that the JOSE
+/// (<c>PackFromPriorAsync</c>/<c>PackSignedAsync</c>, which route through <c>Verifiable.JCose</c>) discarded.
+/// Now that the JOSE
 /// layer's explicit-delegate sites default to <see cref="CryptographicKeyEvents.DefaultSink"/> instead of
 /// discarding, sign and verify both reach the same global <see cref="CryptographicKeyEvents.Events"/> stream
 /// with no further <c>InternalsVisibleTo</c> growth — these tests prove the symmetry end to end.
@@ -31,7 +31,7 @@ internal sealed class DidCommEventSymmetryTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private static readonly ExchangeContext Context = new();
 
@@ -39,7 +39,7 @@ internal sealed class DidCommEventSymmetryTests
     /// <summary>
     /// <c>PackSignedAsync</c> (sign) and <c>UnpackSignedAsync</c> (verify) both publish to the global
     /// <see cref="CryptographicKeyEvents.Events"/> stream — the symmetry the DIDComm signed-message pair
-    /// lacked before wave 7 (sign discarded via the JOSE facade, verify emitted via internal access).
+    /// once lacked (sign discarded via the JOSE facade, verify emitted via internal access).
     /// </summary>
     [TestMethod]
     public async Task PackSignedAndUnpackSignedBothEmitToGlobalStreamSymmetrically()
@@ -58,7 +58,7 @@ internal sealed class DidCommEventSymmetryTests
 
         var message = new DidCommMessage
         {
-            Id = "wave7-symmetry-1",
+            Id = "symmetry-1",
             Type = "https://example.com/protocols/lets_do_lunch/1.0/proposal",
             From = did
         };
@@ -103,7 +103,7 @@ internal sealed class DidCommEventSymmetryTests
 
     /// <summary>
     /// <c>PackFromPriorAsync</c> (sign the from_prior rotation JWT) also reaches the global stream by
-    /// default — the specific asymmetry the scout named (§2.3): <c>VerifyFromPriorAsync</c> already emitted
+    /// default — the specific asymmetry (§2.3): <c>VerifyFromPriorAsync</c> already emitted
     /// via internal access, while <c>PackFromPriorAsync</c> discarded through the JOSE facade
     /// (<c>JwtSigningExtensions.SignAsync</c>). Verified here indirectly through the signed-message unpack
     /// path carrying a <c>from_prior</c> header, which verifies the rotation as part of the same call.
@@ -122,7 +122,7 @@ internal sealed class DidCommEventSymmetryTests
 
         var message = new DidCommMessage
         {
-            Id = "wave7-symmetry-rotation",
+            Id = "symmetry-rotation",
             Type = "https://example.com/protocols/ping/1.0",
             From = "did:example:new-placeholder"
         };

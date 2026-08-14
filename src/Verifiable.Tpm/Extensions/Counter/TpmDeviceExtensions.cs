@@ -173,7 +173,7 @@ public static class TpmDeviceExtensions
         bool noDa,
         CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_DefineSpace, TpmResponseCodec.NvDefineSpace);
 
@@ -206,7 +206,7 @@ public static class TpmDeviceExtensions
         ReadOnlyMemory<byte> counterAuth,
         CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_Increment, TpmResponseCodec.NvIncrement);
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_Read, TpmResponseCodec.NvRead);
@@ -253,7 +253,7 @@ public static class TpmDeviceExtensions
         ReadOnlyMemory<byte> counterAuth,
         CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_Read, TpmResponseCodec.NvRead);
 
@@ -287,7 +287,7 @@ public static class TpmDeviceExtensions
         uint nvIndex,
         CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_UndefineSpace, TpmResponseCodec.NvUndefineSpace);
 

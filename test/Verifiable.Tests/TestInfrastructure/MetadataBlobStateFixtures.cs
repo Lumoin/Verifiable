@@ -102,7 +102,7 @@ internal static class AlwaysRevokedCertificateChecker
         PkiCertificateMemory certificate,
         IReadOnlyList<PkiCertificateMemory> issuerCandidates,
         DateTimeOffset validationTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken) =>
         ValueTask.FromResult(CertificateRevocationStatus.Revoked);
 }

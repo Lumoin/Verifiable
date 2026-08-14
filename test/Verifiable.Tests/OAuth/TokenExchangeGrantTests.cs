@@ -55,8 +55,8 @@ internal sealed class TokenExchangeGrantTests
     private const string ActorClientId = "https://agent.example.com";
     private const string ActorClientSecret = "s3cret-of-the-agent";
 
-    //A non-identity scope AddMachineScopeAudienceMapping maps onto ResourceServerAudience: contract
-    //wave-4 D4 narrows openid away from every client_credentials grant (client_credentials has no
+    //A non-identity scope AddMachineScopeAudienceMapping maps onto ResourceServerAudience: openid is
+    //narrowed away from every client_credentials grant (client_credentials has no
     //authenticated End-User), so the end-to-end tests mint their real subject/actor tokens under
     //this scope instead, to still reach a concrete audience.
     private const string MachineScope = "machine.telemetry.read";
@@ -70,7 +70,7 @@ internal sealed class TokenExchangeGrantTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
     /// <summary>
@@ -497,12 +497,13 @@ internal sealed class TokenExchangeGrantTests
 
 
     /// <summary>
-    /// RFC 8693 §2.1.1 multi-target. Repeated <c>resource</c> parameters indicate the issued token is
-    /// intended for multiple resources. The skin collapses them into a single space-delimited
-    /// <c>resource</c> field value (the convention the authorization-code path shares); the grant
-    /// splits them back into the individual indicators and carries every one into the
-    /// <see cref="TokenExchangeRequest.Resource"/> the authorization seam reads — each still validated
-    /// as an absolute, fragment-free URI.
+    /// RFC 8693 §2.1.1 multi-target: RFC 8707 §2's actual multi-resource wire form is the REPEATED
+    /// <c>resource</c> parameter (not several URIs packed into one occurrence separated by spaces —
+    /// <see cref="TokenExchangeRequestBuilder"/>'s own single-field convention is a client-side
+    /// choice this test deliberately bypasses to exercise the wire form directly). The grant reads
+    /// every occurrence and carries all of them into the
+    /// <see cref="TokenExchangeRequest.Resource"/> the authorization seam reads — each still
+    /// validated as an absolute, fragment-free URI.
     /// </summary>
     [TestMethod]
     public async Task RepeatedResourceCarriesEveryTargetIntoTheAuthorizationSeam()
@@ -539,17 +540,23 @@ internal sealed class TokenExchangeGrantTests
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        //The builder's repeated-resource convention: the two indicators arrive space-delimited in the
-        //single resource field, exactly as the authorization-code path receives them.
-        OutgoingFormFields form = BuildRequest(new TokenExchangeBuilderOptions
-        {
-            SubjectToken = SubjectTokenValue,
-            SubjectTokenType = TokenType.AccessToken,
-            Resource = [FirstResource, SecondResource]
-        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        //RFC 8707 §2's genuine multi-resource wire form: the resource key repeated, built as a raw
+        //key/value pair list (OutgoingFormFields carries only one value per key) so the request body
+        //carries two distinct resource=... occurrences rather than one space-joined value.
+        List<KeyValuePair<string, string>> rawForm =
+        [
+            new(OAuthRequestParameterNames.GrantType, WellKnownGrantTypes.TokenExchange),
+            new(OAuthRequestParameterNames.SubjectToken, SubjectTokenValue),
+            new(OAuthRequestParameterNames.SubjectTokenType, TokenTypeNames.GetName(TokenType.AccessToken)),
+            new(OAuthRequestParameterNames.ClientId, ClientId),
+            new(OAuthRequestParameterNames.ClientSecret, ClientSecret),
+            new(OAuthRequestParameterNames.Resource, FirstResource),
+            new(OAuthRequestParameterNames.Resource, SecondResource)
+        ];
 
-        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
-            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        using FormUrlEncodedContent content = new(rawForm);
+        using HttpResponseMessage response = await host.SharedHttpClient!
+            .PostAsync(tokenUrl, content, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, (int)response.StatusCode, body);
@@ -1124,7 +1131,7 @@ internal sealed class TokenExchangeGrantTests
 
 
     /// <summary>
-    /// RFC 8693 §2.1 L369: "In processing the request, the authorization server MUST perform the
+    /// RFC 8693 §2.1: "In processing the request, the authorization server MUST perform the
     /// appropriate validation procedures for the indicated token type" — validation cannot happen if no
     /// seam exists to run it. Client authentication AND the authorization-policy seam ARE wired here;
     /// ONLY <see cref="AuthorizationServerIntegration.ValidateTokenExchangeTokenAsync"/> is deliberately
@@ -1166,7 +1173,7 @@ internal sealed class TokenExchangeGrantTests
         //RefreshGrantTests.UnsupportedGrantTypeReturnsNotFound exercises for an unknown grant_type).
         Assert.AreEqual(404, (int)response.StatusCode, body);
         Assert.AreNotEqual(200, (int)response.StatusCode,
-            "A well-formed exchange must not be accepted when ValidateTokenExchangeTokenAsync is unwired (RFC 8693 §2.1 L369).");
+            "A well-formed exchange must not be accepted when ValidateTokenExchangeTokenAsync is unwired (RFC 8693 §2.1).");
     }
 
 
@@ -1480,9 +1487,9 @@ internal sealed class TokenExchangeGrantTests
 
 
     /// <summary>
-    /// Contract wave-4 D3/D4: on a tenant granted the
-    /// <see cref="WellKnownCapabilityIdentifiers.OidcOpenIdConnect"/> feature — ruling out D2's
-    /// capability gate as the explanation — a token-exchange grant whose authorization seam
+    /// On a tenant granted the
+    /// <see cref="WellKnownCapabilityIdentifiers.OidcOpenIdConnect"/> feature — ruling out the
+    /// optional capability gate as the explanation — a token-exchange grant whose authorization seam
     /// legitimately grants <c>openid</c> (the app opting in, per the source-layer contract:
     /// <c>token_exchange</c> honors the app-granted scope, unlike <c>client_credentials</c>) still
     /// never yields an id_token. <see cref="Oidc10IdTokenProducer"/>'s <c>IsApplicable</c>
@@ -1512,7 +1519,7 @@ internal sealed class TokenExchangeGrantTests
                     new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
 
         //The policy seam grants openid — an app opting in to vouch that the exchanged subject is an
-        //End-User (contract wave-4 D4: token_exchange honors whatever scope the app's authorization
+        //End-User (token_exchange honors whatever scope the app's authorization
         //seam decides, unlike client_credentials' source-layer narrowing).
         app.Server.OAuth().AuthorizeTokenExchangeAsync =
             static (subject, actor, request, registration, context, ct) =>
@@ -1556,12 +1563,12 @@ internal sealed class TokenExchangeGrantTests
 
 
     /// <summary>
-    /// Contract wave-4 D3/D4 refresh-ladder: a refresh token minted by a token-exchange grant
+    /// Refresh-ladder: a refresh token minted by a token-exchange grant
     /// (draft-ietf-oauth-identity-assertion-authz-grant-04 §4.5's SAML-to-OAuth transition shape —
     /// the authorization seam sets <see cref="TokenExchangeAuthorization.IssuedTokenType"/> to
     /// <see cref="TokenType.RefreshToken"/>) never yields an id_token on redemption via
     /// <c>grant_type=refresh_token</c>, even on a tenant granted
-    /// <see cref="WellKnownCapabilityIdentifiers.OidcOpenIdConnect"/> — ruling out D2's capability
+    /// <see cref="WellKnownCapabilityIdentifiers.OidcOpenIdConnect"/> — ruling out the capability
     /// gate as the explanation — and even though <c>openid</c> genuinely rode both the exchange
     /// response and the redeemed access token's own <c>scope</c> claim. <see cref="Oidc10IdTokenProducer"/>'s
     /// <c>IsApplicable</c> reads <see cref="IssuanceContext.RefreshTokenOriginatingGrantType"/> — carried
@@ -1581,7 +1588,7 @@ internal sealed class TokenExchangeGrantTests
                 WellKnownCapabilityIdentifiers.OAuthTokenExchange,
 
                 //The refresh_token grant's own endpoint match requires this capability
-                //(AuthCodeEndpoints.BuildRefreshToken), independent of the D2 tenant-feature gate under
+                //(AuthCodeEndpoints.BuildRefreshToken), independent of the tenant-feature gate under
                 //test here — without it the redemption leg below would 404 before ever reaching the
                 //id_token producer walk.
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
@@ -1660,19 +1667,325 @@ internal sealed class TokenExchangeGrantTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 §2.1</see>'s
+    /// <c>audience</c> is a logical name the authorization seam MAY set to anything — it need not be
+    /// an <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see> absolute
+    /// resource indicator, and MAY itself contain spaces. Space-joining such a name verbatim into
+    /// the refresh state's space-delimited <c>Resource</c> slot would corrupt it — a later
+    /// <c>ParseResourceIndicators</c> read would split the single logical name into bogus
+    /// "indicators". The carry is gated: when any granted audience entry is not a well-formed,
+    /// whitespace-free absolute URI, <c>Resource</c> stays <see langword="null"/> on the minted
+    /// refresh state — the same fail-closed outcome as "nothing was granted" — so a later
+    /// <c>resource</c>-narrowing refresh against it is refused
+    /// <see cref="OAuthErrors.InvalidTarget"/>, never silently narrowed against a corrupted value.
+    /// </summary>
+    [TestMethod]
+    public async Task RefreshTokenMintedFromSpaceyLogicalAudienceCarriesNoResourceAndFailsClosedOnNarrowing()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = app.RegisterDpopClient(
+            ClientId,
+            new Uri(ClientId),
+            profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: ImmutableHashSet.Create(
+                WellKnownCapabilityIdentifiers.OAuthTokenExchange,
+                WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+                WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+        WireClientAuthentication(app);
+
+        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
+            static (token, tokenType, registration, context, ct) =>
+                ValueTask.FromResult<ValidatedSecurityToken?>(
+                    new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
+
+        //A logical audience name that is NOT a resource indicator — spaces and all — is exactly the
+        //RFC 8693 §2.1 shape the authorization seam is free to grant.
+        const string SpaceyLogicalAudience = "internal billing service";
+        app.Server.OAuth().AuthorizeTokenExchangeAsync =
+            static (subject, actor, request, registration, context, ct) =>
+                ValueTask.FromResult<TokenExchangeAuthorization?>(
+                    new TokenExchangeAuthorization
+                    {
+                        Subject = subject.Subject,
+                        Scope = WellKnownScopes.OpenId,
+                        IssuedTokenType = TokenType.RefreshToken,
+                        Audience = [SpaceyLogicalAudience]
+                    });
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields exchangeForm = BuildRequest(new TokenExchangeBuilderOptions
+        {
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage exchangeResponse = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, exchangeForm, TestContext.CancellationToken).ConfigureAwait(false);
+        string exchangeBody = await exchangeResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)exchangeResponse.StatusCode, exchangeBody);
+
+        using JsonDocument exchangeDoc = JsonDocument.Parse(exchangeBody);
+        string refreshToken = exchangeDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+
+        //A resource-narrowing refresh against the spacey-audience-derived refresh token fails closed
+        //— proving Resource was carried as null (nothing granted to narrow from), not as the corrupted
+        //logical name. (Refresh tokens single-use rotate here, so this is the only redemption of the
+        //token issued above — a prior no-resource redemption would invalidate it before this call.)
+        using HttpResponseMessage narrowedRefresh = await OAuthTestTransport.PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.RefreshToken,
+            [OAuthRequestParameterNames.RefreshToken] = refreshToken,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.Resource] = "https://billing.example.com/api"
+        }, TestContext.CancellationToken).ConfigureAwait(false);
+        string narrowedBody = await narrowedRefresh.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)narrowedRefresh.StatusCode, narrowedBody);
+        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidTarget}\"", narrowedBody, StringComparison.Ordinal,
+            $"A resource-narrowing refresh must fail closed when the spacey logical audience left "
+            + $"nothing granted to narrow from. Got: {narrowedBody}");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 §2.1</see>'s
+    /// <c>audience</c> logical name MAY embed a space while still looking like an absolute URI at a
+    /// glance — <c>"https://api.example.com/orders v2"</c> is such a value.
+    /// <see cref="Uri.TryCreate(string, UriKind, out Uri)"/> parses it successfully because it
+    /// percent-escapes the embedded space into the path, so a shape gate that trusted
+    /// <see cref="UriKind.Absolute"/> parsing alone would treat it as a genuine RFC 8707 §2
+    /// resource indicator and carry it verbatim into the minted refresh state's <c>Resource</c>
+    /// slot. A later resource-narrowing refresh with <c>resource=v2</c> would then split that carried
+    /// value at <c>ParseResourceIndicators</c> into the fabricated indicators
+    /// <c>https://api.example.com/orders</c> and <c>v2</c> and match the second — narrowing the
+    /// issued access token's <c>aud</c> to a target the authorization seam never granted. The carry's
+    /// whitespace-freeness check closes this: the spacey audience fails the gate, <c>Resource</c>
+    /// stays <see langword="null"/> on the minted refresh state, and the narrowing refresh fails
+    /// closed with <see cref="OAuthErrors.InvalidTarget"/> instead of fabricating a grant.
+    /// </summary>
+    [TestMethod]
+    public async Task RefreshTokenMintedFromSpaceyUriShapedAudienceCarriesNoResourceAndFailsClosedOnNarrowing()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = app.RegisterDpopClient(
+            ClientId,
+            new Uri(ClientId),
+            profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: ImmutableHashSet.Create(
+                WellKnownCapabilityIdentifiers.OAuthTokenExchange,
+                WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+                WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+        WireClientAuthentication(app);
+
+        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
+            static (token, tokenType, registration, context, ct) =>
+                ValueTask.FromResult<ValidatedSecurityToken?>(
+                    new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
+
+        //A URI-shaped logical audience with an embedded space: Uri.TryCreate percent-escapes it and
+        //still parses as absolute, so this is exactly the value that would slip a shape gate relying
+        //on UriKind.Absolute parsing alone.
+        const string SpaceyUriShapedAudience = "https://api.example.com/orders v2";
+        app.Server.OAuth().AuthorizeTokenExchangeAsync =
+            static (subject, actor, request, registration, context, ct) =>
+                ValueTask.FromResult<TokenExchangeAuthorization?>(
+                    new TokenExchangeAuthorization
+                    {
+                        Subject = subject.Subject,
+                        Scope = WellKnownScopes.OpenId,
+                        IssuedTokenType = TokenType.RefreshToken,
+                        Audience = [SpaceyUriShapedAudience]
+                    });
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields exchangeForm = BuildRequest(new TokenExchangeBuilderOptions
+        {
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage exchangeResponse = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, exchangeForm, TestContext.CancellationToken).ConfigureAwait(false);
+        string exchangeBody = await exchangeResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)exchangeResponse.StatusCode, exchangeBody);
+
+        using JsonDocument exchangeDoc = JsonDocument.Parse(exchangeBody);
+        string refreshToken = exchangeDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+
+        //A fabricated-narrowing attempt: "v2" was never a granted resource indicator, only the second
+        //space-split fragment of the spacey audience. It must fail closed, proving Resource was
+        //carried as null rather than the unsplit spacey value.
+        using HttpResponseMessage narrowedRefresh = await OAuthTestTransport.PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.RefreshToken,
+            [OAuthRequestParameterNames.RefreshToken] = refreshToken,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.Resource] = "v2"
+        }, TestContext.CancellationToken).ConfigureAwait(false);
+        string narrowedBody = await narrowedRefresh.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)narrowedRefresh.StatusCode, narrowedBody);
+        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidTarget}\"", narrowedBody, StringComparison.Ordinal,
+            $"A resource-narrowing refresh requesting the fabricated 'v2' fragment must fail closed "
+            + $"as invalid_target rather than matching a grant fabricated by splitting the spacey "
+            + $"URI-shaped audience. Got: {narrowedBody}");
+    }
+
+
+    /// <summary>
+    /// The converse of <see cref="RefreshTokenMintedFromSpaceyLogicalAudienceCarriesNoResourceAndFailsClosedOnNarrowing"/>:
+    /// when every granted <see cref="TokenExchangeAuthorization.Audience"/> entry IS a well-formed,
+    /// whitespace-free absolute URI (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC
+    /// 8707 §2</see> shape), the carry populates the minted refresh state's <c>Resource</c>, and a
+    /// later <c>resource</c>-narrowing refresh against it succeeds, narrowing the issued access
+    /// token's <c>aud</c> to that subset.
+    /// </summary>
+    [TestMethod]
+    public async Task RefreshTokenMintedFromUriAudiencesCarriesResourceAndNarrowsOnRefresh()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = app.RegisterDpopClient(
+            ClientId,
+            new Uri(ClientId),
+            profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: ImmutableHashSet.Create(
+                WellKnownCapabilityIdentifiers.OAuthTokenExchange,
+                WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+                WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+        WireClientAuthentication(app);
+
+        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
+            static (token, tokenType, registration, context, ct) =>
+                ValueTask.FromResult<ValidatedSecurityToken?>(
+                    new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
+
+        const string ResourceA = "https://cal.example.com/";
+        const string ResourceB = "https://contacts.example.com/";
+        app.Server.OAuth().AuthorizeTokenExchangeAsync =
+            static (subject, actor, request, registration, context, ct) =>
+                ValueTask.FromResult<TokenExchangeAuthorization?>(
+                    new TokenExchangeAuthorization
+                    {
+                        Subject = subject.Subject,
+                        Scope = WellKnownScopes.OpenId,
+                        IssuedTokenType = TokenType.RefreshToken,
+                        Audience = [ResourceA, ResourceB]
+                    });
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields exchangeForm = BuildRequest(new TokenExchangeBuilderOptions
+        {
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage exchangeResponse = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, exchangeForm, TestContext.CancellationToken).ConfigureAwait(false);
+        string exchangeBody = await exchangeResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)exchangeResponse.StatusCode, exchangeBody);
+
+        using JsonDocument exchangeDoc = JsonDocument.Parse(exchangeBody);
+        string refreshToken = exchangeDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+
+        using HttpResponseMessage narrowedRefresh = await OAuthTestTransport.PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.RefreshToken,
+            [OAuthRequestParameterNames.RefreshToken] = refreshToken,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.Resource] = ResourceB
+        }, TestContext.CancellationToken).ConfigureAwait(false);
+        string narrowedBody = await narrowedRefresh.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)narrowedRefresh.StatusCode, narrowedBody);
+
+        using JsonDocument narrowedDoc = JsonDocument.Parse(narrowedBody);
+        string narrowedAccessToken = narrowedDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+        using JsonDocument narrowedPayload = DecodePayload(narrowedAccessToken);
+        JsonElement aud = narrowedPayload.RootElement.GetProperty(WellKnownJwtClaimNames.Aud);
+        Assert.AreEqual(JsonValueKind.Array, aud.ValueKind);
+        Assert.HasCount(1, aud.EnumerateArray().ToList(),
+            $"The URI-audience carry must have populated Resource so the narrowing refresh can subset "
+            + $"it to ResourceB alone. Payload: {narrowedPayload.RootElement}");
+        Assert.AreEqual(ResourceB, aud[0].GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>'s
+    /// <c>invalid_target</c> ("missing, unknown, or malformed") covers ANY aggregated
+    /// <c>resource</c> occurrence that is null, empty, or whitespace — not only every occurrence
+    /// being blank. A repeated <c>resource</c> parameter where one occurrence is a well-formed URI
+    /// and the OTHER is empty must fail the whole request closed, not silently drop the blank
+    /// occurrence and succeed on the valid one alone.
+    /// </summary>
+    [TestMethod]
+    public async Task TokenExchangeRejectsEmptyResourceOccurrenceMixedWithValidOneAsInvalidTarget()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = RegisterTokenExchangeClient(app);
+        WireClientAuthentication(app);
+
+        //The token-exchange endpoint candidate only materialises when these seams are wired (the
+        //same fail-closed gate PAR/revocation apply); the resource shape gate under test here runs
+        //before either is ever invoked, so their bodies are unreached.
+        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
+            static (token, tokenType, registration, context, ct) =>
+                ValueTask.FromResult<ValidatedSecurityToken?>(
+                    new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
+        app.Server.OAuth().AuthorizeTokenExchangeAsync =
+            static (subject, actor, request, registration, context, ct) =>
+                ValueTask.FromResult<TokenExchangeAuthorization?>(
+                    new TokenExchangeAuthorization { Subject = subject.Subject, Scope = WellKnownScopes.OpenId, IssuedTokenType = TokenType.AccessToken });
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = new()
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
+            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
+            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.AccessToken)
+        };
+        form.Add(OAuthRequestParameterNames.Resource, "https://rs.example.com/api");
+        form.Add(OAuthRequestParameterNames.Resource, "");
+        form = form.WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidTarget}\"", body, StringComparison.Ordinal,
+            $"An empty resource occurrence mixed with a valid one must fail the whole request closed. Got: {body}");
+    }
+
+
+    /// <summary>
     /// Registers a truly grant-only confidential client — no
     /// <see cref="WellKnownCapabilityIdentifiers.OAuthAuthorizationCode"/> — allowed the
     /// <see cref="WellKnownCapabilityIdentifiers.OAuthTokenExchange"/> capability plus
     /// <see cref="WellKnownCapabilityIdentifiers.OAuthClientCredentials"/> (some end-to-end tests
     /// obtain a real subject/actor token via the client_credentials grant). Grant-only token-exchange
     /// issuance works because <see cref="Rfc9068AccessTokenProducer"/>'s <c>RequiredCapability</c> is
-    /// <see langword="null"/> — an optional tenant-feature gate, not a grant-capability proxy
-    /// (contract wave-4 D2) — so the endpoint-match capability alone is sufficient. RegisterDpopClient
+    /// <see langword="null"/> — an optional tenant-feature gate, not a grant-capability proxy —
+    /// so the endpoint-match capability alone is sufficient. RegisterDpopClient
     /// supplies the AccessTokenIssuance signing keys the producers resolve. The discovery/jwks
     /// capabilities round out the standard surface. <see cref="AddMachineScopeAudienceMapping"/> maps
     /// <see cref="MachineScope"/> onto <see cref="ResourceServerAudience"/> so the real
     /// client_credentials subject/actor tokens minted below still reach a concrete audience —
-    /// contract wave-4 D4 narrows <c>openid</c> away from every <c>client_credentials</c> grant.
+    /// <c>openid</c> is narrowed away from every <c>client_credentials</c> grant.
     /// </summary>
     private static VerifierKeyMaterial RegisterTokenExchangeClient(TestHostShell app)
     {

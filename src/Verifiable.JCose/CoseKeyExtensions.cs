@@ -53,7 +53,7 @@ public static class CoseKeyExtensions
         /// <exception cref="InvalidOperationException">Thrown when the COSE_Key omits coordinates required to reconstruct the public point.</exception>
         /// <exception cref="NotSupportedException">Thrown when the key type / curve is not one the algorithm converter recognises.</exception>
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented carrier transfers to the returned PublicKeyMemory; the caller disposes it.")]
-        public PublicKeyMemory ToPublicKeyMemory(MemoryPool<byte> pool)
+        public PublicKeyMemory ToPublicKeyMemory(BaseMemoryPool pool)
         {
             ArgumentNullException.ThrowIfNull(coseKey);
             ArgumentNullException.ThrowIfNull(pool);

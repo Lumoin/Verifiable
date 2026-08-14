@@ -410,7 +410,7 @@ public delegate ValueTask<Federation.HistoricalKeysContribution?> ResolveHistori
 /// <summary>
 /// Processes a Relying Party's explicit client registration request at the
 /// <c>federation_registration_endpoint</c> per
-/// <see href="https://openid.net/specs/openid-federation-1_0.html#section-12.2">Federation §12.2</see>.
+/// <see href="https://openid.net/specs/openid-federation-connect-1_1-final.html#section-12.2">Connect-1.1 §12.2</see>.
 /// The RP POSTs its signed Entity Configuration; the library hands the raw
 /// compact JWS to this delegate, assembles the §12.2 Explicit Registration
 /// Response from the returned contribution, and signs it with the OP's
@@ -1434,7 +1434,7 @@ public delegate ValueTask DeliverBackChannelLogoutDelegate(
 /// (the PDP identifier, the chain-resolved endpoint URLs, and any
 /// <c>capabilities</c>); the application signs it with its own key and
 /// algorithm — e.g. via <c>Verifiable.JCose</c>
-/// <see cref="Verifiable.JCose.Jose.SignAsync{TJwtPart}(TJwtPart, TJwtPart, Verifiable.JCose.JwtPartEncoder{TJwtPart}, Verifiable.JCose.EncodeDelegate, Verifiable.Cryptography.PrivateKeyMemory, System.Buffers.MemoryPool{byte}, System.Threading.CancellationToken)"/> —
+/// <see cref="Verifiable.JCose.Jose.SignAsync{TJwtPart}(TJwtPart, TJwtPart, Verifiable.JCose.JwtPartEncoder{TJwtPart}, Verifiable.JCose.EncodeDelegate, Verifiable.Cryptography.PrivateKeyMemory, System.Buffers.BaseMemoryPool, System.Threading.CancellationToken)"/> —
 /// and returns the compact JWS. The application MUST add the spec-required
 /// <c>iss</c> claim (the PDP identifier, available as
 /// <c>policy_decision_point</c> in <paramref name="metadata"/>).

@@ -71,7 +71,7 @@ public static class VerifierAttestationKeyResolver
         DecodeDelegate base64UrlDecoder,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
         Func<ReadOnlySpan<byte>, Dictionary<string, object>> payloadDeserializer,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(attestation);

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using Verifiable.Core;
@@ -35,7 +34,6 @@ namespace Verifiable.Vcalm;
 /// <see cref="VcalmProblemTypes.UnknownOptionProvided"/> type).
 /// </para>
 /// </remarks>
-[DebuggerDisplay("VcalmHolderEndpoints")]
 public static class VcalmHolderEndpoints
 {
     /// <summary>

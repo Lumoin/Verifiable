@@ -25,13 +25,13 @@ namespace Verifiable.Json.StatusList;
 /// </remarks>
 public sealed class StatusListJsonConverter: JsonConverter<Core.StatusList.StatusList>
 {
-    private MemoryPool<byte> Pool { get; }
+    private BaseMemoryPool Pool { get; }
 
     /// <summary>
     /// Creates a new converter using the specified memory pool.
     /// </summary>
     /// <param name="pool">The memory pool for allocating decompressed data.</param>
-    public StatusListJsonConverter(MemoryPool<byte> pool)
+    public StatusListJsonConverter(BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         this.Pool = pool;

@@ -28,7 +28,7 @@ internal static class WebVhHash
     /// <summary>
     /// Computes <c>base58btc(multihash(input, SHA-256))</c> for the given input bytes, taking the SHA-256 digest
     /// through the supplied <see cref="ComputeDigestDelegate"/> — and so its telemetry, CBOM stamping and event
-    /// emission — by awaiting <see cref="CryptographicKeyEvents.ComputeDigestAsync(ComputeDigestDelegate, System.Buffers.ReadOnlySequence{byte}, int, Tag, MemoryPool{byte}, System.Collections.Frozen.FrozenDictionary{string, object}, System.Threading.CancellationToken)"/>,
+    /// emission — by awaiting <see cref="CryptographicKeyEvents.ComputeDigestAsync(ComputeDigestDelegate, System.Buffers.ReadOnlySequence{byte}, int, Tag, BaseMemoryPool, System.Collections.Frozen.FrozenDictionary{string, object}, System.Threading.CancellationToken)"/>,
     /// so a hardware-async digest backend (TPM2_Hash, KMS) works as well as a synchronously-completing software one.
     /// </summary>
     /// <param name="input">The bytes to hash.</param>
@@ -37,7 +37,7 @@ internal static class WebVhHash
     /// <param name="pool">The pool the digest input and output buffers are rented from.</param>
     /// <param name="cancellationToken">Cancels an in-flight digest on a hardware-async backend (TPM2_Hash, KMS).</param>
     /// <returns>The base58btc-encoded SHA-256 multihash string.</returns>
-    public static async ValueTask<string> ComputeBase58Async(ReadOnlyMemory<byte> input, ComputeDigestDelegate computeDigest, EncodeDelegate base58Encoder, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static async ValueTask<string> ComputeBase58Async(ReadOnlyMemory<byte> input, ComputeDigestDelegate computeDigest, EncodeDelegate base58Encoder, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(computeDigest);
         ArgumentNullException.ThrowIfNull(base58Encoder);
@@ -79,7 +79,7 @@ internal static class WebVhHash
     /// <param name="base58Decoder">The raw base58btc decoder.</param>
     /// <param name="pool">The pool the decoded multihash bytes are rented from.</param>
     /// <returns><see langword="true"/> when the string decodes to a SHA-256 multihash of the correct length.</returns>
-    public static bool IsSha256Multihash(string base58Multihash, DecodeDelegate base58Decoder, MemoryPool<byte> pool)
+    public static bool IsSha256Multihash(string base58Multihash, DecodeDelegate base58Decoder, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(base58Decoder);
         ArgumentNullException.ThrowIfNull(pool);

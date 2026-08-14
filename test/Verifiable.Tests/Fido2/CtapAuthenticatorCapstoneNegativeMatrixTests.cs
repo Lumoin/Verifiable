@@ -18,7 +18,7 @@ namespace Verifiable.Tests.Fido2;
 /// <c>authenticatorGetNextAssertion</c> error/edge scenarios, each driven by
 /// <see cref="CtapAuthenticatorMakeCredentialClient"/>/<see cref="CtapAuthenticatorGetAssertionClient"/>/
 /// <see cref="CtapAuthenticatorGetNextAssertionClient"/> over the real, unmodified transport
-/// (<see cref="CtapWave2TransportHarness"/>) and asserting the exact CTAP2 status byte the authenticator
+/// (<see cref="CtapNfcTransportHarness"/>) and asserting the exact CTAP2 status byte the authenticator
 /// returned on the wire.
 /// </summary>
 /// <remarks>
@@ -42,19 +42,19 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     public async Task ExcludeListHitReturnsCredentialExcluded()
     {
         const string rpId = "negative-a.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-a-authenticator");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("negative-a-authenticator");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken);
 
         CredentialId existingCredentialId = await RegisterCredentialAsync(
-            harness, pool, rpId, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0x01), resident: false, cancellationToken);
+            harness, pool, rpId, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x01), resident: false, cancellationToken);
 
-        CtapMakeCredentialRequest request = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(
+        CtapMakeCredentialRequest request = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(
             pool,
             rpId: rpId,
-            userId: CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0x02),
+            userId: CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x02),
             excludeList: [new PublicKeyCredentialDescriptor { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Id = existingCredentialId }]);
 
         CtapCommandException exception = await Assert.ThrowsExactlyAsync<CtapCommandException>(
@@ -63,7 +63,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
 
         Assert.AreEqual(WellKnownCtapStatusCodes.CredentialExcluded, exception.StatusCode);
 
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(request);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(request);
     }
 
 
@@ -75,14 +75,14 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     public async Task UnknownAllowListIdReturnsNoCredentials()
     {
         const string rpId = "negative-b.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-b-authenticator");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("negative-b-authenticator");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken);
 
-        CredentialId unknownCredentialId = CredentialId.Create(CtapWave2AuthenticatorFixtures.BuildFixedBytes(32, 0x9A), pool);
-        CtapGetAssertionRequest request = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(
+        CredentialId unknownCredentialId = CredentialId.Create(CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(32, 0x9A), pool);
+        CtapGetAssertionRequest request = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionRequest(
             pool,
             rpId: rpId,
             allowList: [new PublicKeyCredentialDescriptor { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Id = unknownCredentialId }]);
@@ -93,7 +93,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
 
         Assert.AreEqual(WellKnownCtapStatusCodes.NoCredentials, exception.StatusCode);
 
-        CtapWave2AuthenticatorFixtures.DisposeGetAssertionRequest(request);
+        CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(request);
     }
 
 
@@ -104,13 +104,13 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     [TestMethod]
     public async Task UnsupportedAlgorithmReturnsUnsupportedAlgorithm()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-c-authenticator");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("negative-c-authenticator");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken);
 
-        CtapMakeCredentialRequest request = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(pool, alg: WellKnownCoseAlgorithms.Rs256);
+        CtapMakeCredentialRequest request = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(pool, alg: WellKnownCoseAlgorithms.Rs256);
 
         CtapCommandException exception = await Assert.ThrowsExactlyAsync<CtapCommandException>(
             () => CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
@@ -118,7 +118,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
 
         Assert.AreEqual(WellKnownCtapStatusCodes.UnsupportedAlgorithm, exception.StatusCode);
 
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(request);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(request);
     }
 
 
@@ -129,13 +129,13 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     [TestMethod]
     public async Task UserVerificationTrueOnMakeCredentialReturnsInvalidOption()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-d-authenticator");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("negative-d-authenticator");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken);
 
-        CtapMakeCredentialRequest request = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(
+        CtapMakeCredentialRequest request = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(
             pool, options: new CtapCommandOptions(UserVerification: true));
 
         CtapCommandException exception = await Assert.ThrowsExactlyAsync<CtapCommandException>(
@@ -144,7 +144,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
 
         Assert.AreEqual(WellKnownCtapStatusCodes.InvalidOption, exception.StatusCode);
 
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(request);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(request);
     }
 
 
@@ -156,13 +156,13 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     [TestMethod]
     public async Task PinUvAuthParamWithoutProtocolReturnsMissingParameter()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-e-authenticator");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("negative-e-authenticator");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken);
 
-        CtapMakeCredentialRequest request = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(
+        CtapMakeCredentialRequest request = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(
             pool, pinUvAuthParam: new byte[] { 0x01, 0x02, 0x03, 0x04 });
 
         CtapCommandException exception = await Assert.ThrowsExactlyAsync<CtapCommandException>(
@@ -171,7 +171,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
 
         Assert.AreEqual(WellKnownCtapStatusCodes.MissingParameter, exception.StatusCode);
 
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(request);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(request);
     }
 
 
@@ -183,13 +183,13 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     [TestMethod]
     public async Task ResidentKeyOptionOnGetAssertionReturnsUnsupportedOption()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-f-authenticator");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("negative-f-authenticator");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken);
 
-        CtapGetAssertionRequest request = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(
+        CtapGetAssertionRequest request = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionRequest(
             pool, options: new CtapCommandOptions(ResidentKey: false));
 
         CtapCommandException exception = await Assert.ThrowsExactlyAsync<CtapCommandException>(
@@ -198,7 +198,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
 
         Assert.AreEqual(WellKnownCtapStatusCodes.UnsupportedOption, exception.StatusCode);
 
-        CtapWave2AuthenticatorFixtures.DisposeGetAssertionRequest(request);
+        CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(request);
     }
 
 
@@ -213,19 +213,19 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     public async Task SecondAccountResidentAtCapacityReturnsKeyStoreFull()
     {
         const string rpId = "negative-g.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-g-authenticator", residentCredentialCapacity: 1);
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("negative-g-authenticator", residentCredentialCapacity: 1);
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken);
 
         CredentialId firstCredentialId = await RegisterCredentialAsync(
-            harness, pool, rpId, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0x11), resident: true, cancellationToken);
+            harness, pool, rpId, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x11), resident: true, cancellationToken);
 
-        CtapMakeCredentialRequest secondRequest = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(
+        CtapMakeCredentialRequest secondRequest = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(
             pool,
             rpId: rpId,
-            userId: CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0x22),
+            userId: CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x22),
             options: new CtapCommandOptions(ResidentKey: true));
 
         CtapCommandException exception = await Assert.ThrowsExactlyAsync<CtapCommandException>(
@@ -234,7 +234,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
 
         Assert.AreEqual(WellKnownCtapStatusCodes.KeyStoreFull, exception.StatusCode);
 
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(secondRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(secondRequest);
         firstCredentialId.Dispose();
     }
 
@@ -247,16 +247,16 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     public async Task UserPresenceFalsePreFlightSucceedsWithUserPresentFlagClear()
     {
         const string rpId = "negative-h.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-h-authenticator");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("negative-h-authenticator");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken);
 
         CredentialId credentialId = await RegisterCredentialAsync(
-            harness, pool, rpId, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0x33), resident: false, cancellationToken);
+            harness, pool, rpId, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x33), resident: false, cancellationToken);
 
-        CtapGetAssertionRequest request = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(
+        CtapGetAssertionRequest request = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionRequest(
             pool,
             rpId: rpId,
             allowList: [new PublicKeyCredentialDescriptor { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Id = credentialId }],
@@ -268,7 +268,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
         using AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(response.AuthData, CredentialPublicKeyCborReader.Read, pool);
         Assert.IsFalse(authenticatorData.Flags.UserPresent, "options.up = false must clear the UP flag in the returned authData.");
 
-        CtapWave2AuthenticatorFixtures.DisposeGetAssertionRequest(request);
+        CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(request);
         response.Credential.Id.Dispose();
     }
 
@@ -280,11 +280,11 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     [TestMethod]
     public async Task GetNextAssertionWithNoPriorSequenceReturnsNotAllowed()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-i-authenticator");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("negative-i-authenticator");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken);
 
         CtapCommandException exception = await Assert.ThrowsExactlyAsync<CtapCommandException>(
             () => CtapAuthenticatorGetNextAssertionClient.GetNextAssertionAsync(
@@ -303,21 +303,21 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     public async Task GetNextAssertionAfterInterveningGetInfoReturnsNotAllowed()
     {
         const string rpId = "negative-j.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-j-authenticator");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("negative-j-authenticator");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken);
 
         using CredentialId firstCredentialId = await RegisterCredentialAsync(
-            harness, pool, rpId, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0x40), resident: true, cancellationToken);
+            harness, pool, rpId, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x40), resident: true, cancellationToken);
         using CredentialId secondCredentialId = await RegisterCredentialAsync(
-            harness, pool, rpId, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0x41), resident: true, cancellationToken);
+            harness, pool, rpId, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x41), resident: true, cancellationToken);
 
-        CtapGetAssertionRequest request = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(pool, rpId: rpId);
+        CtapGetAssertionRequest request = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionRequest(pool, rpId: rpId);
         CtapGetAssertionResponse response = await CtapAuthenticatorGetAssertionClient.GetAssertionAsync(
             harness.Transceive, CtapGetAssertionRequestCborWriter.Write, request, CtapGetAssertionResponseCborReader.Read, pool, cancellationToken);
-        CtapWave2AuthenticatorFixtures.DisposeGetAssertionRequest(request);
+        CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(request);
         response.Credential.Id.Dispose();
         response.User?.Id.Dispose();
 
@@ -341,21 +341,21 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     {
         const string rpId = "negative-k.example";
         var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-k-authenticator", timeProvider: timeProvider);
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("negative-k-authenticator", timeProvider: timeProvider);
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken);
 
         using CredentialId firstCredentialId = await RegisterCredentialAsync(
-            harness, pool, rpId, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0x42), resident: true, cancellationToken);
+            harness, pool, rpId, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x42), resident: true, cancellationToken);
         using CredentialId secondCredentialId = await RegisterCredentialAsync(
-            harness, pool, rpId, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0x43), resident: true, cancellationToken);
+            harness, pool, rpId, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x43), resident: true, cancellationToken);
 
-        CtapGetAssertionRequest request = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(pool, rpId: rpId);
+        CtapGetAssertionRequest request = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionRequest(pool, rpId: rpId);
         CtapGetAssertionResponse response = await CtapAuthenticatorGetAssertionClient.GetAssertionAsync(
             harness.Transceive, CtapGetAssertionRequestCborWriter.Write, request, CtapGetAssertionResponseCborReader.Read, pool, cancellationToken);
-        CtapWave2AuthenticatorFixtures.DisposeGetAssertionRequest(request);
+        CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(request);
         response.Credential.Id.Dispose();
         response.User?.Id.Dispose();
 
@@ -379,21 +379,21 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     public async Task GetNextAssertionAfterCounterExhaustionReturnsNotAllowed()
     {
         const string rpId = "negative-l.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-l-authenticator");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("negative-l-authenticator");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken);
 
         using CredentialId firstCredentialId = await RegisterCredentialAsync(
-            harness, pool, rpId, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0x44), resident: true, cancellationToken);
+            harness, pool, rpId, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x44), resident: true, cancellationToken);
         using CredentialId secondCredentialId = await RegisterCredentialAsync(
-            harness, pool, rpId, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0x45), resident: true, cancellationToken);
+            harness, pool, rpId, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x45), resident: true, cancellationToken);
 
-        CtapGetAssertionRequest request = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(pool, rpId: rpId);
+        CtapGetAssertionRequest request = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionRequest(pool, rpId: rpId);
         CtapGetAssertionResponse firstResponse = await CtapAuthenticatorGetAssertionClient.GetAssertionAsync(
             harness.Transceive, CtapGetAssertionRequestCborWriter.Write, request, CtapGetAssertionResponseCborReader.Read, pool, cancellationToken);
-        CtapWave2AuthenticatorFixtures.DisposeGetAssertionRequest(request);
+        CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(request);
         firstResponse.Credential.Id.Dispose();
         firstResponse.User?.Id.Dispose();
 
@@ -415,20 +415,20 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     /// credential (CTAP 2.3, section 6.1.2, step 16): a direct <c>authenticatorGetAssertion</c> whose
     /// <c>allowList</c> names the now-overwritten (first) credential identifier fails with
     /// <see cref="WellKnownCtapStatusCodes.NoCredentials"/>, since that identifier was removed from the
-    /// credential-ID-keyed store entirely — closing the wave-2 review's coverage note that only exercised
+    /// credential-ID-keyed store entirely — closing a coverage note that only exercised
     /// the overwrite's effect on a subsequent <c>excludeList</c>, never on <c>allowList</c> lookup.
     /// </summary>
     [TestMethod]
     public async Task AllowListNamingOverwrittenCredentialIdReturnsNoCredentials()
     {
         const string rpId = "negative-m.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("negative-m-authenticator");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("negative-m-authenticator");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken);
 
-        byte[] userId = CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0x46);
+        byte[] userId = CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x46);
         byte[] overwrittenCredentialIdBytes;
         using(CredentialId overwrittenCredentialId = await RegisterCredentialAsync(harness, pool, rpId, userId, resident: true, cancellationToken))
         {
@@ -437,7 +437,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
 
         using CredentialId currentCredentialId = await RegisterCredentialAsync(harness, pool, rpId, userId, resident: true, cancellationToken);
 
-        CtapGetAssertionRequest request = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(
+        CtapGetAssertionRequest request = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionRequest(
             pool,
             rpId: rpId,
             allowList: [new PublicKeyCredentialDescriptor { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Id = CredentialId.Create(overwrittenCredentialIdBytes, pool) }]);
@@ -448,7 +448,7 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
 
         Assert.AreEqual(WellKnownCtapStatusCodes.NoCredentials, exception.StatusCode);
 
-        CtapWave2AuthenticatorFixtures.DisposeGetAssertionRequest(request);
+        CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(request);
     }
 
 
@@ -459,14 +459,14 @@ internal sealed class CtapAuthenticatorCapstoneNegativeMatrixTests
     /// already-registered credential.
     /// </summary>
     private static async Task<CredentialId> RegisterCredentialAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, string rpId, byte[] userId, bool resident, CancellationToken cancellationToken)
+        CtapNfcTransportHarness harness, BaseMemoryPool pool, string rpId, byte[] userId, bool resident, CancellationToken cancellationToken)
     {
-        CtapMakeCredentialRequest request = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(
+        CtapMakeCredentialRequest request = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(
             pool, rpId: rpId, userId: userId, options: new CtapCommandOptions(ResidentKey: resident));
 
         CtapMakeCredentialResponse response = await CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
             harness.Transceive, CtapMakeCredentialRequestCborWriter.Write, request, CtapMakeCredentialResponseCborReader.Read, pool, cancellationToken);
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(request);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(request);
 
         using AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(response.AuthData, CredentialPublicKeyCborReader.Read, pool);
 

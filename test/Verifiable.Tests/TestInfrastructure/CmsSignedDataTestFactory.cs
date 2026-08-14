@@ -40,11 +40,25 @@ internal static class CmsSignedDataTestFactory
     /// <summary>
     /// Mints a self-signed certificate for an elliptic-curve signing key.
     /// </summary>
-    public static X509Certificate2 MintSelfSignedCertificate(ECDsa key, DateTimeOffset notBefore, DateTimeOffset notAfter)
+    /// <param name="key">The signing key the certificate certifies and is signed by.</param>
+    /// <param name="notBefore">The validity start.</param>
+    /// <param name="notAfter">The validity end.</param>
+    /// <param name="subjectName">
+    /// The subject distinguished name, defaulting to the shared one every earlier caller relies on. A test that
+    /// mints two self-signed certificates that must be told apart by name — a counter signer beside a signer,
+    /// for instance — passes a distinct one, because two self-signed certificates sharing a subject are also two
+    /// certificates sharing an issuer name, which is the ambiguous-issuer shape chain building trips over.
+    /// </param>
+    /// <returns>The minted certificate; the caller disposes it.</returns>
+    public static X509Certificate2 MintSelfSignedCertificate(
+        ECDsa key,
+        DateTimeOffset notBefore,
+        DateTimeOffset notAfter,
+        string subjectName = "CN=Verifiable CAdES Test")
     {
         ArgumentNullException.ThrowIfNull(key);
 
-        var request = new CertificateRequest("CN=Verifiable CAdES Test", key, HashAlgorithmName.SHA256);
+        var request = new CertificateRequest(subjectName, key, HashAlgorithmName.SHA256);
 
         return request.CreateSelfSigned(notBefore, notAfter);
     }
@@ -58,6 +72,33 @@ internal static class CmsSignedDataTestFactory
         ArgumentNullException.ThrowIfNull(key);
 
         var request = new CertificateRequest("CN=Verifiable CAdES Test", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+
+        return request.CreateSelfSigned(notBefore, notAfter);
+    }
+
+
+    /// <summary>The id-kp-timeStamping Extended Key Usage key purpose (RFC 3161 §2.3), which a TSA certificate must assert as its only EKU, marked critical.</summary>
+    private const string TimeStampingKeyPurposeOid = "1.3.6.1.5.5.7.3.8";
+
+
+    /// <summary>
+    /// Mints a self-signed Time-Stamping Authority certificate for an RSA signing key: the critical
+    /// timeStamping-only Extended Key Usage of RFC 3161 §2.3 beside the basic-constraints and key-usage
+    /// extensions the ring's own authority mint writes, so independent token generators that validate the
+    /// authority certificate accept it.
+    /// </summary>
+    /// <param name="key">The authority's RSA signing key.</param>
+    /// <param name="notBefore">The validity start.</param>
+    /// <param name="notAfter">The validity end.</param>
+    /// <returns>The minted certificate; the caller disposes it.</returns>
+    public static X509Certificate2 MintSelfSignedTimeStampingCertificate(RSA key, DateTimeOffset notBefore, DateTimeOffset notAfter)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+
+        var request = new CertificateRequest("CN=Verifiable RSA Test Time-Stamping Authority", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(certificateAuthority: false, hasPathLengthConstraint: false, pathLengthConstraint: 0, critical: true));
+        request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.NonRepudiation, critical: true));
+        request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension([new Oid(TimeStampingKeyPurposeOid)], critical: true));
 
         return request.CreateSelfSigned(notBefore, notAfter);
     }
@@ -106,6 +147,45 @@ internal static class CmsSignedDataTestFactory
 
 
     /// <summary>
+    /// Signs the payload as a plain CMS SignedData carrying two SignerInfo structures, one per certificate, and
+    /// returns the pooled wire carrier. Used where an operation has to address one signer among several.
+    /// </summary>
+    /// <param name="payload">The content both signers sign.</param>
+    /// <param name="firstSignerCertificate">The certificate of the SignerInfo added first.</param>
+    /// <param name="secondSignerCertificate">The certificate of the SignerInfo added second.</param>
+    /// <returns>The wire carrier. The caller disposes it.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the carrier transfers to the caller, which disposes it.")]
+    public static CmsSignedData SignAsCmsWithTwoSigners(ReadOnlySpan<byte> payload, X509Certificate2 firstSignerCertificate, X509Certificate2 secondSignerCertificate)
+    {
+        var content = new ContentInfo(payload.ToArray());
+        var signedCms = new SignedCms(content, detached: false);
+        signedCms.ComputeSignature(new CmsSigner(firstSignerCertificate) { IncludeOption = X509IncludeOption.EndCertOnly });
+        signedCms.ComputeSignature(new CmsSigner(secondSignerCertificate) { IncludeOption = X509IncludeOption.EndCertOnly });
+
+        return CmsSignedData.FromBytes(signedCms.Encode(), BaseMemoryPool.Shared);
+    }
+
+
+    /// <summary>
+    /// Signs the payload as a plain CMS SignedData carrying no <c>certificates</c> field at all, and returns the
+    /// pooled wire carrier. This is the structure ETSI EN 319 122-1 clause 5.5.2 NOTE 3 describes, where an
+    /// absent field leaves the corresponding hash-index list empty.
+    /// </summary>
+    /// <param name="payload">The content the signature encapsulates and covers.</param>
+    /// <param name="signerCertificate">The signer certificate (the test holds its key); its own copy is not embedded.</param>
+    /// <returns>The wire carrier. The caller disposes it.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the carrier transfers to the caller, which disposes it.")]
+    public static CmsSignedData SignAsCmsWithoutCertificates(ReadOnlySpan<byte> payload, X509Certificate2 signerCertificate)
+    {
+        var content = new ContentInfo(payload.ToArray());
+        var signedCms = new SignedCms(content, detached: false);
+        signedCms.ComputeSignature(new CmsSigner(signerCertificate) { IncludeOption = X509IncludeOption.None });
+
+        return CmsSignedData.FromBytes(signedCms.Encode(), BaseMemoryPool.Shared);
+    }
+
+
+    /// <summary>
     /// Signs the payload as a CAdES-B-B signature and returns the pooled wire carrier. The CMS signer adds the
     /// content-type and message-digest attributes; this adds a signing-time attribute and, when requested, the
     /// signing-certificate-v2 attribute (ESS) binding the signer certificate (or a deliberately wrong one).
@@ -116,6 +196,7 @@ internal static class CmsSignedDataTestFactory
     /// <param name="includeSigningCertificate">Whether to add the signing-certificate-v2 attribute (a CAdES-B requirement).</param>
     /// <param name="bindWrongCertificate">When <see langword="true"/>, the signing-certificate-v2 hash binds a different certificate, for the mismatch negative.</param>
     /// <param name="explicitHashAlgorithm">When <see langword="true"/>, the ESSCertIDv2 names SHA-256 explicitly rather than relying on the default.</param>
+    /// <param name="digestAlgorithm">The digest algorithm the signer digests and signs under, or <see langword="null"/> for the CMS signer's SHA-256 default — a SHA-512-signing authority following ETSI TS 119 312 clause A.9 Table A.8 is minted by naming SHA-512 here.</param>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the carrier transfers to the caller, which disposes it.")]
     public static CmsSignedData SignAsCAdES(
         ReadOnlySpan<byte> payload,
@@ -123,9 +204,60 @@ internal static class CmsSignedDataTestFactory
         DateTimeOffset signingTime,
         bool includeSigningCertificate = true,
         bool bindWrongCertificate = false,
-        bool explicitHashAlgorithm = false)
+        bool explicitHashAlgorithm = false,
+        HashAlgorithmName? digestAlgorithm = null)
     {
-        SignedCms signedCms = BuildCAdES(payload, signerCertificate, signingTime, includeSigningCertificate, bindWrongCertificate, explicitHashAlgorithm);
+        SignedCms signedCms = BuildCAdES(payload, signerCertificate, signingTime, includeSigningCertificate, bindWrongCertificate, explicitHashAlgorithm, digestAlgorithm);
+
+        return CmsSignedData.FromBytes(signedCms.Encode(), BaseMemoryPool.Shared);
+    }
+
+
+    /// <summary>
+    /// Signs the payload as a CAdES-B-B signature whose <c>encapContentInfo</c> carries no content — a detached
+    /// signature — and returns the pooled wire carrier together with nothing else: the content stays with the
+    /// caller, which is the whole point of the shape.
+    /// </summary>
+    /// <param name="payload">The content the signature covers without carrying it.</param>
+    /// <param name="signerCertificate">The signer certificate (the test holds its key).</param>
+    /// <param name="signingTime">The signing-time attribute value.</param>
+    /// <param name="rsaSignaturePadding">
+    /// The padding an RSA signer signs with, or <see langword="null"/> for the signer's default. Passing
+    /// <see cref="RSASignaturePadding.Pss"/> makes the <c>SignerInfo</c> state <c>id-RSASSA-PSS</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8017#appendix-A.2.3">RFC 8017 Appendix A.2.3</see>), the
+    /// shape a third-party container signed under a modern EU signature policy carries.
+    /// </param>
+    /// <returns>The wire carrier. The caller disposes it.</returns>
+    /// <remarks>
+    /// The second selection method of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc4998#appendix-A">IETF RFC 4998 Appendix A</see> groups "the
+    /// hash value of the CMS Object as well as the hash value of the content" as separate data objects, which
+    /// only means anything when the content is separate from the object. Without a detached signature that
+    /// selection cannot be exercised at all.
+    /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the carrier transfers to the caller, which disposes it.")]
+    public static CmsSignedData SignAsCAdESDetached(
+        ReadOnlySpan<byte> payload,
+        X509Certificate2 signerCertificate,
+        DateTimeOffset signingTime,
+        RSASignaturePadding? rsaSignaturePadding = null)
+    {
+        var content = new ContentInfo(payload.ToArray());
+        var signedCms = new SignedCms(content, detached: true);
+        CmsSigner signer = rsaSignaturePadding is null
+            ? new CmsSigner(signerCertificate)
+            : new CmsSigner(SubjectIdentifierType.IssuerAndSerialNumber, signerCertificate, privateKey: null, rsaSignaturePadding);
+        signer.IncludeOption = X509IncludeOption.EndCertOnly;
+        signer.SignedAttributes.Add(new Pkcs9SigningTime(signingTime.UtcDateTime));
+
+        //The certificate hash goes into a stack span; the ESS DER is encoded straight into the attribute.
+        Span<byte> certificateHash = stackalloc byte[Sha256Length];
+        SHA256.HashData(signerCertificate.RawData, certificateHash);
+        var writer = new AsnWriter(AsnEncodingRules.DER);
+        WriteSigningCertificateV2(writer, certificateHash, explicitHashAlgorithm: false);
+        signer.SignedAttributes.Add(new AsnEncodedData(new Oid(SigningCertificateV2Oid), writer.Encode()));
+
+        signedCms.ComputeSignature(signer);
 
         return CmsSignedData.FromBytes(signedCms.Encode(), BaseMemoryPool.Shared);
     }
@@ -202,11 +334,20 @@ internal static class CmsSignedDataTestFactory
         DateTimeOffset signingTime,
         bool includeSigningCertificate,
         bool bindWrongCertificate,
-        bool explicitHashAlgorithm)
+        bool explicitHashAlgorithm,
+        HashAlgorithmName? digestAlgorithm = null)
     {
         var content = new ContentInfo(payload.ToArray());
         var signedCms = new SignedCms(content, detached: false);
         var signer = new CmsSigner(signerCertificate) { IncludeOption = X509IncludeOption.EndCertOnly };
+        if(digestAlgorithm is HashAlgorithmName named)
+        {
+            //The CMS signer digests and signs under the named algorithm; the SignerInfo then states it as the
+            //digest algorithm, with the signature algorithm staying the key's own (bare rsaEncryption for an
+            //RSA signer, per RFC 3370).
+            signer.DigestAlgorithm = new Oid(DigestAlgorithmOid(named));
+        }
+
         signer.SignedAttributes.Add(new Pkcs9SigningTime(signingTime.UtcDateTime));
         if(includeSigningCertificate)
         {
@@ -226,6 +367,16 @@ internal static class CmsSignedDataTestFactory
         signedCms.ComputeSignature(signer);
 
         return signedCms;
+
+        //Maps a hash algorithm name to the digest algorithm object identifier (RFC 5754 §2) the CMS signer
+        //states in the SignerInfo.
+        static string DigestAlgorithmOid(HashAlgorithmName algorithm) => algorithm.Name switch
+        {
+            "SHA256" => "2.16.840.1.101.3.4.2.1",
+            "SHA384" => "2.16.840.1.101.3.4.2.2",
+            "SHA512" => "2.16.840.1.101.3.4.2.3",
+            _ => throw new ArgumentOutOfRangeException(nameof(algorithm), $"No digest algorithm object identifier is mapped for '{algorithm.Name}'.")
+        };
     }
 
 

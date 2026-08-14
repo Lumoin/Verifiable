@@ -457,8 +457,8 @@ internal sealed class HostedAuthorizationServer
                         new Uri($"{authority}{TestHostShell.ComposeEndpointPath(endpointKey, segment)}"));
                 }
 
-                //Phase 9h chunk 9 — the library asks for endpoint URLs solely
-                //The path-suffix dispatch lives in a private static helper
+                //The library asks for endpoint URLs solely through this delegate; the
+                //path-suffix dispatch lives in a private static helper
                 //(EndpointPathSuffix) shared with ComposeEndpointPath /
                 //ComposeEndpointUri — fixture code that needs concrete URIs
                 //synchronously calls the same source-of-truth.
@@ -498,7 +498,7 @@ internal sealed class HostedAuthorizationServer
             ResolvePolicyAsync = (registration, ctx, ct) =>
                 PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, ctx, ct),
 
-            //Phase 9h chunk 4/8 — per-call decision points. Wired to the
+            //Per-call decision points. Wired to the
             //library defaults: full registration capability set (no
             //attenuation), no-op inspection, public-subject identity.
             //Applications that need CAEP/RISC attenuation, audit emission,

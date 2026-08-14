@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.OAuth.Federation;
 
@@ -23,27 +22,26 @@ namespace Verifiable.OAuth.Federation;
 ///   <item><description><see cref="Essential"/> — when <see langword="true"/>, the parameter MUST be present in the effective metadata after application.</description></item>
 /// </list>
 /// </remarks>
-[DebuggerDisplay("WellKnownMetadataPolicyOperators")]
 public static class WellKnownMetadataPolicyOperators
 {
     /// <summary><c>value</c> — replaces the parameter's value.</summary>
-    public static readonly MetadataPolicyOperator Value = new("value");
+    public static MetadataPolicyOperator Value { get; } = new("value");
 
     /// <summary><c>add</c> — appends to an array parameter.</summary>
-    public static readonly MetadataPolicyOperator Add = new("add");
+    public static MetadataPolicyOperator Add { get; } = new("add");
 
     /// <summary><c>default</c> — value when subject did not declare one.</summary>
-    public static readonly MetadataPolicyOperator Default = new("default");
+    public static MetadataPolicyOperator Default { get; } = new("default");
 
     /// <summary><c>one_of</c> — restricts to an enumerated set.</summary>
-    public static readonly MetadataPolicyOperator OneOf = new("one_of");
+    public static MetadataPolicyOperator OneOf { get; } = new("one_of");
 
     /// <summary><c>subset_of</c> — array must be a subset of the listed values.</summary>
-    public static readonly MetadataPolicyOperator SubsetOf = new("subset_of");
+    public static MetadataPolicyOperator SubsetOf { get; } = new("subset_of");
 
     /// <summary><c>superset_of</c> — array must be a superset of the listed values.</summary>
-    public static readonly MetadataPolicyOperator SupersetOf = new("superset_of");
+    public static MetadataPolicyOperator SupersetOf { get; } = new("superset_of");
 
     /// <summary><c>essential</c> — boolean flag; parameter MUST be present.</summary>
-    public static readonly MetadataPolicyOperator Essential = new("essential");
+    public static MetadataPolicyOperator Essential { get; } = new("essential");
 }

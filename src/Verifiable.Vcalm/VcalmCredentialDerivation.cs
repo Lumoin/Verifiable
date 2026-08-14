@@ -64,5 +64,5 @@ public sealed record VcalmCredentialDerivation
     public required DecodeDelegate Decoder { get; init; }
 
     /// <summary>The memory pool backing the transient derive buffers.</summary>
-    public required MemoryPool<byte> MemoryPool { get; init; }
+    public required BaseMemoryPool MemoryPool { get; init; }
 }

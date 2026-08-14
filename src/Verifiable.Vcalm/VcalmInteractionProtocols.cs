@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Vcalm;
@@ -23,7 +22,6 @@ namespace Verifiable.Vcalm;
 /// implements only the vcapi entry's §3.6 exchange and the inviteRequest entry.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("VcalmInteractionProtocols")]
 public sealed record VcalmInteractionProtocols
 {
     /// <summary>

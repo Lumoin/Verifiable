@@ -102,7 +102,7 @@ public sealed record UnsupportedCtapCommandReceived(byte CommandByte): CtapAuthe
 /// </param>
 /// <param name="IsUserPresenceDeferralAllowed">
 /// Whether the transport that decoded this request supports parking a user-presence wait across
-/// separate wire round trips (R2) — threaded as data from <see cref="CtapAuthenticatorSimulator.BeginDeferredTransceiveAsync"/>,
+/// separate wire round trips — threaded as data from <see cref="CtapAuthenticatorSimulator.BeginDeferredTransceiveAsync"/>,
 /// never ambient state. Defaults to <see langword="false"/>: a plain <see cref="Ctap2TransceiveDelegate"/>
 /// call processes synchronously to completion, so <see cref="CtapUserPresenceDecision.Pending"/> resolves
 /// to <see cref="WellKnownCtapStatusCodes.UserActionTimeout"/> rather than parking.
@@ -130,7 +130,7 @@ public sealed record MakeCredentialRequested(
 /// </param>
 /// <param name="IsUserPresenceDeferralAllowed">
 /// Whether the transport that decoded this request supports parking a user-presence wait across
-/// separate wire round trips (R2) — see <see cref="MakeCredentialRequested.IsUserPresenceDeferralAllowed"/>'s
+/// separate wire round trips — see <see cref="MakeCredentialRequested.IsUserPresenceDeferralAllowed"/>'s
 /// identical remark. Defaults to <see langword="false"/>.
 /// </param>
 public sealed record GetAssertionRequested(
@@ -222,14 +222,13 @@ public sealed record AssertionSigned(
 /// </summary>
 public enum CtapGetAssertionHmacSecretOutcomeKind
 {
-    /// <summary><c>verify(sharedSecret, saltEnc, saltAuth)</c> failed (snapshot line 13304) → <see cref="WellKnownCtapStatusCodes.PinAuthInvalid"/> (trap 2).</summary>
+    /// <summary><c>verify(sharedSecret, saltEnc, saltAuth)</c> failed (snapshot line 13304) → <see cref="WellKnownCtapStatusCodes.PinAuthInvalid"/>.</summary>
     VerifyFailed,
 
     /// <summary>
     /// <c>decrypt(sharedSecret, saltEnc)</c> failed, or the decrypted plaintext is not exactly 32 or 64
-    /// bytes long (snapshot line 13307) → <see cref="WellKnownCtapStatusCodes.InvalidParameter"/> (trap
-    /// 3) — the length gate is on the DECRYPTED plaintext, never <c>saltEnc</c>'s own ciphertext length
-    /// (trap 7).
+    /// bytes long (snapshot line 13307) → <see cref="WellKnownCtapStatusCodes.InvalidParameter"/> —
+    /// the length gate is on the DECRYPTED plaintext, never <c>saltEnc</c>'s own ciphertext length.
     /// </summary>
     DecryptFailed,
 
@@ -301,7 +300,7 @@ public sealed record CredentialManagementResponseComputed(CtapCredentialManageme
 /// <summary>
 /// The effect fold-back of a <see cref="CtapLocateCredentialManagementCredentialsAction"/>:
 /// <c>enumerateCredentialsBegin</c>'s own by-hash resident-credential match, ordered
-/// <see cref="CtapCredentialRecord.CreationSequence"/>-ascending (R9) — the per-candidate
+/// <see cref="CtapCredentialRecord.CreationSequence"/>-ascending — the per-candidate
 /// <c>rpIDHash</c> recomputation having required the effectful loop's own memory pool.
 /// </summary>
 /// <param name="MatchedCredentialIds">
@@ -433,7 +432,7 @@ public enum CtapChangePinOutcomeKind
 /// <param name="FreshProtocolTwoToken">PIN/UV auth protocol two's freshly reset token state — see <see cref="FreshProtocolOneToken"/>.</param>
 /// <param name="Verdict">
 /// The <see cref="CtapPinRetriesCustody"/> verdict from the current-PIN check that produced this
-/// input, or <see langword="null"/> when no such bundle is composed (contract R-4, wavepin). Present on
+/// input, or <see langword="null"/> when no such bundle is composed. Present on
 /// EVERY outcome reached only once the current PIN has already matched or been penalized — i.e. every
 /// outcome except <see cref="CtapChangePinOutcomeKind.DecapsulationFailed"/>/
 /// <see cref="CtapChangePinOutcomeKind.VerifyFailed"/>, which never ran the current-PIN check at all —
@@ -523,7 +522,7 @@ public enum CtapPinTokenIssuanceOutcomeKind
 /// </param>
 /// <param name="Verdict">
 /// The <see cref="CtapPinRetriesCustody"/> verdict from the current-PIN check that produced this
-/// input, or <see langword="null"/> when no such bundle is composed (contract R-4, wavepin). Present on
+/// input, or <see langword="null"/> when no such bundle is composed. Present on
 /// every outcome reached only once the current PIN has already matched or been penalized — i.e. every
 /// outcome except <see cref="CtapPinTokenIssuanceOutcomeKind.DecapsulationFailed"/>, which never ran the
 /// current-PIN check at all — so the pure fold-back's <c>ForcePinChangeRequired</c>/success reset and
@@ -631,13 +630,13 @@ public sealed record UvTokenIssuanceCompleted(
 /// <param name="Pool">
 /// The memory pool available to this command, threaded from <see cref="Ctap2TransceiveDelegate"/>'s own
 /// pool parameter before this input was built — the value <see cref="CtapAuthenticatorState.FactoryReset"/>
-/// rents the restored <see cref="CtapAuthenticatorState.SerializedLargeBlobArray"/> from (R7: the
+/// rents the restored <see cref="CtapAuthenticatorState.SerializedLargeBlobArray"/> from (the
 /// array's restoration is entropy-free, so it needs no <see cref="Ctap.Authenticator.Automata.CtapAction"/>
 /// round-trip — only a pool reference the pure transition graph has nowhere else to obtain, mirroring
 /// <see cref="MakeCredentialRequested.SelectedAlgorithm"/>'s own "precompute outside, use inside"
 /// precedent for a composition-time dependency the pure transition cannot construct itself).
 /// </param>
-public sealed record ResetRequested(DateTimeOffset Now, MemoryPool<byte> Pool): CtapAuthenticatorInput;
+public sealed record ResetRequested(DateTimeOffset Now, BaseMemoryPool Pool): CtapAuthenticatorInput;
 
 /// <summary>
 /// The effect fold-back of a <see cref="CtapFactoryResetKeyMaterialAction"/>: a freshly minted
@@ -667,7 +666,7 @@ public sealed record AuthenticatorResetKeyMaterialMinted(
 /// without any <c>pinUvAuthToken</c>; every be-permission-gated subcommand
 /// (<c>enrollBegin</c>/<c>enrollCaptureNextSample</c>/<c>enumerateEnrollments</c>/
 /// <c>setFriendlyName</c>/<c>removeEnrollment</c>) runs the full preamble/verify/permission ladder
-/// against the live fingerprint template store (R12).
+/// against the live fingerprint template store.
 /// </remarks>
 /// <param name="Request">The decoded request.</param>
 /// <param name="Now">
@@ -693,7 +692,7 @@ public sealed record BioEnrollmentRequested(CtapBioEnrollmentRequest Request, Da
 /// </param>
 /// <param name="LastEnrollSampleStatus">
 /// The first sample's capture outcome, one of <see cref="WellKnownCtapLastEnrollSampleStatuses"/> — a
-/// response FIELD value, never a protocol error (bio scout Finding 9).
+/// response FIELD value, never a protocol error.
 /// </param>
 public sealed record BioEnrollmentCaptureStarted(BioEnrollmentTemplateId TemplateId, int LastEnrollSampleStatus): CtapAuthenticatorInput;
 
@@ -704,7 +703,7 @@ public sealed record BioEnrollmentCaptureStarted(BioEnrollmentTemplateId Templat
 /// </summary>
 /// <param name="LastEnrollSampleStatus">
 /// The captured sample's outcome, one of <see cref="WellKnownCtapLastEnrollSampleStatuses"/> — a response
-/// FIELD value, never a protocol error (bio scout Finding 9). The template identifier itself is not
+/// FIELD value, never a protocol error. The template identifier itself is not
 /// echoed here: the pure transition already knows it from <see cref="CtapAuthenticatorState.RememberedBioEnrollment"/>,
 /// matched against the request before this action was ever declared.
 /// </param>
@@ -718,7 +717,7 @@ public sealed record BioEnrollmentSampleCaptured(int LastEnrollSampleStatus): Ct
 /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorLargeBlobs">
 /// CTAP 2.3, section 6.10: authenticatorLargeBlobs (0x0C)</see>. <c>get</c> is fully served
 /// unauthenticated (a substring of the already-seeded <see cref="CtapAuthenticatorState.SerializedLargeBlobArray"/>);
-/// <c>set</c> runs the complete §6.10.2 algorithm — the R5 conditional token gate, the volatile
+/// <c>set</c> runs the complete §6.10.2 algorithm — the conditional token gate, the volatile
 /// <c>expectedLength</c>/<c>expectedNextOffset</c> state machine, and the commit-time integrity check —
 /// via <see cref="CtapVerifyLargeBlobsTokenAction"/>/<see cref="CtapCommitLargeBlobArrayAction"/>'s own
 /// fold-back inputs.
@@ -727,7 +726,7 @@ public sealed record BioEnrollmentSampleCaptured(int LastEnrollSampleStatus): Ct
 /// <param name="Now">
 /// The time this command was received, read once from the simulator's threaded
 /// <see cref="TimeProvider"/> before this input was built, mirroring <see cref="CredentialManagementRequested.Now"/>
-/// — the value the R5 gate's presented <c>pinUvAuthToken</c> usage-timer expiry check is evaluated
+/// — the value the gate's presented <c>pinUvAuthToken</c> usage-timer expiry check is evaluated
 /// against ahead of trusting it, and the stamp a successful verify writes into the token's
 /// <see cref="CtapPinUvAuthTokenState.LastUsedAt"/>.
 /// </param>

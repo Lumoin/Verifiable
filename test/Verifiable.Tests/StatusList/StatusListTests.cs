@@ -48,7 +48,7 @@ internal sealed class StatusListTests
     /// <remarks>The shared memory pool is thread-safe and intended for high-performance scenarios where
     /// frequent allocation and deallocation of byte arrays is required. Using the shared pool helps reduce memory
     /// fragmentation and improves application performance by reusing buffers.</remarks>
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
     [TestMethod]

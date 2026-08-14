@@ -37,9 +37,9 @@ namespace Verifiable.Tests.OAuth;
 /// draft-ietf-oauth-client-id-metadata-document-02</see>.
 /// </summary>
 /// <remarks>
-/// Covers CIMD-02-clause-ledger rows 003, 012, 018, 026, 027, 029, 031, 032, 041, 042, 045, 046, 047,
-/// 048, 049, 050, 062, 063, 064, 065, 066, 067 (slice E1 — the happy-path half of the D12 flagship
-/// suite; SSRF/cache/negative-fetch rows belong to the companion slice). Every host uses
+/// Covers draft-ietf-oauth-client-id-metadata-document-02 clauses 003, 012, 018, 026, 027, 029, 031,
+/// 032, 041, 042, 045, 046, 047, 048, 049, 050, 062, 063, 064, 065, 066, 067 — the happy-path half;
+/// SSRF/cache/negative-fetch cases belong to the companion suite. Every host uses
 /// <see cref="TestHostShell.StartHttpHostAsync(CancellationToken)"/>'s or
 /// <see cref="StaticContentHost.StartAsync"/>'s single explicit HTTPS <c>Listen</c> convention — there
 /// is no plaintext listener anywhere in this file — and every test builds its own hosts, so the suite
@@ -94,7 +94,7 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
         HostedAuthorizationServer hosted = app.Host("default");
         string segment = stub.TenantId.Value;
 
-        //CIMD-012/D6: a redirect_uri the document never declared is rejected — proving the accepted
+        //CIMD-012: a redirect_uri the document never declared is rejected — proving the accepted
         //redirect_uri below comes from the fetched document, not a blanket allow.
         AuthCodeFlowEndpointResult wrongRedirect = await client.AuthCode.StartParAsync(
             registration, new Uri("https://not-in-the-document.example/cb"), OAuthFormEncodedFields.Empty,
@@ -424,8 +424,7 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
     /// all) still identifies its client and still gets its metadata fetched for the
     /// <c>client_credentials</c> grant, which involves no redirect URL at all — the §4.2 redirect
     /// registration requirement simply does not apply to it. The SAME docless client's PAR fails the
-    /// redirect check (D6, already shipped) because the fetched document supplied no registered
-    /// redirect URIs whatsoever.
+    /// redirect check because the fetched document supplied no registered redirect URIs whatsoever.
     /// </summary>
     [TestMethod]
     public async Task ClientCredentials_RedirectlessDocumentGrantsTokens_AuthorizeFlowFailsRedirectCheck()

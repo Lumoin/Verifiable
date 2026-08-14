@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core;
 
 namespace Verifiable.OAuth.Server;
@@ -28,7 +27,6 @@ namespace Verifiable.OAuth.Server;
 /// <see cref="PolicyProfile"/> for the full extensibility shape.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("PolicyProfiles")]
 public static class PolicyProfiles
 {
     /// <summary>

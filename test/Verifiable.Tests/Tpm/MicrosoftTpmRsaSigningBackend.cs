@@ -50,7 +50,7 @@ internal static class MicrosoftTpmRsaSigningBackend
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the rented private-key and modulus buffers transfers to the returned carriers, which the simulator disposes.")]
-    private static ValueTask<TpmGeneratedRsaKey> GenerateKeyAsync(ushort keyBits, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static ValueTask<TpmGeneratedRsaKey> GenerateKeyAsync(ushort keyBits, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -76,7 +76,7 @@ internal static class MicrosoftTpmRsaSigningBackend
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the rented signature buffer transfers to the returned Signature, which the simulator disposes.")]
     private static ValueTask<Signature> SignDigestAsync(
-        ReadOnlyMemory<byte> privateKey, ReadOnlyMemory<byte> digest, TpmAlgIdConstants scheme, TpmAlgIdConstants hashAlg, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> privateKey, ReadOnlyMemory<byte> digest, TpmAlgIdConstants scheme, TpmAlgIdConstants hashAlg, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -146,7 +146,7 @@ internal static class MicrosoftTpmRsaSigningBackend
     /// <param name="bytes">The bytes to copy.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The pooled buffer holding a copy of <paramref name="bytes"/>.</returns>
-    private static IMemoryOwner<byte> CopyToPooled(byte[] bytes, MemoryPool<byte> pool)
+    private static IMemoryOwner<byte> CopyToPooled(byte[] bytes, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(bytes.Length);
         if(owner.Memory.Length != bytes.Length)

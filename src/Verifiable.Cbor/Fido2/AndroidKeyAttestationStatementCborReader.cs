@@ -55,7 +55,7 @@ public static class AndroidKeyAttestationStatementCborReader
     /// <paramref name="attestationStatement"/> is not a CTAP2 canonical CBOR map conforming to the
     /// android-key <c>attStmt</c> syntax.
     /// </exception>
-    public static AndroidKeyAttestationStatement Parse(ReadOnlyMemory<byte> attestationStatement, MemoryPool<byte> pool)
+    public static AndroidKeyAttestationStatement Parse(ReadOnlyMemory<byte> attestationStatement, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -115,7 +115,7 @@ public static class AndroidKeyAttestationStatementCborReader
 
         //Reads the CBOR array of DER-encoded certificate byte strings at the reader's current position
         //into pooled PkiCertificateMemory carriers, leaf/credCert first, per the android-key x5c CDDL.
-        static List<PkiCertificateMemory> ReadCertificateChain(CborReader reader, MemoryPool<byte> pool)
+        static List<PkiCertificateMemory> ReadCertificateChain(CborReader reader, BaseMemoryPool pool)
         {
             var certificates = new List<PkiCertificateMemory>();
             int? elementCount = reader.ReadStartArray();
@@ -166,7 +166,7 @@ public static class AndroidKeyAttestationStatementCborReader
         }
 
         //Assigns the decoded certificate chain to x5c.
-        static bool AssignX5c(CborReader reader, MemoryPool<byte> pool, ref List<PkiCertificateMemory>? x5c)
+        static bool AssignX5c(CborReader reader, BaseMemoryPool pool, ref List<PkiCertificateMemory>? x5c)
         {
             x5c = ReadCertificateChain(reader, pool);
 

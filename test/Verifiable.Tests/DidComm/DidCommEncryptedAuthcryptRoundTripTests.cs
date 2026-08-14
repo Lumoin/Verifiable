@@ -34,7 +34,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly MemoryPool<byte> Pool = BaseMemoryPool.Shared;
+    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
     private static readonly ExchangeContext Context = new();
@@ -606,7 +606,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
     //material creator, the encrypt/decrypt authenticated agreement pair, and the sender skid (which selects
     //the curve via the keypair). Asserts the recovered plaintext and the authcrypt sender-authentication flags.
     private async Task AssertDelegateRoundTripAsync(
-        Func<MemoryPool<byte>, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
+        Func<BaseMemoryPool, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
         MultiRecipientAuthenticatedKeyAgreementEncryptDelegate encryptAgreement,
         AuthenticatedKeyAgreementDecryptDelegate decryptAgreement,
         string skid)
@@ -870,6 +870,14 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
         Assert.IsTrue(result.Verified.HasValue, "Authcrypt authenticates the sender, so the result MUST carry a Verified<T> authenticity proof.");
         Assert.AreSame(result.Message, result.Verified.GetValueOrDefault().Value, "The Verified proof MUST wrap the recovered message.");
         Assert.IsFalse(result.IsSignedInner, "A non-nested authcrypt message is not signed inner.");
+
+        //W6: the proof is IDENTITY-BOUND via BoundProvenance.TryBindByKeyAgreement, not a bare asserted label.
+        Verified<DidCommMessage> verified = result.Verified!.Value;
+        Assert.IsTrue(verified.IsIdentityBound, "The authcrypt proof MUST be identity-bound.");
+        BoundProvenance provenance = Assert.IsInstanceOfType<BoundProvenance>(verified.Provenance);
+        Assert.AreEqual(ResolutionSource.KeyAgreement, provenance.Source);
+        Assert.AreEqual(expectedSkid, provenance.Identity?.Value);
+
         AssertRecoveredMessage(result.Message, expectedTo);
     }
 

@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Apdu.Lds;
@@ -19,7 +18,6 @@ namespace Verifiable.Apdu.Lds;
 /// retains ownership and disposes it.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("ActiveAuthenticationKey")]
 public sealed class ActiveAuthenticationKey: SensitiveMemory
 {
     /// <summary>

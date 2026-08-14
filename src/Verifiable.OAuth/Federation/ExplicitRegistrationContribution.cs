@@ -5,7 +5,7 @@ namespace Verifiable.OAuth.Federation;
 /// <summary>
 /// Application-supplied body of an Explicit Registration Response served at
 /// the <c>federation_registration_endpoint</c> per
-/// <see href="https://openid.net/specs/openid-federation-1_0.html#section-12.2">Federation §12.2</see>.
+/// <see href="https://openid.net/specs/openid-federation-connect-1_1-final.html#section-12.2">Connect-1.1 §12.2</see>.
 /// The library produces the structural envelope (<c>iss</c> = the OP,
 /// <c>sub</c> = <c>aud</c> = the RP, <c>iat</c>, <c>exp</c>) and signs the
 /// JWT with the OP's federation signing key; the registered client

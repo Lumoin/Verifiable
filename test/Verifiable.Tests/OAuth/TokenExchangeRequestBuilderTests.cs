@@ -112,11 +112,12 @@ internal sealed class TokenExchangeRequestBuilderTests
 
     /// <summary>
     /// RFC 8693 §2.1.1 / RFC 8707 §2: multiple valid <c>resource</c> values (an https URI, an http
-    /// URI, and a urn) collapse into ONE space-delimited field — the same wire shape
-    /// <c>IdJagFlowHandlers.MintAsync</c> already uses for the ID-JAG mint leg's resource parameter.
+    /// URI, and a urn) become that many REPEATED <c>resource</c> occurrences on the wire — the
+    /// genuine RFC 8707 §2 multi-resource wire form (<see cref="OutgoingFormFields.Add"/>), never
+    /// one occurrence carrying several space-joined URIs.
     /// </summary>
     [TestMethod]
-    public void MultipleValidResourcesAreSpaceJoinedIntoOneField()
+    public void MultipleValidResourcesEmitRepeatedResourceOccurrences()
     {
         Result<OutgoingFormFields, TokenRequestBuilderError> result = TokenExchangeRequestBuilder.Build(new TokenExchangeBuilderOptions
         {
@@ -126,9 +127,11 @@ internal sealed class TokenExchangeRequestBuilderTests
         });
 
         Assert.IsTrue(result.IsSuccess);
-        Assert.AreEqual(
-            "https://rs1.example.com/api http://rs2.example.com/api urn:example:resource",
-            result.Value![OAuthRequestParameterNames.Resource]);
+        IReadOnlyList<string> resourceOccurrences = result.Value!.GetValues(OAuthRequestParameterNames.Resource);
+        Assert.HasCount(3, resourceOccurrences);
+        Assert.AreEqual("https://rs1.example.com/api", resourceOccurrences[0]);
+        Assert.AreEqual("http://rs2.example.com/api", resourceOccurrences[1]);
+        Assert.AreEqual("urn:example:resource", resourceOccurrences[2]);
     }
 
 

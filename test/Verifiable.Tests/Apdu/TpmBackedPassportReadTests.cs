@@ -125,7 +125,7 @@ internal sealed class TpmBackedPassportReadTests
     /// </summary>
     private static Nonce DrawTpmNonce(TpmEntropyProvider entropy, int byteLength, out EntropyConsumedEvent consumed)
     {
-        (Nonce nonce, CryptoEvent? evt) = entropy.GenerateNonce(byteLength, Tag.Create((typeof(Purpose), Purpose.Nonce)), BaseMemoryPool.Shared);
+        (Nonce nonce, CryptoEvent? evt) = entropy.GenerateNonce(byteLength, Tag.Create(Purpose.Nonce), BaseMemoryPool.Shared);
         consumed = evt as EntropyConsumedEvent
             ?? throw new InvalidOperationException("A TPM entropy draw must emit an EntropyConsumedEvent.");
 
@@ -155,7 +155,7 @@ internal sealed class TpmBackedPassportReadTests
     /// Frames a sessionless TPM command (header, handles, parameters) into a rented buffer.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented command buffer transfers to the caller, which disposes it.")]
-    private static IMemoryOwner<byte> FrameSessionlessCommand<TInput>(TInput input, MemoryPool<byte> pool, out int length)
+    private static IMemoryOwner<byte> FrameSessionlessCommand<TInput>(TInput input, BaseMemoryPool pool, out int length)
         where TInput: ITpmCommandInput
     {
         length = TpmHeader.HeaderSize + input.GetSerializedSize();

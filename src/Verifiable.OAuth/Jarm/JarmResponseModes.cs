@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using Verifiable.Cryptography.Text;
 
@@ -14,7 +13,6 @@ namespace Verifiable.OAuth.Jarm;
 /// (<c>direct_post</c>, <c>dc_api</c>, …) live in
 /// <see cref="Oid4Vp.WellKnownResponseModes"/>.
 /// </remarks>
-[DebuggerDisplay("JarmResponseModes")]
 public static class JarmResponseModes
 {
     /// <summary>The UTF-8 source literal of <see cref="QueryJwt"/>.</summary>

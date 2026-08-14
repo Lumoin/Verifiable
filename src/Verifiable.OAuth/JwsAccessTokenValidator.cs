@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -39,7 +38,6 @@ namespace Verifiable.OAuth;
 /// token semantics.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("JwsAccessTokenValidator")]
 public static class JwsAccessTokenValidator
 {
     /// <summary>
@@ -77,7 +75,7 @@ public static class JwsAccessTokenValidator
         JwsAccessTokenJsonParser parser,
         DecodeDelegate base64UrlDecoder,
         TimeProvider timeProvider,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeSpan iatSkew,
         TenantId tenantId,
         ExchangeContext context,
@@ -163,7 +161,7 @@ public static class JwsAccessTokenValidator
         JwsAccessTokenJsonParser parser,
         DecodeDelegate base64UrlDecoder,
         TimeProvider timeProvider,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeSpan iatSkew,
         TenantId tenantId,
         ExchangeContext context,
@@ -457,12 +455,17 @@ public static class JwsAccessTokenValidator
 
     /// <summary>
     /// Reads a claim whose JSON value is either a single string or an array of strings — the
-    /// RFC 7519 §4.1.3 <c>aud</c> shape, also used by the OIDC Core §2 <c>amr</c> claim. Normalises
-    /// both wire shapes into a list; a single string becomes a one-element list. Returns
-    /// <see langword="false"/> (with <paramref name="list"/> empty) when the claim is absent or
-    /// resolves to an empty list.
+    /// RFC 7519 §4.1.3 <c>aud</c> shape, also used by the OIDC Core §2 <c>amr</c> claim and (in the
+    /// AuthCode JAR projection) the RFC 8707 §2.1 <c>resource</c> claim. Normalises both wire
+    /// shapes into a list; a single string becomes a one-element list. Returns
+    /// <see langword="false"/> (with <paramref name="list"/> empty) when the claim is absent,
+    /// carries a value of neither shape, or resolves to an empty list — the caller decides whether
+    /// "absent" and "present but unparseable" need distinguishing (<see cref="JwtPayload"/>
+    /// satisfies <see cref="IReadOnlyDictionary{TKey, TValue}"/> via <c>Dictionary&lt;string,
+    /// object&gt;</c>, so any verified claim dictionary reads through the same call).
     /// </summary>
-    internal static bool TryReadStringList(JwtPayload payload, string claimName, out IReadOnlyList<string> list)
+    internal static bool TryReadStringList(
+        IReadOnlyDictionary<string, object> payload, string claimName, out IReadOnlyList<string> list)
     {
         if(payload.TryGetValue(claimName, out object? raw))
         {

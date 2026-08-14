@@ -46,9 +46,9 @@ internal sealed class JwtBearerGrantTests
     private const string AssertionSubject = "https://user.example/alice";
     private const string GrantedScope = "read";
 
-    //A non-identity scope RegisterJwtBearerClient maps onto ResourceServerAudience: contract
-    //wave-4 D4 narrows openid away from every client_credentials grant (client_credentials has no
-    //authenticated End-User), so the end-to-end tests mint their real assertion under this scope
+    //A non-identity scope RegisterJwtBearerClient maps onto ResourceServerAudience: openid is
+    //narrowed away from every client_credentials grant (client_credentials has no authenticated
+    //End-User), so the end-to-end tests mint their real assertion under this scope
     //instead, to still reach a concrete audience for the §3 rule-3 aud == this AS check.
     private const string MachineScope = "machine.telemetry.read";
 
@@ -62,7 +62,7 @@ internal sealed class JwtBearerGrantTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
     /// <summary>
@@ -422,7 +422,7 @@ internal sealed class JwtBearerGrantTests
 
         //STEP 1 — Mint a REAL signed JWT to serve as the assertion (client_credentials, RFC 6749 §4.4).
         //iss == asIssuer; MachineScope embeds aud == ResourceServerAudience (the AS's audience identity
-        //for the §3 rule-3 check) — contract wave-4 D4 narrows openid away from every
+        //for the §3 rule-3 check) — openid is narrowed away from every
         //client_credentials grant, so RegisterJwtBearerClient maps this non-identity scope instead.
         //The project's signing surface mints it — no hand-rolled crypto.
         string assertion = await ObtainClientCredentialsAccessTokenAsync(
@@ -774,8 +774,8 @@ internal sealed class JwtBearerGrantTests
             await BuildJwksKeyResolverAsync(http, host.HttpBaseAddress!, segment).ConfigureAwait(false);
 
         //Mint a REAL signed JWT (client_credentials) to serve as the assertion — same as the positive
-        //end-to-end. iss == asIssuer; MachineScope embeds aud == ResourceServerAudience (contract
-        //wave-4 D4 narrows openid away from every client_credentials grant).
+        //end-to-end. iss == asIssuer; MachineScope embeds aud == ResourceServerAudience (openid is
+        //narrowed away from every client_credentials grant).
         string realAssertion = await ObtainClientCredentialsAccessTokenAsync(
             http, tokenUrl, ClientId, ClientSecret, MachineScope).ConfigureAwait(false);
 
@@ -1090,15 +1090,15 @@ internal sealed class JwtBearerGrantTests
     /// <see cref="WellKnownCapabilityIdentifiers.OAuthClientCredentials"/> (the end-to-end test
     /// obtains a real assertion via the client_credentials grant). Grant-only jwt-bearer issuance
     /// works because <see cref="Rfc9068AccessTokenProducer"/>'s <c>RequiredCapability</c> is
-    /// <see langword="null"/> — an optional tenant-feature gate, not a grant-capability proxy
-    /// (contract wave-4 D2) — so the endpoint-match capability alone is sufficient. RegisterDpopClient
+    /// <see langword="null"/> — an optional tenant-feature gate, not a grant-capability proxy —
+    /// so the endpoint-match capability alone is sufficient. RegisterDpopClient
     /// supplies the AccessTokenIssuance signing keys the producers resolve; the discovery/jwks
     /// capabilities round out the standard surface. <see cref="MachineScope"/> is added to
     /// <c>AllowedScopes</c> and mapped onto <see cref="ResourceServerAudience"/> in
     /// <c>ScopeToAudience</c> (the register-then-upgrade pattern — the routing dictionaries are
     /// host-internal) so <see cref="ObtainClientCredentialsAccessTokenAsync"/> can mint a correctly
-    /// audienced real assertion without requesting <c>openid</c> — contract wave-4 D4 narrows
-    /// <c>openid</c> away from every <c>client_credentials</c> grant, so such a grant cannot carry the
+    /// audienced real assertion without requesting <c>openid</c> — <c>openid</c> is narrowed
+    /// away from every <c>client_credentials</c> grant, so such a grant cannot carry the
     /// audience mapping the end-to-end tests rely on.
     /// </summary>
     private static VerifierKeyMaterial RegisterJwtBearerClient(TestHostShell app)
@@ -1136,9 +1136,9 @@ internal sealed class JwtBearerGrantTests
 
 
     /// <summary>
-    /// Contract wave-4 D3/D4: on a tenant granted the
-    /// <see cref="WellKnownCapabilityIdentifiers.OidcOpenIdConnect"/> feature — ruling out D2's
-    /// capability gate as the explanation — a jwt-bearer grant whose seam legitimately grants
+    /// On a tenant granted the
+    /// <see cref="WellKnownCapabilityIdentifiers.OidcOpenIdConnect"/> feature — ruling out the
+    /// optional capability gate as the explanation — a jwt-bearer grant whose seam legitimately grants
     /// <c>openid</c> (the app opting in per the source-layer contract: <c>jwt_bearer</c> honors the
     /// app-granted scope, unlike <c>client_credentials</c>) still never yields an id_token.
     /// <see cref="Oidc10IdTokenProducer"/>'s <c>IsApplicable</c> independently requires
@@ -1162,7 +1162,7 @@ internal sealed class JwtBearerGrantTests
         WireClientAuthentication(app);
 
         //The seam grants openid — an app opting in to vouch that the exchanged subject is an
-        //End-User (contract wave-4 D4: jwt_bearer honors whatever scope the app's authorization
+        //End-User (jwt_bearer honors whatever scope the app's authorization
         //seam decides, unlike client_credentials' source-layer narrowing).
         app.Server.OAuth().ValidateJwtBearerAssertionAsync =
             static (assertion, requestedScope, registration, context, ct) =>

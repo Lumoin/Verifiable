@@ -13,11 +13,11 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Models "the process holding the CTAP simulator died and a new one started" (contract R-1's own
-/// spec-external third lifecycle event) entirely in-process: constructing a second
+/// Models "the process holding the CTAP simulator died and a new one started" (a spec-external third
+/// lifecycle event) entirely in-process: constructing a second
 /// <c>CtapAuthenticatorSimulator</c> from THIS SAME instance's <see cref="CreateBundle"/> output, after
 /// disposing the first, proves rehydration without any real process boundary — the dictionary itself
-/// plays the role a file, a database row, or (package C) a sealed TPM object would in production.
+/// plays the role a file, a database row, or a sealed TPM object would in production.
 /// </para>
 /// <para>
 /// <see cref="OperationLog"/> is this instance's own field, not a variable captured by a lambda closure
@@ -72,7 +72,7 @@ internal sealed class DictionaryBackedCtapStateCustodyStore
 
 
     /// <summary>Attempts to load the snapshot bytes persisted for <paramref name="runId"/>. Has the <see cref="TryLoadSnapshotAsyncDelegate"/> shape.</summary>
-    private ValueTask<PooledMemory?> TryLoadSnapshotAsync(string runId, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private ValueTask<PooledMemory?> TryLoadSnapshotAsync(string runId, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         OperationLog.Add($"Load:{runId}");
 

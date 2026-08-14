@@ -59,7 +59,7 @@ public static class JweAgreementInfo
     public static string ComputeApuFromSenderKeyId(
         string senderKeyId,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(senderKeyId);
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
@@ -98,7 +98,7 @@ public static class JweAgreementInfo
     public static string ComputeApvFromRecipientKeyIds(
         IReadOnlyCollection<string> recipientKeyIds,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(recipientKeyIds);
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
@@ -137,7 +137,7 @@ public static class JweAgreementInfo
     public static bool ApvMatchesRecipients(
         IReadOnlyCollection<string> recipientKeyIds,
         ReadOnlySpan<byte> expectedApvDigest,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(recipientKeyIds);
         ArgumentNullException.ThrowIfNull(pool);
@@ -157,7 +157,7 @@ public static class JweAgreementInfo
     //kid strings — sync by nature, no hardware-async backend — so it goes through the registered synchronous
     //HashFunctionDelegate seam, the same seam ConcatKdf hashes through. Kids are sorted ordinal and joined with a
     //single '.' (DIDComm v2.1).
-    private static DigestValue ComputeApvDigest(IReadOnlyCollection<string> recipientKeyIds, MemoryPool<byte> pool)
+    private static DigestValue ComputeApvDigest(IReadOnlyCollection<string> recipientKeyIds, BaseMemoryPool pool)
     {
         string[] sorted = [.. recipientKeyIds];
         Array.Sort(sorted, StringComparer.Ordinal);

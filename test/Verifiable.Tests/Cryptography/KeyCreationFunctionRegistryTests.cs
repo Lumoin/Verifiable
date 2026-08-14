@@ -11,11 +11,10 @@ using Verifiable.Microsoft;
 namespace Verifiable.Tests.Cryptography;
 
 /// <summary>
-/// Coverage for the wave-7 keygen choke point: <see cref="KeyCreationFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
-/// resolution and <see cref="CryptographicKeyEvents.CreateKeyPair"/>'s <see cref="KeyMaterialGeneratedEvent"/>
-/// emission, across both software backends this project's <c>TestSetup</c> registers and both purposes the
-/// registry discriminates on. Also proves the double-emission risk the wave-7 contract's design item 3
-/// explicitly rejects: <see cref="CryptographicKeyFactory.CreatePrivateKey(PrivateKeyMemory, string, CryptoAlgorithm, Purpose, string?, System.Collections.Frozen.FrozenDictionary{string, object}?)"/>/
+/// Coverage for this library keygen choke point: <see cref="KeyCreationFunctionRegistry{TDiscriminator1, TDiscriminator2}"/> resolution and <see cref="CryptographicKeyEvents.CreateKeyPair"/>'s <see
+/// cref="KeyMaterialGeneratedEvent"/> emission, across both software backends this project's <c>TestSetup</c> registers and both purposes the registry discriminates on. Also proves the double-emission
+/// risk this library explicitly rejects: <see cref="CryptographicKeyFactory.CreatePrivateKey(PrivateKeyMemory, string, CryptoAlgorithm, Purpose, string?,
+/// System.Collections.Frozen.FrozenDictionary{string, object}?)"/>/
 /// <see cref="CryptographicKeyFactory.CreatePublicKey(PublicKeyMemory, string, CryptoAlgorithm, Purpose, string?, System.Collections.Frozen.FrozenDictionary{string, object}?)"/>
 /// binding freshly-minted material must never also emit <see cref="KeyMaterialGeneratedEvent"/>.
 /// </summary>
@@ -122,16 +121,12 @@ internal sealed class KeyCreationFunctionRegistryTests
 
 
     /// <summary>
-    /// Mint (<see cref="CryptographicKeyEvents.CreateKeyPair"/>), bind
-    /// (<see cref="CryptographicKeyFactory.CreatePrivateKey(PrivateKeyMemory, string, CryptoAlgorithm, Purpose, string?, System.Collections.Frozen.FrozenDictionary{string, object}?)"/>/
-    /// <see cref="CryptographicKeyFactory.CreatePublicKey(PublicKeyMemory, string, CryptoAlgorithm, Purpose, string?, System.Collections.Frozen.FrozenDictionary{string, object}?)"/>),
-    /// then sign+verify must emit exactly ONE <see cref="KeyMaterialGeneratedEvent"/> for this key — never a
-    /// second one from the bind step, which is the double-emission risk the wave-7 contract's design item 3
-    /// explicitly rejects (binding methods bind both freshly-minted and loaded/stored material
-    /// indistinguishably, so a bind-time emission would also mislabel every loaded key as newly generated).
-    /// Uses a Brainpool curve no other test in this file mints, so the count assertion against the
-    /// process-wide <see cref="CryptographicKeyEvents.Events"/> stream stays deterministic under MSTest's
-    /// class-level parallelism.
+    /// Mint (<see cref="CryptographicKeyEvents.CreateKeyPair"/>), bind (<see cref="CryptographicKeyFactory.CreatePrivateKey(PrivateKeyMemory, string, CryptoAlgorithm, Purpose, string?,
+    /// System.Collections.Frozen.FrozenDictionary{string, object}?)"/>/ <see cref="CryptographicKeyFactory.CreatePublicKey(PublicKeyMemory, string, CryptoAlgorithm, Purpose, string?,
+    /// System.Collections.Frozen.FrozenDictionary{string, object}?)"/>), then sign+verify must emit exactly ONE <see cref="KeyMaterialGeneratedEvent"/> for this key — never a second one
+    /// from the bind step, which is the double-emission risk this library explicitly rejects (binding methods bind both freshly-minted and loaded/stored material indistinguishably,
+    /// so a bind-time emission would also mislabel every loaded key as newly generated). Uses a Brainpool curve no other test in this file mints, so the count assertion against the
+    /// process-wide <see cref="CryptographicKeyEvents.Events"/> stream stays deterministic under MSTest's class-level parallelism.
     /// </summary>
     [TestMethod]
     public async Task MintBindSignEmitsExactlyOneKeyMaterialGeneratedEvent()
@@ -142,9 +137,9 @@ internal sealed class KeyCreationFunctionRegistryTests
             var keys = CryptographicKeyEvents.CreateKeyPair(CryptoAlgorithm.BrainpoolP224r1, Purpose.Signing, BaseMemoryPool.Shared);
             using PublicKeyMemory publicKeyMemory = keys.PublicKey;
             using PrivateKey privateKey = CryptographicKeyFactory.CreatePrivateKey(
-                keys.PrivateKey, "wave7-double-emission-key", CryptoAlgorithm.BrainpoolP224r1, Purpose.Signing);
+                keys.PrivateKey, "double-emission-key", CryptoAlgorithm.BrainpoolP224r1, Purpose.Signing);
             using PublicKey publicKey = CryptographicKeyFactory.CreatePublicKey(
-                publicKeyMemory, "wave7-double-emission-key", CryptoAlgorithm.BrainpoolP224r1, Purpose.Verification);
+                publicKeyMemory, "double-emission-key", CryptoAlgorithm.BrainpoolP224r1, Purpose.Verification);
 
             using Signature signature = await privateKey.SignAsync(TestData, BaseMemoryPool.Shared).ConfigureAwait(false);
             bool isVerified = await publicKey.VerifyAsync(TestData, signature).ConfigureAwait(false);
@@ -215,7 +210,7 @@ internal sealed class KeyCreationFunctionRegistryTests
     /// other test happens to be running concurrently in another MSTest class-parallel worker — a plain list
     /// being written from more than one thread at once throws "Collection was modified" out of a concurrent
     /// enumeration, exactly the race <c>CryptoEventSinkTests</c>'s own doc comment names (reproduced live
-    /// this wave against <c>SignVerifyEventTests</c>'/<c>Fido2ObservedWorkloadEventTests</c>' own observers,
+    /// here against <c>SignVerifyEventTests</c>'/<c>Fido2ObservedWorkloadEventTests</c>' own observers,
     /// both since fixed to the same <see cref="ConcurrentQueue{T}"/> shape this file uses from the start).
     /// </summary>
     private sealed class CollectingObserver(ConcurrentQueue<CryptoEvent> sink): IObserver<CryptoEvent>

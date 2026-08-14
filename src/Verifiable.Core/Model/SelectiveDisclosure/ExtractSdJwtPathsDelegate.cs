@@ -32,5 +32,5 @@ public delegate IReadOnlyDictionary<SdDisclosure, CredentialPath> ExtractSdJwtPa
     SdToken<string> token,
     DecodeDelegate decoder,
     EncodeDelegate encoder,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     string hashAlgorithm);

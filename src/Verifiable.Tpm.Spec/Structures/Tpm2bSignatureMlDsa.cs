@@ -71,7 +71,7 @@ public readonly struct Tpm2bSignatureMlDsa: IDisposable, IEquatable<Tpm2bSignatu
     /// <param name="signature">The signature data.</param>
     /// <param name="pool">The memory pool to allocate from.</param>
     /// <returns>The signature buffer.</returns>
-    public static Tpm2bSignatureMlDsa Create(ReadOnlySpan<byte> signature, MemoryPool<byte>? pool = null)
+    public static Tpm2bSignatureMlDsa Create(ReadOnlySpan<byte> signature, BaseMemoryPool? pool = null)
     {
         if(signature.Length > MaxMlDsaSigSize)
         {
@@ -115,7 +115,7 @@ public readonly struct Tpm2bSignatureMlDsa: IDisposable, IEquatable<Tpm2bSignatu
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool to allocate from.</param>
     /// <returns>The parsed signature.</returns>
-    public static Tpm2bSignatureMlDsa Parse(ref TpmReader reader, MemoryPool<byte>? pool = null)
+    public static Tpm2bSignatureMlDsa Parse(ref TpmReader reader, BaseMemoryPool? pool = null)
     {
         ushort size = reader.ReadUInt16();
 

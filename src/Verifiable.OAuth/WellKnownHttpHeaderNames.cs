@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth;
@@ -25,7 +24,6 @@ namespace Verifiable.OAuth;
 /// when a call site actually needs them.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("WellKnownHttpHeaderNames")]
 public static class WellKnownHttpHeaderNames
 {
     /// <summary>The UTF-8 source literal of <see cref="Authorization"/>.</summary>

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.AuthCode.Server.States;
 using Verifiable.OAuth.Server;
@@ -22,7 +21,6 @@ namespace Verifiable.OAuth.AuthCode.Server;
 /// <c>request_uri → flowId</c>, the token endpoint maps <c>code → flowId</c>.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("AuthCodeServerFlowAutomaton")]
 public static class AuthCodeServerFlowAutomaton
 {
     /// <summary>

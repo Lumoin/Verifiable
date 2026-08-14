@@ -7,7 +7,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// Ensures a monotonic counter exists for the credential identified by <paramref name="creationSequence"/>,
 /// minting it if this is the first time the credential has ever been seen, and returns its current count —
 /// the value <see cref="Automata.CtapAuthenticatorSimulator"/> installs as a freshly minted credential's
-/// INITIAL signature counter (contract R-9, wavenv).
+/// INITIAL signature counter.
 /// </summary>
 /// <param name="creationSequence">
 /// The minting credential's own <see cref="Automata.CtapCredentialRecord.CreationSequence"/> value — the
@@ -26,7 +26,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// counter that shared the same <paramref name="creationSequence"/> before being retired.
 /// </returns>
 /// <remarks>
-/// Contract R-9(3)(c): the returned value IS the registration's stored and wire-visible signature counter —
+/// The returned value IS the registration's stored and wire-visible signature counter —
 /// never re-derived from it. This delegate is never called for an ALREADY-minted credential; see
 /// <see cref="IncrementCounterAsyncDelegate"/> for the assertion-time counterpart.
 /// </remarks>

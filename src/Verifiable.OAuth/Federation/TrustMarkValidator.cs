@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core.Assessment;
 
 namespace Verifiable.OAuth.Federation;
@@ -18,7 +17,6 @@ namespace Verifiable.OAuth.Federation;
 /// can supply a custom rule list via the constructor to extend the §7.3
 /// baseline with deployment-specific shape checks.
 /// </remarks>
-[DebuggerDisplay("TrustMarkValidator")]
 public sealed class TrustMarkValidator
 {
     private ClaimIssuer<TrustMarkValidationContext> Issuer { get; }

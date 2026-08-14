@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -40,7 +39,6 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// and Data Integrity's authentication-purpose presentation proof.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("KbCwtIssuance")]
 public static class KbCwtIssuance
 {
     /// <summary>
@@ -78,7 +76,7 @@ public static class KbCwtIssuance
         BuildKbtPayloadDelegate buildPayload,
         BuildSigStructureDelegate buildSigStructure,
         SerializeCoseSign1Delegate serializeCoseSign1,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(presentationToken);

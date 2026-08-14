@@ -41,7 +41,6 @@ namespace Verifiable.Vcalm.Exchange;
 /// as invalid rather than looping forever.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("VcalmWorkflowStepEngine")]
 public static class VcalmWorkflowStepEngine
 {
     /// <summary>

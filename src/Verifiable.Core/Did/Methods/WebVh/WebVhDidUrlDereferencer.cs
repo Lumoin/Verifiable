@@ -67,7 +67,7 @@ public static class WebVhDidUrlDereferencer
         ProofOptionsSerializeDelegate proofOptionsSerializer,
         DecodeDelegate base58Decoder,
         ComputeDigestDelegate computeDigest,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(resolve);
         ArgumentNullException.ThrowIfNull(transport);
@@ -180,7 +180,7 @@ public static class WebVhDidUrlDereferencer
         ProofOptionsSerializeDelegate proofOptionsSerializer,
         DecodeDelegate base58Decoder,
         ComputeDigestDelegate computeDigest,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
@@ -322,7 +322,7 @@ public static class WebVhDidUrlDereferencer
             }
         }
 
-        if(matchingMethod is null)
+        if(matchingMethod is null || document.Id is not { } canonicalDid)
         {
             return null;
         }
@@ -330,18 +330,21 @@ public static class WebVhDidUrlDereferencer
         //The alias is an embedded authentication method carrying the resolved document's key material under the
         //proof's verificationMethod id, so the proof — signed over its own (did:web) verificationMethod id —
         //resolves to the same key. The signed bytes are unchanged; only the holder document used to look the key
-        //up is the alias.
+        //up is the alias. The alias method's controller is the CANONICAL did:webvh identity (canonicalDid), not
+        //the did:web alias DID (proofDid): alsoKnownAs establishes that the two DIDs name the SAME controlled
+        //identity, and the whois presentation's own holder claims the canonical DID, so the resolved method's
+        //controller must agree with that claim (controller-RESOLUTION semantics) for the cross-verify to bind.
         VerificationMethod aliasMethod = new()
         {
             Id = proofVerificationMethodId,
-            Controller = proofDid,
+            Controller = canonicalDid.ToString(),
             Type = matchingMethod.Type,
             KeyFormat = matchingMethod.KeyFormat
         };
 
         return new DidDocument
         {
-            Id = document.Id,
+            Id = canonicalDid,
             Authentication = [new AuthenticationMethod(aliasMethod)]
         };
     }

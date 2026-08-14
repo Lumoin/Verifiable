@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.Vcalm;
 
@@ -11,7 +10,6 @@ namespace Verifiable.Vcalm;
 /// an endpoint receives data, options, or option values that it does not understand" MUST mapped to
 /// the §3.8 <see cref="VcalmProblemTypes.UnknownOptionProvided"/> problem type.
 /// </summary>
-[DebuggerDisplay("VcalmVerifyOptions")]
 public sealed record VcalmVerifyOptions
 {
     /// <summary>

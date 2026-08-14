@@ -21,7 +21,7 @@ namespace Verifiable.Tests.DidComm;
 
 /// <summary>
 /// Proves the DIDComm v2.1 authcrypt (ECDH-1PU) <em>encrypt</em>-side NIST key-agreement decompression: a
-/// P-256 recipient public key handed to <see cref="DidCommEncryptedExtensions.PackAuthcryptAsync(DidCommMessage, IReadOnlyList{GeneralJweRecipientInput}, string, PrivateKeyMemory, string, string, PublicPrivateKeyMaterial{PublicKeyMemory, PrivateKeyMemory}, DidCommMessageSerializer, JwtHeaderSerializer, EncodeDelegate, TagToEpkCrvDelegate, GenerateNonceDelegate, MultiRecipientAuthenticatedKeyAgreementEncryptDelegate, AuthenticatedKeyDerivationDelegate, KeyWrapDelegate, AeadEncryptDelegate, MemoryPool{byte}, CancellationToken)"/>
+/// P-256 recipient public key handed to <see cref="DidCommEncryptedExtensions.PackAuthcryptAsync(DidCommMessage, IReadOnlyList{GeneralJweRecipientInput}, string, PrivateKeyMemory, string, string, PublicPrivateKeyMaterial{PublicKeyMemory, PrivateKeyMemory}, DidCommMessageSerializer, JwtHeaderSerializer, EncodeDelegate, TagToEpkCrvDelegate, GenerateNonceDelegate, MultiRecipientAuthenticatedKeyAgreementEncryptDelegate, AuthenticatedKeyDerivationDelegate, KeyWrapDelegate, AeadEncryptDelegate, BaseMemoryPool, CancellationToken)"/>
 /// as a COMPRESSED SEC1 point (<c>0x02/0x03 || X</c>, tagged <see cref="EncodingScheme.EcCompressed"/>) — the
 /// shape the DID-document converter yields for a resolved EC key — still round-trips. The NIST agreement must
 /// decompress the recipient point (curve from the tag) before slicing it into the agreement, so a DID-doc-resolved
@@ -32,7 +32,7 @@ internal sealed class DidCommEncryptedAuthcryptCompressedKeyTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly MemoryPool<byte> Pool = BaseMemoryPool.Shared;
+    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
     private static readonly ExchangeContext Context = new();
@@ -199,7 +199,7 @@ internal sealed class DidCommEncryptedAuthcryptCompressedKeyTests
     //the shared secret; the recipient — holding the matching private key — unpacks and authenticates the sender.
     //Per curve this hits the 33/49/67-byte compressed-point decompression branch, not just P-256.
     private async Task AssertCompressedRecipientRoundTripAsync(
-        Func<MemoryPool<byte>, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
+        Func<BaseMemoryPool, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
         CryptoAlgorithm algorithm,
         MultiRecipientAuthenticatedKeyAgreementEncryptDelegate encryptAgreement,
         AuthenticatedKeyAgreementDecryptDelegate decryptAgreement,

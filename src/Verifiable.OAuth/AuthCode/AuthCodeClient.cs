@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core;
 using Verifiable.OAuth.Client;
@@ -38,7 +37,6 @@ namespace Verifiable.OAuth.AuthCode;
 ///     registration, redirectUri, OAuthFormEncodedFields.Empty, ct);
 /// </code>
 /// </remarks>
-[DebuggerDisplay("AuthCodeClient")]
 [SuppressMessage("Performance", "CA1815:Override equals and operator equals on value types", Justification = "AuthCodeClient is a service-shaped wrapper around a single reference; value equality would compare reference identity of the underlying infrastructure, which is not a meaningful operation for callers.")]
 public readonly struct AuthCodeClient
 {
@@ -95,6 +93,24 @@ public readonly struct AuthCodeClient
         Uri redirectUri,
         OAuthFormEncodedFields additionalFields,
         ExchangeContext context,
+        CancellationToken cancellationToken) =>
+        StartParAsync(registration, redirectUri, additionalFields, context, resource: null, cancellationToken);
+
+
+    /// <inheritdoc cref="StartParAsync(ClientRegistration, Uri, OAuthFormEncodedFields, ExchangeContext, CancellationToken)"/>
+    /// <param name="resource">
+    /// The RFC 8707 §2 <c>resource</c> indicator(s) to request. Each entry MUST be one absolute
+    /// URI — several indicators are several list entries, threaded to
+    /// <see cref="AuthCodeFlowHandlers.HandleParAsync(System.Collections.Generic.IReadOnlyDictionary{string, string}, Uri, OAuthClientInfrastructure, ClientRegistration, ExchangeContext, System.Collections.Generic.IReadOnlyList{string}?, CancellationToken)"/>
+    /// as genuinely REPEATED wire occurrences, never one occurrence carrying several
+    /// space-joined URIs. <see langword="null"/> or empty omits the parameter entirely.
+    /// </param>
+    public ValueTask<AuthCodeFlowEndpointResult> StartParAsync(
+        ClientRegistration registration,
+        Uri redirectUri,
+        OAuthFormEncodedFields additionalFields,
+        ExchangeContext context,
+        IReadOnlyList<string>? resource,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(registration);
@@ -102,7 +118,7 @@ public readonly struct AuthCodeClient
         ArgumentNullException.ThrowIfNull(context);
 
         return AuthCodeFlowHandlers.HandleParAsync(
-            additionalFields.Fields, redirectUri, Infrastructure, registration, context, cancellationToken);
+            additionalFields.Fields, redirectUri, Infrastructure, registration, context, resource, cancellationToken);
     }
 
 

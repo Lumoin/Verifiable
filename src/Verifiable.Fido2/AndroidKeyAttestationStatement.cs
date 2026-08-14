@@ -88,4 +88,4 @@ public sealed record AndroidKeyAttestationStatement(int Alg, ReadOnlyMemory<byte
 /// android-key attestation statement syntax defined in
 /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-android-key-attestation">W3C Web Authentication Level 3, section 8.4</see>.
 /// </exception>
-public delegate AndroidKeyAttestationStatement ParseAndroidKeyAttestationStatementDelegate(ReadOnlyMemory<byte> attestationStatement, MemoryPool<byte> pool);
+public delegate AndroidKeyAttestationStatement ParseAndroidKeyAttestationStatementDelegate(ReadOnlyMemory<byte> attestationStatement, BaseMemoryPool pool);

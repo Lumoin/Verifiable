@@ -68,6 +68,10 @@ internal sealed class SsfDiscoveryParsingTests
     }
 
 
+    /// <remarks>
+    /// Proves <see href="https://openid.net/specs/openid-caep-interoperability-profile-1_0-01.html">OpenID CAEP Interoperability Profile 1.0, draft 01</see>
+    /// 2.3.3-jwks-uri.
+    /// </remarks>
     [TestMethod]
     public void MissingIssuerIsRejected() =>
         Assert.IsNull(SsfDiscoveryJsonParsing.ParseTransmitterConfiguration("""{ "jwks_uri": "https://t.example/jwks" }"""));

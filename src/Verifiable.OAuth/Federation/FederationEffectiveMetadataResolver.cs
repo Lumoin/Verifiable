@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using Verifiable.Core.Assessment;
 using Verifiable.JCose;
 
@@ -33,7 +32,6 @@ namespace Verifiable.OAuth.Federation;
 /// false).
 /// </para>
 /// </remarks>
-[DebuggerDisplay("FederationEffectiveMetadataResolver")]
 public static class FederationEffectiveMetadataResolver
 {
     /// <summary>

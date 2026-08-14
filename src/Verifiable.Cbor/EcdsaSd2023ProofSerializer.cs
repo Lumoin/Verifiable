@@ -147,7 +147,7 @@ public static class EcdsaSd2023CborSerializer
     public static BaseProofValue ParseBaseProof(
         string proofValue,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ArgumentException.ThrowIfNullOrEmpty(proofValue);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
@@ -170,7 +170,7 @@ public static class EcdsaSd2023CborSerializer
     /// <param name="memoryPool">Memory pool for allocations.</param>
     /// <returns>The parsed base proof value components.</returns>
     /// <exception cref="FormatException">Thrown when the proof format is invalid.</exception>
-    public static BaseProofValue ParseBaseProofBytes(ReadOnlySpan<byte> proofBytes, MemoryPool<byte> memoryPool)
+    public static BaseProofValue ParseBaseProofBytes(ReadOnlySpan<byte> proofBytes, BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(memoryPool);
 
@@ -265,7 +265,7 @@ public static class EcdsaSd2023CborSerializer
         IReadOnlyList<int> mandatoryIndexes,
         EncodeDelegate base64UrlEncoder,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(signatures);
         ArgumentNullException.ThrowIfNull(labelMap);
@@ -297,7 +297,7 @@ public static class EcdsaSd2023CborSerializer
         IReadOnlyDictionary<string, string> labelMap,
         IReadOnlyList<int> mandatoryIndexes,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(signatures);
         ArgumentNullException.ThrowIfNull(labelMap);
@@ -365,7 +365,7 @@ public static class EcdsaSd2023CborSerializer
         string proofValue,
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ArgumentException.ThrowIfNullOrEmpty(proofValue);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
@@ -393,7 +393,7 @@ public static class EcdsaSd2023CborSerializer
     public static DerivedProofValue ParseDerivedProofBytes(
         ReadOnlySpan<byte> proofBytes,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
         ArgumentNullException.ThrowIfNull(memoryPool);
@@ -487,7 +487,7 @@ public static class EcdsaSd2023CborSerializer
     private static Dictionary<int, byte[]> CompressLabelMap(
         IReadOnlyDictionary<string, string> labelMap,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         var compressed = new Dictionary<int, byte[]>(labelMap.Count);
 

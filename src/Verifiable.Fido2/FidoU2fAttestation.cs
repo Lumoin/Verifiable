@@ -213,7 +213,7 @@ public static class FidoU2fAttestation
         //Steps 7-8: Basic versus AttCA determination is explicitly optional ("Optionally, inspect
         //x5c and consult externally provided knowledge ...") and this layer has no such externally
         //provided knowledge, so AttestationType.Unknown ("uncertainty") is the correct outcome —
-        //owner ruling 6, the shipped packed precedent for an indistinguishable certificate-path type.
+        //mirroring the shipped packed precedent for an indistinguishable certificate-path type.
         return new CertifiedAttestationResult(AttestationType.Unknown, x5c);
     }
 
@@ -230,7 +230,7 @@ public static class FidoU2fAttestation
         CredentialId credentialId,
         ReadOnlySpan<byte> x,
         ReadOnlySpan<byte> y,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         out int length)
     {
         length = 1 + rpIdHash.Length + clientDataHash.Length + credentialId.Length + 1 + x.Length + y.Length;

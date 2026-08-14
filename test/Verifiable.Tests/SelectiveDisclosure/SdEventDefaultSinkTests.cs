@@ -14,7 +14,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.SelectiveDisclosure;
 
 /// <summary>
-/// Coverage for the wave-7 <see cref="CryptoEventSink"/> widening of the two SD-JWT/SD-CWT pipeline sign
+/// Coverage for the <see cref="CryptoEventSink"/> widening of the two SD-JWT/SD-CWT pipeline sign
 /// sites (<see cref="SdJwtPipeline"/>/<see cref="SdCwtPipeline"/>, internal to <c>Verifiable.Json</c>/
 /// <c>Verifiable.Cbor</c>). Unlike the JOSE/COSE sites, these two resolve and invoke a
 /// <see cref="SigningDelegate"/> behind the fixed <see cref="SignPayloadDelegate"/> method-group contract
@@ -23,25 +23,25 @@ namespace Verifiable.Tests.SelectiveDisclosure;
 /// break every one of those method-group conversions (C# requires exact arity), so the two sites instead
 /// route unconditionally to <see cref="CryptographicKeyEvents.DefaultSink"/>, with no per-call override.
 /// These tests prove the produced <see cref="SignatureProducedEvent"/> reaches the global
-/// <see cref="CryptographicKeyEvents.Events"/> stream, closing the two sites the wave-7 scout censused.
+/// <see cref="CryptographicKeyEvents.Events"/> stream, closing the two sites that previously discarded it.
 /// </summary>
 [TestClass]
 internal sealed class SdEventDefaultSinkTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
     /// <summary>
-    /// <see cref="SdJwtPipeline.Sign"/>, reached through <see cref="SdJwtIssuance.IssueVerboseAsync(ReadOnlyMemory{byte}, IReadOnlySet{CredentialPath}, GenerateDisclosureSaltDelegate, PrivateKeyMemory, string, MemoryPool{byte}, string?, string?, DecoyDigestOptions, CancellationToken)"/>,
+    /// <see cref="SdJwtPipeline.Sign"/>, reached through <see cref="SdJwtIssuance.IssueVerboseAsync(ReadOnlyMemory{byte}, IReadOnlySet{CredentialPath}, GenerateDisclosureSaltDelegate, PrivateKeyMemory, string, BaseMemoryPool, string?, string?, DecoyDigestOptions, CancellationToken)"/>,
     /// publishes a <see cref="SignatureProducedEvent"/> to the global stream by default.
     /// </summary>
     [TestMethod]
     public async Task SdJwtIssuanceSignEmitsSignatureProducedEventToGlobalStream()
     {
         using PrivateKeyMemory privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
-        byte[] payload = Encoding.UTF8.GetBytes("""{"iss":"did:example:wave7-sdjwt","given_name":"Alice"}""");
+        byte[] payload = Encoding.UTF8.GetBytes("""{"iss":"did:example:sdjwt","given_name":"Alice"}""");
         var disclosablePaths = new HashSet<CredentialPath> { CredentialPath.FromJsonPointer("/given_name") };
 
         var observer = new TestObserver<CryptoEvent>();
@@ -63,7 +63,7 @@ internal sealed class SdEventDefaultSinkTests
 
 
     /// <summary>
-    /// <see cref="SdCwtPipeline.Sign"/>, reached through <see cref="SdCwtIssuance.IssueVerboseAsync(ReadOnlyMemory{byte}, IReadOnlySet{CredentialPath}, GenerateDisclosureSaltDelegate, PrivateKeyMemory, string, MemoryPool{byte}, string?, string?, DecoyDigestOptions, CancellationToken)"/>,
+    /// <see cref="SdCwtPipeline.Sign"/>, reached through <see cref="SdCwtIssuance.IssueVerboseAsync(ReadOnlyMemory{byte}, IReadOnlySet{CredentialPath}, GenerateDisclosureSaltDelegate, PrivateKeyMemory, string, BaseMemoryPool, string?, string?, DecoyDigestOptions, CancellationToken)"/>,
     /// publishes a <see cref="SignatureProducedEvent"/> to the global stream by default.
     /// </summary>
     [TestMethod]
@@ -72,8 +72,8 @@ internal sealed class SdEventDefaultSinkTests
         using PrivateKeyMemory privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
         var claims = new Dictionary<int, object>
         {
-            [WellKnownCwtClaimNames.Iss] = "https://issuer.example/wave7-sdcwt",
-            [501] = "wave7-disclosable"
+            [WellKnownCwtClaimNames.Iss] = "https://issuer.example/sdcwt",
+            [501] = "disclosable"
         };
         byte[] cborBytes = SdCwtWireFixtures.SerializeCwtClaimMap(claims).ToArray();
         var disclosablePaths = new HashSet<CredentialPath> { CredentialPath.FromJsonPointer("/501") };

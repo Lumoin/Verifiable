@@ -27,7 +27,7 @@ public delegate string EncodeDelegate(ReadOnlySpan<byte> data);
 /// from the provided memory pool. The caller is responsible for disposing the returned
 /// <see cref="IMemoryOwner{T}"/> to return the buffer to the pool.
 /// </remarks>
-public delegate IMemoryOwner<byte> DecodeDelegate(ReadOnlySpan<char> source, MemoryPool<byte> pool);
+public delegate IMemoryOwner<byte> DecodeDelegate(ReadOnlySpan<char> source, BaseMemoryPool pool);
 
 
 /// <summary>
@@ -79,7 +79,7 @@ public static class MultibaseSerializer
     public static IMemoryOwner<byte> PrependHeader(
         ReadOnlySpan<byte> data,
         ReadOnlySpan<byte> codecHeader,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -112,7 +112,7 @@ public static class MultibaseSerializer
     /// via <see cref="MulticodecHeaderRegistry"/>.
     /// </para>
     /// </remarks>
-    public static IMemoryOwner<byte> PrependHeader(PublicKeyMemory publicKey, MemoryPool<byte> pool)
+    public static IMemoryOwner<byte> PrependHeader(PublicKeyMemory publicKey, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(publicKey);
         ArgumentNullException.ThrowIfNull(pool);
@@ -142,7 +142,7 @@ public static class MultibaseSerializer
         ReadOnlySpan<byte> codecHeader,
         char multibasePrefix,
         EncodeDelegate encoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(encoder);
         ArgumentNullException.ThrowIfNull(pool);
@@ -288,7 +288,7 @@ public static class MultibaseSerializer
         ReadOnlySpan<char> encoded,
         int codecHeaderLength,
         DecodeDelegate decoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(decoder);
         ArgumentNullException.ThrowIfNull(pool);
@@ -351,12 +351,12 @@ public static class MultibaseSerializer
         ReadOnlySpan<char> encoded,
         int codecHeaderLength,
         SimpleDecodeDelegate simpleDecoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(simpleDecoder);
         ArgumentNullException.ThrowIfNull(pool);
 
-        IMemoryOwner<byte> decoder(ReadOnlySpan<char> source, MemoryPool<byte> decoderPool)
+        IMemoryOwner<byte> decoder(ReadOnlySpan<char> source, BaseMemoryPool decoderPool)
         {
             byte[] decoded = simpleDecoder(source);
             var buffer = decoderPool.Rent(decoded.Length);
@@ -379,7 +379,7 @@ public static class MultibaseSerializer
     public static (IMemoryOwner<byte> KeyData, CryptoAlgorithm Algorithm) DecodeKey(
         ReadOnlySpan<char> encoded,
         DecodeDelegate decoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(decoder);
         ArgumentNullException.ThrowIfNull(pool);
@@ -419,12 +419,12 @@ public static class MultibaseSerializer
     public static (IMemoryOwner<byte> KeyData, CryptoAlgorithm Algorithm) DecodeKey(
         ReadOnlySpan<char> encoded,
         SimpleDecodeDelegate simpleDecoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(simpleDecoder);
         ArgumentNullException.ThrowIfNull(pool);
 
-        IMemoryOwner<byte> decoder(ReadOnlySpan<char> source, MemoryPool<byte> decoderPool)
+        IMemoryOwner<byte> decoder(ReadOnlySpan<char> source, BaseMemoryPool decoderPool)
         {
             byte[] decoded = simpleDecoder(source);
             var buffer = decoderPool.Rent(decoded.Length);
@@ -447,7 +447,7 @@ public static class MultibaseSerializer
     public static IMemoryOwner<byte> DecodeFromJwk(
         ReadOnlySpan<char> encoded,
         SimpleDecodeDelegate simpleDecoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(simpleDecoder);
         ArgumentNullException.ThrowIfNull(pool);

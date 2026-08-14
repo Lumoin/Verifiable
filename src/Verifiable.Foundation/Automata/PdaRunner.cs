@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -73,7 +72,6 @@ namespace Verifiable.Foundation.Automata;
 ///     timeProvider, cancellationToken);
 /// </code>
 /// </remarks>
-[DebuggerDisplay("PdaRunner")]
 public static class PdaRunner
 {
     /// <summary>

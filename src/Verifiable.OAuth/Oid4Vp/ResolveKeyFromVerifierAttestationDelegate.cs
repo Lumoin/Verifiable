@@ -46,5 +46,5 @@ namespace Verifiable.OAuth.Oid4Vp;
 public delegate ValueTask<PublicKeyMemory> ResolveKeyFromVerifierAttestationDelegate(
     VerifierAttestationJwt attestation,
     string expectedClientId,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);

@@ -204,7 +204,7 @@ internal sealed class CtapGetInfoResponseCborReaderTests
     /// An <c>options</c> map carrying an unrecognized option ID is decoded successfully with that
     /// entry ignored. <c>uvAcfg</c> is the example here (permanently unmodeled — the UV-path-only
     /// <c>acfg</c> gate this profile never grants through) since <c>uv</c> itself is now a modeled
-    /// member (wavebio R2).
+    /// member.
     /// </summary>
     [TestMethod]
     public void IgnoresUnrecognizedOptionId()
@@ -239,7 +239,7 @@ internal sealed class CtapGetInfoResponseCborReaderTests
     /// <summary>
     /// Round-tripping a response carrying <c>ep</c> present-true/present-false recovers the value
     /// exactly, alongside a capable-profile <c>authenticatorConfigCommands</c> of <c>[1, 2, 3]</c>
-    /// (R2's conditional array). <c>ep</c>'s third tri-state leg — ABSENT for a non-capable
+    /// (the conditional array). <c>ep</c>'s third tri-state leg — ABSENT for a non-capable
     /// authenticator — is already proven by every other test in this file, none of which ever sets
     /// <c>Ep</c> on the written <see cref="CtapGetInfoOptions"/>.
     /// </summary>
@@ -299,7 +299,7 @@ internal sealed class CtapGetInfoResponseCborReaderTests
     /// <summary>
     /// Round-tripping a response carrying <c>maxCredentialCountInList</c> (0x07), <c>algorithms</c>
     /// (0x0A, reusing <see cref="Verifiable.Cbor.Ctap.CtapCommandEntityCborCodec.ReadParametersArray"/>),
-    /// and <c>firmwareVersion</c> (0x0E) recovers every value exactly — R5/R6/R7's three new members.
+    /// and <c>firmwareVersion</c> (0x0E) recovers every value exactly — three new members.
     /// A distinct <c>firmwareVersion</c> (7, not the
     /// <see cref="Verifiable.Fido2.Ctap.Authenticator.Automata.CtapAuthenticatorState.Initial"/> seed
     /// default of 1) proves the value genuinely round-trips rather than coincidentally matching a

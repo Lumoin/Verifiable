@@ -25,5 +25,20 @@ public enum PkiObjectKind
     OcspResponse = 3,
 
     /// <summary>An RFC 3161 timestamp token.</summary>
-    TimestampToken = 4
+    TimestampToken = 4,
+
+    /// <summary>A DER-encoded OCSP request per RFC 6960.</summary>
+    OcspRequest = 5,
+
+    /// <summary>A DER-encoded RFC 3161 <c>TimeStampReq</c>.</summary>
+    TimestampRequest = 6,
+
+    /// <summary>A DER-encoded RFC 3161 <c>TimeStampResp</c> (the status envelope a Time-Stamping Authority returns, before the embedded token is extracted).</summary>
+    TimestampResponse = 7,
+
+    /// <summary>A DER-encoded ASN.1 <c>IssuerSerial</c> (X.509's issuer-name-plus-serial-number pair) — the shape XAdES's <c>IssuerSerialV2</c> carries opaque (ETSI EN 319 132-1 V1.3.1 clause 5.2.2).</summary>
+    IssuerSerial = 8,
+
+    /// <summary>An RFC 6960 §4.2.1 <c>KeyHash</c> (the hash of a responder's public key) — the shape XAdES's <c>OCSPIdentifier/ResponderID/ByKey</c> carries opaque (ETSI EN 319 132-1 V1.3.1 Annex A.1.2).</summary>
+    OcspResponderKeyHash = 9
 }

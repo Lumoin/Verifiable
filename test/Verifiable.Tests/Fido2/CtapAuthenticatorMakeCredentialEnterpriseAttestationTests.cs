@@ -12,15 +12,15 @@ using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
 using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
-using static Verifiable.Tests.TestInfrastructure.CtapWave2AuthenticatorFixtures;
+using static Verifiable.Tests.TestInfrastructure.CtapMakeCredentialGetAssertionFixtures;
 
 namespace Verifiable.Tests.Fido2;
 
 /// <summary>
-/// The waveep PKG-C matrix for <c>authenticatorMakeCredential</c>'s <c>enterpriseAttestation</c> parameter
-/// (CTAP 2.3 §7.1, mc algorithm step 9): the full negative/positive clause tree (R4/R5/R6), the packed
-/// CERTIFIED attestation mint (R7), <c>epAtt</c> emission (R9), the none-family discretionary decline
-/// (R8), the <c>authenticatorReset</c> interplay (§7.1.3), and R15's personal/enterprise coexistence
+/// The matrix for <c>authenticatorMakeCredential</c>'s <c>enterpriseAttestation</c> parameter
+/// (CTAP 2.3 §7.1, mc algorithm step 9): the full negative/positive clause tree, the packed
+/// CERTIFIED attestation mint, <c>epAtt</c> emission, the none-family discretionary decline,
+/// the <c>authenticatorReset</c> interplay (§7.1.3), and the personal/enterprise coexistence
 /// proofs. Driven over <see cref="CtapAuthenticatorSimulator.TransceiveAsync"/> with the shipped CBOR
 /// codecs, mirroring <see cref="CtapAuthenticatorMakeCredentialTests"/>'s and
 /// <see cref="CtapAuthenticatorPackedAttestationTests"/>'s own shape.
@@ -37,23 +37,23 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     /// <summary>A second relying party identifier, distinct from <see cref="UnlistedRpId"/>, standing in for a platform-vetted (value-2) RP.</summary>
     private const string PlatformVettedRpId = "platform-vetted.example";
 
-    /// <summary>A relying party identifier for R15(b)'s personal (non-enterprise) resident credential.</summary>
+    /// <summary>A relying party identifier for the personal (non-enterprise) resident credential.</summary>
     private const string PersonalRpId = "personal.example";
 
 
     /// <summary>
-    /// The <c>clientDataHash</c> bytes <see cref="CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest"/>
+    /// The <c>clientDataHash</c> bytes <see cref="CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest"/>
     /// always seeds with, captured independently for the certified-signature verification oracle (the
     /// request's own carrier is disposed once sent).
     /// </summary>
     private static byte[] ExpectedMakeCredentialClientDataHash => BuildFixedBytes(32, 0x10);
 
-    /// <summary>The <c>clientDataHash</c> bytes <see cref="CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest"/> always seeds with — see <see cref="ExpectedMakeCredentialClientDataHash"/>.</summary>
+    /// <summary>The <c>clientDataHash</c> bytes <see cref="CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionRequest"/> always seeds with — see <see cref="ExpectedMakeCredentialClientDataHash"/>.</summary>
     private static byte[] ExpectedGetAssertionClientDataHash => BuildFixedBytes(32, 0x20);
 
 
     /// <summary>
-    /// mc Step 9 sub-step 1 (CTAP 2.3 line 3331, waveep R5, trap 5's order-pin): a NON-CAPABLE
+    /// mc Step 9 sub-step 1 (CTAP 2.3 line 3331): a NON-CAPABLE
     /// authenticator rejects <c>enterpriseAttestation</c> with <c>InvalidParameter</c> REGARDLESS of the
     /// value supplied — including out-of-range values that would otherwise trigger the value-validation
     /// check (sub-step 2.1) IF that check ran first. Value 1 alone is already covered by
@@ -69,7 +69,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     public async Task EnterpriseAttestationOnNonCapableAuthenticatorReturnsInvalidParameterRegardlessOfValue(int enterpriseAttestationValue)
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator($"mc-ep-noncapable-{enterpriseAttestationValue}");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, enterpriseAttestation: enterpriseAttestationValue);
         using PooledMemory response = await SendMakeCredentialAsync(simulator, request, pool, TestContext.CancellationToken);
@@ -87,8 +87,8 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     [TestMethod]
     public async Task EnterpriseAttestationOnCapableButDisabledAuthenticatorReturnsInvalidParameter()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
-        using CtapAuthenticatorSimulator simulator = CtapWaveEpFixtures.CreateCapableSimulator("mc-ep-capable-disabled", pool);
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using CtapAuthenticatorSimulator simulator = CtapEnterpriseAttestationFixtures.CreateCapableSimulator("mc-ep-capable-disabled", pool);
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, enterpriseAttestation: 1);
         using PooledMemory response = await SendMakeCredentialAsync(simulator, request, pool, TestContext.CancellationToken);
@@ -98,7 +98,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
 
 
     /// <summary>
-    /// mc Step 9 sub-step 2.1 (CTAP 2.3 line 3336, waveep R5): once capable AND enabled, a value that is
+    /// mc Step 9 sub-step 2.1 (CTAP 2.3 line 3336): once capable AND enabled, a value that is
     /// neither 1 nor 2 rejects with <c>InvalidOption</c> — a code this handler could never previously
     /// produce for this parameter (seams §1).
     /// </summary>
@@ -107,8 +107,8 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     [DataRow(3, DisplayName = "value 3")]
     public async Task EnterpriseAttestationInvalidValueOnCapableEnabledAuthenticatorReturnsInvalidOption(int enterpriseAttestationValue)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
-        using CtapAuthenticatorSimulator simulator = await CtapWaveEpFixtures.CreateCapableEnabledSimulatorAsync(
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using CtapAuthenticatorSimulator simulator = await CtapEnterpriseAttestationFixtures.CreateCapableEnabledSimulatorAsync(
             $"mc-ep-invalid-value-{enterpriseAttestationValue}", pool, preConfiguredRpIds: null, TestContext.CancellationToken);
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, enterpriseAttestation: enterpriseAttestationValue);
@@ -119,29 +119,29 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
 
 
     /// <summary>
-    /// mc Step 9's vendor-facilitated grant (CTAP 2.3 line 3345, waveep R4): <c>enterpriseAttestation: 1</c>
+    /// mc Step 9's vendor-facilitated grant (CTAP 2.3 line 3345): <c>enterpriseAttestation: 1</c>
     /// with an <c>rp.id</c> matching the pre-configured list mints a packed CERTIFIED attestation — the
     /// response carries <c>epAtt: true</c>, an <c>attStmt</c> with <c>x5c</c> present (the seeded chain's
-    /// own bytes, byte-exact), and keys in ascending order <c>alg</c> &lt; <c>sig</c> &lt; <c>x5c</c>
-    /// (trap 14). The signature independently verifies against the SEEDED ATTESTATION public key (trap
-    /// 11's positive half) and does NOT verify against the newly minted CREDENTIAL's own public key (trap
+    /// own bytes, byte-exact), and keys in ascending order <c>alg</c> &lt; <c>sig</c> &lt; <c>x5c</c>.
+    /// The signature independently verifies against the SEEDED ATTESTATION public key (the
+    /// positive half) and does NOT verify against the newly minted CREDENTIAL's own public key (the
     /// 11's negative half — proving the certified mint never signs with the credential key).
     /// </summary>
     [TestMethod]
     public async Task EnterpriseAttestationValueOneWithListedRpIdGrantsCertifiedAttestationSignedByAttestationKey()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         (CtapEnterpriseAttestationProvisioning provisioning, PublicKeyMemory attestationPublicKey) =
-            CtapWaveEpFixtures.BuildProvisioningWithAttestationPublicKey(pool);
+            CtapEnterpriseAttestationFixtures.BuildProvisioningWithAttestationPublicKey(pool);
         using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-ep-value1-listed", enterpriseAttestationProvisioning: provisioning);
         try
         {
             var enableRequest = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.EnableEnterpriseAttestation);
-            using PooledMemory enableResponse = await CtapWaveConfigFixtures.SendAuthenticatorConfigAsync(simulator, enableRequest, pool, TestContext.CancellationToken);
+            using PooledMemory enableResponse = await CtapConfigFixtures.SendAuthenticatorConfigAsync(simulator, enableRequest, pool, TestContext.CancellationToken);
             Assert.AreEqual(WellKnownCtapStatusCodes.Ok, enableResponse.AsReadOnlySpan()[0]);
 
             CtapMakeCredentialRequest request = BuildMakeCredentialRequest(
-                pool, rpId: CtapWaveEpFixtures.DefaultPreConfiguredRpId, enterpriseAttestation: 1);
+                pool, rpId: CtapEnterpriseAttestationFixtures.DefaultPreConfiguredRpId, enterpriseAttestation: 1);
             using PooledMemory response = await SendMakeCredentialAsync(simulator, request, pool, TestContext.CancellationToken);
             Assert.AreEqual(WellKnownCtapStatusCodes.Ok, response.AsReadOnlySpan()[0]);
 
@@ -173,7 +173,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
 
                 using ECDsa credentialOracleKey = BuildP256OracleFromCoseKey(authenticatorData.AttestedCredentialData!.CredentialPublicKey);
                 bool verifiedByCredentialKey = credentialOracleKey.VerifyData(message, statement.Signature.Span, HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence);
-                Assert.IsFalse(verifiedByCredentialKey, "the certified signature must NOT verify against the newly minted credential's own public key (trap 11).");
+                Assert.IsFalse(verifiedByCredentialKey, "the certified signature must NOT verify against the newly minted credential's own public key.");
             }
             finally
             {
@@ -195,7 +195,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
 
     /// <summary>
     /// The genuinely reachable "enterprise-attested resident credential with a largeBlobKey also
-    /// requested" combination (trap 2/5): granting an enterprise attestation and requesting §12.3's
+    /// requested" combination: granting an enterprise attestation and requesting §12.3's
     /// <c>largeBlobKey</c> extension in the SAME mc call produces a wire response carrying <c>attStmt</c>
     /// (<c>0x03</c>), <c>epAtt</c> (<c>0x04</c>), AND <c>largeBlobKey</c> (<c>0x05</c>) together — proving
     /// the full simulator pipeline (not just the writer in isolation) preserves all three members through
@@ -204,12 +204,12 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     [TestMethod]
     public async Task EnterpriseAttestationGrantedTogetherWithLargeBlobKeyProducesAllThreeOptionalMembers()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
-        using CtapAuthenticatorSimulator simulator = await CtapWaveEpFixtures.CreateCapableEnabledSimulatorAsync(
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using CtapAuthenticatorSimulator simulator = await CtapEnterpriseAttestationFixtures.CreateCapableEnabledSimulatorAsync(
             "mc-ep-with-largeblobkey", pool, preConfiguredRpIds: null, TestContext.CancellationToken);
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(
-            pool, rpId: CtapWaveEpFixtures.DefaultPreConfiguredRpId, enterpriseAttestation: 1,
+            pool, rpId: CtapEnterpriseAttestationFixtures.DefaultPreConfiguredRpId, enterpriseAttestation: 1,
             options: new CtapCommandOptions(ResidentKey: true), extensions: BuildMakeCredentialExtensionsInput(largeBlobKey: true));
         using PooledMemory response = await SendMakeCredentialAsync(simulator, request, pool, TestContext.CancellationToken);
 
@@ -225,15 +225,15 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
 
     /// <summary>
     /// mc Step 9 sub-step 2.3's fallthrough (CTAP 2.3 line 3350, the row-3339 MUST NOT's own NON-VACUOUS
-    /// proof, waveep R4): <c>enterpriseAttestation: 1</c> with an <c>rp.id</c> that does NOT match the
+    /// proof): <c>enterpriseAttestation: 1</c> with an <c>rp.id</c> that does NOT match the
     /// pre-configured list is treated as ABSENT — the request still SUCCEEDS, but with a regular packed
     /// SELF attestation (no <c>x5c</c>) and <c>epAtt</c> absent, never an error.
     /// </summary>
     [TestMethod]
     public async Task EnterpriseAttestationValueOneWithUnlistedRpIdFallsThroughToRegularSelfAttestation()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
-        using CtapAuthenticatorSimulator simulator = await CtapWaveEpFixtures.CreateCapableEnabledSimulatorAsync(
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using CtapAuthenticatorSimulator simulator = await CtapEnterpriseAttestationFixtures.CreateCapableEnabledSimulatorAsync(
             "mc-ep-value1-unlisted", pool, preConfiguredRpIds: null, TestContext.CancellationToken);
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, rpId: UnlistedRpId, enterpriseAttestation: 1);
@@ -251,7 +251,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
 
 
     /// <summary>
-    /// mc Step 9's platform-managed grant (CTAP 2.3 line 3347, waveep R4): <c>enterpriseAttestation: 2</c>
+    /// mc Step 9's platform-managed grant (CTAP 2.3 line 3347): <c>enterpriseAttestation: 2</c>
     /// grants an enterprise attestation for an <c>rp.id</c> NOT on the pre-configured list at all — "the
     /// authenticator MAY return an enterprise attestation WITHOUT checking whether the request's rp.id
     /// matches an entry on the authenticator's pre-configured RP ID list" — proving value 2's own no-
@@ -260,8 +260,8 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     [TestMethod]
     public async Task EnterpriseAttestationValueTwoWithUnlistedRpIdGrantsCertifiedAttestationWithoutListCheck()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
-        using CtapAuthenticatorSimulator simulator = await CtapWaveEpFixtures.CreateCapableEnabledSimulatorAsync(
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using CtapAuthenticatorSimulator simulator = await CtapEnterpriseAttestationFixtures.CreateCapableEnabledSimulatorAsync(
             "mc-ep-value2-unlisted", pool, preConfiguredRpIds: null, TestContext.CancellationToken);
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, rpId: PlatformVettedRpId, enterpriseAttestation: 2);
@@ -291,7 +291,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
 
 
     /// <summary>
-    /// Waveep R8: a granted request whose OWN <c>attestationFormatsPreference</c> resolves to a
+    /// A granted request whose OWN <c>attestationFormatsPreference</c> resolves to a
     /// none-family choice declines the grant — the authenticator's ONE adopted sub-step 2.4 discretionary
     /// constraint. <c>enterpriseAttestation: 2</c> (unconditionally grantable) combined with a
     /// single-entry <c>["none"]</c> preference still answers <c>fmt=none</c>, <c>attStmt</c> omitted, and
@@ -300,8 +300,8 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     [TestMethod]
     public async Task EnterpriseAttestationValueTwoWithNonePreferenceDeclinesGrant()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
-        using CtapAuthenticatorSimulator simulator = await CtapWaveEpFixtures.CreateCapableEnabledSimulatorAsync(
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using CtapAuthenticatorSimulator simulator = await CtapEnterpriseAttestationFixtures.CreateCapableEnabledSimulatorAsync(
             "mc-ep-value2-none-preference", pool, preConfiguredRpIds: null, TestContext.CancellationToken);
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(
@@ -327,15 +327,15 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     [TestMethod]
     public async Task EnterpriseAttestationAfterFactoryResetReturnsInvalidParameter()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
-        using CtapAuthenticatorSimulator simulator = await CtapWaveEpFixtures.CreateCapableEnabledSimulatorAsync(
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using CtapAuthenticatorSimulator simulator = await CtapEnterpriseAttestationFixtures.CreateCapableEnabledSimulatorAsync(
             "mc-ep-reset-then-mc", pool, preConfiguredRpIds: null, TestContext.CancellationToken);
 
         byte[] resetRequest = [WellKnownCtapCommands.Reset];
         using PooledMemory resetResponse = await simulator.TransceiveAsync(resetRequest, pool, TestContext.CancellationToken);
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, resetResponse.AsReadOnlySpan()[0]);
 
-        CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, rpId: CtapWaveEpFixtures.DefaultPreConfiguredRpId, enterpriseAttestation: 1);
+        CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, rpId: CtapEnterpriseAttestationFixtures.DefaultPreConfiguredRpId, enterpriseAttestation: 1);
         using PooledMemory response = await SendMakeCredentialAsync(simulator, request, pool, TestContext.CancellationToken);
 
         Assert.AreEqual(WellKnownCtapStatusCodes.InvalidParameter, response.AsReadOnlySpan()[0]);
@@ -343,7 +343,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
 
 
     /// <summary>
-    /// R15(a): the personal context on an enterprise-provisioned device. An <c>enterpriseAttestation</c>-
+    /// The personal context on an enterprise-provisioned device. An <c>enterpriseAttestation</c>-
     /// ABSENT mc request against a CAPABLE+ENABLED authenticator returns the regular packed SELF
     /// attestation, <c>epAtt</c> absent — and the response's own SHAPE (fmt, x5c-absence, epAtt-absence)
     /// is indistinguishable from an equivalent request against a NON-CAPABLE authenticator (CTAP 2.3 line
@@ -355,8 +355,8 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     [TestMethod]
     public async Task ParameterAbsentOnCapableEnabledAuthenticatorProducesShapeIndistinguishableFromNonCapableAuthenticator()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
-        using CtapAuthenticatorSimulator capableEnabledSimulator = await CtapWaveEpFixtures.CreateCapableEnabledSimulatorAsync(
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using CtapAuthenticatorSimulator capableEnabledSimulator = await CtapEnterpriseAttestationFixtures.CreateCapableEnabledSimulatorAsync(
             "mc-ep-r15a-capable", pool, preConfiguredRpIds: null, TestContext.CancellationToken);
         using CtapAuthenticatorSimulator nonCapableSimulator = CreateSimulator("mc-ep-r15a-noncapable");
 
@@ -369,9 +369,9 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
         Assert.AreEqual(nonCapableDecoded.Fmt, capableEnabledDecoded.Fmt, "the fmt member must match between the two authenticators.");
         Assert.AreEqual(nonCapableDecoded.EpAtt.HasValue, capableEnabledDecoded.EpAtt.HasValue, "epAtt presence must match (both absent).");
 
-        static async Task<CtapMakeCredentialResponse> SendPlainMakeCredentialAsync(CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool)
+        static async Task<CtapMakeCredentialResponse> SendPlainMakeCredentialAsync(CtapAuthenticatorSimulator simulator, BaseMemoryPool pool)
         {
-            CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, rpId: CtapWaveEpFixtures.DefaultPreConfiguredRpId);
+            CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, rpId: CtapEnterpriseAttestationFixtures.DefaultPreConfiguredRpId);
             using PooledMemory response = await SendMakeCredentialAsync(simulator, request, pool, default);
 
             Assert.AreEqual(WellKnownCtapStatusCodes.Ok, response.AsReadOnlySpan()[0]);
@@ -379,7 +379,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
             return CtapMakeCredentialResponseCborReader.Read(response.AsReadOnlyMemory()[1..]);
         }
 
-        static void AssertRegularSelfAttestationShape(CtapMakeCredentialResponse decoded, MemoryPool<byte> pool)
+        static void AssertRegularSelfAttestationShape(CtapMakeCredentialResponse decoded, BaseMemoryPool pool)
         {
             Assert.AreEqual(WellKnownWebAuthnAttestationFormats.Packed, decoded.Fmt);
             Assert.IsFalse(decoded.EpAtt.HasValue, "the personal (param-absent) path must never carry epAtt.");
@@ -391,7 +391,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
 
 
     /// <summary>
-    /// R15(b): a personal (non-enterprise) resident credential and an enterprise-attested resident
+    /// A personal (non-enterprise) resident credential and an enterprise-attested resident
     /// credential coexist on ONE authenticator; both later assert successfully via
     /// <c>authenticatorGetAssertion</c>, and each assertion's signature verifies ONLY against ITS OWN
     /// credential's public key — never the seeded attestation key — proving the personal path carries no
@@ -402,8 +402,8 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     [TestMethod]
     public async Task PersonalAndEnterpriseResidentCredentialsCoexistAndBothAssertViaGetAssertionWithoutEnterpriseMaterialOnPersonalPath()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
-        using CtapAuthenticatorSimulator simulator = await CtapWaveEpFixtures.CreateCapableEnabledSimulatorAsync(
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using CtapAuthenticatorSimulator simulator = await CtapEnterpriseAttestationFixtures.CreateCapableEnabledSimulatorAsync(
             "mc-ep-r15b-coexist", pool, preConfiguredRpIds: null, TestContext.CancellationToken);
 
         CtapMakeCredentialRequest personalRequest = BuildMakeCredentialRequest(
@@ -416,7 +416,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
         CoseKey personalCredentialPublicKey = personalAuthenticatorData.AttestedCredentialData!.CredentialPublicKey;
 
         CtapMakeCredentialRequest enterpriseRequest = BuildMakeCredentialRequest(
-            pool, rpId: CtapWaveEpFixtures.DefaultPreConfiguredRpId, userId: BuildFixedBytes(16, 0x72),
+            pool, rpId: CtapEnterpriseAttestationFixtures.DefaultPreConfiguredRpId, userId: BuildFixedBytes(16, 0x72),
             options: new CtapCommandOptions(ResidentKey: true), enterpriseAttestation: 1);
         using PooledMemory enterpriseResponse = await SendMakeCredentialAsync(simulator, enterpriseRequest, pool, TestContext.CancellationToken);
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, enterpriseResponse.AsReadOnlySpan()[0]);
@@ -439,7 +439,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
             personalAssertionDecoded.User?.Id.Dispose();
         }
 
-        CtapGetAssertionRequest enterpriseAssertionRequest = BuildGetAssertionRequest(pool, rpId: CtapWaveEpFixtures.DefaultPreConfiguredRpId);
+        CtapGetAssertionRequest enterpriseAssertionRequest = BuildGetAssertionRequest(pool, rpId: CtapEnterpriseAttestationFixtures.DefaultPreConfiguredRpId);
         using PooledMemory enterpriseAssertionResponse = await SendGetAssertionAsync(simulator, enterpriseAssertionRequest, pool, TestContext.CancellationToken);
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, enterpriseAssertionResponse.AsReadOnlySpan()[0]);
         CtapGetAssertionResponse enterpriseAssertionDecoded = CtapGetAssertionResponseCborReader.Read(enterpriseAssertionResponse.AsReadOnlyMemory()[1..], pool);
@@ -468,7 +468,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
 
     /// <summary>
     /// Reads <paramref name="attStmt"/>'s three CBOR text keys, in wire order, and asserts they are
-    /// exactly <c>alg</c>, <c>sig</c>, <c>x5c</c> (waveep R7, trap 14: bytewise ascending on a 3-character
+    /// exactly <c>alg</c>, <c>sig</c>, <c>x5c</c> (bytewise ascending on a 3-character
     /// tie).
     /// </summary>
     private static void AssertAttStmtKeyOrderIsAlgSigX5c(ReadOnlyMemory<byte> attStmt)

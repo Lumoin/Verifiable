@@ -53,6 +53,22 @@ public static class CborWriterExtensions
 
 
     /// <summary>
+    /// Writes a <see cref="Uri"/> as a CBOR tag 32 (<c>#6.32(tstr)</c>) value per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.4.5.3">RFC 8949 §3.4.5.3</see>.
+    /// </summary>
+    /// <param name="writer">The CBOR writer.</param>
+    /// <param name="value">The URI to write.</param>
+    public static void WriteUri(this CborWriter writer, Uri value)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(value);
+
+        writer.WriteTag(CborTag.Uri);
+        writer.WriteTextString(value.IsAbsoluteUri ? value.AbsoluteUri : value.OriginalString);
+    }
+
+
+    /// <summary>
     /// Writes a CBOR array of text strings.
     /// </summary>
     /// <param name="writer">The CBOR writer.</param>

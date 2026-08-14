@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.OAuth.Federation;
 
@@ -33,7 +32,6 @@ namespace Verifiable.OAuth.Federation;
 /// resolved to the requested anchor; the endpoint then responds HTTP 404.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("ResolveResponseContribution")]
 public sealed record ResolveResponseContribution
 {
     /// <summary>

@@ -222,7 +222,7 @@ internal sealed class JoseTests
     /// <summary>
     /// The <see cref="JwsMessage"/>-based <c>VerifyAsync</c> overload shares the compact-string overload's
     /// documented contract that "callers depend on VerifyAsync returning false, never throwing, on untrusted
-    /// input" (see the guard in <see cref="Jws.VerifyAsync(string, DecodeDelegate, MemoryPool{byte}, PublicKeyMemory, VerificationDelegate, int, CryptoEventSink?, CancellationToken)"/>).
+    /// input" (see the guard in <see cref="Jws.VerifyAsync(string, DecodeDelegate, BaseMemoryPool, PublicKeyMemory, VerificationDelegate, int, CryptoEventSink?, CancellationToken)"/>).
     /// A resolved <see cref="VerificationDelegate"/> can throw while parsing attacker-tampered key material —
     /// for example a tampered EC point surfacing as <see cref="PlatformNotSupportedException"/> on Windows CNG
     /// rather than a graceful rejection — and this overload must fail closed to <see langword="false"/> instead
@@ -261,7 +261,7 @@ internal sealed class JoseTests
 
 
     /// <summary>
-    /// <see cref="Jws.VerifySignatureAsync(string, ReadOnlyMemory{byte}, bool, ReadOnlyMemory{byte}, EncodeDelegate, VerificationDelegate, ReadOnlyMemory{byte}, MemoryPool{byte}, CryptoEventSink?, CancellationToken)"/>
+    /// <see cref="Jws.VerifySignatureAsync(string, ReadOnlyMemory{byte}, bool, ReadOnlyMemory{byte}, EncodeDelegate, VerificationDelegate, ReadOnlyMemory{byte}, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/>
     /// shares the same fail-closed contract as the other <c>Jws</c> verify overloads: a resolved
     /// <see cref="VerificationDelegate"/> that throws while parsing attacker-tampered key material must not let
     /// that exception escape past the guard — it must be treated as "signature does not verify".
@@ -305,7 +305,7 @@ internal sealed class JoseTests
 
     /// <summary>
     /// The explicit-<see cref="VerificationDelegate"/> compact-string
-    /// <see cref="Jws.VerifyAndDecodeAsync(string, DecodeDelegate, JwtPartDecoder, MemoryPool{byte}, PublicKeyMemory, VerificationDelegate, int, CryptoEventSink?, CancellationToken)"/>
+    /// <see cref="Jws.VerifyAndDecodeAsync(string, DecodeDelegate, JwtPartDecoder, BaseMemoryPool, PublicKeyMemory, VerificationDelegate, int, CryptoEventSink?, CancellationToken)"/>
     /// overload shares the same fail-closed contract as the other <c>Jws</c> verify overloads: a resolved
     /// <see cref="VerificationDelegate"/> that throws while parsing attacker-tampered key material must not let
     /// that exception escape past the guard — it must be treated as "signature does not verify", returning an
@@ -464,7 +464,7 @@ internal sealed class JoseTests
         Justification = "Ownership transfers to the caller (Jws.SignAsync) which disposes via PrivateKey.")]
     private static ValueTask<PrivateKeyMemory?> ResolvePrivateKeyMaterial(
         JoseKeyContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TestResolverState state,
         CancellationToken cancellationToken)
     {
@@ -482,7 +482,7 @@ internal sealed class JoseTests
         Justification = "Ownership transfers to the caller (Jws.VerifyAsync) which disposes via PublicKey.")]
     private static ValueTask<PublicKeyMemory?> ResolvePublicKeyMaterial(
         JoseKeyContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TestResolverState state,
         CancellationToken cancellationToken)
     {

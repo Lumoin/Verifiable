@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Model.DataIntegrity;
@@ -35,7 +34,6 @@ namespace Verifiable.Vcalm;
 /// endpoint is typically publicly accessible without authentication").
 /// </para>
 /// </remarks>
-[DebuggerDisplay("VcalmStatusEndpoints")]
 public static class VcalmStatusEndpoints
 {
     /// <summary>

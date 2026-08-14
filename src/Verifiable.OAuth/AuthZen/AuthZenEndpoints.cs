@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.JCose;
@@ -34,7 +33,6 @@ namespace Verifiable.OAuth.AuthZen;
 /// No <c>System.Text.Json</c> dependency is taken on here.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("AuthZenEndpoints")]
 public static class AuthZenEndpoints
 {
     /// <summary>

@@ -14,7 +14,7 @@ namespace Verifiable;
 /// <remarks>
 /// <para>
 /// This is the sole production (non-test) consumer of the process-wide <see cref="CryptoEvent"/> stream
-/// in this repository. The wave-7 consumer scout found that <c>EmitCbom --observe</c> already ran a
+/// in this repository. <c>EmitCbom --observe</c> already ran a
 /// workload that emits <see cref="SignatureProducedEvent"/>/<see cref="VerificationCompletedEvent"/>/
 /// <see cref="KeyMaterialGeneratedEvent"/> through the wired provider, but nothing in the CLI/MCP
 /// composition root ever subscribed to <see cref="CryptographicKeyEvents.Events"/> — those events were
@@ -40,7 +40,7 @@ internal static class CryptoEventProvenance
     /// The line separating the unchanged CBOM JSON from the appended provenance summary in the combined
     /// verb output. A caller that only wants the CBOM JSON can split on this marker — or simply not pass
     /// <c>--events</c>/<c>events: true</c>, in which case the marker and summary never appear at all and
-    /// the output is exactly what it was before this wave.
+    /// the output is exactly the plain CBOM JSON.
     /// </summary>
     public const string SectionHeader = "--- Crypto event provenance ---";
 
@@ -111,7 +111,7 @@ internal static class CryptoEventProvenance
     /// Extracts the (algorithm, backend) pair the summary groups by. Not every <see cref="CryptoEvent"/>
     /// carries both: the entropy family carries a source instead of a backend string (its most analogous
     /// field), and the digest/HMAC family carry neither a <see cref="CryptoAlgorithm"/> nor a backend at
-    /// all today (the wave-7 contract's design item 6 left those sites out of scope) — both cases render a
+    /// all today (these fields are not yet modeled for the entropy/digest/HMAC families) — both cases render a
     /// documented placeholder rather than throwing, so an event type this method does not yet know about
     /// never breaks the summary; it renders as <c>(unknown)</c>/<c>(unknown)</c> instead.
     /// </summary>
@@ -136,8 +136,8 @@ internal static class CryptoEventProvenance
     /// A minimal <see cref="IObserver{T}"/> collecting every observed <see cref="CryptoEvent"/> into a
     /// <see cref="ConcurrentQueue{T}"/>. <see cref="CryptographicKeyEvents.Events"/> is process-wide and
     /// its dispatch makes no promise about which thread delivers, so a plain <see cref="List{T}"/> would
-    /// risk data corruption under concurrent delivery — the exact "Collection was modified" hazard found
-    /// (and fixed, same shape, this wave) in two test-only observers that predated this type.
+    /// risk data corruption under concurrent delivery — the exact "Collection was modified" hazard also
+    /// guarded against in two test-only observers that predated this type.
     /// </summary>
     private sealed class Collector: IObserver<CryptoEvent>
     {

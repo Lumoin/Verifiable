@@ -13,14 +13,14 @@ namespace Verifiable.Apdu;
 /// <returns>The parsed response.</returns>
 public delegate TResponse ApduResponseParser<TResponse>(
     ref ApduReader reader,
-    MemoryPool<byte> pool) where TResponse: IApduWireType;
+    BaseMemoryPool pool) where TResponse: IApduWireType;
 
 /// <summary>
 /// Internal delegate for type-erased response parsing.
 /// </summary>
 internal delegate IApduWireType ApduResponseParserInternal(
     ref ApduReader reader,
-    MemoryPool<byte> pool);
+    BaseMemoryPool pool);
 
 /// <summary>
 /// Codec for parsing APDU command responses.
@@ -71,7 +71,7 @@ public sealed class ApduResponseCodec
     {
         ArgumentNullException.ThrowIfNull(parser);
         return new ApduResponseCodec(
-            (ref ApduReader r, MemoryPool<byte> p) => parser(ref r, p));
+            (ref ApduReader r, BaseMemoryPool p) => parser(ref r, p));
     }
 
     /// <summary>
@@ -90,7 +90,7 @@ public sealed class ApduResponseCodec
     /// <param name="pool">The memory pool.</param>
     /// <returns>The parsed response as <see cref="IApduWireType"/>.</returns>
     /// <exception cref="InvalidOperationException">Thrown if this codec has no parser.</exception>
-    internal IApduWireType ParseResponse(ref ApduReader reader, MemoryPool<byte> pool)
+    internal IApduWireType ParseResponse(ref ApduReader reader, BaseMemoryPool pool)
     {
         if(Parser is null)
         {

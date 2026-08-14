@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth;
@@ -14,7 +13,6 @@ namespace Verifiable.OAuth;
 /// records, and OpenTelemetry attributes — naming should stay stable
 /// across versions because audit trails reference it.
 /// </remarks>
-[DebuggerDisplay("WellKnownAssessorIds")]
 public static class WellKnownAssessorIds
 {
     /// <summary>The UTF-8 source literal of <see cref="ClaimContributors"/>.</summary>

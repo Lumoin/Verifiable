@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using Verifiable.JCose;
 
@@ -43,7 +42,6 @@ namespace Verifiable.OAuth.Federation;
 ///   </description></item>
 /// </list>
 /// </remarks>
-[DebuggerDisplay("FederationClientAuthentication")]
 public static class FederationClientAuthentication
 {
     /// <summary>

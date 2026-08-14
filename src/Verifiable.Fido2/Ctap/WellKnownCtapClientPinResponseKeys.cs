@@ -6,8 +6,8 @@ namespace Verifiable.Fido2.Ctap;
 /// <remarks>
 /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorClientPIN">
 /// CTAP 2.3, section 6.5.5: authenticatorClientPIN (0x06) Command Definition</see>, the response
-/// parameter table. Every member is modeled so a later wave's token-issuing subcommands extend data,
-/// not structure — this wave's authenticator emits only <see cref="KeyAgreement"/>,
+/// parameter table. Every member is modeled so future token-issuing subcommands extend data,
+/// not structure — this authenticator emits only <see cref="KeyAgreement"/>,
 /// <see cref="PinRetries"/>, and <see cref="UvRetries"/>.
 /// </remarks>
 public static class WellKnownCtapClientPinResponseKeys

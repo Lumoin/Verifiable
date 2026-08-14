@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.Server;
 
@@ -27,7 +26,6 @@ namespace Verifiable.Server;
 /// <see cref="Instance"/>.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("StatelessFlowKind")]
 public sealed class StatelessFlowKind: FlowKind
 {
     /// <summary>The singleton instance.</summary>

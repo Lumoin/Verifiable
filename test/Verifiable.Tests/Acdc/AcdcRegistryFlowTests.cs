@@ -68,7 +68,7 @@ internal sealed class AcdcRegistryFlowTests
             //The indirect binding: the registry inception's SAID is anchored in the Issuer's verified KEL.
             string kelJson = await httpClient.GetStringAsync(new Uri(issuer.BaseAddress, "/kel"), cancellationToken).ConfigureAwait(false);
             using AcdcTestSupport.EncodedSerialization kelBytes = AcdcTestSupport.Encode(kelJson);
-            IReadOnlyList<KeriSeal>? anchors = await AcdcFlowKit.VerifyKelAndReadAnchorsAsync(kelBytes.Memory, message.Issuer, disposables, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
+            IReadOnlyList<KeriAnchoredSeal>? anchors = await AcdcFlowKit.VerifyKelAndReadAnchorsAsync(kelBytes.Memory, message.Issuer, disposables, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
             Assert.IsNotNull(anchors, "The Issuer KEL MUST verify and be the credential Issuer's.");
             Assert.IsNotNull(AcdcKeriBinding.FindDirectIssuanceSeal(anchors, registrySaid), "The registry inception MUST be anchored in the Issuer's KEL.");
 

@@ -14,7 +14,7 @@ namespace Verifiable.Tests.Fido2;
 /// <summary>
 /// Firewalled end-to-end tests for the <c>appid</c> extension's rpIdHash special logic in
 /// <see cref="Fido2AssertionChecks.CheckAssertionRpIdHash"/>, driven through the real
-/// <see cref="Fido2AssertionVerifier.VerifyAsync(CoseKey,ReadOnlyMemory{byte},ReadOnlyMemory{byte},ReadOnlyMemory{byte},AssertionCeremonyInput,string,System.Buffers.MemoryPool{byte},TimeProvider,CancellationToken)"/>
+/// <see cref="Fido2AssertionVerifier.VerifyAsync(CoseKey,ReadOnlyMemory{byte},ReadOnlyMemory{byte},ReadOnlyMemory{byte},AssertionCeremonyInput,string,System.Buffers.BaseMemoryPool,TimeProvider,CancellationToken)"/>
 /// path and <see cref="Fido2AssertionOracle"/>.
 /// </summary>
 /// <remarks>
@@ -119,7 +119,7 @@ internal sealed class Fido2AppIdRpIdHashTests
     /// <summary>
     /// No <c>appid</c> output at all, with <c>authData.rpIdHash</c> equal to the expected RP ID
     /// hash, is the unchanged happy path: <see cref="Fido2ClaimIds.Fido2AssertionRpIdHash"/>
-    /// succeeds exactly as it did before this wave.
+    /// succeeds.
     /// </summary>
     [TestMethod]
     public async Task AppIdAbsentWithMatchingRpIdHashIsUnchangedHappyPath()

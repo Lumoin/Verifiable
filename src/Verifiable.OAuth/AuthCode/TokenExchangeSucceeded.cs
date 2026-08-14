@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.OAuth.AuthCode;
 
@@ -12,7 +11,6 @@ namespace Verifiable.OAuth.AuthCode;
 /// <param name="RefreshToken">The refresh token, if issued.</param>
 /// <param name="Scope">The granted scopes, if different from those requested.</param>
 /// <param name="ReceivedAt">The UTC instant the token response was received.</param>
-[DebuggerDisplay("TokenExchangeSucceeded")]
 public sealed record TokenExchangeSucceeded(
     string AccessToken,
     string TokenType,

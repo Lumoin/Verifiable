@@ -26,7 +26,7 @@ internal sealed class FlattenedJweMessageTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private static readonly JwtHeaderSerializer JwtHeaderSerializer =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
@@ -78,7 +78,7 @@ internal sealed class FlattenedJweMessageTests
     [TestMethod]
     public async Task FromGeneral_NeutralizesSourceSoDoubleUsingIsSafe()
     {
-        //The D8 fix: FromGeneral marks the source transferred so its Dispose becomes a no-op,
+        //FromGeneral marks the source transferred so its Dispose becomes a no-op,
         //making the idiomatic double-using safe. The shared components are disposed exactly once
         //(by the flattened message) at scope exit. Completing the using scope without throwing is
         //the disposal assertion; the explicit Assert proves the flattened components are still
@@ -371,14 +371,14 @@ internal sealed class FlattenedJweMessageTests
     {
         private readonly PublicKeyMemory recipientPublic;
         private readonly PrivateKeyMemory recipientPrivate;
-        private readonly MemoryPool<byte> pool;
+        private readonly BaseMemoryPool pool;
         private bool isPrivateConsumed;
 
         public AnoncryptSingleRecipient(
             GeneralJweMessage message,
             PublicKeyMemory recipientPublic,
             PrivateKeyMemory recipientPrivate,
-            MemoryPool<byte> pool)
+            BaseMemoryPool pool)
         {
             Message = message;
             this.recipientPublic = recipientPublic;

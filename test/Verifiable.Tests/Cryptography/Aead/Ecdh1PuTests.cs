@@ -22,7 +22,7 @@ internal sealed class Ecdh1PuTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     //Appendix A: P-256 keys in JWK base64url coordinates.
     private const string AppendixAAliceStaticX = "WKn-ZIGevcwGIyyrzFoZNBdaq9_TsqzGl96oc0CWuis";
@@ -315,7 +315,7 @@ internal sealed class Ecdh1PuTests
 
 
     private async Task AssertRoundTripAsync(
-        Func<MemoryPool<byte>, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> keyCreator,
+        Func<BaseMemoryPool, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> keyCreator,
         AuthenticatedKeyAgreementEncryptDelegate encryptDelegate,
         AuthenticatedKeyAgreementDecryptDelegate decryptDelegate,
         int expectedSharedSecretLength)

@@ -26,7 +26,7 @@ public static class DidCommPlaintextExtensions
     /// <param name="memoryPool">The pool the returned artifact's owned buffer is drawn from.</param>
     /// <returns>The validated <see cref="DidCommPlaintextMessage"/> wire artifact.</returns>
     /// <exception cref="FormatException">Thrown when the message violates a structural requirement.</exception>
-    public static DidCommPlaintextMessage PackPlaintext(this DidCommMessage message, DidCommMessageSerializer serializer, MemoryPool<byte> memoryPool)
+    public static DidCommPlaintextMessage PackPlaintext(this DidCommMessage message, DidCommMessageSerializer serializer, BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(message);
         ArgumentNullException.ThrowIfNull(serializer);
@@ -77,6 +77,12 @@ public static class DidCommPlaintextExtensions
     //(DIDComm v2.1 §Message Headers). The integer typing of created_time / expires_time is enforced
     //by the parser at the wire level; unknown headers are preserved by the parser into
     //AdditionalHeaders and are intentionally not validated here.
+    //
+    //The Return-Route and Queue Transport extension's return_route value is likewise never validated
+    //here: rejecting an unrecognized directive would fail unpack for a header a receiver is free not to
+    //understand, violating DIDComm v2.1 §Message Headers ("software that does not understand ... MUST
+    //ignore it and MUST NOT fail"). Verifiable.DidComm.ReturnRoute.DidCommReturnRouteExtensions.ResolveReturnRoute
+    //applies the lenient "unrecognized -> none" reading instead.
     private static void ValidateStructure(DidCommMessage message)
     {
         if(string.IsNullOrEmpty(message.Id))

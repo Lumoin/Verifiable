@@ -80,7 +80,7 @@ public sealed class ActivateCredentialInput: ITpmCommandInput, IDisposable
         TpmiDhObject keyHandle,
         ReadOnlySpan<byte> credentialBlob,
         ReadOnlySpan<byte> secret,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         Tpm2bIdObject credentialBuffer = Tpm2bIdObject.Create(credentialBlob, pool);

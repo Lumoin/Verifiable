@@ -1,3 +1,4 @@
+using Lumoin.Base;
 using System.Buffers;
 using System.Collections.Generic;
 using System.IO.Pipelines;
@@ -33,7 +34,7 @@ public static class CesrStreamReader
     /// the item is not yet fully buffered (the caller must read more); throws when the item is malformed or
     /// unsupported.
     /// </summary>
-    private delegate bool TryReadTopLevelItem(ReadOnlySequence<byte> buffer, MemoryPool<byte> pool, out CesrToken token, out SequencePosition consumed);
+    private delegate bool TryReadTopLevelItem(ReadOnlySequence<byte> buffer, BaseMemoryPool pool, out CesrToken token, out SequencePosition consumed);
 
 
     /// <summary>
@@ -49,7 +50,7 @@ public static class CesrStreamReader
     /// <exception cref="CesrFormatException">The stream is malformed, truncated, or carries an unsupported top-level item.</exception>
     public static IAsyncEnumerable<CesrToken> ReadBinaryAsync(
         PipeReader reader,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(reader);
@@ -73,7 +74,7 @@ public static class CesrStreamReader
     /// <exception cref="CesrFormatException">The stream is malformed, truncated, or carries an unsupported top-level item.</exception>
     public static IAsyncEnumerable<CesrToken> ReadTextAsync(
         PipeReader reader,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(reader);
@@ -90,7 +91,7 @@ public static class CesrStreamReader
     /// </summary>
     private static async IAsyncEnumerable<CesrToken> ReadAsync(
         PipeReader reader,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TryReadTopLevelItem tryReadTopLevel,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
@@ -128,7 +129,7 @@ public static class CesrStreamReader
     /// <see langword="false"/> when the item is not yet fully buffered (the caller must read more); throws when
     /// the item is malformed or unsupported.
     /// </summary>
-    private static bool TryReadTopLevelBinary(ReadOnlySequence<byte> buffer, MemoryPool<byte> pool, out CesrToken token, out SequencePosition consumed)
+    private static bool TryReadTopLevelBinary(ReadOnlySequence<byte> buffer, BaseMemoryPool pool, out CesrToken token, out SequencePosition consumed)
     {
         token = default;
         consumed = buffer.Start;
@@ -211,7 +212,7 @@ public static class CesrStreamReader
     /// the framed body is handed back as its qb64 characters. Returns <see langword="false"/> when the item is
     /// not yet fully buffered (the caller must read more); throws when the item is malformed or unsupported.
     /// </summary>
-    private static bool TryReadTopLevelText(ReadOnlySequence<byte> buffer, MemoryPool<byte> pool, out CesrToken token, out SequencePosition consumed)
+    private static bool TryReadTopLevelText(ReadOnlySequence<byte> buffer, BaseMemoryPool pool, out CesrToken token, out SequencePosition consumed)
     {
         token = default;
         consumed = buffer.Start;
@@ -315,7 +316,7 @@ public static class CesrStreamReader
     /// serialization is not yet buffered; throws when the item carries no version string within the bounded
     /// prefix or declares a non-positive length.
     /// </summary>
-    private static bool TryReadNonNative(ReadOnlySequence<byte> buffer, CesrDomain domain, MemoryPool<byte> pool, out CesrToken token, out SequencePosition consumed)
+    private static bool TryReadNonNative(ReadOnlySequence<byte> buffer, CesrDomain domain, BaseMemoryPool pool, out CesrToken token, out SequencePosition consumed)
     {
         token = default;
         consumed = buffer.Start;

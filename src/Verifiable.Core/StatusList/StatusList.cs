@@ -121,7 +121,7 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
     /// <paramref name="bitSize"/> is not a valid value.
     /// </exception>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="pool"/> is <see langword="null"/>.</exception>
-    public static StatusList Create(int capacity, StatusListBitSize bitSize, MemoryPool<byte> pool, BitOrder bitOrder)
+    public static StatusList Create(int capacity, StatusListBitSize bitSize, BaseMemoryPool pool, BitOrder bitOrder)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(capacity);
         ValidateBitSize(bitSize);
@@ -155,7 +155,7 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="compressedData"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="compressedData"/> is empty.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="bitSize"/> is not a valid value.</exception>
-    public static StatusList FromCompressed(ReadOnlySpan<byte> compressedData, StatusListBitSize bitSize, MemoryPool<byte> pool, BitOrder bitOrder)
+    public static StatusList FromCompressed(ReadOnlySpan<byte> compressedData, StatusListBitSize bitSize, BaseMemoryPool pool, BitOrder bitOrder)
     {
         if(compressedData.IsEmpty)
         {
@@ -193,7 +193,7 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="pool"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="rawData"/> is empty.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="bitSize"/> is not a valid value.</exception>
-    public static StatusList FromRaw(ReadOnlySpan<byte> rawData, StatusListBitSize bitSize, MemoryPool<byte> pool, BitOrder bitOrder)
+    public static StatusList FromRaw(ReadOnlySpan<byte> rawData, StatusListBitSize bitSize, BaseMemoryPool pool, BitOrder bitOrder)
     {
         if(rawData.IsEmpty)
         {

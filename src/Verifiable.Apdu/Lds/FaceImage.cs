@@ -48,7 +48,7 @@ public sealed class FaceImage: SensitiveMemory
     /// <summary>
     /// Copies <paramref name="bytes"/> into a pooled <see cref="FaceImage"/>.
     /// </summary>
-    public static FaceImage FromBytes(ReadOnlySpan<byte> bytes, FaceImageFormat format, MemoryPool<byte> pool)
+    public static FaceImage FromBytes(ReadOnlySpan<byte> bytes, FaceImageFormat format, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

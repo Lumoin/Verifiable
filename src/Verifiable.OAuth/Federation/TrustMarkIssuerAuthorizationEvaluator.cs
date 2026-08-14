@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core.Assessment;
 
 namespace Verifiable.OAuth.Federation;
@@ -30,7 +29,6 @@ namespace Verifiable.OAuth.Federation;
 /// security default.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("TrustMarkIssuerAuthorizationEvaluator")]
 public static class TrustMarkIssuerAuthorizationEvaluator
 {
     /// <summary>

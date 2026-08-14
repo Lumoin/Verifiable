@@ -9,14 +9,14 @@ namespace Verifiable.Fido2.Ctap;
 /// The <c>authenticatorMakeCredential</c> request structure: every parameter this library models,
 /// including the ClientPIN parameters this authenticator always rejects when unsupported, and the
 /// <see cref="EnterpriseAttestation"/> parameter, which mc Step 9 evaluates against the authenticator's
-/// own capability/enablement state and pre-configured RP ID list (CTAP 2.3 §7.1, waveep R4-R6) to decide
+/// own capability/enablement state and pre-configured RP ID list (CTAP 2.3 §7.1) to decide
 /// whether to grant an enterprise attestation.
 /// </summary>
 /// <remarks>
 /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorMakeCredential">
 /// CTAP 2.3, section 6.1: authenticatorMakeCredential (0x01)</see>. <see cref="Extensions"/> and
-/// <see cref="PinUvAuthParam"/> carry their wire bytes opaquely — no ClientPIN codec is modeled this
-/// wave, so presence (and, for <see cref="PinUvAuthParam"/>, the byte content) is all a handler needs to
+/// <see cref="PinUvAuthParam"/> carry their wire bytes opaquely — no ClientPIN codec is modeled here,
+/// so presence (and, for <see cref="PinUvAuthParam"/>, the byte content) is all a handler needs to
 /// apply the shared "any <c>pinUvAuthParam</c> is rejected" guard. <see cref="CredProtect"/>,
 /// <see cref="MinPinLength"/>, <see cref="LargeBlobKey"/>, <see cref="HmacSecret"/>, and
 /// <see cref="HmacSecretMc"/> are <see cref="Extensions"/>'s own five known-key members, decoded for
@@ -84,7 +84,7 @@ namespace Verifiable.Fido2.Ctap;
 /// exactly as it arrived on the wire (including an explicit <see langword="false"/>, distinct from
 /// absence) — <see langword="null"/> when <see cref="Extensions"/> is absent or carries no
 /// <c>hmac-secret</c> key. CTAP 2.3 §12.7 (snapshot line 13194): whether the annotation is emitted is a
-/// transition-level concern (contract R3 — only literal <see langword="true"/> grants it); this reader
+/// transition-level concern (only literal <see langword="true"/> grants it); this reader
 /// reports whatever value arrived on the wire, mirroring <see cref="MinPinLength"/>'s own
 /// preserve-the-explicit-false convention.
 /// </param>
@@ -95,7 +95,7 @@ namespace Verifiable.Fido2.Ctap;
 /// <see cref="CtapGetAssertionRequest.HmacSecret"/> decodes for <c>authenticatorGetAssertion</c>'s own
 /// <c>hmac-secret</c> input (CTAP 2.3 §12.8, snapshot line 13402: "the same as the hmac secret
 /// extension's getAssertion input") — <see langword="null"/> when <see cref="Extensions"/> is absent or
-/// carries no <c>hmac-secret-mc</c> key. The R6 pairing gate (present while <see cref="HmacSecret"/> is
+/// carries no <c>hmac-secret-mc</c> key. The pairing gate (present while <see cref="HmacSecret"/> is
 /// absent or not exactly <see langword="true"/> is a request-shape error, CTAP 2.3 §12.8 snapshot line
 /// 13370) is a transition-level concern, not this reader's.
 /// </param>

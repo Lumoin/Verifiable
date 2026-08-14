@@ -74,5 +74,5 @@ public sealed record VcalmPresentationSigning
     public required ComputeDigestDelegate ComputeDigest { get; init; }
 
     /// <summary>The memory pool backing the transient signing buffers.</summary>
-    public required MemoryPool<byte> MemoryPool { get; init; }
+    public required BaseMemoryPool MemoryPool { get; init; }
 }

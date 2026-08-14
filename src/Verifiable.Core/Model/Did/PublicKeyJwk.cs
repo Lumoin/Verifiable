@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Linq;
 
 namespace Verifiable.Core.Model.Did
@@ -34,7 +33,6 @@ namespace Verifiable.Core.Model.Did
     /// <remarks>Note that for DID specifications private key information, such as 'd' field,
     /// MUST not be present. The DID usage of JWK is compatible with
     /// <see href="https://tools.ietf.org/html/rfc7517">JWK (RFC 7517) specification</see>.</remarks>
-    [DebuggerDisplay("PublicKeyJwk()")]
     public class PublicKeyJwk: KeyFormat
     {
         public Dictionary<string, object> Header { get; set; } = [];

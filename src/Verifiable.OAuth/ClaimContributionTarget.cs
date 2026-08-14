@@ -28,7 +28,6 @@ namespace Verifiable.OAuth;
 /// carry just the subset they need.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("ClaimContributionTarget")]
 public abstract record ClaimContributionTarget;
 
 

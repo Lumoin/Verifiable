@@ -29,7 +29,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionClientTests
     [TestMethod]
     public async Task SendsSingleByteRequestAndDecodesSuccessResponse()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[]? capturedRequest = null;
 
         CredentialId credentialId = CredentialId.Create([0x11, 0x22, 0x33, 0x44], pool);
@@ -37,7 +37,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionClientTests
             new PublicKeyCredentialDescriptor { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Id = credentialId },
             new byte[] { 0x01, 0x02 }, new byte[] { 0x03, 0x04 });
 
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, MemoryPool<byte> transceivePool, CancellationToken cancellationToken)
+        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool transceivePool, CancellationToken cancellationToken)
         {
             capturedRequest = request.ToArray();
             TaggedMemory<byte> payload = CtapGetAssertionResponseCborWriter.Write(scriptedResponse);
@@ -64,7 +64,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionClientTests
     [TestMethod]
     public async Task ThrowsCtapCommandExceptionOnNonSuccessStatus()
     {
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, MemoryPool<byte> pool, CancellationToken cancellationToken) =>
+        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes([WellKnownCtapStatusCodes.NotAllowed], pool, Fido2BufferTags.CtapResponseEnvelope));
 
         CtapCommandException exception = await Assert.ThrowsExactlyAsync<CtapCommandException>(
@@ -79,7 +79,7 @@ internal sealed class CtapAuthenticatorGetNextAssertionClientTests
     [TestMethod]
     public async Task ThrowsFido2FormatExceptionOnEmptyResponse()
     {
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, MemoryPool<byte> pool, CancellationToken cancellationToken) =>
+        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes(ReadOnlySpan<byte>.Empty, pool, Fido2BufferTags.CtapResponseEnvelope));
 
         await Assert.ThrowsExactlyAsync<Fido2FormatException>(

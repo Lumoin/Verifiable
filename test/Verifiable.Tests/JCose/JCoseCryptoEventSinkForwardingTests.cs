@@ -17,7 +17,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.JCose;
 
 /// <summary>
-/// Coverage for the wave-7 <see cref="CryptoEventSink"/> widening of the JOSE/COSE explicit-delegate call
+/// Coverage for the <see cref="CryptoEventSink"/> widening of the JOSE/COSE explicit-delegate call
 /// sites (<c>Cose.cs</c>/<c>Jose.cs</c>/<c>JwtSigningExtensions.cs</c>): each site that resolves and invokes
 /// a <see cref="SigningDelegate"/>/<see cref="VerificationDelegate"/> directly (rather than through a bound
 /// <see cref="PrivateKey"/>/<see cref="PublicKey"/>) forwards the produced <see cref="CryptoEvent"/> through
@@ -35,7 +35,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Cose.SignAsync(EncodedCoseProtectedHeader, IReadOnlyDictionary{int, object}?, ReadOnlyMemory{byte}, BuildSigStructureDelegate, PrivateKeyMemory, SigningDelegate, MemoryPool{byte}, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Cose.SignAsync(EncodedCoseProtectedHeader, IReadOnlyDictionary{int, object}?, ReadOnlyMemory{byte}, BuildSigStructureDelegate, PrivateKeyMemory, SigningDelegate, BaseMemoryPool, CancellationToken, CryptoEventSink?)"/>
     /// forwards the <see cref="SignatureProducedEvent"/> to an explicit sink instead of the global stream.
     /// </summary>
     [TestMethod]
@@ -104,7 +104,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, SigningDelegate, MemoryPool{byte}, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, SigningDelegate, BaseMemoryPool, CancellationToken, CryptoEventSink?)"/>
     /// (the typed explicit-delegate overload) forwards the <see cref="SignatureProducedEvent"/> to an
     /// explicit sink.
     /// </summary>
@@ -116,7 +116,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
 
         var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256 };
-        var payload = new Dictionary<string, object> { [WellKnownJwtClaimNames.Sub] = "wave7-jws-sign-typed" };
+        var payload = new Dictionary<string, object> { [WellKnownJwtClaimNames.Sub] = "fixture-jws-sign-typed" };
 
         var observed = new List<CryptoEvent>();
 
@@ -138,10 +138,10 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, ReadOnlyMemory{byte}, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, SigningDelegate, MemoryPool{byte}, IReadOnlyDictionary{string, object}?, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, ReadOnlyMemory{byte}, JwtPartEncoder{TJwtPart}, EncodeDelegate, PrivateKeyMemory, SigningDelegate, BaseMemoryPool, IReadOnlyDictionary{string, object}?, CancellationToken, CryptoEventSink?)"/>
     /// (the raw-payload overload <c>DidCommSignedExtensions.PackSignedAsync</c> reaches) forwards to an
     /// explicit sink, and — the DIDComm symmetry property — reaches <see cref="CryptographicKeyEvents.DefaultSink"/>
-    /// (the global stream) when no sink is supplied, matching what <see cref="Jws.VerifySignatureAsync(string, ReadOnlyMemory{byte}, bool, ReadOnlyMemory{byte}, EncodeDelegate, VerificationDelegate, ReadOnlyMemory{byte}, MemoryPool{byte}, CancellationToken, CryptoEventSink?)"/>
+    /// (the global stream) when no sink is supplied, matching what <see cref="Jws.VerifySignatureAsync(string, ReadOnlyMemory{byte}, bool, ReadOnlyMemory{byte}, EncodeDelegate, VerificationDelegate, ReadOnlyMemory{byte}, BaseMemoryPool, CancellationToken, CryptoEventSink?)"/>
     /// (the sibling <c>UnpackSignedAsync</c> reaches) already does on the verify side.
     /// </summary>
     [TestMethod]
@@ -156,7 +156,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
             [WellKnownJoseHeaderNames.Typ] = "application/didcomm-signed+json",
             [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256
         };
-        byte[] rawPayload = Encoding.UTF8.GetBytes("""{"id":"raw-payload-wave7"}""");
+        byte[] rawPayload = Encoding.UTF8.GetBytes("""{"id":"raw-payload-fixture"}""");
 
         var observed = new List<CryptoEvent>();
 
@@ -198,7 +198,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Jws.VerifyAsync(JwsMessage, EncodeDelegate, PublicKeyMemory, VerificationDelegate, MemoryPool{byte}, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Jws.VerifyAsync(JwsMessage, EncodeDelegate, PublicKeyMemory, VerificationDelegate, BaseMemoryPool, CancellationToken, CryptoEventSink?)"/>
     /// forwards the <see cref="VerificationCompletedEvent"/> to an explicit sink.
     /// </summary>
     [TestMethod]
@@ -209,7 +209,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
 
         var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256 };
-        var payload = new Dictionary<string, object> { [WellKnownJwtClaimNames.Sub] = "wave7-jws-verify-message" };
+        var payload = new Dictionary<string, object> { [WellKnownJwtClaimNames.Sub] = "fixture-jws-verify-message" };
 
         using JwsMessage message = await Jws.SignAsync(
             header, payload, JwtWireFixtures.EncodeJwtPart, TestSetup.Base64UrlEncoder,
@@ -232,7 +232,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Jws.VerifySignatureAsync(string, ReadOnlyMemory{byte}, bool, ReadOnlyMemory{byte}, EncodeDelegate, VerificationDelegate, ReadOnlyMemory{byte}, MemoryPool{byte}, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Jws.VerifySignatureAsync(string, ReadOnlyMemory{byte}, bool, ReadOnlyMemory{byte}, EncodeDelegate, VerificationDelegate, ReadOnlyMemory{byte}, BaseMemoryPool, CancellationToken, CryptoEventSink?)"/>
     /// (the overload <c>DidCommSignedExtensions.UnpackSignedAsync</c> reaches) forwards to an explicit sink.
     /// </summary>
     [TestMethod]
@@ -243,7 +243,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
 
         var protectedHeader = new JwtHeader { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256 };
-        byte[] rawPayload = Encoding.UTF8.GetBytes("""{"id":"verify-signature-wave7"}""");
+        byte[] rawPayload = Encoding.UTF8.GetBytes("""{"id":"verify-signature-fixture"}""");
 
         using JwsMessage signed = await Jws.SignAsync(
             protectedHeader, rawPayload, JwtWireFixtures.EncodeJwtPart, TestSetup.Base64UrlEncoder,
@@ -271,7 +271,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Jws.VerifyAsync(string, DecodeDelegate, MemoryPool{byte}, PublicKeyMemory, VerificationDelegate, int, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Jws.VerifyAsync(string, DecodeDelegate, BaseMemoryPool, PublicKeyMemory, VerificationDelegate, int, CancellationToken, CryptoEventSink?)"/>
     /// (compact serialization) forwards to an explicit sink.
     /// </summary>
     [TestMethod]
@@ -282,7 +282,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
 
         var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256 };
-        var payload = new Dictionary<string, object> { [WellKnownJwtClaimNames.Sub] = "wave7-jws-verify-compact" };
+        var payload = new Dictionary<string, object> { [WellKnownJwtClaimNames.Sub] = "fixture-jws-verify-compact" };
 
         using JwsMessage message = await Jws.SignAsync(
             header, payload, JwtWireFixtures.EncodeJwtPart, TestSetup.Base64UrlEncoder,
@@ -307,7 +307,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="Jws.VerifyAndDecodeAsync(string, DecodeDelegate, JwtPartDecoder, MemoryPool{byte}, PublicKeyMemory, VerificationDelegate, int, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="Jws.VerifyAndDecodeAsync(string, DecodeDelegate, JwtPartDecoder, BaseMemoryPool, PublicKeyMemory, VerificationDelegate, int, CancellationToken, CryptoEventSink?)"/>
     /// forwards to an explicit sink.
     /// </summary>
     [TestMethod]
@@ -318,7 +318,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
 
         var header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256 };
-        var payload = new Dictionary<string, object> { [WellKnownJwtClaimNames.Sub] = "wave7-jws-verify-and-decode" };
+        var payload = new Dictionary<string, object> { [WellKnownJwtClaimNames.Sub] = "fixture-jws-verify-and-decode" };
 
         using JwsMessage message = await Jws.SignAsync(
             header, payload, JwtWireFixtures.EncodeJwtPart, TestSetup.Base64UrlEncoder,
@@ -344,7 +344,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
 
     /// <summary>
-    /// <see cref="JwtSigningExtensions.SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, SigningDelegate, MemoryPool{byte}, CancellationToken, CryptoEventSink?)"/>
+    /// <see cref="JwtSigningExtensions.SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, SigningDelegate, BaseMemoryPool, CancellationToken, CryptoEventSink?)"/>
     /// (the primitive <c>DidCommFromPriorExtensions.PackFromPriorAsync</c> calls) forwards to an explicit sink.
     /// </summary>
     [TestMethod]
@@ -359,7 +359,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
             [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt,
             [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256
         };
-        var payload = new JwtPayload { [WellKnownJwtClaimNames.Iss] = "did:example:wave7-prior" };
+        var payload = new JwtPayload { [WellKnownJwtClaimNames.Iss] = "did:example:fixture-prior" };
         var unsigned = new UnsignedJwt(header, payload);
 
         JwtHeaderSerializer headerSerializer = static h => Encoding.UTF8.GetBytes(JsonSerializer.Serialize((Dictionary<string, object>)h, TestSetup.DefaultSerializationOptions));
@@ -442,7 +442,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
         var resolverState = new JwsResolverBinderState(privateKeyMemory.AsReadOnlySpan().ToArray(), publicKeyMemory.AsReadOnlySpan().ToArray());
 
         var header = new JwtHeader { [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256 };
-        var payload = new JwtPayload { [WellKnownJwtClaimNames.Sub] = "wave7-jws-resolver-binder" };
+        var payload = new JwtPayload { [WellKnownJwtClaimNames.Sub] = "fixture-jws-resolver-binder" };
 
         var globalObserver = new TestObserver<CryptoEvent>();
         using(CryptographicKeyEvents.Events.Subscribe(globalObserver))
@@ -481,7 +481,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
     {
         var writer = new CborWriter(CborConformanceMode.Canonical);
         writer.WriteStartMap(1);
-        writer.WriteTextString("wave7");
+        writer.WriteTextString("fixture");
         writer.WriteTextString("jose-cose-forwarding");
         writer.WriteEndMap();
         return writer.Encode();
@@ -494,7 +494,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
     /// <summary>Resolves the COSE resolver/binder test state's private key bytes into pooled key material.</summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned PrivateKeyMemory transfers to the caller which disposes via PrivateKey.")]
-    private static ValueTask<PrivateKeyMemory?> ResolvePrivateKeyMaterial(CoseKeyContext context, MemoryPool<byte> pool, CoseResolverBinderState state, CancellationToken cancellationToken)
+    private static ValueTask<PrivateKeyMemory?> ResolvePrivateKeyMaterial(CoseKeyContext context, BaseMemoryPool pool, CoseResolverBinderState state, CancellationToken cancellationToken)
     {
         IMemoryOwner<byte> owner = pool.Rent(state.PrivateKeyBytes.Length);
         state.PrivateKeyBytes.CopyTo(owner.Memory.Span);
@@ -504,7 +504,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
     /// <summary>Resolves the COSE resolver/binder test state's public key bytes into pooled key material.</summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned PublicKeyMemory transfers to the caller which disposes via PublicKey.")]
-    private static ValueTask<PublicKeyMemory?> ResolvePublicKeyMaterial(CoseKeyContext context, MemoryPool<byte> pool, CoseResolverBinderState state, CancellationToken cancellationToken)
+    private static ValueTask<PublicKeyMemory?> ResolvePublicKeyMaterial(CoseKeyContext context, BaseMemoryPool pool, CoseResolverBinderState state, CancellationToken cancellationToken)
     {
         IMemoryOwner<byte> owner = pool.Rent(state.PublicKeyBytes.Length);
         state.PublicKeyBytes.CopyTo(owner.Memory.Span);
@@ -515,13 +515,13 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
     /// <summary>Binds the resolved private key material to the Microsoft P-256 signing function.</summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned PrivateKey transfers to the caller.")]
     private static ValueTask<PrivateKey> BindPrivateKey(PrivateKeyMemory material, int state, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(new PrivateKey(material, "wave7-cose-key", MicrosoftCryptographicFunctions.SignP256Async));
+        ValueTask.FromResult(new PrivateKey(material, "fixture-cose-key", MicrosoftCryptographicFunctions.SignP256Async));
 
 
     /// <summary>Binds the resolved public key material to the Microsoft P-256 verification function.</summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned PublicKey transfers to the caller.")]
     private static ValueTask<PublicKey> BindPublicKey(PublicKeyMemory material, int state, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(new PublicKey(material, "wave7-cose-key", MicrosoftCryptographicFunctions.VerifyP256Async));
+        ValueTask.FromResult(new PublicKey(material, "fixture-cose-key", MicrosoftCryptographicFunctions.VerifyP256Async));
 
 
     /// <summary>Resolver/binder test state carrying the raw P-256 key bytes for the Jws smoke test.</summary>
@@ -530,7 +530,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
     /// <summary>Resolves the Jws resolver/binder test state's private key bytes into pooled key material.</summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned PrivateKeyMemory transfers to the caller which disposes via PrivateKey.")]
-    private static ValueTask<PrivateKeyMemory?> ResolveJwsPrivateKeyMaterial(JoseKeyContext context, MemoryPool<byte> pool, JwsResolverBinderState state, CancellationToken cancellationToken)
+    private static ValueTask<PrivateKeyMemory?> ResolveJwsPrivateKeyMaterial(JoseKeyContext context, BaseMemoryPool pool, JwsResolverBinderState state, CancellationToken cancellationToken)
     {
         IMemoryOwner<byte> owner = pool.Rent(state.PrivateKeyBytes.Length);
         state.PrivateKeyBytes.CopyTo(owner.Memory.Span);
@@ -540,7 +540,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
 
     /// <summary>Resolves the Jws resolver/binder test state's public key bytes into pooled key material.</summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned PublicKeyMemory transfers to the caller which disposes via PublicKey.")]
-    private static ValueTask<PublicKeyMemory?> ResolveJwsPublicKeyMaterial(JoseKeyContext context, MemoryPool<byte> pool, JwsResolverBinderState state, CancellationToken cancellationToken)
+    private static ValueTask<PublicKeyMemory?> ResolveJwsPublicKeyMaterial(JoseKeyContext context, BaseMemoryPool pool, JwsResolverBinderState state, CancellationToken cancellationToken)
     {
         IMemoryOwner<byte> owner = pool.Rent(state.PublicKeyBytes.Length);
         state.PublicKeyBytes.CopyTo(owner.Memory.Span);
@@ -551,11 +551,11 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
     /// <summary>Binds the resolved private key material to the Microsoft P-256 signing function.</summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned PrivateKey transfers to the caller.")]
     private static ValueTask<PrivateKey> BindJwsPrivateKey(PrivateKeyMemory material, int state, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(new PrivateKey(material, "wave7-jws-key", MicrosoftCryptographicFunctions.SignP256Async));
+        ValueTask.FromResult(new PrivateKey(material, "fixture-jws-key", MicrosoftCryptographicFunctions.SignP256Async));
 
 
     /// <summary>Binds the resolved public key material to the Microsoft P-256 verification function.</summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned PublicKey transfers to the caller.")]
     private static ValueTask<PublicKey> BindJwsPublicKey(PublicKeyMemory material, int state, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(new PublicKey(material, "wave7-jws-key", MicrosoftCryptographicFunctions.VerifyP256Async));
+        ValueTask.FromResult(new PublicKey(material, "fixture-jws-key", MicrosoftCryptographicFunctions.VerifyP256Async));
 }

@@ -28,7 +28,7 @@ internal sealed class DidCommFromPriorTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string MessageId = "1234567890";
     private const string MessageType = "https://example.com/protocols/lets_do_lunch/1.0/proposal";

@@ -113,7 +113,7 @@ internal sealed class PackedEnterpriseAttestationTests
     /// <see cref="Fido2AttestationErrors.CertificateProfileViolation"/> through a permissive
     /// injected chain validator that does not itself enforce RFC 5280 section 4.2 — proving
     /// <see cref="PackedAttestation"/>'s own in-layer defense-in-depth check exists independent of
-    /// the chain validator's enforcement, the wave-8 lesson.
+    /// the chain validator's enforcement.
     /// </summary>
     [TestMethod]
     public async Task SernumExtensionCriticalThroughPermissiveValidatorIsRejectedWithCertificateProfileViolation()
@@ -127,7 +127,7 @@ internal sealed class PackedEnterpriseAttestationTests
 
 
     /// <summary>
-    /// <see cref="CtapWaveEpFixtures.EncodeSernumExtensionValue"/> emits a single DER OCTET STRING — not
+    /// <see cref="CtapEnterpriseAttestationFixtures.EncodeSernumExtensionValue"/> emits a single DER OCTET STRING — not
     /// the AAGUID extension's double-OCTET-STRING wrap (<see cref="Fido2AttestationTestVectors.EncodeAaguidExtensionValue"/>) —
     /// decoded back with an independent <see cref="AsnReader"/> and compared against a hand-built value.
     /// </summary>
@@ -135,7 +135,7 @@ internal sealed class PackedEnterpriseAttestationTests
     public void EncodeSernumExtensionValueProducesSingleOctetStringWrap()
     {
         byte[] serialNumber = [0xDE, 0xAD, 0xBE, 0xEF];
-        byte[] encoded = CtapWaveEpFixtures.EncodeSernumExtensionValue(serialNumber);
+        byte[] encoded = CtapEnterpriseAttestationFixtures.EncodeSernumExtensionValue(serialNumber);
 
         var reader = new AsnReader(encoded, AsnEncodingRules.DER);
         byte[] decoded = reader.ReadOctetString();
@@ -197,7 +197,7 @@ internal sealed class PackedEnterpriseAttestationTests
 
         IReadOnlyList<X509Extension>? additionalExtensions = serialNumber is null
             ? null
-            : [new X509Extension(SernumExtensionOid, CtapWaveEpFixtures.EncodeSernumExtensionValue(serialNumber), critical: sernumCritical)];
+            : [new X509Extension(SernumExtensionOid, CtapEnterpriseAttestationFixtures.EncodeSernumExtensionValue(serialNumber), critical: sernumCritical)];
 
         using X509Certificate2 rootCert = Fido2AttestationTestVectors.CreateSelfSignedCa("CN=Test Attestation Root", rootKey);
         using X509Certificate2 leafCert = Fido2AttestationTestVectors.CreateLeafAttestationCertificate(

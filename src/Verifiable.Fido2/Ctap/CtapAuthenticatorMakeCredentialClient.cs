@@ -58,7 +58,7 @@ public static class CtapAuthenticatorMakeCredentialClient
         EncodeCtapMakeCredentialRequestDelegate encodeRequest,
         CtapMakeCredentialRequest request,
         DecodeCtapMakeCredentialResponseDelegate decodeResponse,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(transceive);

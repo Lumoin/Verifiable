@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Server;
@@ -20,7 +19,6 @@ namespace Verifiable.OAuth.Server;
 /// URL the application has to provide.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("WellKnownEndpointNames")]
 public static class WellKnownEndpointNames
 {
     //AuthCode family

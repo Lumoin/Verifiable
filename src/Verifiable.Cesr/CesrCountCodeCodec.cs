@@ -1,3 +1,4 @@
+using Lumoin.Base;
 using System.Buffers;
 using Verifiable.Cesr.Text;
 
@@ -44,7 +45,7 @@ public static class CesrCountCodeCodec
     /// <param name="count">The quadlet/triplet count, or the packed version for a genus/version code.</param>
     /// <param name="pool">The memory pool from which to allocate the result.</param>
     /// <returns>Pooled memory holding the qb2 bytes; the caller must dispose it. The length is the full code size.</returns>
-    public static IMemoryOwner<byte> EncodeBinary(string code, int count, MemoryPool<byte> pool)
+    public static IMemoryOwner<byte> EncodeBinary(string code, int count, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(code);
         ArgumentNullException.ThrowIfNull(pool);

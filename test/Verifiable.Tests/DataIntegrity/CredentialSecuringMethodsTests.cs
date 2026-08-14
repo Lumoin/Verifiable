@@ -45,6 +45,11 @@ internal sealed class CredentialSecuringMethodsTests
     private const string Ed25519SecretKeyMultibase = "z3u2en7t5LR2WtQH5PfFqMqwVHBeXouLzo6haApm8XHqvjxq";
     private const string Ed25519VerificationMethodId = "did:key:z6MkrJVnaZkeFzdQyMZu1cgjg7k1pZZ6pvBQ7XJPt4swbTQ2#z6MkrJVnaZkeFzdQyMZu1cgjg7k1pZZ6pvBQ7XJPt4swbTQ2";
 
+    //Controller-RESOLUTION semantics: the credential path now binds issuer == the resolved
+    //verification method's own controller, so the fixture's DID document must name the SAME issuer
+    //UnsignedCredentialJson declares below.
+    private const string IssuerDid = "did:example:76e12ec712ebc6f1c221ebfeb1f";
+
     private const string UnsignedCredentialJson = /*lang=json,strict*/ """
     {
         "@context": [
@@ -611,7 +616,7 @@ internal sealed class CredentialSecuringMethodsTests
                 {
                     Id = verificationMethodId,
                     Type = "Multikey",
-                    Controller = did,
+                    Controller = IssuerDid,
                     KeyFormat = new PublicKeyMultibase(publicKeyMultibase)
                 }
             ],

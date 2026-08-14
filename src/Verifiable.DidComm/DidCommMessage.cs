@@ -111,6 +111,25 @@ public sealed class DidCommMessage: IEquatable<DidCommMessage>
     public IList<string>? Ack { get; set; }
 
     /// <summary>
+    /// OPTIONAL. The directive controlling whether, and how, the receiving agent may use the connection
+    /// this message arrived on to return messages — the Return-Route and Queue Transport extension's
+    /// <c>return_route</c> header (§Return Route Header: <c>none</c>/<c>all</c>/<c>thread</c>). Modeled as
+    /// a plain string rather than an enum: DIDComm v2.1 §Message Headers requires that software which does
+    /// not understand a header MUST ignore it and MUST NOT fail because of its inclusion, so an
+    /// unrecognized directive value must round-trip verbatim rather than be coerced or rejected. Absent
+    /// means <c>none</c> — resolved by <c>DidCommReturnRouteExtensions.ResolveReturnRoute</c>.
+    /// </summary>
+    public string? ReturnRoute { get; set; }
+
+    /// <summary>
+    /// REQUIRED when <see cref="ReturnRoute"/> is <c>thread</c>; otherwise absent. Names the thread whose
+    /// matching replies are returned over the connection — the Return-Route and Queue Transport
+    /// extension's <c>return_route_thread</c> header (§Return Route Header). Like <see cref="ReturnRoute"/>,
+    /// carried verbatim so an unrecognized companion value never fails unpack.
+    /// </summary>
+    public string? ReturnRouteThread { get; set; }
+
+    /// <summary>
     /// OPTIONAL. The application data and structure specific to the message <see cref="Type"/>.
     /// When present it MUST be a JSON object; held as arbitrary JSON.
     /// </summary>
@@ -130,7 +149,8 @@ public sealed class DidCommMessage: IEquatable<DidCommMessage>
 
     /// <summary>
     /// Determines whether this message equals <paramref name="other"/> by value over every wire-bearing member: the
-    /// scalar headers and times by ordinal/value comparison, the <see cref="To"/>/<see cref="PleaseAck"/>/
+    /// scalar headers and times by ordinal/value comparison — including <see cref="ReturnRoute"/> and
+    /// <see cref="ReturnRouteThread"/> — the <see cref="To"/>/<see cref="PleaseAck"/>/
     /// <see cref="Ack"/> id lists and the <see cref="Attachments"/> element-wise in order, and the arbitrary-JSON
     /// <see cref="Body"/> and <see cref="AdditionalHeaders"/> by deep structural comparison
     /// (<see cref="StructuralEquality.JsonEqual"/>). The computed <see cref="EffectiveThreadId"/> is derived from
@@ -157,6 +177,8 @@ public sealed class DidCommMessage: IEquatable<DidCommMessage>
             && string.Equals(ThreadId, other.ThreadId, StringComparison.Ordinal)
             && string.Equals(ParentThreadId, other.ParentThreadId, StringComparison.Ordinal)
             && string.Equals(FromPrior, other.FromPrior, StringComparison.Ordinal)
+            && string.Equals(ReturnRoute, other.ReturnRoute, StringComparison.Ordinal)
+            && string.Equals(ReturnRouteThread, other.ReturnRouteThread, StringComparison.Ordinal)
             && CreatedTime == other.CreatedTime
             && ExpiresTime == other.ExpiresTime
             && StructuralEquality.SequenceEqual(To, other.To)
@@ -184,6 +206,8 @@ public sealed class DidCommMessage: IEquatable<DidCommMessage>
         hash.Add(ThreadId, StringComparer.Ordinal);
         hash.Add(ParentThreadId, StringComparer.Ordinal);
         hash.Add(FromPrior, StringComparer.Ordinal);
+        hash.Add(ReturnRoute, StringComparer.Ordinal);
+        hash.Add(ReturnRouteThread, StringComparer.Ordinal);
         hash.Add(CreatedTime);
         hash.Add(ExpiresTime);
         hash.Add(StructuralEquality.SequenceHashCode(To));

@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -34,7 +33,6 @@ namespace Verifiable.WebFinger;
 /// silently ignored by construction (§4.2).
 /// </para>
 /// </remarks>
-[DebuggerDisplay("WebFingerEndpoints")]
 public static class WebFingerEndpoints
 {
     /// <summary>

@@ -3,9 +3,9 @@ using Verifiable.Fido2.Ctap;
 namespace Verifiable.Tests.Fido2;
 
 /// <summary>
-/// Byte-exact tests for the seven <c>authenticatorClientPIN</c> PIN-path status codes wave-5b adds to
-/// <see cref="WellKnownCtapStatusCodes"/>, wave-5c's <see cref="WellKnownCtapStatusCodes.PuatRequired"/>,
-/// this wave's <see cref="WellKnownCtapStatusCodes.InvalidSubcommand"/> (R1), and the
+/// Byte-exact tests for the seven <c>authenticatorClientPIN</c> PIN-path status codes added to
+/// <see cref="WellKnownCtapStatusCodes"/>, <see cref="WellKnownCtapStatusCodes.PuatRequired"/>,
+/// <see cref="WellKnownCtapStatusCodes.InvalidSubcommand"/>, and the
 /// <c>pinUvAuthToken</c> permission bit values in <see cref="WellKnownCtapPinUvAuthTokenPermissions"/>
 /// (CTAP 2.3 §8.2/§6.5.5).
 /// </summary>

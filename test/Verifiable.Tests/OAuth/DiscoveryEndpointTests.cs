@@ -14,17 +14,16 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
-/// OAuth Phase A — OpenID Connect Discovery 1.0 §3 document shape per
+/// OpenID Connect Discovery 1.0 §3 document shape per
 /// <see href="https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfig">OIDC Discovery §3</see>
 /// and the RFC 8414 §3 OAuth 2.0 metadata document.
 /// </summary>
 /// <remarks>
-/// Phase 9h shipped the endpoint-URL emission (issuer +
-/// per-request EndpointChain walk). Phase A chunks 12-16 complete the
-/// metadata document with the spec-mandated supporting fields:
-/// chunk 12 — REQUIRED fields (subject_types_supported,
-/// response_types_supported, id_token_signing_alg_values_supported);
-/// chunks 13-16 — capability-derived, scope, claims, and DPoP fields.
+/// Endpoint-URL emission (issuer + per-request EndpointChain walk)
+/// pairs with the spec-mandated supporting fields: REQUIRED fields
+/// (subject_types_supported, response_types_supported,
+/// id_token_signing_alg_values_supported), then the capability-derived,
+/// scope, claims, and DPoP fields.
 /// </remarks>
 [TestClass]
 internal sealed class DiscoveryEndpointTests
@@ -613,30 +612,30 @@ internal sealed class DiscoveryEndpointTests
 
         using JsonDocument body = JsonDocument.Parse(response.Body);
 
-        //Phase 9h endpoint URLs.
+        //Endpoint URLs.
         AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.Issuer);
         AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.AuthorizationEndpoint);
         AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.TokenEndpoint);
         AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.JwksUri);
         AssertFieldPresent(body, OpenIdProviderMetadataParameterNames.UserinfoEndpoint);
 
-        //Chunk 12 — REQUIRED OIDC fields.
+        //REQUIRED OIDC fields.
         AssertFieldPresent(body, OpenIdProviderMetadataParameterNames.SubjectTypesSupported);
         AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.ResponseTypesSupported);
         AssertFieldPresent(body, OpenIdProviderMetadataParameterNames.IdTokenSigningAlgValuesSupported);
 
-        //Chunk 13 — capability-derived OPTIONAL fields.
+        //Capability-derived OPTIONAL fields.
         AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.GrantTypesSupported);
         AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.CodeChallengeMethodsSupported);
         AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.TokenEndpointAuthMethodsSupported);
 
-        //Chunk 14 — scopes.
+        //Scopes.
         AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.ScopesSupported);
 
-        //Chunk 15 — claims advertisement.
+        //Claims advertisement.
         AssertFieldPresent(body, OpenIdProviderMetadataParameterNames.ClaimsSupported);
 
-        //Chunk 16 — claim_types.
+        //claim_types.
         AssertFieldPresent(body, OpenIdProviderMetadataParameterNames.ClaimTypesSupported);
 
         //FAPI 2.0 §5.2.2 / RFC 9207 — PAR-required and iss-parameter-supported flags.
@@ -659,7 +658,7 @@ internal sealed class DiscoveryEndpointTests
     [TestMethod]
     public async Task DiscoveryStillCarriesIssuerAndEndpointUrls()
     {
-        //Regression guard — the chunk-12 additions must not displace the
+        //Regression guard — the REQUIRED-field additions must not displace the
         //pre-existing endpoint-URL emission.
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(

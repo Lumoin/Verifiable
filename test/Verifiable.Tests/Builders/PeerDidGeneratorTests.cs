@@ -234,7 +234,7 @@ internal sealed class PeerDidGeneratorTests
     {
         //did:peer:2 is a closed, abbreviated format, so generation is asserted byte-for-byte against the
         //specification's golden vector.
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using PublicKeyMemory authenticationKey = DecodeMultibaseKey(SigningKey, pool);
         using PublicKeyMemory keyAgreementKey = DecodeMultibaseKey(KeyAgreementKey, pool);
 
@@ -256,7 +256,7 @@ internal sealed class PeerDidGeneratorTests
     [TestMethod]
     public async Task GenerateNumalgo2RoundTripsThroughResolution()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using PublicKeyMemory authenticationKey = DecodeMultibaseKey(SigningKey, pool);
         using PublicKeyMemory keyAgreementKey = DecodeMultibaseKey(KeyAgreementKey, pool);
 
@@ -285,7 +285,7 @@ internal sealed class PeerDidGeneratorTests
     [TestMethod]
     public void GenerateNumalgo2RejectsServicesTheClosedFormatCannotExpress()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using PublicKeyMemory key = DecodeMultibaseKey(SigningKey, pool);
         PeerDidPurposedKey[] keys = [new PeerDidPurposedKey(key, PeerDidPurpose.Authentication)];
 
@@ -307,7 +307,7 @@ internal sealed class PeerDidGeneratorTests
     {
         //A uri carrying a quote, a backslash, and a newline exercises the writer's escaping and the reader's decoding.
         string uri = "https://example.com/a\"b\\c\nd";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using PublicKeyMemory key = DecodeMultibaseKey(SigningKey, pool);
 
         string did = PeerDidGenerator.GenerateNumalgo2(
@@ -326,7 +326,7 @@ internal sealed class PeerDidGeneratorTests
     public async Task GenerateNumalgo2RoundTripsStringServiceEndpoint()
     {
         //A non-dm type passes through verbatim and a bare-string endpoint populates ServiceEndpoint, not the map.
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using PublicKeyMemory key = DecodeMultibaseKey(SigningKey, pool);
         var service = new Service { Type = "LinkedDomains", ServiceEndpoint = "https://example.com/ep" };
 
@@ -350,7 +350,7 @@ internal sealed class PeerDidGeneratorTests
     {
         //One key per purpose, in order, pins all five purpose-code mappings (a transposition would otherwise
         //survive a suite that only generates V and E). No services exercises the key-only path.
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using PublicKeyMemory assertion = DecodeMultibaseKey(SigningKey, pool);
         using PublicKeyMemory keyAgreement = DecodeMultibaseKey(KeyAgreementKey, pool);
         using PublicKeyMemory authentication = DecodeMultibaseKey(SigningKey, pool);
@@ -383,7 +383,7 @@ internal sealed class PeerDidGeneratorTests
     [TestMethod]
     public async Task GenerateNumalgo2EmitsExplicitServiceId()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using PublicKeyMemory key = DecodeMultibaseKey(SigningKey, pool);
         var service = new Service { Id = DidUrl.ParseFragment("#agent"), Type = "DIDCommMessaging", ServiceEndpoint = "https://example.com/ep" };
 
@@ -399,7 +399,7 @@ internal sealed class PeerDidGeneratorTests
     }
 
 
-    private static PublicKeyMemory DecodeMultibaseKey(string multibaseKey, MemoryPool<byte> pool)
+    private static PublicKeyMemory DecodeMultibaseKey(string multibaseKey, BaseMemoryPool pool)
     {
         var decoded = CryptoFormatConversions.DefaultBase58ToAlgorithmConverter(
             multibaseKey, pool, DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase)));

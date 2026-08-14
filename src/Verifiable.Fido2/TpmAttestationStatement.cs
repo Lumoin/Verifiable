@@ -114,4 +114,4 @@ public sealed record TpmAttestationStatement(
 /// tpm attestation statement syntax defined in
 /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-tpm-attestation">W3C Web Authentication Level 3, section 8.3</see>.
 /// </exception>
-public delegate TpmAttestationStatement ParseTpmAttestationStatementDelegate(ReadOnlyMemory<byte> attestationStatement, MemoryPool<byte> pool);
+public delegate TpmAttestationStatement ParseTpmAttestationStatementDelegate(ReadOnlyMemory<byte> attestationStatement, BaseMemoryPool pool);

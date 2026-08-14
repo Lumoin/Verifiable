@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Introspection;
@@ -9,7 +8,6 @@ namespace Verifiable.OAuth.Introspection;
 /// registered in the IANA OAuth Authorization Server Metadata registry. Resource
 /// servers use these to parametrise their client registration requests.
 /// </summary>
-[DebuggerDisplay("IntrospectionServerMetadataParameterNames")]
 public static class IntrospectionServerMetadataParameterNames
 {
     /// <summary>The UTF-8 source literal of <see cref="IntrospectionSigningAlgValuesSupported"/>.</summary>

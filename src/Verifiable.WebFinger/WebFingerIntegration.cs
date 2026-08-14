@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Server;
 
 namespace Verifiable.WebFinger;
@@ -26,7 +25,6 @@ namespace Verifiable.WebFinger;
 /// <c>Verifiable.Server</c>.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("WebFingerIntegration")]
 public sealed class WebFingerIntegration: ServerIntegration
 {
     /// <summary>

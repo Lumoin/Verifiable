@@ -387,7 +387,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
         Assert.IsTrue(refreshDoc.RootElement.TryGetProperty("access_token", out _),
             $"The refresh_token grant must return a fresh access_token. Body: {refreshResponse.Body}");
 
-        //Positive control for the wave-4 grant-identity invariant: this refresh token
+        //Positive control for the grant-identity invariant: this refresh token
         //originates from the authorization_code grant (not token_exchange), so per
         //Oidc10IdTokenProducer.IsApplicableAsync the redemption must still mint an
         //id_token — contrast TokenExchangeGrantTests

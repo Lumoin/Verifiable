@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using Verifiable.Server;
 
@@ -12,7 +11,6 @@ namespace Verifiable.Vcalm.Exchange;
 /// <c>System.Text.Json</c>); the actual HTTP POST is the application's, behind the
 /// <see cref="DeliverVcalmCallbackDelegate"/> seam.
 /// </summary>
-[DebuggerDisplay("VcalmCallbackComposer")]
 public static class VcalmCallbackComposer
 {
     /// <summary>

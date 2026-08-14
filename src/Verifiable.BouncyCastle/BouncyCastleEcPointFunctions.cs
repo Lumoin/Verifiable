@@ -38,7 +38,7 @@ public static class BouncyCastleEcPointFunctions
     public static ValueTask<EncodedEcPoint> MultiplyGeneratorAsync(
         ReadOnlyMemory<byte> scalar,
         Tag curve,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(curve);
@@ -60,7 +60,7 @@ public static class BouncyCastleEcPointFunctions
         ReadOnlyMemory<byte> scalar,
         ReadOnlyMemory<byte> point,
         Tag curve,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(curve);
@@ -83,7 +83,7 @@ public static class BouncyCastleEcPointFunctions
         ReadOnlyMemory<byte> point,
         ReadOnlyMemory<byte> addend,
         Tag curve,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(curve);
@@ -111,7 +111,7 @@ public static class BouncyCastleEcPointFunctions
     public static ValueTask<EncodedEcPoint> Map2PointAsync(
         ReadOnlyMemory<byte> pseudoRandom,
         Tag curve,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(curve);
@@ -173,7 +173,7 @@ public static class BouncyCastleEcPointFunctions
         ReadOnlyMemory<byte> staticPrivateKey,
         ReadOnlyMemory<byte> ephemeralMappingPrivateKey,
         Tag curve,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(curve);
@@ -197,7 +197,7 @@ public static class BouncyCastleEcPointFunctions
     /// pool supports it), clearing the transient BouncyCastle array.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The returned buffer is owned and disposed by the caller.")]
-    private static IMemoryOwner<byte> EncodeScalar(BigInteger value, int length, MemoryPool<byte> pool)
+    private static IMemoryOwner<byte> EncodeScalar(BigInteger value, int length, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool is BaseMemoryPool basePool
             ? basePool.Rent(length, AllocationKind.Pinned)
@@ -240,7 +240,7 @@ public static class BouncyCastleEcPointFunctions
     /// Encodes a point in SEC1 uncompressed form into a freshly rented <see cref="EncodedEcPoint"/>
     /// carrying the curve tag.
     /// </summary>
-    private static EncodedEcPoint Encode(ECPoint point, Tag curve, MemoryPool<byte> pool)
+    private static EncodedEcPoint Encode(ECPoint point, Tag curve, BaseMemoryPool pool)
     {
         byte[] encoded = point.Normalize().GetEncoded(false);
 

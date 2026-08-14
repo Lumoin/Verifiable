@@ -1,3 +1,4 @@
+using Lumoin.Base;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
@@ -61,7 +62,7 @@ public static class KeriKeyEventStream
         PipeReader stream,
         KeriEventFieldMapDecoder decodeFieldMap,
         ComputeDigestDelegate computeDigest,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TimeProvider timeProvider,
         DelegationSealResolver? resolveDelegationSeal = null,
         CancellationToken cancellationToken = default)
@@ -198,7 +199,7 @@ public static class KeriKeyEventStream
     private static ImmutableArray<CryptoProof> BuildControllerProofs(
         IReadOnlyList<CesrToken> attachments,
         IReadOnlyList<string> authorizingKeys,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         List<IDisposable> owned)
     {
         ImmutableArray<CryptoProof>.Builder proofs = ImmutableArray.CreateBuilder<CryptoProof>();
@@ -239,7 +240,7 @@ public static class KeriKeyEventStream
     /// <param name="owned">The list the reconstructed key and signature are tracked on for disposal.</param>
     /// <returns>The reconstructed proof.</returns>
     /// <exception cref="KeriException">The signing key's CESR code is not a supported verification-key algorithm.</exception>
-    private static CryptoProof BuildProof(string qualifiedKey, ReadOnlySpan<byte> signatureRaw, MemoryPool<byte> pool, List<IDisposable> owned)
+    private static CryptoProof BuildProof(string qualifiedKey, ReadOnlySpan<byte> signatureRaw, BaseMemoryPool pool, List<IDisposable> owned)
     {
         using CesrParsedPrimitive parsedKey = CesrPrimitiveCodec.DecodeText(qualifiedKey, pool);
         if(!CesrVerificationKeyCodes.TryGetVerificationKeyInfo(parsedKey.Code, out CesrVerificationKeyInfo? keyInfo))
@@ -266,7 +267,7 @@ public static class KeriKeyEventStream
     /// <param name="pool">The pool the buffer is rented from.</param>
     /// <param name="owned">The list the buffer owner is tracked on for disposal.</param>
     /// <returns>The UTF-8 bytes as a view over the tracked pooled buffer.</returns>
-    private static ReadOnlyMemory<byte> RentUtf8(string text, MemoryPool<byte> pool, List<IDisposable> owned)
+    private static ReadOnlyMemory<byte> RentUtf8(string text, BaseMemoryPool pool, List<IDisposable> owned)
     {
         int length = Encoding.UTF8.GetByteCount(text);
         IMemoryOwner<byte> owner = pool.Rent(length);

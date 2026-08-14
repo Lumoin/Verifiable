@@ -46,15 +46,6 @@ public static class CAdESVerification
     /// <summary>The signature-time-stamp-token unsigned attribute (CAdES-T, RFC 3161 / ETSI EN 319 122-1 §5.3).</summary>
     private const string SignatureTimeStampTokenOid = "1.2.840.113549.1.9.16.2.14";
 
-    /// <summary>The SHA-256 hash algorithm object identifier — the default for an ESSCertIDv2 that omits its hash algorithm.</summary>
-    private const string Sha256Oid = "2.16.840.1.101.3.4.2.1";
-
-    /// <summary>The SHA-384 hash algorithm object identifier.</summary>
-    private const string Sha384Oid = "2.16.840.1.101.3.4.2.2";
-
-    /// <summary>The SHA-512 hash algorithm object identifier.</summary>
-    private const string Sha512Oid = "2.16.840.1.101.3.4.2.3";
-
 
     /// <summary>
     /// Verifies a CAdES-B-B signature.
@@ -68,7 +59,7 @@ public static class CAdESVerification
         Justification = "Ownership of the verified content transfers to a successful result, which the caller disposes; every failure path disposes it before returning.")]
     public static async ValueTask<CAdESVerificationResult> VerifyAsync(
         CmsSignedData signedData,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(signedData);
@@ -88,6 +79,76 @@ public static class CAdESVerification
             return CAdESVerificationResult.Failed(CAdESVerificationStatus.InvalidSignature);
         }
 
+        return await VerifyAttributesAsync(signedData, content, verifyCms, pool, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Verifies a CAdES-B-B signature whose CMS SignedData encapsulates no content of its own (RFC 5652 §5.2) —
+    /// the shape every PAdES signature takes (ETSI EN 319 142-1 clause 5.3, PA-4.1-01/PA-6.3-h) and the shape
+    /// every CAdES object inside an Associated Signature Container takes (ETSI EN 319 162-1 clause 4.4.4.2 item
+    /// 3 a)). The same CAdES-B rules <see cref="VerifyAsync"/> applies, over the detached-content counterpart of
+    /// the CMS core.
+    /// </summary>
+    /// <param name="signedData">The CMS SignedData carrier, encapsulating no content of its own.</param>
+    /// <param name="detachedContent">The octets the signature is detached over — for PAdES, the document's own <c>ByteRange</c>-gapped bytes.</param>
+    /// <param name="pool">The memory pool for the verified content and the certificate-hash computation.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The verification result; on success it owns the verified content (the supplied detached octets) and the caller disposes it. On failure it carries no content.</returns>
+    /// <exception cref="ArgumentNullException">When <paramref name="signedData"/>, <paramref name="detachedContent"/>, or <paramref name="pool"/> is <see langword="null"/>.</exception>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the verified content transfers to a successful result, which the caller disposes; every failure path disposes it before returning.")]
+    public static async ValueTask<CAdESVerificationResult> VerifyDetachedAsync(
+        CmsSignedData signedData,
+        SignedContentMemory detachedContent,
+        BaseMemoryPool pool,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(signedData);
+        ArgumentNullException.ThrowIfNull(detachedContent);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        //The detached counterpart is optional to register: a host that supplies one chooses the backend a
+        //detached signature verifies on, and a host that supplies none keeps the library's own managed backend —
+        //the same registry-with-fallback shape CAdESSignatureFacts.VerifyCryptographyAsync already applies.
+        VerifyDetachedCmsSignedDataDelegate verifyDetachedCms =
+            CryptographicKeyFactory.GetFunction<VerifyDetachedCmsSignedDataDelegate>(typeof(VerifyDetachedCmsSignedDataDelegate))
+            ?? ManagedCmsVerification.VerifyDetachedCmsSignedDataAsync;
+
+        CmsVerifiedContent content;
+        try
+        {
+            content = await verifyDetachedCms(signedData, detachedContent, pool, cancellationToken).ConfigureAwait(false);
+        }
+        catch(CryptographicException)
+        {
+            //The CMS signature (over the signed attributes, including the message-digest binding against the
+            //supplied detached content) did not verify.
+            return CAdESVerificationResult.Failed(CAdESVerificationStatus.InvalidSignature);
+        }
+
+        return await VerifyAttributesAsync(signedData, content, verifyCms: null, pool, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Applies the CAdES-B baseline signed-attribute rules and the CAdES-T signature-timestamp check to CMS
+    /// content the core has already verified — shared between <see cref="VerifyAsync"/>'s encapsulated path and
+    /// <see cref="VerifyDetachedAsync"/>'s detached path, which differ only in how the core verification below
+    /// them was reached.
+    /// </summary>
+    /// <param name="verifyCms">
+    /// <see cref="VerifyAsync"/>'s own already-resolved <see cref="VerifyCmsSignedDataDelegate"/>, or
+    /// <see langword="null"/> from <see cref="VerifyDetachedAsync"/>, which registers no requirement of its own on
+    /// this delegate. Never resolved here: a present signature-time-stamp is the only reason this method's own
+    /// callee ever needs it, so resolution — and the <see cref="InvalidOperationException"/> an unregistered
+    /// delegate throws — is deferred to <see cref="VerifyTimestampAsync"/>, reached only when a token is actually
+    /// present. <see cref="VerifyDetachedAsync"/>'s documented registry-with-fallback therefore holds even with
+    /// nothing registered, for the common case of a signature carrying no timestamp.
+    /// </param>
+    private static async ValueTask<CAdESVerificationResult> VerifyAttributesAsync(
+        CmsSignedData signedData, CmsVerifiedContent content, VerifyCmsSignedDataDelegate? verifyCms, BaseMemoryPool pool, CancellationToken cancellationToken)
+    {
         try
         {
             //CAdES-B baseline: the content-type attribute is mandatory whenever signed attributes are present.
@@ -118,7 +179,7 @@ public static class CAdESVerification
             DateTimeOffset? signingTime = ReadSigningTime(content);
 
             //CAdES-T: an optional signature timestamp over the signature value, raising the level to T.
-            (CAdESLevel level, DateTimeOffset? timestampTime, CAdESVerificationStatus timestampStatus) =
+            (AdESBaselineLevel level, DateTimeOffset? timestampTime, CAdESVerificationStatus timestampStatus) =
                 await VerifyTimestampAsync(signedData, verifyCms, pool, cancellationToken).ConfigureAwait(false);
             if(timestampStatus != CAdESVerificationStatus.Valid)
             {
@@ -146,8 +207,9 @@ public static class CAdESVerification
     /// CMS seam, and its message imprint is checked against the hash of the CAdES signature value.
     /// </summary>
     /// <returns>The level reached (Baseline when no timestamp is present, Timestamp when a valid one is), the timestamp time, and the status (a non-<see cref="CAdESVerificationStatus.Valid"/> status when a present timestamp fails).</returns>
-    private static async ValueTask<(CAdESLevel Level, DateTimeOffset? Time, CAdESVerificationStatus Status)> VerifyTimestampAsync(
-        CmsSignedData signedData, VerifyCmsSignedDataDelegate verifyCms, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    /// <exception cref="InvalidOperationException">A signature-time-stamp token is present, <paramref name="verifyCms"/> is <see langword="null"/>, and no <see cref="VerifyCmsSignedDataDelegate"/> is registered — resolved lazily here, the one place this method's own work actually needs it.</exception>
+    private static async ValueTask<(AdESBaselineLevel Level, DateTimeOffset? Time, CAdESVerificationStatus Status)> VerifyTimestampAsync(
+        CmsSignedData signedData, VerifyCmsSignedDataDelegate? verifyCms, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         (ReadOnlyMemory<byte> signatureValue, IReadOnlyList<(string Oid, ReadOnlyMemory<byte> Value)> unsignedAttributes) =
             ManagedCmsVerification.ParseSignerExtras(signedData.AsReadOnlySpan());
@@ -164,61 +226,49 @@ public static class CAdESVerification
 
         if(token is null)
         {
-            //No signature timestamp: a valid CAdES-B-B (baseline) signature.
-            return (CAdESLevel.Baseline, null, CAdESVerificationStatus.Valid);
+            //No signature timestamp: a valid CAdES-B-B (baseline) signature. VerifyCmsSignedDataDelegate is never
+            //resolved on this path, so a caller with nothing registered still reaches this success.
+            return (AdESBaselineLevel.BB, null, CAdESVerificationStatus.Valid);
         }
+
+        VerifyCmsSignedDataDelegate resolvedVerifyCms = verifyCms
+            ?? CryptographicKeyFactory.GetFunction<VerifyCmsSignedDataDelegate>(typeof(VerifyCmsSignedDataDelegate))
+            ?? throw new InvalidOperationException("No VerifyCmsSignedDataDelegate has been registered.");
 
         using CmsSignedData tokenCarrier = CmsSignedData.FromBytes(token.Value.Span, pool);
         CmsVerifiedContent timestamp;
         try
         {
-            timestamp = await verifyCms(tokenCarrier, pool, cancellationToken).ConfigureAwait(false);
+            timestamp = await resolvedVerifyCms(tokenCarrier, pool, cancellationToken).ConfigureAwait(false);
         }
         catch(CryptographicException)
         {
-            return (CAdESLevel.Baseline, null, CAdESVerificationStatus.InvalidTimestamp);
+            return (AdESBaselineLevel.BB, null, CAdESVerificationStatus.InvalidTimestamp);
         }
 
         using(timestamp)
         {
-            (string hashOid, byte[] imprint, DateTimeOffset genTime) = ParseTimeStampTokenInfo(timestamp.Content);
-
-            (Tag tag, int length) = DigestForOid(hashOid);
-            if(tag is null)
+            using TimestampTokenInfo tokenInfo = TimestampTokenInfo.Read(timestamp.Content, pool);
+            if(tokenInfo.Status == TimestampTokenInfoStatus.UnsupportedMessageImprintAlgorithm)
             {
-                return (CAdESLevel.Baseline, null, CAdESVerificationStatus.UnsupportedHashAlgorithm);
+                return (AdESBaselineLevel.BB, null, CAdESVerificationStatus.UnsupportedHashAlgorithm);
             }
 
-            using DigestValue computed = await CryptographicKeyEvents.ComputeDigestAsync(
-                signatureValue, length, tag, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
-            if(!computed.AsReadOnlySpan().SequenceEqual(imprint))
+            if(!tokenInfo.IsRead)
+            {
+                //The TSTInfo is not well-formed DER, which is the same Malformed outcome a signed attribute that
+                //does not parse produces.
+                return (AdESBaselineLevel.BB, null, CAdESVerificationStatus.Malformed);
+            }
+
+            if(!await tokenInfo.VerifyMessageImprintAsync(signatureValue, pool, cancellationToken).ConfigureAwait(false))
             {
                 //The timestamp does not bind this signature.
-                return (CAdESLevel.Baseline, null, CAdESVerificationStatus.TimestampImprintMismatch);
+                return (AdESBaselineLevel.BB, null, CAdESVerificationStatus.TimestampImprintMismatch);
             }
 
-            return (CAdESLevel.Timestamp, genTime, CAdESVerificationStatus.Valid);
+            return (AdESBaselineLevel.BT, tokenInfo.GenerationTime, CAdESVerificationStatus.Valid);
         }
-    }
-
-
-    /// <summary>
-    /// Parses an RFC 3161 TSTInfo: the message-imprint hash algorithm and value (which binds the timestamped
-    /// data) and the generalised time the token asserts.
-    /// </summary>
-    private static (string HashOid, byte[] Imprint, DateTimeOffset GenTime) ParseTimeStampTokenInfo(ReadOnlyMemory<byte> tstInfo)
-    {
-        AsnReader info = new AsnReader(tstInfo, AsnEncodingRules.DER).ReadSequence();
-        _ = info.ReadInteger();                                        //version
-        _ = info.ReadObjectIdentifier();                              //policy
-        AsnReader messageImprint = info.ReadSequence();
-        AsnReader hashAlgorithm = messageImprint.ReadSequence();
-        string hashOid = hashAlgorithm.ReadObjectIdentifier();
-        byte[] imprint = messageImprint.ReadOctetString();
-        _ = info.ReadInteger();                                        //serialNumber
-        DateTimeOffset genTime = info.ReadGeneralizedTime();
-
-        return (hashOid, imprint, genTime);
     }
 
 
@@ -227,18 +277,18 @@ public static class CAdESVerification
     /// certificate under the hash algorithm it declares (SHA-256 by default).
     /// </summary>
     private static async ValueTask<CAdESVerificationStatus> VerifySigningCertificateBindingAsync(
-        CmsSignedAttribute signingCertificate, ReadOnlyMemory<byte> signerCertificate, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CmsSignedAttribute signingCertificate, ReadOnlyMemory<byte> signerCertificate, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         (string hashOid, byte[] certificateHash) = ParseFirstEssCertId(signingCertificate.AsReadOnlyMemory());
 
-        (Tag tag, int length) = DigestForOid(hashOid);
-        if(tag is null)
+        PkiDigestAlgorithm? algorithm = PkiDigestAlgorithm.FromOid(hashOid);
+        if(algorithm is null)
         {
             return CAdESVerificationStatus.UnsupportedHashAlgorithm;
         }
 
         using DigestValue computed = await CryptographicKeyEvents.ComputeDigestAsync(
-            signerCertificate, length, tag, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+            signerCertificate, algorithm.Value.OutputByteLength, algorithm.Value.DigestTag, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return computed.AsReadOnlySpan().SequenceEqual(certificateHash)
             ? CAdESVerificationStatus.Valid
@@ -259,7 +309,7 @@ public static class CAdESVerification
 
         //hashAlgorithm AlgorithmIdentifier DEFAULT {algorithm id-sha256}: present when the next element is the
         //AlgorithmIdentifier SEQUENCE, omitted (default SHA-256) when the certHash OCTET STRING comes first.
-        string hashOid = Sha256Oid;
+        string hashOid = WellKnownOids.Sha256;
         if(essCertId.PeekTag() == new Asn1Tag(UniversalTagNumber.Sequence, isConstructed: true))
         {
             AsnReader hashAlgorithm = essCertId.ReadSequence();
@@ -305,19 +355,6 @@ public static class CAdESVerification
             return null;
         }
     }
-
-
-    /// <summary>
-    /// Maps a hash-algorithm object identifier to its digest <see cref="Tag"/> and output length, or a
-    /// <see langword="null"/> tag for an unsupported algorithm.
-    /// </summary>
-    private static (Tag Tag, int Length) DigestForOid(string hashOid) => hashOid switch
-    {
-        Sha256Oid => (CryptoTags.Sha256Digest, 32),
-        Sha384Oid => (CryptoTags.Sha384Digest, 48),
-        Sha512Oid => (CryptoTags.Sha512Digest, 64),
-        _ => (null!, 0)
-    };
 }
 
 
@@ -357,20 +394,6 @@ public enum CAdESVerificationStatus
 
 
 /// <summary>
-/// The CAdES baseline level a verified signature reaches (ETSI EN 319 122-1). Higher levels add
-/// long-term-validation material on top of the level below.
-/// </summary>
-public enum CAdESLevel
-{
-    /// <summary>CAdES-B-B: the baseline signed attributes (content-type and signing-certificate-v2).</summary>
-    Baseline,
-
-    /// <summary>CAdES-B-T: a baseline signature plus a verified signature timestamp over the signature value.</summary>
-    Timestamp
-}
-
-
-/// <summary>
 /// The result of <see cref="CAdESVerification.VerifyAsync"/>. On success it owns the verified CMS content and
 /// surfaces the signer certificate and the optional signing time; the caller disposes it. On failure it owns
 /// nothing.
@@ -381,7 +404,7 @@ public sealed class CAdESVerificationResult: IDisposable
     private bool disposed;
 
 
-    private CAdESVerificationResult(CAdESVerificationStatus status, CmsVerifiedContent? verifiedContent, DateTimeOffset? signingTime, CAdESLevel level, DateTimeOffset? timestampTime)
+    private CAdESVerificationResult(CAdESVerificationStatus status, CmsVerifiedContent? verifiedContent, DateTimeOffset? signingTime, AdESBaselineLevel level, DateTimeOffset? timestampTime)
     {
         Status = status;
         this.VerifiedContent = verifiedContent;
@@ -397,8 +420,8 @@ public sealed class CAdESVerificationResult: IDisposable
     /// <summary>Gets a value indicating whether the signature verified against all CAdES-B baseline rules.</summary>
     public bool IsValid => Status == CAdESVerificationStatus.Valid;
 
-    /// <summary>Gets the CAdES level the signature reached: <see cref="CAdESLevel.Baseline"/>, or <see cref="CAdESLevel.Timestamp"/> when a valid signature timestamp is present.</summary>
-    public CAdESLevel Level { get; }
+    /// <summary>Gets the CAdES level the signature reached: <see cref="AdESBaselineLevel.BB"/>, or <see cref="AdESBaselineLevel.BT"/> when a valid signature timestamp is present.</summary>
+    public AdESBaselineLevel Level { get; }
 
     /// <summary>Gets the signing time from the optional signing-time attribute, or <see langword="null"/> when absent.</summary>
     public DateTimeOffset? SigningTime { get; }
@@ -414,12 +437,12 @@ public sealed class CAdESVerificationResult: IDisposable
 
 
     /// <summary>Creates a successful result owning the verified content.</summary>
-    internal static CAdESVerificationResult Valid(CmsVerifiedContent verifiedContent, DateTimeOffset? signingTime, CAdESLevel level, DateTimeOffset? timestampTime) =>
+    internal static CAdESVerificationResult Valid(CmsVerifiedContent verifiedContent, DateTimeOffset? signingTime, AdESBaselineLevel level, DateTimeOffset? timestampTime) =>
         new(CAdESVerificationStatus.Valid, verifiedContent, signingTime, level, timestampTime);
 
     /// <summary>Creates a failed result that owns nothing.</summary>
     internal static CAdESVerificationResult Failed(CAdESVerificationStatus status) =>
-        new(status, null, null, CAdESLevel.Baseline, null);
+        new(status, null, null, AdESBaselineLevel.BB, null);
 
 
     /// <inheritdoc/>

@@ -121,7 +121,7 @@ public sealed class Tpm2bIdObject: IDisposable
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed credential blob.</returns>
-    public static Tpm2bIdObject Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static Tpm2bIdObject Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ushort size = reader.ReadUInt16();
@@ -149,7 +149,7 @@ public sealed class Tpm2bIdObject: IDisposable
     /// <param name="bytes">The blob bytes.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The created credential blob.</returns>
-    public static Tpm2bIdObject Create(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
+    public static Tpm2bIdObject Create(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         if(bytes.IsEmpty)

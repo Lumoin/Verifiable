@@ -1,3 +1,4 @@
+using Lumoin.Base;
 using System.Buffers;
 using System.Buffers.Text;
 using Verifiable.Cesr.Text;
@@ -52,7 +53,7 @@ public static class CesrIndexedSignatureCodec
     /// <param name="pool">The memory pool from which to allocate the result.</param>
     /// <param name="ondex">The other-index for a dual-indexed signature, or <see langword="null"/> when single-indexed.</param>
     /// <returns>Pooled memory holding the qb2 bytes; the caller must dispose it.</returns>
-    public static IMemoryOwner<byte> EncodeBinary(string code, ReadOnlySpan<byte> raw, int index, MemoryPool<byte> pool, int? ondex = null)
+    public static IMemoryOwner<byte> EncodeBinary(string code, ReadOnlySpan<byte> raw, int index, BaseMemoryPool pool, int? ondex = null)
     {
         ArgumentNullException.ThrowIfNull(code);
         ArgumentNullException.ThrowIfNull(pool);
@@ -80,7 +81,7 @@ public static class CesrIndexedSignatureCodec
     /// <param name="qb64">The fully qualified Base64URL text; only the leading primitive is consumed.</param>
     /// <param name="pool">The memory pool from which to allocate the recovered raw signature.</param>
     /// <returns>The decoded code, index, other-index, and raw signature. The caller must dispose the result.</returns>
-    public static CesrParsedIndexedSignature DecodeText(ReadOnlySpan<char> qb64, MemoryPool<byte> pool) =>
+    public static CesrParsedIndexedSignature DecodeText(ReadOnlySpan<char> qb64, BaseMemoryPool pool) =>
         DecodeText(qb64, pool, out _);
 
 
@@ -92,7 +93,7 @@ public static class CesrIndexedSignatureCodec
     /// <param name="pool">The memory pool from which to allocate the recovered raw signature.</param>
     /// <param name="consumedChars">The number of leading characters the decoded signature occupied.</param>
     /// <returns>The decoded code, index, other-index, and raw signature. The caller must dispose the result.</returns>
-    public static CesrParsedIndexedSignature DecodeText(ReadOnlySpan<char> qb64, MemoryPool<byte> pool, out int consumedChars)
+    public static CesrParsedIndexedSignature DecodeText(ReadOnlySpan<char> qb64, BaseMemoryPool pool, out int consumedChars)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -171,7 +172,7 @@ public static class CesrIndexedSignatureCodec
     /// <param name="qb2">The fully qualified binary bytes; only the leading primitive is consumed.</param>
     /// <param name="pool">The memory pool from which to allocate the recovered raw signature.</param>
     /// <returns>The decoded code, index, other-index, and raw signature. The caller must dispose the result.</returns>
-    public static CesrParsedIndexedSignature DecodeBinary(ReadOnlySpan<byte> qb2, MemoryPool<byte> pool) =>
+    public static CesrParsedIndexedSignature DecodeBinary(ReadOnlySpan<byte> qb2, BaseMemoryPool pool) =>
         DecodeBinary(qb2, pool, out _);
 
 
@@ -183,7 +184,7 @@ public static class CesrIndexedSignatureCodec
     /// <param name="pool">The memory pool from which to allocate the recovered raw signature.</param>
     /// <param name="consumedBytes">The number of leading bytes the decoded signature occupied.</param>
     /// <returns>The decoded code, index, other-index, and raw signature. The caller must dispose the result.</returns>
-    public static CesrParsedIndexedSignature DecodeBinary(ReadOnlySpan<byte> qb2, MemoryPool<byte> pool, out int consumedBytes)
+    public static CesrParsedIndexedSignature DecodeBinary(ReadOnlySpan<byte> qb2, BaseMemoryPool pool, out int consumedBytes)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -240,7 +241,7 @@ public static class CesrIndexedSignatureCodec
     }
 
 
-    private static CesrParsedIndexedSignature BuildParsed(string code, int index, int? ondex, ReadOnlySpan<byte> raw, MemoryPool<byte> pool)
+    private static CesrParsedIndexedSignature BuildParsed(string code, int index, int? ondex, ReadOnlySpan<byte> raw, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(Math.Max(raw.Length, 1));
         raw.CopyTo(owner.Memory.Span);

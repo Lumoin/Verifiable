@@ -89,7 +89,7 @@ public sealed class TpmsNvPublic: IDisposable
     /// <param name="reader">The reader positioned at the structure.</param>
     /// <param name="pool">The memory pool for the policy digest.</param>
     /// <returns>The parsed structure.</returns>
-    public static TpmsNvPublic Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static TpmsNvPublic Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

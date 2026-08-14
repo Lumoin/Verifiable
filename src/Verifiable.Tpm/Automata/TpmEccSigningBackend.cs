@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Automata;
 /// <returns>The generated key. The caller owns and disposes it.</returns>
 public delegate ValueTask<TpmGeneratedEccKey> TpmEccKeyGenerationDelegate(
     TpmEccCurveConstants curve,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);
 
 /// <summary>
@@ -47,7 +47,7 @@ public delegate ValueTask<Signature> TpmEccDigestSignDelegate(
     ReadOnlyMemory<byte> privateScalar,
     ReadOnlyMemory<byte> digest,
     TpmEccCurveConstants curve,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);
 
 /// <summary>
@@ -75,7 +75,7 @@ public delegate ValueTask<IMemoryOwner<byte>> TpmEccSharedSecretDelegate(
     ReadOnlyMemory<byte> privateScalar,
     ReadOnlyMemory<byte> peerPublicPoint,
     TpmEccCurveConstants curve,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);
 
 /// <summary>

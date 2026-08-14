@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 
@@ -60,7 +59,6 @@ namespace Verifiable.Server;
 /// missed pooling opportunity, not a leak.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("JsonAppender")]
 public static class JsonAppender
 {
     private const int DefaultCapacity = 256;

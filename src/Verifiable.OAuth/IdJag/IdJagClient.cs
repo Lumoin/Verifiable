@@ -58,7 +58,6 @@ public sealed record IdJagMintOptions
 /// draft-ietf-oauth-identity-assertion-authz-grant-04 §4.4). The client authenticates as a confidential
 /// client (§9.1) with a <c>private_key_jwt</c> assertion signed from <see cref="SigningKey"/>.
 /// </summary>
-[DebuggerDisplay("IdJagRedeemOptions")]
 public sealed record IdJagRedeemOptions
 {
     /// <summary>The ID-JAG obtained from the mint, presented as the §4.4 <c>assertion</c> (REQUIRED).</summary>
@@ -93,7 +92,6 @@ public sealed record IdJagRedeemOptions
 /// struct is cheap (one reference field) and carries no per-AS state — each method takes a
 /// <see cref="ClientRegistration"/> describing which authorization server the call targets.
 /// </remarks>
-[DebuggerDisplay("IdJagClient")]
 [SuppressMessage("Performance", "CA1815:Override equals and operator equals on value types", Justification = "IdJagClient is a service-shaped wrapper around a single reference; value equality would compare reference identity of the underlying infrastructure, which is not a meaningful operation for callers.")]
 public readonly struct IdJagClient
 {

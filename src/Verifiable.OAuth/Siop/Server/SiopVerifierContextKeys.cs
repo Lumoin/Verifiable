@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Siop.Server;
@@ -22,7 +21,6 @@ namespace Verifiable.OAuth.Siop.Server;
 /// request.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("SiopVerifierContextKeys")]
 public static class SiopVerifierContextKeys
 {
     /// <summary>The UTF-8 source literal of <see cref="Nonce"/>.</summary>

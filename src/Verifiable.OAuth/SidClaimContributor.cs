@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core.Assessment;
 using Verifiable.JCose;
 
@@ -20,7 +19,6 @@ namespace Verifiable.OAuth;
 /// <c>auth_time</c>. Applies only to <see cref="IdTokenTarget"/>: a session identifier
 /// belongs in the ID Token, not in access tokens, introspection, or UserInfo.
 /// </remarks>
-[DebuggerDisplay("SidClaimContributor")]
 public static class SidClaimContributor
 {
     /// <summary>

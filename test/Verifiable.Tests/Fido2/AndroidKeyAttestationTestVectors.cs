@@ -78,9 +78,9 @@ internal static class AndroidKeyAttestationTestVectors
     internal static byte[] EncodeKeyDescriptionExtensionValue(byte[] attestationChallenge, AndroidKeyAuthorizationList softwareEnforced, AndroidKeyAuthorizationList teeEnforced)
     {
         var keyDescription = new DerSequence(
-            new DerInteger(300),
+            DerInteger.ValueOf(300),
             new DerEnumerated(0),
-            new DerInteger(0),
+            DerInteger.ValueOf(0),
             new DerEnumerated(0),
             new DerOctetString(attestationChallenge),
             new DerOctetString([]),
@@ -97,7 +97,7 @@ internal static class AndroidKeyAttestationTestVectors
             var elements = new List<Asn1Encodable>();
             if(authorizationList.Purposes.Count > 0)
             {
-                Asn1Encodable[] purposeIntegers = [.. authorizationList.Purposes.Select(static purpose => (Asn1Encodable)new DerInteger(purpose))];
+                Asn1Encodable[] purposeIntegers = [.. authorizationList.Purposes.Select(static purpose => (Asn1Encodable)DerInteger.ValueOf(purpose))];
                 elements.Add(new DerTaggedObject(1, new DerSet(purposeIntegers)));
             }
 
@@ -108,7 +108,7 @@ internal static class AndroidKeyAttestationTestVectors
 
             if(authorizationList.Origin is int origin)
             {
-                elements.Add(new DerTaggedObject(702, new DerInteger(origin)));
+                elements.Add(new DerTaggedObject(702, DerInteger.ValueOf(origin)));
             }
 
             return new DerSequence(elements.ToArray());

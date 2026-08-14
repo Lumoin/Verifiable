@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Cryptography
@@ -10,6 +11,7 @@ namespace Verifiable.Cryptography
     /// </summary>
     /// <remarks>If counters, statistics or other statistics or functionality
     /// is needed this class can be inherited.</remarks>
+    [DebuggerDisplay("PublicKeyMemory Algorithm={Tag.Get<Verifiable.Cryptography.Context.CryptoAlgorithm>()} Purpose={Tag.Get<Verifiable.Cryptography.Context.Purpose>()}")]
     public class PublicKeyMemory: SensitiveMemory, IEquatable<PublicKeyMemory>
     {
         /// <summary>

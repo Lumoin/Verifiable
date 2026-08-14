@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.JCose;
 
 namespace Verifiable.OAuth;
@@ -20,7 +19,6 @@ namespace Verifiable.OAuth;
 /// <c>JwsSerialization.SerializeCompact</c> on the underlying <see cref="Message"/>.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("SignedJar")]
 public sealed class SignedJar: IDisposable
 {
     private bool disposed;

@@ -51,5 +51,5 @@ namespace Verifiable.Apdu.Ctap;
 /// </remarks>
 public delegate ValueTask<PooledMemory> CtapPayloadTransceiveDelegate(
     ReadOnlyMemory<byte> request,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);

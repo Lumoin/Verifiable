@@ -45,7 +45,7 @@ internal static class WebPlusMbHash
         ComputeDigestDelegate computeDigest,
         Tag digestTag,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(computeDigest);
@@ -74,7 +74,7 @@ internal static class WebPlusMbHash
         ReadOnlySpan<byte> multihashCode,
         int digestLength,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
         ArgumentNullException.ThrowIfNull(pool);
@@ -93,7 +93,7 @@ internal static class WebPlusMbHash
         ReadOnlySpan<byte> digest,
         ReadOnlySpan<byte> multihashCode,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         Span<byte> multihashHeader = stackalloc byte[multihashCode.Length + 1];
         multihashCode.CopyTo(multihashHeader);

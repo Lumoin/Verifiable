@@ -428,7 +428,7 @@ internal sealed class TpmPinExtensionsTests
         var simulator = new TpmSimulator("tpm-in-house-pin-verbs");
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
         using IMemoryOwner<byte> owner = pool.Rent(length);

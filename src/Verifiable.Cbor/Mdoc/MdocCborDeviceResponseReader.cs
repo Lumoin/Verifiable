@@ -55,7 +55,7 @@ public static class MdocCborDeviceResponseReader
     /// Thrown when the bytes do not satisfy the ISO/IEC 18013-5 §8.3.2.1
     /// DeviceResponse wire shape or a required field is missing.
     /// </exception>
-    public static MdocParsedDeviceResponse Read(ReadOnlySpan<byte> encodedDeviceResponse, MemoryPool<byte> pool)
+    public static MdocParsedDeviceResponse Read(ReadOnlySpan<byte> encodedDeviceResponse, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -65,7 +65,7 @@ public static class MdocCborDeviceResponseReader
     }
 
 
-    private static MdocParsedDeviceResponse ReadDeviceResponse(CborReader reader, MemoryPool<byte> pool)
+    private static MdocParsedDeviceResponse ReadDeviceResponse(CborReader reader, BaseMemoryPool pool)
     {
         int? entryCount = reader.ReadStartMap();
 
@@ -142,7 +142,7 @@ public static class MdocCborDeviceResponseReader
     }
 
 
-    private static List<MdocParsedDocument> ReadDocuments(CborReader reader, MemoryPool<byte> pool)
+    private static List<MdocParsedDocument> ReadDocuments(CborReader reader, BaseMemoryPool pool)
     {
         int? count = reader.ReadStartArray();
         List<MdocParsedDocument> documents = new(count ?? 0);
@@ -172,7 +172,7 @@ public static class MdocCborDeviceResponseReader
     [System.Diagnostics.CodeAnalysis.SuppressMessage(
         "Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the parsed issuer-signed and device-signed halves transfers to the returned MdocParsedDocument; the partial-parse failure paths dispose them explicitly.")]
-    private static MdocParsedDocument ReadDocument(CborReader reader, MemoryPool<byte> pool)
+    private static MdocParsedDocument ReadDocument(CborReader reader, BaseMemoryPool pool)
     {
         int? entryCount = reader.ReadStartMap();
 
@@ -243,7 +243,7 @@ public static class MdocCborDeviceResponseReader
     [System.Diagnostics.CodeAnalysis.SuppressMessage(
         "Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the parsed namespaces items and issuerAuth transfers to the returned MdocIssuerSigned; the partial-parse failure paths dispose them explicitly.")]
-    private static MdocIssuerSigned ReadIssuerSigned(CborReader reader, MemoryPool<byte> pool)
+    private static MdocIssuerSigned ReadIssuerSigned(CborReader reader, BaseMemoryPool pool)
     {
         int? entryCount = reader.ReadStartMap();
 
@@ -308,7 +308,7 @@ public static class MdocCborDeviceResponseReader
     }
 
 
-    private static Dictionary<string, IReadOnlyList<MdocIssuerSignedItem>> ReadIssuerNameSpaces(CborReader reader, MemoryPool<byte> pool)
+    private static Dictionary<string, IReadOnlyList<MdocIssuerSignedItem>> ReadIssuerNameSpaces(CborReader reader, BaseMemoryPool pool)
     {
         int? namespaceCount = reader.ReadStartMap();
         Dictionary<string, IReadOnlyList<MdocIssuerSignedItem>> nameSpaces = new(StringComparer.Ordinal);
@@ -337,7 +337,7 @@ public static class MdocCborDeviceResponseReader
     }
 
 
-    private static List<MdocIssuerSignedItem> ReadIssuerSignedItems(CborReader reader, MemoryPool<byte> pool)
+    private static List<MdocIssuerSignedItem> ReadIssuerSignedItems(CborReader reader, BaseMemoryPool pool)
     {
         int? itemCount = reader.ReadStartArray();
         List<MdocIssuerSignedItem> items = new(itemCount ?? 0);
@@ -370,7 +370,7 @@ public static class MdocCborDeviceResponseReader
     [System.Diagnostics.CodeAnalysis.SuppressMessage(
         "Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the pool-routed random salt transfers to the returned MdocIssuerSignedItem; the caller's namespaces aggregation disposes it on later failure.")]
-    private static MdocIssuerSignedItem ReadIssuerSignedItem(CborReader reader, MemoryPool<byte> pool)
+    private static MdocIssuerSignedItem ReadIssuerSignedItem(CborReader reader, BaseMemoryPool pool)
     {
         //Preserve the exact Tag-24 wrapper bytes — the MSO digest commitment hashes them verbatim,
         //so the verifier MUST hash the same byte pattern the issuer committed to.
@@ -452,7 +452,7 @@ public static class MdocCborDeviceResponseReader
     [System.Diagnostics.CodeAnalysis.SuppressMessage(
         "Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the parsed deviceAuth transfers to the returned MdocDeviceSigned; the partial-parse failure paths dispose it explicitly.")]
-    private static MdocDeviceSigned ReadDeviceSigned(CborReader reader, MemoryPool<byte> pool)
+    private static MdocDeviceSigned ReadDeviceSigned(CborReader reader, BaseMemoryPool pool)
     {
         int? entryCount = reader.ReadStartMap();
 
@@ -520,7 +520,7 @@ public static class MdocCborDeviceResponseReader
     [System.Diagnostics.CodeAnalysis.SuppressMessage(
         "Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the pool-routed COSE carrier transfers through the MdocDeviceSignature/MdocDeviceMac into the returned MdocDeviceAuth; the failure path disposes it explicitly.")]
-    private static MdocDeviceAuth ReadDeviceAuth(CborReader reader, MemoryPool<byte> pool)
+    private static MdocDeviceAuth ReadDeviceAuth(CborReader reader, BaseMemoryPool pool)
     {
         int? entryCount = reader.ReadStartMap();
 
@@ -623,7 +623,7 @@ public static class MdocCborDeviceResponseReader
     }
 
 
-    private static EncodedCoseSign1 PoolRoute(ReadOnlySpan<byte> bytes, Tag tag, MemoryPool<byte> pool)
+    private static EncodedCoseSign1 PoolRoute(ReadOnlySpan<byte> bytes, Tag tag, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(bytes.Length);
         bytes.CopyTo(owner.Memory.Span);
