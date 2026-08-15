@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Federation;
@@ -7,7 +6,7 @@ namespace Verifiable.OAuth.Federation;
 /// <summary>
 /// The wire values an OpenID Provider lists in
 /// <see cref="WellKnownFederationClaimNames.ClientRegistrationTypesSupported"/>
-/// per <see href="https://openid.net/specs/openid-federation-1_0.html#section-12">Federation §12</see>.
+/// per <see href="https://openid.net/specs/openid-federation-connect-1_1-final.html#section-12">Connect-1.1 §12</see>.
 /// </summary>
 /// <remarks>
 /// <c>automatic</c> (§12.1) admits a Relying Party from an inline trust chain
@@ -16,7 +15,6 @@ namespace Verifiable.OAuth.Federation;
 /// OP's <c>federation_registration_endpoint</c>. An OP may support either or
 /// both. Comparison is ordinal — these are protocol tokens, not display text.
 /// </remarks>
-[DebuggerDisplay("WellKnownFederationRegistrationTypeValues")]
 public static class WellKnownFederationRegistrationTypeValues
 {
     /// <summary>The UTF-8 source literal of <see cref="Automatic"/>.</summary>
@@ -27,7 +25,7 @@ public static class WellKnownFederationRegistrationTypeValues
     /// inline trust chain. Implemented by
     /// <see cref="FederationAutomaticRegistration"/>.
     /// </summary>
-    public static readonly string Automatic = Utf8Constants.ToInternedString(AutomaticUtf8);
+    public static string Automatic { get; } = Utf8Constants.ToInternedString(AutomaticUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Explicit"/>.</summary>
     public static ReadOnlySpan<byte> ExplicitUtf8 => "explicit"u8;
@@ -36,7 +34,7 @@ public static class WellKnownFederationRegistrationTypeValues
     /// <c>explicit</c> — Federation §12.2 explicit registration at the
     /// <c>federation_registration_endpoint</c>.
     /// </summary>
-    public static readonly string Explicit = Utf8Constants.ToInternedString(ExplicitUtf8);
+    public static string Explicit { get; } = Utf8Constants.ToInternedString(ExplicitUtf8);
 
     /// <summary>Whether <paramref name="value"/> is <see cref="Automatic"/>.</summary>
     public static bool IsAutomatic(string value) => string.Equals(value, Automatic, StringComparison.Ordinal);

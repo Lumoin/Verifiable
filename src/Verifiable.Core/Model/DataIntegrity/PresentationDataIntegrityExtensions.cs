@@ -111,7 +111,7 @@ public static class PresentationDataIntegrityExtensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
             ComputeDigestDelegate computeDigest,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext context,
             CancellationToken cancellationToken = default)
         {
@@ -258,7 +258,7 @@ public static class PresentationDataIntegrityExtensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             DecodeDelegate decoder,
             ComputeDigestDelegate computeDigest,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext context,
             CancellationToken cancellationToken = default)
         {
@@ -354,7 +354,7 @@ public static class PresentationDataIntegrityExtensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             DecodeDelegate decoder,
             ComputeDigestDelegate computeDigest,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext context,
             CancellationToken cancellationToken = default)
         {
@@ -424,7 +424,7 @@ public static class PresentationDataIntegrityExtensions
         ProofOptionsSerializeDelegate serializeProofOptions,
         DecodeDelegate decoder,
         ComputeDigestDelegate computeDigest,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
@@ -536,8 +536,39 @@ public static class PresentationDataIntegrityExtensions
             return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.SignatureInvalid);
         }
 
-        return CredentialVerificationResult<DataIntegritySecuredPresentation>.Success(
-            new Verified<DataIntegritySecuredPresentation>(presentation, VerificationContextTag.Create(verificationMethodId)));
+        //Controller-RESOLUTION semantics: bind holder == the resolved method's own
+        //controller. A resolved method whose controller disagrees with the presentation's holder
+        //claim does not authenticate that holder, even though the signature, proof purpose, and
+        //relationship scoping all hold -- the deliberate did:web-aliasing / controller-indirection
+        //rejection.
+        var claimedController = presentation.Holder;
+        if(string.IsNullOrEmpty(claimedController)
+            || string.IsNullOrEmpty(verificationMethod.Controller)
+            || string.IsNullOrEmpty(verificationMethod.Id))
+        {
+            return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.ControllerMismatch);
+        }
+
+        //Passing the proof's own purpose (not the expected literal) makes the gate independently
+        //re-check purpose-to-relationship correspondence; the proofPurpose guard above already
+        //returned on a null or mismatched value, so it is non-null and equal to Authentication here.
+        BoundProvenance? provenance = BoundProvenance.TryBindByControllerArtifact(
+            claimedController,
+            verificationMethod.Id,
+            verificationMethod.Controller,
+            proof.ProofPurpose!,
+            VerificationRelationship.Authentication,
+            presentation);
+
+        //provenance witnesses this exact presentation instance; TryCreateBound refuses
+        //otherwise, which cannot happen here since the gate above bound the same reference.
+        if(provenance is null
+            || Verified<DataIntegritySecuredPresentation>.TryCreateBound(presentation, provenance) is not { } verified)
+        {
+            return CredentialVerificationResult<DataIntegritySecuredPresentation>.Failed(VerificationFailureReason.ControllerMismatch);
+        }
+
+        return CredentialVerificationResult<DataIntegritySecuredPresentation>.Success(verified);
     }
 
 

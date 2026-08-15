@@ -13,9 +13,9 @@ namespace Verifiable.Fido2.Ctap;
 /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorCredentialManagement">
 /// CTAP 2.3, section 6.8: authenticatorCredentialManagement (0x0A)</see>, the response structure table
 /// (lines 7026-7081). <see cref="CredProtect"/> (<c>0x0A</c>) carries the credential's REAL persisted
-/// <c>CtapCredentialRecord.CredProtectLevel</c> (R11). <see cref="LargeBlobKey"/> (<c>0x0B</c>) carries
+/// <c>CtapCredentialRecord.CredProtectLevel</c>. <see cref="LargeBlobKey"/> (<c>0x0B</c>) carries
 /// the credential's REAL stored <c>CtapCredentialRecord.LargeBlobKey</c>, if any — "the contents, if
-/// any, of the stored largeBlobKey" (lines 7312/7341, wavelb R8). <c>thirdPartyPayment</c> (<c>0x0C</c>)
+/// any, of the stored largeBlobKey" (lines 7312/7341). <c>thirdPartyPayment</c> (<c>0x0C</c>)
 /// carries NO field here: this authenticator models no third-party payment extension, so emitting it
 /// would be a wire overclaim (<see cref="WellKnownCtapCredentialManagementResponseKeys"/> still models
 /// its integer key, for wire completeness). <c>deleteCredential</c>/<c>updateUserInformation</c> produce
@@ -35,11 +35,11 @@ namespace Verifiable.Fido2.Ctap;
 /// <param name="TotalRps">Optional (<c>0x05</c>). The total number of RPs holding a discoverable credential, reported once by <c>enumerateRPsBegin</c>.</param>
 /// <param name="User">Optional (<c>0x06</c>). The user entity a credential-enumeration step reports.</param>
 /// <param name="CredentialId">Optional (<c>0x07</c>). The credential descriptor a credential-enumeration step reports.</param>
-/// <param name="PublicKey">Optional (<c>0x08</c>). The credential's public key in COSE_Key form — the R11 stored value, reused unchanged.</param>
+/// <param name="PublicKey">Optional (<c>0x08</c>). The credential's public key in COSE_Key form — the stored value, reused unchanged.</param>
 /// <param name="TotalCredentials">Optional (<c>0x09</c>). The total number of credentials for the enumerated RP, reported once by <c>enumerateCredentialsBegin</c>.</param>
 /// <param name="CredProtect">
 /// Optional (<c>0x0A</c>). The enumerated credential's persisted <c>credProtect</c> level (CTAP 2.3
-/// §12.1) — the R11 stored value, reused unchanged from <c>CtapCredentialRecord.CredProtectLevel</c>.
+/// §12.1) — the stored value, reused unchanged from <c>CtapCredentialRecord.CredProtectLevel</c>.
 /// </param>
 /// <param name="LargeBlobKey">
 /// Optional (<c>0x0B</c>). The enumerated credential's stored <c>largeBlobKey</c> (CTAP 2.3 §12.3, lines

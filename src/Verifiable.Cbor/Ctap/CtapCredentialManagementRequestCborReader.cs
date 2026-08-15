@@ -42,7 +42,7 @@ public static class CtapCredentialManagementRequestCborReader
     /// own missing required member (classified
     /// <see cref="Fido2FormatFailureKind.UnexpectedStructure"/>).
     /// </exception>
-    public static CtapCredentialManagementRequest Read(ReadOnlyMemory<byte> parametersCbor, MemoryPool<byte> pool)
+    public static CtapCredentialManagementRequest Read(ReadOnlyMemory<byte> parametersCbor, BaseMemoryPool pool)
     {
         IReadOnlyDictionary<int, ReadOnlyMemory<byte>> parameters = CtapParameterMapReader.Read(parametersCbor);
 
@@ -113,7 +113,7 @@ public static class CtapCredentialManagementRequestCborReader
     /// <param name="pool">The memory pool <c>credentialID</c>/<c>user</c>'s own carriers rent from.</param>
     /// <returns>The three decoded members, each <see langword="null"/> when its own key is absent.</returns>
     private static (ReadOnlyMemory<byte>? RpIdHash, PublicKeyCredentialDescriptor? CredentialId, CtapPublicKeyCredentialUserEntity? User) ReadSubCommandParams(
-        ReadOnlyMemory<byte> subCommandParamsCbor, MemoryPool<byte> pool)
+        ReadOnlyMemory<byte> subCommandParamsCbor, BaseMemoryPool pool)
     {
         IReadOnlyDictionary<int, ReadOnlyMemory<byte>> members = CtapParameterMapReader.Read(subCommandParamsCbor);
 

@@ -33,7 +33,7 @@ internal static class OAuthTestTransport
     public static async Task<HttpResponseMessage> PostFormAsync(
         HttpClient httpClient,
         Uri endpoint,
-        IReadOnlyDictionary<string, string> formFields,
+        IReadOnlyCollection<KeyValuePair<string, string>> formFields,
         OutgoingHeaders? headers,
         CancellationToken cancellationToken)
     {
@@ -59,7 +59,7 @@ internal static class OAuthTestTransport
     public static Task<HttpResponseMessage> PostFormAsync(
         HttpClient httpClient,
         Uri endpoint,
-        IReadOnlyDictionary<string, string> formFields,
+        IReadOnlyCollection<KeyValuePair<string, string>> formFields,
         CancellationToken cancellationToken) =>
         PostFormAsync(httpClient, endpoint, formFields, headers: null, cancellationToken);
 }

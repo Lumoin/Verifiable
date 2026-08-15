@@ -35,8 +35,10 @@ namespace Verifiable.Cryptography;
 /// </para>
 /// <para>
 /// All intermediate allocations come from the supplied <see cref="MemoryPool{T}"/> and
-/// are zeroed before disposal. The returned owner must also be zeroed and disposed by
-/// the caller immediately after use.
+/// are zeroed before disposal. The hash input (which embeds the shared secret <c>Z</c>)
+/// and the derived output are both <see cref="AllocationKind.Pinned"/>, so the
+/// zeroize-on-dispose actually wipes the memory rather than a GC-moved copy. The
+/// returned owner must also be zeroed and disposed by the caller immediately after use.
 /// </para>
 /// </remarks>
 public static class ConcatKdf
@@ -81,7 +83,7 @@ public static class ConcatKdf
         ReadOnlySpan<byte> partyUInfo,
         ReadOnlySpan<byte> partyVInfo,
         int keydataLenBits,
-        MemoryPool<byte> pool) =>
+        BaseMemoryPool pool) =>
         Derive(sharedSecret, algorithmId, partyUInfo, partyVInfo, keydataLenBits,
             committedTag: [], CryptoTags.AesGcmCek, pool);
 
@@ -135,7 +137,7 @@ public static class ConcatKdf
         int keydataLenBits,
         ReadOnlySpan<byte> committedTag,
         Tag outputTag,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(algorithmId);
         ArgumentNullException.ThrowIfNull(outputTag);
@@ -163,7 +165,7 @@ public static class ConcatKdf
             + 4
             + (committedTag.IsEmpty ? 0 : 4 + committedTag.Length);
 
-        using IMemoryOwner<byte> hashInputOwner = pool.Rent(hashInputLength);
+        using IMemoryOwner<byte> hashInputOwner = pool.Rent(hashInputLength, AllocationKind.Pinned);
         Span<byte> hashInput = hashInputOwner.Memory.Span[..hashInputLength];
         hashInput.Clear();
 
@@ -205,7 +207,7 @@ public static class ConcatKdf
         //identical to the single-round RFC 7518 §4.6.2 derivation.
         int reps = (outputByteLength + SHA256.HashSizeInBytes - 1) / SHA256.HashSizeInBytes;
 
-        IMemoryOwner<byte> outputOwner = pool.Rent(outputByteLength);
+        IMemoryOwner<byte> outputOwner = pool.Rent(outputByteLength, AllocationKind.Pinned);
 
         try
         {
@@ -252,7 +254,7 @@ public static class ConcatKdf
 
     /// <summary>
     /// A <see cref="Verifiable.Cryptography.Aead.KeyDerivationDelegate"/> that wraps
-    /// <see cref="Derive(ReadOnlySpan{byte}, string, ReadOnlySpan{byte}, ReadOnlySpan{byte}, int, MemoryPool{byte})"/>
+    /// <see cref="Derive(ReadOnlySpan{byte}, string, ReadOnlySpan{byte}, ReadOnlySpan{byte}, int, BaseMemoryPool)"/>
     /// using SHA-256 Concat KDF.
     /// </summary>
     /// <remarks>
@@ -266,14 +268,14 @@ public static class ConcatKdf
 
     /// <summary>
     /// A <see cref="Verifiable.Cryptography.Aead.AuthenticatedKeyDerivationDelegate"/>
-    /// that wraps <see cref="Derive(ReadOnlySpan{byte}, string, ReadOnlySpan{byte}, ReadOnlySpan{byte}, int, ReadOnlySpan{byte}, Tag, MemoryPool{byte})"/>
+    /// that wraps <see cref="Derive(ReadOnlySpan{byte}, string, ReadOnlySpan{byte}, ReadOnlySpan{byte}, int, ReadOnlySpan{byte}, Tag, BaseMemoryPool)"/>
     /// using SHA-256 Concat KDF with the ECDH-1PU authentication tag commitment.
     /// </summary>
     /// <remarks>
     /// The derived key is tagged <see cref="CryptoTags.AesKwKeyEncryptionKey"/> — the
     /// Key Agreement with Key Wrapping shape used by <c>ECDH-1PU+A256KW</c>. Direct
     /// Key Agreement callers derive their content encryption key through
-    /// <see cref="Derive(ReadOnlySpan{byte}, string, ReadOnlySpan{byte}, ReadOnlySpan{byte}, int, ReadOnlySpan{byte}, Tag, MemoryPool{byte})"/>
+    /// <see cref="Derive(ReadOnlySpan{byte}, string, ReadOnlySpan{byte}, ReadOnlySpan{byte}, int, ReadOnlySpan{byte}, Tag, BaseMemoryPool)"/>
     /// with an empty tag and their own output tag.
     /// </remarks>
     public static Verifiable.Cryptography.Aead.AuthenticatedKeyDerivationDelegate DefaultAuthenticatedKeyDerivationDelegate =>

@@ -9,13 +9,13 @@ using Verifiable.Cryptography.Context;
 namespace Verifiable.Tests.Cbom;
 
 /// <summary>
-/// Tests for <see cref="CryptoEventProvenance"/> — the wave-7 CLI/MCP consumer of
+/// Tests for <see cref="CryptoEventProvenance"/> — the CLI/MCP consumer of
 /// <see cref="CryptographicKeyEvents.Events"/>. <see cref="CryptoEventProvenance.CaptureAsync{TResult}"/>'s
 /// subscription lifetime (bounded to exactly one workload call, never leaking) and
 /// <see cref="CryptoEventProvenance.RenderSummary"/>'s grouping/formatting are both testable without
 /// spawning the real CLI process, since <c>Verifiable.Tests</c> has <c>InternalsVisibleTo</c> access to the
 /// <c>Verifiable</c> CLI/MCP project (see <c>ToolTests/CbomCliTests.cs</c> for the end-to-end, real-exe
-/// proof that both the choke-point and wave-7-widened paths land in this summary together).
+/// proof that both the choke-point and JOSE-signed widened paths land in this summary together).
 /// </summary>
 [TestClass]
 internal sealed class CryptoEventProvenanceTests
@@ -106,7 +106,7 @@ internal sealed class CryptoEventProvenanceTests
 
 
     /// <summary>
-    /// The subscription-lifetime property the wave-7 contract calls for: <c>CaptureAsync</c> must never
+    /// The subscription-lifetime property this library guarantees: <c>CaptureAsync</c> must never
     /// leave a residual subscription running after it returns, whether the workload completed normally or
     /// threw. Proven across many repeated calls rather than a single before/after sample of
     /// <see cref="CryptographicKeyEvents.SubscriberCountForTests"/>: that counter is shared with every

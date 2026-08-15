@@ -24,13 +24,13 @@ using Verifiable.Tpm.Spec.Handles;
 namespace Verifiable.Tests.Fido2;
 
 /// <summary>
-/// The wavenv capstones for NV-counter-backed signature-counter custody
-/// (<see cref="CtapSignatureCounterCustody"/>/<see cref="TpmNvSignatureCounterCustody"/>, contract R-9): the
-/// R-9(b) closure the <see cref="CtapAuthenticatorTpmCustodyCapstoneTests"/> class remarks recorded as
+/// The capstones for NV-counter-backed signature-counter custody
+/// (<see cref="CtapSignatureCounterCustody"/>/<see cref="TpmNvSignatureCounterCustody"/>): the
+/// closure the <see cref="CtapAuthenticatorTpmCustodyCapstoneTests"/> class remarks recorded as
 /// deferred. Mirrors that class's own firewalled discipline exactly: ONE in-house <see cref="TpmSimulator"/>
 /// instance plays the durable chip and OUTLIVES every <see cref="CtapAuthenticatorSimulator"/> instance
 /// built against it, and every assertion reads a wire-visible fact over the real, unmodified APDU transport
-/// (<see cref="CtapWave2TransportHarness"/>) — never internal simulator or TPM state.
+/// (<see cref="CtapNfcTransportHarness"/>) — never internal simulator or TPM state.
 /// </summary>
 [TestClass]
 internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
@@ -50,7 +50,7 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
 
 
     /// <summary>
-    /// Flagship (contract R-9, capstone 1): a stale WHOLE-SNAPSHOT cannot roll the NV-backed signCount
+    /// Flagship (capstone 1): a stale WHOLE-SNAPSHOT cannot roll the NV-backed signCount
     /// back. Both custodies are composed together. Three assertions run on instance 1, advancing the wire
     /// signCount 2 -&gt; 3 -&gt; 4; an EARLY sealed-snapshot blob (captured right after the FIRST assertion,
     /// whose cached signCount is 2) is then restored over the LATEST one before instance 1 dies. Instance 2
@@ -64,18 +64,18 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
     [TestMethod]
     public async Task StaleWholeSnapshotCannotRollBackNvBackedSignCountOverRealApduTransport()
     {
-        const string RpId = "wavenv-flagship.example";
+        const string RpId = "nv-flagship.example";
         const string Pin = "1234";
-        const string RunId = "wavenv-flagship";
+        const string RunId = "nv-flagship";
         const uint BaseNvIndexHandle = 0x0100_0700;
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
-        byte[] sealAuth = "wavenv-flagship-seal-auth"u8.ToArray();
-        byte[] counterAuth = "wavenv-flagship-counter-auth"u8.ToArray();
+        byte[] sealAuth = "nv-flagship-seal-auth"u8.ToArray();
+        byte[] counterAuth = "nv-flagship-counter-auth"u8.ToArray();
 
-        (TpmDevice tpm, uint parentHandle) = await CreateChipWithLoadedStorageParentAsync("wavenv-flagship-chip", cancellationToken).ConfigureAwait(false);
+        (TpmDevice tpm, uint parentHandle) = await CreateChipWithLoadedStorageParentAsync("nv-flagship-chip", cancellationToken).ConfigureAwait(false);
         try
         {
             var store = new DictionaryBackedTpmSealedSnapshotBlobStore();
@@ -84,14 +84,14 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
             byte[] credentialIdBytes;
             uint lastPreKillWireSignCount;
 
-            CtapAuthenticatorSimulator simulator1 = await CtapWave2AuthenticatorFixtures.CreateSimulatorWithCustodyAsync(
+            CtapAuthenticatorSimulator simulator1 = await CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
                 RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, signatureCounterCustody: counterCustody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
-            using(CtapWave2TransportHarness harness1 = await CtapWave2TransportHarness.CreateAsync(simulator1, pool, cancellationToken).ConfigureAwait(false))
+            using(CtapNfcTransportHarness harness1 = await CtapNfcTransportHarness.CreateAsync(simulator1, pool, cancellationToken).ConfigureAwait(false))
             {
                 await EstablishPinAsync(harness1.Transceive, pool, protocolId, Pin, cancellationToken).ConfigureAwait(false);
                 credentialIdBytes = await RegisterDiscoverableCredentialAsync(
-                    harness1.Transceive, pool, protocolId, Pin, RpId, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xF0), cancellationToken)
+                    harness1.Transceive, pool, protocolId, Pin, RpId, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xF0), cancellationToken)
                     .ConfigureAwait(false);
 
                 uint signCountAfterFirstAssertion = await PerformAssertionAndGetSignCountAsync(
@@ -114,10 +114,10 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
 
             simulator1.Dispose();
 
-            CtapAuthenticatorSimulator simulator2 = await CtapWave2AuthenticatorFixtures.CreateSimulatorWithCustodyAsync(
+            CtapAuthenticatorSimulator simulator2 = await CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
                 RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, signatureCounterCustody: counterCustody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
-            using(CtapWave2TransportHarness harness2 = await CtapWave2TransportHarness.CreateAsync(simulator2, pool, cancellationToken).ConfigureAwait(false))
+            using(CtapNfcTransportHarness harness2 = await CtapNfcTransportHarness.CreateAsync(simulator2, pool, cancellationToken).ConfigureAwait(false))
             {
                 uint signCountAfterRehydrate = await PerformAssertionAndGetSignCountAsync(
                     harness2.Transceive, pool, protocolId, Pin, RpId, credentialIdBytes, cancellationToken).ConfigureAwait(false);
@@ -139,26 +139,26 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
 
 
     /// <summary>
-    /// Contract R-9, capstone 2 (continuity half): mint -&gt; assert -&gt; kill -&gt; rehydrate (from the
+    /// Continuity: mint -&gt; assert -&gt; kill -&gt; rehydrate (from the
     /// LATEST, non-stale snapshot) -&gt; assert. The wire signCount strictly increases across the boundary —
-    /// see <see cref="CustodyAbsentSignCountBehavesByteIdenticallyToPreWaveOverRealApduTransport"/> for the
+    /// see <see cref="CustodyAbsentSignCountBehavesByteIdenticallyToBaselineOverRealApduTransport"/> for the
     /// paired custody-absent control this capstone's own opt-in claim depends on.
     /// </summary>
     [TestMethod]
     public async Task NvBackedSignCountStrictlyIncreasesAcrossDeathAndRehydrationOverRealApduTransport()
     {
-        const string RpId = "wavenv-continuity.example";
+        const string RpId = "nv-continuity.example";
         const string Pin = "1234";
-        const string RunId = "wavenv-continuity";
+        const string RunId = "nv-continuity";
         const uint BaseNvIndexHandle = 0x0100_0710;
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
-        byte[] sealAuth = "wavenv-continuity-seal-auth"u8.ToArray();
-        byte[] counterAuth = "wavenv-continuity-counter-auth"u8.ToArray();
+        byte[] sealAuth = "nv-continuity-seal-auth"u8.ToArray();
+        byte[] counterAuth = "nv-continuity-counter-auth"u8.ToArray();
 
-        (TpmDevice tpm, uint parentHandle) = await CreateChipWithLoadedStorageParentAsync("wavenv-continuity-chip", cancellationToken).ConfigureAwait(false);
+        (TpmDevice tpm, uint parentHandle) = await CreateChipWithLoadedStorageParentAsync("nv-continuity-chip", cancellationToken).ConfigureAwait(false);
         try
         {
             var store = new DictionaryBackedTpmSealedSnapshotBlobStore();
@@ -167,14 +167,14 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
             byte[] credentialIdBytes;
             uint signCountBeforeDeath;
 
-            CtapAuthenticatorSimulator simulator1 = await CtapWave2AuthenticatorFixtures.CreateSimulatorWithCustodyAsync(
+            CtapAuthenticatorSimulator simulator1 = await CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
                 RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, signatureCounterCustody: counterCustody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
-            using(CtapWave2TransportHarness harness1 = await CtapWave2TransportHarness.CreateAsync(simulator1, pool, cancellationToken).ConfigureAwait(false))
+            using(CtapNfcTransportHarness harness1 = await CtapNfcTransportHarness.CreateAsync(simulator1, pool, cancellationToken).ConfigureAwait(false))
             {
                 await EstablishPinAsync(harness1.Transceive, pool, protocolId, Pin, cancellationToken).ConfigureAwait(false);
                 credentialIdBytes = await RegisterDiscoverableCredentialAsync(
-                    harness1.Transceive, pool, protocolId, Pin, RpId, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xF1), cancellationToken)
+                    harness1.Transceive, pool, protocolId, Pin, RpId, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xF1), cancellationToken)
                     .ConfigureAwait(false);
                 signCountBeforeDeath = await PerformAssertionAndGetSignCountAsync(
                     harness1.Transceive, pool, protocolId, Pin, RpId, credentialIdBytes, cancellationToken).ConfigureAwait(false);
@@ -182,10 +182,10 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
 
             simulator1.Dispose();
 
-            CtapAuthenticatorSimulator simulator2 = await CtapWave2AuthenticatorFixtures.CreateSimulatorWithCustodyAsync(
+            CtapAuthenticatorSimulator simulator2 = await CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
                 RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, signatureCounterCustody: counterCustody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
-            using(CtapWave2TransportHarness harness2 = await CtapWave2TransportHarness.CreateAsync(simulator2, pool, cancellationToken).ConfigureAwait(false))
+            using(CtapNfcTransportHarness harness2 = await CtapNfcTransportHarness.CreateAsync(simulator2, pool, cancellationToken).ConfigureAwait(false))
             {
                 uint signCountAfterRehydrate = await PerformAssertionAndGetSignCountAsync(
                     harness2.Transceive, pool, protocolId, Pin, RpId, credentialIdBytes, cancellationToken).ConfigureAwait(false);
@@ -205,39 +205,39 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
 
 
     /// <summary>
-    /// Contract R-9, capstone 2 (custody-absent control): with NO signature-counter custody composed at
-    /// all, two assertions against a freshly minted credential must produce the EXACT pre-wave progression
+    /// Custody-absent control: with NO signature-counter custody composed at
+    /// all, two assertions against a freshly minted credential must produce the EXACT baseline progression
     /// 0 -&gt; 1 -&gt; 2 — byte-identical to today's in-snapshot behavior, proving the mint/assert threading
-    /// this wave introduced changes nothing when the new seam is absent (contract R-9's opt-in discipline).
+    /// added here changes nothing when the new seam is absent (this adapter's opt-in discipline).
     /// </summary>
     [TestMethod]
-    public async Task CustodyAbsentSignCountBehavesByteIdenticallyToPreWaveOverRealApduTransport()
+    public async Task CustodyAbsentSignCountBehavesByteIdenticallyToBaselineOverRealApduTransport()
     {
-        const string RpId = "wavenv-absent-control.example";
+        const string RpId = "nv-absent-control.example";
         const string Pin = "1234";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("wavenv-absent-control");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("nv-absent-control");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await EstablishPinAsync(harness.Transceive, pool, protocolId, Pin, cancellationToken).ConfigureAwait(false);
         byte[] credentialIdBytes = await RegisterDiscoverableCredentialAsync(
-            harness.Transceive, pool, protocolId, Pin, RpId, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xF2), cancellationToken).ConfigureAwait(false);
+            harness.Transceive, pool, protocolId, Pin, RpId, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xF2), cancellationToken).ConfigureAwait(false);
 
         uint signCountAfterFirstAssertion = await PerformAssertionAndGetSignCountAsync(
             harness.Transceive, pool, protocolId, Pin, RpId, credentialIdBytes, cancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(1u, signCountAfterFirstAssertion, "with no signature-counter custody composed, the first assertion must bump signCount from 0 to 1, exactly as before this wave.");
+        Assert.AreEqual(1u, signCountAfterFirstAssertion, "with no signature-counter custody composed, the first assertion must bump signCount from 0 to 1, exactly as the no-custody baseline.");
 
         uint signCountAfterSecondAssertion = await PerformAssertionAndGetSignCountAsync(
             harness.Transceive, pool, protocolId, Pin, RpId, credentialIdBytes, cancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(2u, signCountAfterSecondAssertion, "with no signature-counter custody composed, the second assertion must bump signCount from 1 to 2, exactly as before this wave.");
+        Assert.AreEqual(2u, signCountAfterSecondAssertion, "with no signature-counter custody composed, the second assertion must bump signCount from 1 to 2, exactly as the no-custody baseline.");
     }
 
 
     /// <summary>
-    /// Contract R-9, capstone 3: retirement is observed for every credential that leaves the store, via the
+    /// Retirement is observed for every credential that leaves the store, via the
     /// delegate's own context log (no closure capture) — both an explicit <c>deleteCredential</c> and an
     /// <c>authenticatorReset</c> factory wipe of the surviving resident credential. Because
     /// <c>authenticatorReset</c> restarts the mint-order sequence at zero, the post-reset credential's
@@ -248,41 +248,41 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
     [TestMethod]
     public async Task FactoryResetAndDeleteCredentialRetireCountersAndPostResetMintSeedsAboveEveryPreResetValueOverRealApduTransport()
     {
-        const string RpId = "wavenv-reset.example";
+        const string RpId = "nv-reset.example";
         const string Pin = "1234";
-        const string RunId = "wavenv-reset";
+        const string RunId = "nv-reset";
         const uint BaseNvIndexHandle = 0x0100_0720;
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
-        byte[] sealAuth = "wavenv-reset-seal-auth"u8.ToArray();
-        byte[] counterAuth = "wavenv-reset-counter-auth"u8.ToArray();
+        byte[] sealAuth = "nv-reset-seal-auth"u8.ToArray();
+        byte[] counterAuth = "nv-reset-counter-auth"u8.ToArray();
 
-        (TpmDevice tpm, uint parentHandle) = await CreateChipWithLoadedStorageParentAsync("wavenv-reset-chip", cancellationToken).ConfigureAwait(false);
+        (TpmDevice tpm, uint parentHandle) = await CreateChipWithLoadedStorageParentAsync("nv-reset-chip", cancellationToken).ConfigureAwait(false);
         try
         {
             var store = new DictionaryBackedTpmSealedSnapshotBlobStore();
             RecordingSignatureCounterCustodyHarness counterHarness = new RecordingSignatureCounterCustodyHarness(
                 TpmNvSignatureCounterCustody.Create(tpm, ReadOnlyMemory<byte>.Empty, counterAuth, BaseNvIndexHandle)).Build();
 
-            CtapAuthenticatorSimulator simulator = await CtapWave2AuthenticatorFixtures.CreateSimulatorWithCustodyAsync(
+            CtapAuthenticatorSimulator simulator = await CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
                 RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, signatureCounterCustody: counterHarness.Custody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             uint maxPreResetObserved;
             uint signCountAfterPostResetMint;
-            using(CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false))
+            using(CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false))
             {
                 await EstablishPinAsync(harness.Transceive, pool, protocolId, Pin, cancellationToken).ConfigureAwait(false);
 
                 byte[] credentialAIdBytes = await RegisterDiscoverableCredentialAsync(
-                    harness.Transceive, pool, protocolId, Pin, RpId, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xA0), cancellationToken)
+                    harness.Transceive, pool, protocolId, Pin, RpId, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xA0), cancellationToken)
                     .ConfigureAwait(false);
                 uint signCountA = await PerformAssertionAndGetSignCountAsync(
                     harness.Transceive, pool, protocolId, Pin, RpId, credentialAIdBytes, cancellationToken).ConfigureAwait(false);
 
                 byte[] credentialBIdBytes = await RegisterDiscoverableCredentialAsync(
-                    harness.Transceive, pool, protocolId, Pin, RpId, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xB0), cancellationToken)
+                    harness.Transceive, pool, protocolId, Pin, RpId, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xB0), cancellationToken)
                     .ConfigureAwait(false);
                 uint signCountB1 = await PerformAssertionAndGetSignCountAsync(
                     harness.Transceive, pool, protocolId, Pin, RpId, credentialBIdBytes, cancellationToken).ConfigureAwait(false);
@@ -306,7 +306,7 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
 
                 await EstablishPinAsync(harness.Transceive, pool, protocolId, Pin, cancellationToken).ConfigureAwait(false);
                 byte[] credentialCIdBytes = await RegisterDiscoverableCredentialAsync(
-                    harness.Transceive, pool, protocolId, Pin, RpId, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xC0), cancellationToken)
+                    harness.Transceive, pool, protocolId, Pin, RpId, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xC0), cancellationToken)
                     .ConfigureAwait(false);
                 signCountAfterPostResetMint = await PerformAssertionAndGetSignCountAsync(
                     harness.Transceive, pool, protocolId, Pin, RpId, credentialCIdBytes, cancellationToken).ConfigureAwait(false);
@@ -328,7 +328,7 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
 
 
     /// <summary>
-    /// Contract R-9, capstone 4: a counter-custody increment failure fails the WHOLE assertion command —
+    /// A counter-custody increment failure fails the WHOLE assertion command —
     /// the wire never sees a response for that attempt at all, since the throw happens before any authData
     /// is framed or signed. A subsequent SUCCESSFUL assertion's wire signCount is then exactly one more than
     /// the last successful attempt's own — proving the failed attempt never touched the counter (this
@@ -338,32 +338,32 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
     [TestMethod]
     public async Task FailedIncrementFailsAssertionOnWireAndSubsequentSuccessAdvancesOnlyByOneOverRealApduTransport()
     {
-        const string RpId = "wavenv-failclosed.example";
+        const string RpId = "nv-failclosed.example";
         const string Pin = "1234";
-        const string RunId = "wavenv-failclosed";
+        const string RunId = "nv-failclosed";
         const uint BaseNvIndexHandle = 0x0100_0730;
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
-        byte[] sealAuth = "wavenv-failclosed-seal-auth"u8.ToArray();
-        byte[] counterAuth = "wavenv-failclosed-counter-auth"u8.ToArray();
+        byte[] sealAuth = "nv-failclosed-seal-auth"u8.ToArray();
+        byte[] counterAuth = "nv-failclosed-counter-auth"u8.ToArray();
 
-        (TpmDevice tpm, uint parentHandle) = await CreateChipWithLoadedStorageParentAsync("wavenv-failclosed-chip", cancellationToken).ConfigureAwait(false);
+        (TpmDevice tpm, uint parentHandle) = await CreateChipWithLoadedStorageParentAsync("nv-failclosed-chip", cancellationToken).ConfigureAwait(false);
         try
         {
             var store = new DictionaryBackedTpmSealedSnapshotBlobStore();
             RecordingSignatureCounterCustodyHarness counterHarness = new RecordingSignatureCounterCustodyHarness(
                 TpmNvSignatureCounterCustody.Create(tpm, ReadOnlyMemory<byte>.Empty, counterAuth, BaseNvIndexHandle)).Build();
 
-            CtapAuthenticatorSimulator simulator = await CtapWave2AuthenticatorFixtures.CreateSimulatorWithCustodyAsync(
+            CtapAuthenticatorSimulator simulator = await CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithCustodyAsync(
                 RunId, BuildStateCustody(tpm, parentHandle, sealAuth, store), aaguid, signatureCounterCustody: counterHarness.Custody, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
-            using(CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false))
+            using(CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false))
             {
                 await EstablishPinAsync(harness.Transceive, pool, protocolId, Pin, cancellationToken).ConfigureAwait(false);
                 byte[] credentialIdBytes = await RegisterDiscoverableCredentialAsync(
-                    harness.Transceive, pool, protocolId, Pin, RpId, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xF3), cancellationToken)
+                    harness.Transceive, pool, protocolId, Pin, RpId, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xF3), cancellationToken)
                     .ConfigureAwait(false);
 
                 uint signCountAfterFirstAssertion = await PerformAssertionAndGetSignCountAsync(
@@ -420,7 +420,7 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
     /// <returns>The TPM device and the loaded storage parent's handle.</returns>
     private static async Task<(TpmDevice Tpm, uint ParentHandle)> CreateChipWithLoadedStorageParentAsync(string chipRunId, CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var chip = new TpmSimulator(chipRunId, signingBackend: BouncyCastleTpmEccSigningBackend.Create());
         await chip.PowerOnAsync(cancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(chip, pool, cancellationToken).ConfigureAwait(false);
@@ -456,7 +456,7 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
-    private static async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
@@ -479,7 +479,7 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
 
 
     /// <summary>Sends a bare <c>authenticatorReset</c> request over <paramref name="transceive"/>, returning the raw response envelope.</summary>
-    private static ValueTask<PooledMemory> SendResetAsync(Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static ValueTask<PooledMemory> SendResetAsync(Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] request = [WellKnownCtapCommands.Reset];
 
@@ -489,9 +489,9 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
 
     /// <summary>Establishes <paramref name="pin"/> as the authenticator's PIN over <paramref name="transceive"/>'s real transport.</summary>
     private static async Task EstablishPinAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string pin, CancellationToken cancellationToken)
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string pin, CancellationToken cancellationToken)
     {
-        using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(transceive, protocolId, pool, cancellationToken)
+        using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(transceive, protocolId, pool, cancellationToken)
             .ConfigureAwait(false);
         (byte[] newPinEnc, byte[] pinUvAuthParam) = await session.BuildSetPinMessagesAsync(pin, cancellationToken).ConfigureAwait(false);
 
@@ -509,10 +509,10 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
     /// (<c>0x09</c>) over <paramref name="transceive"/>'s real transport, decrypting it from wire bytes only.
     /// </summary>
     private static async Task<byte[]> IssueTokenAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string pin, int permissions, string? rpId,
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string pin, int permissions, string? rpId,
         CancellationToken cancellationToken)
     {
-        using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(transceive, protocolId, pool, cancellationToken)
+        using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(transceive, protocolId, pool, cancellationToken)
             .ConfigureAwait(false);
         byte[] pinHashEnc = await session.BuildPinHashEncAsync(pin, cancellationToken).ConfigureAwait(false);
 
@@ -534,23 +534,23 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
     /// <paramref name="transceive"/>'s real transport.
     /// </summary>
     private static async Task<byte[]> RegisterDiscoverableCredentialAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string pin, string rpId, byte[] userId,
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string pin, string rpId, byte[] userId,
         CancellationToken cancellationToken)
     {
         byte[] token = await IssueTokenAsync(
             transceive, pool, protocolId, pin, WellKnownCtapPinUvAuthTokenPermissions.Mc, rpId, cancellationToken).ConfigureAwait(false);
 
-        byte[] clientDataHashBytes = CtapWave2AuthenticatorFixtures.BuildFixedBytes(32, 0x10);
-        byte[] pinUvAuthParam = await CtapWaveConfigFixtures.ComputeSignatureAsync(token, protocolId, clientDataHashBytes, pool, cancellationToken)
+        byte[] clientDataHashBytes = CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(32, 0x10);
+        byte[] pinUvAuthParam = await CtapConfigFixtures.ComputeSignatureAsync(token, protocolId, clientDataHashBytes, pool, cancellationToken)
             .ConfigureAwait(false);
 
-        CtapMakeCredentialRequest request = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(
+        CtapMakeCredentialRequest request = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(
             pool, rpId: rpId, userId: userId, options: new CtapCommandOptions(ResidentKey: true),
             pinUvAuthParam: pinUvAuthParam, pinUvAuthProtocol: (int)protocolId);
         CtapMakeCredentialResponse response = await CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
             transceive, CtapMakeCredentialRequestCborWriter.Write, request, CtapMakeCredentialResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(request);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(request);
 
         using AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(response.AuthData, CredentialPublicKeyCborReader.Read, pool);
 
@@ -563,22 +563,22 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
     /// <paramref name="transceive"/>'s real transport and returns the decoded assertion's <c>signCount</c>.
     /// </summary>
     private static async Task<uint> PerformAssertionAndGetSignCountAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string pin, string rpId, byte[] credentialIdBytes,
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string pin, string rpId, byte[] credentialIdBytes,
         CancellationToken cancellationToken)
     {
         byte[] token = await IssueTokenAsync(
             transceive, pool, protocolId, pin, WellKnownCtapPinUvAuthTokenPermissions.Ga, rpId, cancellationToken).ConfigureAwait(false);
-        byte[] pinUvAuthParam = await CtapWaveConfigFixtures.ComputeSignatureAsync(
-            token, protocolId, CtapWave2AuthenticatorFixtures.BuildFixedBytes(32, 0x20), pool, cancellationToken).ConfigureAwait(false);
+        byte[] pinUvAuthParam = await CtapConfigFixtures.ComputeSignatureAsync(
+            token, protocolId, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(32, 0x20), pool, cancellationToken).ConfigureAwait(false);
 
         CredentialId credentialId = CredentialId.Create(credentialIdBytes, pool);
-        CtapGetAssertionRequest request = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(
+        CtapGetAssertionRequest request = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionRequest(
             pool, rpId: rpId, allowList: [new PublicKeyCredentialDescriptor { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Id = credentialId }],
             pinUvAuthParam: pinUvAuthParam, pinUvAuthProtocol: (int)protocolId);
 
         CtapGetAssertionResponse response = await CtapAuthenticatorGetAssertionClient.GetAssertionAsync(
             transceive, CtapGetAssertionRequestCborWriter.Write, request, CtapGetAssertionResponseCborReader.Read, pool, cancellationToken).ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeGetAssertionRequest(request);
+        CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(request);
 
         uint signCount;
         using(AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(response.AuthData, CredentialPublicKeyCborReader.Read, pool))
@@ -599,7 +599,7 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
     /// issued single-use <c>cm</c>-permissioned token over <paramref name="transceive"/>'s real transport.
     /// </summary>
     private static async Task DeleteCredentialAsync(
-        Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId, string pin, byte[] credentialIdBytes,
+        Ctap2TransceiveDelegate transceive, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId, string pin, byte[] credentialIdBytes,
         CancellationToken cancellationToken)
     {
         byte[] token = await IssueTokenAsync(
@@ -607,9 +607,9 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
 
         using CredentialId deleteId = CredentialId.Create(credentialIdBytes, pool);
         var descriptor = new PublicKeyCredentialDescriptor { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Id = deleteId };
-        byte[] subCommandParams = CtapWaveCmFixtures.BuildSubCommandParams(credentialId: descriptor);
-        byte[] message = CtapWaveCmFixtures.BuildMessage(WellKnownCtapCredentialManagementSubCommands.DeleteCredential, subCommandParams);
-        byte[] param = await CtapWaveConfigFixtures.ComputeSignatureAsync(token, protocolId, message, pool, cancellationToken).ConfigureAwait(false);
+        byte[] subCommandParams = CtapCredentialManagementFixtures.BuildSubCommandParams(credentialId: descriptor);
+        byte[] message = CtapCredentialManagementFixtures.BuildMessage(WellKnownCtapCredentialManagementSubCommands.DeleteCredential, subCommandParams);
+        byte[] param = await CtapConfigFixtures.ComputeSignatureAsync(token, protocolId, message, pool, cancellationToken).ConfigureAwait(false);
 
         var request = new CtapCredentialManagementRequest(
             SubCommand: WellKnownCtapCredentialManagementSubCommands.DeleteCredential,
@@ -617,7 +617,7 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
             PinUvAuthProtocol: (int)protocolId,
             PinUvAuthParam: param);
 
-        byte[] envelope = CtapWaveCmFixtures.BuildCredentialManagementEnvelope(request);
+        byte[] envelope = CtapCredentialManagementFixtures.BuildCredentialManagementEnvelope(request);
         using PooledMemory response = await transceive(envelope, pool, cancellationToken).ConfigureAwait(false);
 
         byte statusCode = response.AsReadOnlySpan()[0];

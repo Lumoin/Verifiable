@@ -35,7 +35,7 @@ internal sealed class Oid4VciWalletClientTests
 
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string ClientId = "https://wallet.client.test";
     private static readonly Uri ClientBaseUri = new("https://wallet.client.test");

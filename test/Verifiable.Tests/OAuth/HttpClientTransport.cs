@@ -51,7 +51,7 @@ internal static class HttpClientTransport
     public static async ValueTask<HttpResponseData> SendFormPostAsync(
         HttpClient httpClient,
         Uri endpoint,
-        IReadOnlyDictionary<string, string> formFields,
+        IReadOnlyCollection<KeyValuePair<string, string>> formFields,
         OutgoingHeaders headers,
         CancellationToken cancellationToken)
     {

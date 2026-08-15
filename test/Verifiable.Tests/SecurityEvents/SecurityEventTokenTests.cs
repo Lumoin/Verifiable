@@ -30,7 +30,7 @@ internal sealed class SecurityEventTokenTests
 
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     //A receiver that has never seen any jti.
     private static readonly IsSecurityEventTokenJtiSeenDelegate NeverSeen =

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using Verifiable.Server;
 
@@ -28,7 +27,6 @@ namespace Verifiable.OAuth.Siop;
 /// (<c>sub_jwk</c> for the JWK Thumbprint subject syntax type, or the resolved DID).
 /// </para>
 /// </remarks>
-[DebuggerDisplay("SiopProviderMetadataWriter")]
 public static class SiopProviderMetadataWriter
 {
     /// <summary>

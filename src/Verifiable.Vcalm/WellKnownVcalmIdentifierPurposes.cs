@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Server;
 
 namespace Verifiable.Vcalm;
@@ -14,7 +13,6 @@ namespace Verifiable.Vcalm;
 /// <c>urn:verifiable:identifier-purpose:vcalm:&lt;name&gt;</c>, threaded through the
 /// identifier-generation seam so a deployment owns the value's format and entropy.
 /// </remarks>
-[DebuggerDisplay("WellKnownVcalmIdentifierPurposes")]
 public static class WellKnownVcalmIdentifierPurposes
 {
     /// <summary>

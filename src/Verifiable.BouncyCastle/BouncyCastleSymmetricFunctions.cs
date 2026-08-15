@@ -79,7 +79,7 @@ public static class BouncyCastleSymmetricFunctions
         ReadOnlyMemory<byte> keyBytes,
         ReadOnlyMemory<byte> iv,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
@@ -119,7 +119,7 @@ public static class BouncyCastleSymmetricFunctions
         ReadOnlyMemory<byte> keyBytes,
         ReadOnlyMemory<byte> iv,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
@@ -158,7 +158,7 @@ public static class BouncyCastleSymmetricFunctions
         ReadOnlyMemory<byte> keyBytes,
         int outputByteLength,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
@@ -200,7 +200,7 @@ public static class BouncyCastleSymmetricFunctions
         ReadOnlyMemory<byte> keyBytes,
         ReadOnlyMemory<byte> expectedMac,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
@@ -268,7 +268,10 @@ public static class BouncyCastleSymmetricFunctions
 
     /// <summary>
     /// Runs the block-aligned, no-padding CBC transform into a freshly rented buffer, zeroing every
-    /// transient copy of key and data on the way out.
+    /// transient copy of key and data on the way out. The decrypt output is
+    /// <see cref="AllocationKind.Pinned"/> because recovered plaintext can carry keying material
+    /// (the ICAO 9303 BAC chip cryptogram's session-key seed transits this path), while the encrypt
+    /// output is public ciphertext and stays <see cref="AllocationKind.Managed"/>.
     /// </summary>
     private static IMemoryOwner<byte> CbcTransform(
         ReadOnlySpan<byte> input,
@@ -276,7 +279,7 @@ public static class BouncyCastleSymmetricFunctions
         ReadOnlySpan<byte> iv,
         CryptoAlgorithm algorithm,
         bool forEncryption,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         (IBlockCipher engine, int blockSize) = ResolveBlockCipher(algorithm);
         ValidateKeyLength(algorithm, key.Length);
@@ -307,7 +310,7 @@ public static class BouncyCastleSymmetricFunctions
             int written = cipher.ProcessBytes(inputArray, 0, inputArray.Length, outputArray, 0);
             written += cipher.DoFinal(outputArray, written);
 
-            IMemoryOwner<byte> owner = pool.Rent(written);
+            IMemoryOwner<byte> owner = pool.Rent(written, forEncryption ? AllocationKind.Managed : AllocationKind.Pinned);
             outputArray.AsSpan(0, written).CopyTo(owner.Memory.Span);
             return owner;
         }
@@ -327,7 +330,7 @@ public static class BouncyCastleSymmetricFunctions
         ReadOnlySpan<byte> key,
         int outputByteLength,
         CryptoAlgorithm algorithm,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         IMac mac = ResolveMac(algorithm, outputByteLength);
         ValidateKeyLength(algorithm, key.Length);

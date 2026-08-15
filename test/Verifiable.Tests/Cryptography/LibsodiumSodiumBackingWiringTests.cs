@@ -1,21 +1,22 @@
 using System;
 using System.Buffers;
 using Lumoin.Base;
-using Lumoin.Base.Sodium;
+using Lumoin.Base.Libsodium;
 
 namespace Verifiable.Tests.Cryptography
 {
     /// <summary>
     /// Tests the wiring this repository owns between <see cref="Verifiable.Libsodium"/> and the family
     /// <see cref="SodiumBacking"/> allocator: constructing a <see cref="BaseMemoryPool"/> whose Native
-    /// tier is backed by <see cref="SodiumBacking.Allocate(int)"/>, and confirming this project's own
-    /// <c>libsodium</c> native asset reference is what makes <see cref="SodiumBacking.IsAvailable"/>
-    /// observably <see langword="true"/> in this process — no separate native-asset wiring is needed
-    /// beyond the <c>libsodium</c> NuGet package this project already references for its own P/Invoke
-    /// bindings. The allocator MACHINERY itself (guard pages, canaries, mlock, zero-on-free) belongs to
-    /// and is tested by the <c>Lumoin.Base.Sodium</c> package's own repository, not here. The Ed25519
-    /// sign/keygen/private-key-conversion round trips that also exercise this scratch path end to end
-    /// are already covered by <see cref="LibsodiumCryptographicTests"/> and are not duplicated here.
+    /// tier is backed by <see cref="SodiumBacking.Allocate(int)"/>, and confirming the single
+    /// <c>Lumoin.Base.Libsodium</c> package reference this project takes is what makes
+    /// <see cref="SodiumBacking.IsAvailable"/> observably <see langword="true"/> in this process — that
+    /// one package bundles both the native libsodium asset and the managed P/Invoke wrapper, so no
+    /// separate native-asset wiring is needed. The allocator MACHINERY itself (guard pages, canaries,
+    /// mlock, zero-on-free) belongs to and is tested by the <c>Lumoin.Base.Libsodium</c> package's own
+    /// repository, not here. The Ed25519 sign/keygen/private-key-conversion round trips that also
+    /// exercise this scratch path end to end are already covered by <see cref="LibsodiumCryptographicTests"/>
+    /// and are not duplicated here.
     /// </summary>
     [TestClass]
     internal sealed class LibsodiumSodiumBackingWiringTests

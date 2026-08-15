@@ -30,7 +30,6 @@ namespace Verifiable.OAuth.Federation;
 /// first.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("MetadataPolicyEvaluator")]
 public static class MetadataPolicyEvaluator
 {
     /// <summary>

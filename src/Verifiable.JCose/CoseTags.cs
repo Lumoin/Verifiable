@@ -99,6 +99,21 @@ public static class CoseTags
     /// </remarks>
     public const int Sign = 98;
 
+    /// <summary>
+    /// COSE_Countersignature - standalone version 2 countersignature.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Tags a standalone <c>COSE_Countersignature</c> (RFC 9338 §3.1's
+    /// <c>COSE_Countersignature_Tagged = #6.19(COSE_Countersignature)</c>) — the same array
+    /// shape as <c>COSE_Signature</c>. Read-tolerated; never emitted by this substrate's own writer.
+    /// </para>
+    /// <para>
+    /// See <see href="https://www.rfc-editor.org/rfc/rfc9338#section-5.1">RFC 9338 §5.1</see>.
+    /// </para>
+    /// </remarks>
+    public const int CounterSignature = 19;
+
 
     /// <summary>
     /// Determines if the tag is <see cref="Sign1"/>.
@@ -114,6 +129,14 @@ public static class CoseTags
     /// <param name="tag">The CBOR tag.</param>
     /// <returns><see langword="true"/> if the tag is COSE_Sign; otherwise, <see langword="false"/>.</returns>
     public static bool IsSign(int tag) => tag == Sign;
+
+
+    /// <summary>
+    /// Determines if the tag is <see cref="CounterSignature"/>.
+    /// </summary>
+    /// <param name="tag">The CBOR tag.</param>
+    /// <returns><see langword="true"/> if the tag is COSE_Countersignature; otherwise, <see langword="false"/>.</returns>
+    public static bool IsCounterSignature(int tag) => tag == CounterSignature;
 
 
     /// <summary>
@@ -157,6 +180,7 @@ public static class CoseTags
     {
         Sign1 => "COSE_Sign1",
         Sign => "COSE_Sign",
+        CounterSignature => "COSE_Countersignature",
         Encrypt0 => "COSE_Encrypt0",
         Encrypt => "COSE_Encrypt",
         Mac0 => "COSE_Mac0",

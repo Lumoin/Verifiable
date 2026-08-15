@@ -17,7 +17,7 @@ namespace Verifiable.Cbor.Ctap;
 /// <see cref="CborConformanceMode.Ctap2Canonical"/>, mirroring
 /// <see cref="CtapGetInfoResponseCborReader"/>. Per section 8's forward-compatibility rule, any member
 /// key this reader does not model (<c>unsignedExtensionOutputs</c>, or any unrecognized key) is skipped
-/// rather than rejected. <c>largeBlobKey</c> (<c>0x07</c>) IS modeled (wavelb R8). The <c>credential</c>
+/// rather than rejected. <c>largeBlobKey</c> (<c>0x07</c>) IS modeled. The <c>credential</c>
 /// identifier and, when present, the <c>user</c> handle are tracked outside the parse block and disposed
 /// if a later member fails to decode, so a rejected response never leaks pooled memory — mirrors
 /// <see cref="Verifiable.Cbor.Ctap.CtapMakeCredentialRequestCborReader"/>'s own convention.
@@ -39,7 +39,7 @@ public static class CtapGetAssertionResponseCborReader
     /// <paramref name="payload"/> is not valid CTAP2 canonical CBOR, or omits a Required member
     /// (<c>credential</c>, <c>authData</c>, or <c>signature</c>).
     /// </exception>
-    public static CtapGetAssertionResponse Read(ReadOnlyMemory<byte> payload, MemoryPool<byte> pool)
+    public static CtapGetAssertionResponse Read(ReadOnlyMemory<byte> payload, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

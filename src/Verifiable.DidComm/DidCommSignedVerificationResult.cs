@@ -101,7 +101,16 @@ public enum DidCommSignatureVerificationError
     RotationSignerNotAuthorized,
 
     /// <summary>The <c>from_prior</c> signature did not verify against the resolved prior-DID key.</summary>
-    RotationSignatureInvalid
+    RotationSignatureInvalid,
+
+    /// <summary>
+    /// Defensive fail-closed branch: the resolved verification method could not be witnessed as consistent
+    /// with the signer <c>kid</c> (<see cref="BoundProvenance.TryBindByResolvedMethod"/>) when minting the
+    /// identity-bound <see cref="Verified{T}"/> proof. Should not occur in the honest flow — reaching this
+    /// point already required the four gates (<c>kid</c> extraction, <c>from</c>↔<c>kid</c> addressing
+    /// consistency, DID resolution, <c>authentication</c> authorization) to pass.
+    /// </summary>
+    IdentityBindingFailed
 }
 
 
@@ -123,6 +132,10 @@ public enum DidCommSignatureVerificationError
 /// <c>InternalsVisibleTo</c> by <c>Verifiable.Cryptography</c>). A signed message is always
 /// authenticated, so <see cref="Verified"/> is present whenever <see cref="IsVerified"/> is
 /// <see langword="true"/>, and <see cref="Message"/> is simply its <see cref="Verified{T}.Value"/>.
+/// The proof is IDENTITY-BOUND (<see cref="Verified{T}.IsIdentityBound"/> is <see langword="true"/>):
+/// <see cref="Success"/> mints it via <see cref="BoundProvenance.TryBindByResolvedMethod"/>, witnessing
+/// that the signer <c>kid</c> names exactly the verification method the four-gate recipe already
+/// resolved and authorized — never a caller-swappable label.
 /// </para>
 /// </remarks>
 public sealed class DidCommSignedVerificationResult
@@ -198,13 +211,31 @@ public sealed class DidCommSignedVerificationResult
     public DidCommSignatureVerificationError Error { get; }
 
 
-    //Mints a verified result, wrapping the authenticated message in a Verified<DidCommMessage> proof tagged with the
-    //signer's verification context. Internal so only the library's verification path can produce one. A verified
-    //from_prior rotation surfaces the prior DID; a message without one (or with one that was not present) is a
-    //non-rotation result.
-    internal static DidCommSignedVerificationResult Success(DidCommMessage message, string signerKid, bool isToHeaderPresent, bool isRotation = false, string? priorDid = null, long? rotationIat = null)
+    //Mints a verified result, wrapping the authenticated message in a Verified<DidCommMessage> proof
+    //identity-bound to the already-resolved and already-authorized verification method (UnpackSignedAsync's
+    //four-gate recipe ran before calling this: kid extracted, from==kid bound, self-resolved via the
+    //injected DidResolver, authentication-relationship authorized). Internal so only the library's
+    //verification path can produce one. A verified from_prior rotation surfaces the prior DID; a message
+    //without one (or with one that was not present) is a non-rotation result.
+    internal static DidCommSignedVerificationResult Success(
+        DidCommMessage message,
+        string signerKid,
+        string resolvedMethodId,
+        bool isToHeaderPresent,
+        bool isRotation = false,
+        string? priorDid = null,
+        long? rotationIat = null)
     {
-        var verified = new Verified<DidCommMessage>(message, VerificationContextTag.Create(signerKid));
+        BoundProvenance? provenance = BoundProvenance.TryBindByResolvedMethod(
+            new KeyId(signerKid), resolvedMethodId, VerificationRelationship.Authentication, message);
+
+        if(provenance is null || Verified<DidCommMessage>.TryCreateBound(message, provenance) is not { } verified)
+        {
+            //Should not occur in the honest flow -- the four gates already established that signerKid names
+            //exactly the resolved verification method reaching this call. Fail closed rather than mint an
+            //unproven result.
+            return Failed(DidCommSignatureVerificationError.IdentityBindingFailed);
+        }
 
         return new DidCommSignedVerificationResult(true, verified, signerKid, isToHeaderPresent, isRotation, priorDid, rotationIat, DidCommSignatureVerificationError.None);
     }

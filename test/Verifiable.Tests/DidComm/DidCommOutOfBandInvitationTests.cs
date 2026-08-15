@@ -20,7 +20,7 @@ internal sealed class DidCommOutOfBandInvitationTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     //The DIDComm v2.1 §Example Out-of-Band Message Encoding base64url value (didcomm-v2.1.txt L1548).
     private const string SpecGoldenVectorOob =

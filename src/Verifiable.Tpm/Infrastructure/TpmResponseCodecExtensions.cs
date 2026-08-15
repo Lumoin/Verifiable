@@ -72,7 +72,7 @@ public static class TpmResponseCodecExtensions
         /// </para>
         /// </remarks>
         public static TpmResponseCodec StartAuthSession => TpmResponseCodec.CreateWithHandle(
-            static (ref TpmReader reader, uint handle, System.Buffers.MemoryPool<byte> pool) =>
+            static (ref TpmReader reader, uint handle, BaseMemoryPool pool) =>
                 StartAuthSessionResponse.Parse(ref reader, TpmiShAuthSession.FromValue(handle), pool));
 
         /// <summary>
@@ -186,8 +186,8 @@ public static class TpmResponseCodecExtensions
         /// Response parameters:
         /// </para>
         /// <list type="bullet">
-        ///   <item><description>timeout (TPM2B_TIMEOUT) - empty in this wave's deferred-ticket form.</description></item>
-        ///   <item><description>policyTicket (TPMT_TK_AUTH) - a NULL ticket in this wave's deferred-ticket form.</description></item>
+        ///   <item><description>timeout (TPM2B_TIMEOUT) - empty; the real ticket mint is deferred.</description></item>
+        ///   <item><description>policyTicket (TPMT_TK_AUTH) - a NULL ticket; the real mint is deferred.</description></item>
         /// </list>
         /// <para>
         /// See TPM 2.0 Part 3, Section 23.3 - TPM2_PolicySigned.
@@ -266,7 +266,7 @@ public static class TpmResponseCodecExtensions
         /// </para>
         /// </remarks>
         public static TpmResponseCodec CreatePrimary => TpmResponseCodec.CreateWithHandle(
-            static (ref TpmReader reader, uint handle, System.Buffers.MemoryPool<byte> pool) =>
+            static (ref TpmReader reader, uint handle, BaseMemoryPool pool) =>
                 CreatePrimaryResponse.Parse(ref reader, TpmiDhObject.FromValue(handle), pool));
 
         /// <summary>
@@ -300,7 +300,7 @@ public static class TpmResponseCodecExtensions
         /// </para>
         /// </remarks>
         public static TpmResponseCodec Load => TpmResponseCodec.CreateWithHandle(
-            static (ref TpmReader reader, uint handle, System.Buffers.MemoryPool<byte> pool) =>
+            static (ref TpmReader reader, uint handle, BaseMemoryPool pool) =>
                 LoadResponse.Parse(ref reader, TpmiDhObject.FromValue(handle), pool));
 
         /// <summary>

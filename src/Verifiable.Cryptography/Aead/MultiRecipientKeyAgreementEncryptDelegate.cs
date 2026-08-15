@@ -52,5 +52,5 @@ namespace Verifiable.Cryptography.Aead;
 public delegate ValueTask<SharedSecret> MultiRecipientKeyAgreementEncryptDelegate(
     PublicKeyMemory recipientPublicKey,
     ReadOnlyMemory<byte> ephemeralPrivateKeyBytes,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);

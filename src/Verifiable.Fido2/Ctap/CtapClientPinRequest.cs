@@ -6,16 +6,16 @@ namespace Verifiable.Fido2.Ctap;
 
 /// <summary>
 /// The <c>authenticatorClientPIN</c> request structure: every parameter this library models, per
-/// §2.1's full table, so wave-b/c subcommands extend data, not structure.
+/// §2.1's full table, so later subcommands extend data, not structure.
 /// </summary>
 /// <remarks>
 /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorClientPIN">
-/// CTAP 2.3, section 6.5.5: authenticatorClientPIN (0x06) Command Definition</see>. This wave's
-/// authenticator reads only <see cref="SubCommand"/> and <see cref="PinUvAuthProtocol"/> (for
+/// CTAP 2.3, section 6.5.5: authenticatorClientPIN (0x06) Command Definition</see>. This authenticator
+/// reads only <see cref="SubCommand"/> and <see cref="PinUvAuthProtocol"/> (for
 /// <c>getKeyAgreement</c>); <see cref="KeyAgreement"/>, <see cref="PinUvAuthParam"/>,
 /// <see cref="NewPinEnc"/>, <see cref="PinHashEnc"/>, <see cref="Permissions"/>, and
-/// <see cref="RpId"/> decode opaquely for the PIN-establishment/token-issuing subcommands a later
-/// wave implements.
+/// <see cref="RpId"/> decode opaquely for the PIN-establishment/token-issuing subcommands not yet
+/// implemented.
 /// </remarks>
 /// <param name="SubCommand">
 /// Required (<c>0x02</c>). The requested action, one of <see cref="WellKnownCtapClientPinSubCommands"/>.

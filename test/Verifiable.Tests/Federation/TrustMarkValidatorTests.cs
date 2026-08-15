@@ -6,7 +6,8 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Federation;
 
 /// <summary>
-/// Opening invariants for the standalone trust mark validator (1170 + 1172).
+/// Opening invariants for the standalone trust mark validator (§7.3 shape checks: signature, exp-in-future,
+/// exp-after-iat, alg-present, kid-present, iat-in-range).
 /// </summary>
 [TestClass]
 internal sealed class TrustMarkValidatorTests
@@ -44,7 +45,7 @@ internal sealed class TrustMarkValidatorTests
         ClaimIssueResult result = await TrustMarkValidator.Default()
             .ValidateAsync(context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.HasCount(5, result.Claims);
+        Assert.HasCount(6, result.Claims);
         foreach(Claim claim in result.Claims)
         {
             Assert.AreEqual(ClaimOutcome.Success, claim.Outcome,

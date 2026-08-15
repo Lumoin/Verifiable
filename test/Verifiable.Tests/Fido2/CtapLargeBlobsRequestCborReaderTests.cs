@@ -8,8 +8,8 @@ namespace Verifiable.Tests.Fido2;
 
 /// <summary>
 /// Tests for <see cref="CtapLargeBlobsRequestCborReader"/>: round-tripping against the paired test-side
-/// writer, the byte-exact REVERSED <c>pinUvAuthParam</c>/<c>pinUvAuthProtocol</c> wire order (trap 1),
-/// <c>offset</c>'s nullable-not-throwing absence (trap 6/7), unknown-key tolerance (section 8's
+/// writer, the byte-exact REVERSED <c>pinUvAuthParam</c>/<c>pinUvAuthProtocol</c> wire order,
+/// <c>offset</c>'s nullable-not-throwing absence, unknown-key tolerance (section 8's
 /// forward-compatibility rule), and malformed/wrong-type negatives.
 /// </summary>
 [TestClass]
@@ -79,7 +79,7 @@ internal sealed class CtapLargeBlobsRequestCborReaderTests
 
 
     /// <summary>
-    /// Byte-exact KAT proving the REVERSED wire order (trap 1): <c>pinUvAuthParam</c> (<c>0x05</c>)
+    /// Byte-exact KAT proving the REVERSED wire order: <c>pinUvAuthParam</c> (<c>0x05</c>)
     /// precedes <c>pinUvAuthProtocol</c> (<c>0x06</c>) — the OPPOSITE of
     /// <c>WellKnownCtapAuthenticatorConfigRequestKeys</c>/<c>WellKnownCtapCredentialManagementRequestKeys</c>,
     /// both of which put <c>pinUvAuthProtocol</c> before <c>pinUvAuthParam</c>. A round-trip test alone
@@ -104,7 +104,7 @@ internal sealed class CtapLargeBlobsRequestCborReaderTests
 
 
     /// <summary>
-    /// <c>offset</c>'s absence decodes cleanly to <see langword="null"/> WITHOUT throwing (trap 6/7):
+    /// <c>offset</c>'s absence decodes cleanly to <see langword="null"/> WITHOUT throwing:
     /// unlike <c>authenticatorConfig</c>/<c>authenticatorCredentialManagement</c>'s own Required
     /// <c>subCommand</c> member (whose absence throws <see cref="Fido2FormatException"/> at the decode
     /// boundary), <c>offset</c>'s Required-by-spec status is enforced by the PURE TRANSITION

@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
@@ -20,7 +19,6 @@ namespace Verifiable.OAuth.Dpop;
 /// <c>jti</c> replay tracking is the AS-side handler's responsibility —
 /// see the remark on <see cref="ValidateDpopProofDelegate"/>.
 /// </remarks>
-[DebuggerDisplay("DpopProofValidator")]
 public static class DpopProofValidator
 {
     /// <summary>
@@ -34,7 +32,7 @@ public static class DpopProofValidator
         EncodeDelegate base64UrlEncoder,
         DecodeDelegate base64UrlDecoder,
         TimeProvider timeProvider,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeSpan iatSkew,
         CancellationToken cancellationToken)
     {
@@ -213,7 +211,7 @@ public static class DpopProofValidator
     public static async ValueTask<string> ComputeAthAsync(
         string accessToken,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(accessToken);

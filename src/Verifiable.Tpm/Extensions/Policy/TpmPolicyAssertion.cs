@@ -19,7 +19,7 @@ namespace Verifiable.Tpm.Extensions.Policy;
 /// <param name="pool">The memory pool backing the returned signature.</param>
 /// <param name="cancellationToken">A token observed across the exchange.</param>
 /// <returns>The signature as a pooled carrier the caller owns and disposes: IEEE P1363 <c>r ‖ s</c> for ECDSA, or the raw RSA signature for RSASSA/RSAPSS.</returns>
-public delegate ValueTask<Signature> TpmPolicySignedSigningDelegate(DigestValue aHash, object? context, MemoryPool<byte> pool, CancellationToken cancellationToken);
+public delegate ValueTask<Signature> TpmPolicySignedSigningDelegate(DigestValue aHash, object? context, BaseMemoryPool pool, CancellationToken cancellationToken);
 
 /// <summary>
 /// A single assertion in a <see cref="TpmPolicy"/>. This is a closed data union (the concrete kinds below);

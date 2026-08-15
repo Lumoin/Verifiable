@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Hand-rolled span-based XML reading and W3C canonicalization for XAdES.</Title>
+    <Description>Span-based XML reader and W3C canonicalization support for XAdES signature processing: Canonical XML 1.0, Canonical XML 1.1 and Exclusive XML Canonicalization 1.0, each with and without comments. Hand-rolled with zero platform XML dependencies. Designed for AOT compatibility and trimming safety.</Description>
+    <PackageTags>XML Canonicalization C14N ExclusiveC14N XAdES SpanBased AOT</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verifiable.Foundation\Verifiable.Foundation.csproj" />
+  </ItemGroup>
+
+</Project>

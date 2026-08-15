@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Server;
@@ -20,7 +19,6 @@ namespace Verifiable.OAuth.AuthCode;
 /// successfully completed the Authorization Code exchange.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("AuthCodeFlowAutomaton")]
 public static class AuthCodeFlowAutomaton
 {
     /// <summary>

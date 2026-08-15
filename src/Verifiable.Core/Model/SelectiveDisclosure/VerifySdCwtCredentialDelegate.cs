@@ -30,5 +30,5 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 public delegate ValueTask<bool> VerifySdCwtCredentialDelegate(
     SdToken<System.ReadOnlyMemory<byte>> sdCwt,
     PublicKeyMemory issuerVerificationKey,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);

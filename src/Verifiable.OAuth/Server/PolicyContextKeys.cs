@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.Cryptography.Text;
 
@@ -33,7 +32,6 @@ namespace Verifiable.OAuth.Server;
 /// <c>ResolvePolicyAsync</c> read defaults; that is the safe behaviour.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("PolicyContextKeys")]
 public static class PolicyContextKeys
 {
     /// <summary>The UTF-8 source literal of <see cref="JarAudienceValidation"/>.</summary>

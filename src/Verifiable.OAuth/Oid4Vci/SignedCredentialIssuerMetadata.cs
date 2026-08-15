@@ -91,7 +91,7 @@ public static class SignedCredentialIssuerMetadata
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(metadata);

@@ -51,7 +51,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// machinery, and <c>options.uv = true</c> on mc/ga once built-in UV is configured; and
 /// <c>authenticatorLargeBlobs</c> (<c>0x0C</c>) FULLY — <c>get</c> (public, unauthenticated substring
 /// reads of the stored serialized large-blob array) and the complete <c>set</c> write state machine (CTAP
-/// 2.3 §6.10.2): the R5 conditional token gate (tokenless when the authenticator is unprotected and
+/// 2.3 §6.10.2): the conditional token gate (tokenless when the authenticator is unprotected and
 /// <c>alwaysUv</c> is off), the volatile <c>expectedLength</c>/<c>expectedNextOffset</c> sequencing, and
 /// the commit-time truncated-SHA-256 integrity check; every other command
 /// byte is answered with an error, per
@@ -85,10 +85,10 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// <see cref="CtapAttestationFormatChoice"/> and <c>CtapAuthenticatorTransitions.ResolveAttestationFormat</c>):
 /// packed self-attestation is this authenticator's own default choice when the preference is absent,
 /// empty, or names no supported format; a preference of exactly <c>["none"]</c> omits <c>attStmt</c> from
-/// the CTAP response entirely. The certified shape (waveep §7.1) is never a direct product of this
+/// the CTAP response entirely. The certified shape (CTAP 2.3 §7.1) is never a direct product of this
 /// preference resolution — it is the self-attestation resolution UPGRADED by mc Step 9's own enterprise-
 /// attestation grant, signed with the SEEDED enterprise attestation private key rather than the
-/// credential's own key (never the credential key — trap 11), and carrying the seeded <c>x5c</c> chain.
+/// credential's own key (never the credential key), and carrying the seeded <c>x5c</c> chain.
 /// </para>
 /// <para>
 /// Credential key generation and assertion signing are routed through the production cryptography
@@ -133,7 +133,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// alongside the credential identifier on an <c>authenticatorMakeCredential</c> whose §12.3 extension
     /// processing resolved <see cref="CtapGenerateCredentialKeyAction.LargeBlobKeyRequested"/> to
     /// <see langword="true"/> — CTAP 2.3 §12.3, line 12827: "32 bytes of opaque storage" / line 12851:
-    /// "a freshly generated 32-byte key". Single-sourced (D4) rather than a bare literal at the mint site.
+    /// "a freshly generated 32-byte key". Single-sourced rather than a bare literal at the mint site.
     /// </summary>
     private const int LargeBlobKeyLength = 32;
 
@@ -141,7 +141,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// The length in bytes of each freshly minted <c>hmac-secret</c> CredRandom value, drawn from the
     /// entropy provider on EVERY <c>authenticatorMakeCredential</c> regardless of whether the request
     /// carried the extension (CTAP 2.3 section 12.7, snapshot line 13191: "two random 32-byte values";
-    /// line 13192's SHOULD, adopted — contract R2). Single-sourced (D4) rather than a bare literal at the
+    /// line 13192's SHOULD, adopted). Single-sourced rather than a bare literal at the
     /// two mint sites (<see cref="CtapCredentialRecord.CredRandomWithUV"/>/
     /// <see cref="CtapCredentialRecord.CredRandomWithoutUV"/>).
     /// </summary>
@@ -174,7 +174,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// bytes), 16)</c> (CTAP 2.3 §6.10, line 7540/7666) — the OTHER truncate-to-16 quantity on this
     /// surface, numerically identical to <see cref="StoredPinHashLength"/> but a distinct semantic value
     /// (a whole-array commit check, not a PIN hash), named separately so the two are never conflated
-    /// (seams trap 3).
+    /// (seams).
     /// </summary>
     private const int LargeBlobArrayTrailingHashLength = 16;
 
@@ -190,15 +190,15 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <summary>
     /// The state-custody seam bundle this instance persists through and rehydrates from, or
     /// <see langword="null"/> when this instance was constructed through the ordinary constructor
-    /// (contract R-3: absent custody is today's behavior, byte-identical). Set once, by
+    /// (absent custody is today's behavior, byte-identical). Set once, by
     /// <see cref="CreateWithCustodyAsync"/>, immediately after construction.
     /// </summary>
     private CtapStateCustody? Custody { get; set; }
 
     /// <summary>
     /// The NV-counter-backed signature-counter custody seam bundle this instance's assertions and mints
-    /// consult, or <see langword="null"/> when this instance was constructed without one (contract R-9,
-    /// wavenv: absent custody is today's in-snapshot signature-counter behavior, byte-identical). Set once,
+    /// consult, or <see langword="null"/> when this instance was constructed without one
+    /// (absent custody is today's in-snapshot signature-counter behavior, byte-identical). Set once,
     /// by <see cref="CreateWithCustodyAsync"/>, immediately after construction — entirely independent of
     /// <see cref="Custody"/>: a caller may compose the whole-snapshot bundle without this one.
     /// </summary>
@@ -206,8 +206,8 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
     /// <summary>
     /// The NV-backed persistent-tier PIN-retries custody seam bundle this instance's PIN-path effects
-    /// consult, or <see langword="null"/> when this instance was constructed without one (contract R-1..R-6,
-    /// wavepin: absent custody is today's whole-snapshot-mirrored <c>PinRetries</c> behavior, byte-identical).
+    /// consult, or <see langword="null"/> when this instance was constructed without one
+    /// (absent custody is today's whole-snapshot-mirrored <c>PinRetries</c> behavior, byte-identical).
     /// Set once, by <see cref="CreateWithCustodyAsync"/>, immediately after construction — entirely
     /// independent of <see cref="Custody"/>/<see cref="SignatureCounterCustody"/>: a caller may compose any
     /// subset of the three seams.
@@ -240,7 +240,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
     /// <summary>
     /// The codec seam that CBOR-decodes an <c>authenticatorClientPIN</c> request — a required
-    /// composition-time dependency (decision 9: the advertises-but-<c>INVALID_COMMAND</c>s configuration
+    /// composition-time dependency (the advertises-but-<c>INVALID_COMMAND</c>s configuration
     /// is unrepresentable), since <c>authenticatorGetInfo</c> always advertises <c>clientPin</c> and
     /// <c>pinUvAuthToken</c>.
     /// </summary>
@@ -254,14 +254,14 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
     /// <summary>
     /// The codec seam that CBOR-decodes an <c>authenticatorConfig</c> request — a required
-    /// composition-time dependency (R7: <c>authnrCfg</c> is always advertised <see langword="true"/> in
+    /// composition-time dependency (<c>authnrCfg</c> is always advertised <see langword="true"/> in
     /// this profile, so an advertises-but-cannot-decode configuration is unrepresentable).
     /// </summary>
     private DecodeCtapAuthenticatorConfigRequestDelegate DecodeAuthenticatorConfigRequest { get; }
 
     /// <summary>
     /// The codec seam that CBOR-decodes an <c>authenticatorCredentialManagement</c> request — a required
-    /// composition-time dependency (R1: <c>credMgmt</c> is always advertised <see langword="true"/> in
+    /// composition-time dependency (<c>credMgmt</c> is always advertised <see langword="true"/> in
     /// this profile, so an advertises-but-cannot-decode configuration is unrepresentable).
     /// </summary>
     private DecodeCtapCredentialManagementRequestDelegate DecodeCredentialManagementRequest { get; }
@@ -275,7 +275,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <summary>
     /// The codec seam that CBOR-decodes an <c>authenticatorBioEnrollment</c> request — a required
     /// composition-time dependency: this authenticator advertises <c>bioEnroll</c> present
-    /// (true-or-false tri-state) unconditionally from this wave on, so an advertises-but-cannot-decode
+    /// (true-or-false tri-state) unconditionally, so an advertises-but-cannot-decode
     /// configuration is unrepresentable, the exact posture <see cref="DecodeCredentialManagementRequest"/>
     /// establishes for <c>credMgmt</c>.
     /// </summary>
@@ -310,7 +310,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <summary>
     /// The codec seam that CBOR-encodes a certified (enterprise) packed <c>attStmt</c>, or
     /// <see langword="null"/> if none was injected. Only ever consulted when mc Step 9 has granted an
-    /// enterprise attestation (waveep R6/R7) — which itself requires
+    /// enterprise attestation — which itself requires
     /// <see cref="CtapAuthenticatorState.EnterpriseAttestationProvisioning"/> to be non-null — so a
     /// composition that seeds enterprise attestation provisioning without also injecting this seam is a
     /// genuine composition-time error, surfaced when <see cref="BuildAttestationResponseAsync"/> reaches
@@ -322,7 +322,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// The codec seam that CBOR-encodes the resolved <c>credProtect</c>/<c>hmac-secret</c>/
     /// <c>minPinLength</c>/<c>hmac-secret-mc</c> authData extensions output map — a required
     /// composition-time dependency, since <c>authenticatorGetInfo</c> always advertises every one of
-    /// these extensions (R1) and a simulator must be able to encode the output of every extension it
+    /// these extensions and a simulator must be able to encode the output of every extension it
     /// advertises.
     /// </summary>
     private EncodeCtapMakeCredentialExtensionOutputsDelegate EncodeMakeCredentialExtensionOutputs { get; }
@@ -331,7 +331,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// The codec seam that CBOR-encodes the resolved <c>hmac-secret</c> <c>authenticatorGetAssertion</c>
     /// authData extensions output map — a required composition-time dependency, mirroring
     /// <see cref="EncodeMakeCredentialExtensionOutputs"/>'s own "always advertised, so always encodable"
-    /// posture (CTAP 2.3 §9 item 1, contract R1).
+    /// posture (CTAP 2.3 §9 item 1).
     /// </summary>
     private EncodeCtapGetAssertionExtensionOutputsDelegate EncodeGetAssertionExtensionOutputs { get; }
 
@@ -339,7 +339,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     private FillEntropyDelegate Rng { get; }
 
     /// <summary>
-    /// The R8 outcome-injection knob for <c>enrollBegin</c>'s/<c>enrollCaptureNextSample</c>'s own
+    /// The outcome-injection knob for <c>enrollBegin</c>'s/<c>enrollCaptureNextSample</c>'s own
     /// fingerprint sensor simulation — a composition-time personalization, never a test-only seam.
     /// Defaults to always <see cref="WellKnownCtapLastEnrollSampleStatuses.Good"/> (an ideal sensor).
     /// </summary>
@@ -352,7 +352,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     private static int DefaultSimulateFingerprintCapture() => WellKnownCtapLastEnrollSampleStatuses.Good;
 
     /// <summary>
-    /// The R8 outcome-injection knob for <c>performBuiltInUv</c>'s own simulated gesture — a
+    /// The outcome-injection knob for <c>performBuiltInUv</c>'s own simulated gesture — a
     /// composition-time personalization, never a test-only seam. Defaults to always
     /// <see cref="CtapBuiltInUvAttemptOutcome.Success"/> (an ideal, always-matching sensor). Consumed by
     /// <c>getPinUvAuthTokenUsingUvWithPermissions</c>'s (<c>0x06</c>) token-issuance effect and by
@@ -368,7 +368,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     private static CtapBuiltInUvAttemptOutcome DefaultSimulateBuiltInUv() => CtapBuiltInUvAttemptOutcome.Success;
 
     /// <summary>
-    /// The R1 user-presence decision seam for <c>authenticatorMakeCredential</c>'s/
+    /// The user-presence decision seam for <c>authenticatorMakeCredential</c>'s/
     /// <c>authenticatorGetAssertion</c>'s own :2840 user-action collection — a composition-time
     /// personalization, never a test-only seam. Defaults to always <see cref="CtapUserPresenceDecision.Granted"/>
     /// (an ideal, always-present user), preserving the byte-for-byte behavior of every existing test and
@@ -413,7 +413,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <param name="encodeCredentialPublicKey">The codec seam that CBOR-encodes a minted credential's public key.</param>
     /// <param name="encodePackedSelfAttestationStatement">The codec seam that CBOR-encodes a self-attestation packed <c>attStmt</c>.</param>
     /// <param name="decodeClientPinRequest">
-    /// The codec seam that CBOR-decodes an <c>authenticatorClientPIN</c> request — required (decision 9):
+    /// The codec seam that CBOR-decodes an <c>authenticatorClientPIN</c> request — required:
     /// <c>authenticatorGetInfo</c> always advertises <c>clientPin</c>/<c>pinUvAuthToken</c>, and a
     /// simulator must be able to decode every command it advertises.
     /// </param>
@@ -422,13 +422,13 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <paramref name="decodeClientPinRequest"/>.
     /// </param>
     /// <param name="decodeAuthenticatorConfigRequest">
-    /// The codec seam that CBOR-decodes an <c>authenticatorConfig</c> request — required (R7):
+    /// The codec seam that CBOR-decodes an <c>authenticatorConfig</c> request — required:
     /// <c>authenticatorGetInfo</c> always advertises <c>authnrCfg</c>, and a simulator must be able to
     /// decode every command it advertises.
     /// </param>
     /// <param name="decodeCredentialManagementRequest">
-    /// The codec seam that CBOR-decodes an <c>authenticatorCredentialManagement</c> request — required
-    /// (R1): <c>authenticatorGetInfo</c> always advertises <c>credMgmt</c>, and a simulator must be able
+    /// The codec seam that CBOR-decodes an <c>authenticatorCredentialManagement</c> request — required:
+    /// <c>authenticatorGetInfo</c> always advertises <c>credMgmt</c>, and a simulator must be able
     /// to decode every command it advertises.
     /// </param>
     /// <param name="encodeCredentialManagementResponse">
@@ -438,7 +438,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <param name="decodeBioEnrollmentRequest">
     /// The codec seam that CBOR-decodes an <c>authenticatorBioEnrollment</c> request — required:
     /// <c>authenticatorGetInfo</c> always advertises <c>bioEnroll</c> present (true-or-false tri-state)
-    /// from this wave on, and a simulator must be able to decode every command it advertises.
+    /// unconditionally, and a simulator must be able to decode every command it advertises.
     /// </param>
     /// <param name="encodeBioEnrollmentResponse">
     /// The codec seam that CBOR-encodes an <c>authenticatorBioEnrollment</c> response model — see
@@ -458,7 +458,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <c>minPinLength</c>/<c>hmac-secret-mc</c> authData extensions output map — required, mirroring
     /// <paramref name="decodeCredentialManagementRequest"/>'s own "always advertised, so always
     /// decodable/encodable" posture: <c>authenticatorGetInfo</c> always advertises every one of these
-    /// extensions (R1).
+    /// extensions.
     /// </param>
     /// <param name="encodeGetAssertionExtensionOutputs">
     /// The codec seam that CBOR-encodes the resolved <c>hmac-secret</c> <c>authenticatorGetAssertion</c>
@@ -502,19 +502,19 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// pool. Defaults to <see cref="Lumoin.Base.BaseMemoryPool.Shared"/> when <see langword="null"/>.
     /// </param>
     /// <param name="simulateFingerprintCapture">
-    /// The R8 outcome-injection knob for <c>enrollBegin</c>'s/<c>enrollCaptureNextSample</c>'s own
+    /// The outcome-injection knob for <c>enrollBegin</c>'s/<c>enrollCaptureNextSample</c>'s own
     /// fingerprint sensor simulation. Defaults to always <see cref="WellKnownCtapLastEnrollSampleStatuses.Good"/>
     /// (the ideal-sensor personalization) when <see langword="null"/>. A composition-time
     /// personalization knob, never a test-only seam — mirroring <paramref name="rng"/>'s own posture.
     /// </param>
     /// <param name="simulateBuiltInUv">
-    /// The R8 outcome-injection knob for <c>performBuiltInUv</c>'s own simulated gesture. Defaults to
+    /// The outcome-injection knob for <c>performBuiltInUv</c>'s own simulated gesture. Defaults to
     /// always <see cref="CtapBuiltInUvAttemptOutcome.Success"/> (the ideal-sensor personalization) when
     /// <see langword="null"/>. A composition-time personalization knob, never a test-only seam — mirroring
     /// <paramref name="simulateFingerprintCapture"/>'s own posture.
     /// </param>
     /// <param name="simulateUserPresence">
-    /// The R1 outcome-injection knob for <c>authenticatorMakeCredential</c>'s/
+    /// The outcome-injection knob for <c>authenticatorMakeCredential</c>'s/
     /// <c>authenticatorGetAssertion</c>'s own :2840 user-presence collection. Defaults to always
     /// <see cref="CtapUserPresenceDecision.Granted"/> (the ideal-user personalization) when
     /// <see langword="null"/> — preserving every existing test's and mc's own historical hardcoded
@@ -522,7 +522,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// test-only seam — mirroring <paramref name="simulateBuiltInUv"/>'s own posture.
     /// </param>
     /// <param name="enterpriseAttestationProvisioning">
-    /// The vendor-burned-in enterprise attestation material (waveep R1), threaded verbatim into
+    /// The vendor-burned-in enterprise attestation material, threaded verbatim into
     /// <see cref="CtapAuthenticatorState.Initial"/>. <see langword="null"/> (the default) yields a
     /// non-enterprise-attestation-capable authenticator — the same personalization-knob posture as
     /// <paramref name="aaguid"/>/<paramref name="supportedExtensions"/>. When supplied, ownership
@@ -530,7 +530,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// construction-time-minted secret.
     /// </param>
     /// <param name="encodePackedCertifiedAttestationStatement">
-    /// The codec seam that CBOR-encodes a certified (enterprise) packed <c>attStmt</c> (waveep R7).
+    /// The codec seam that CBOR-encodes a certified (enterprise) packed <c>attStmt</c>.
     /// <see langword="null"/> (the default) is only safe when <paramref name="enterpriseAttestationProvisioning"/>
     /// is ALSO <see langword="null"/> — mc Step 9 can never grant an enterprise attestation without
     /// provisioning material, so the certified branch is then structurally unreachable.
@@ -584,7 +584,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         FillEntropyDelegate? rng = null,
         CtapCredentialSigningBackend? credentialSigningBackend = null,
         TimeProvider? timeProvider = null,
-        MemoryPool<byte>? pinUvAuthKeyAgreementPool = null,
+        BaseMemoryPool? pinUvAuthKeyAgreementPool = null,
         SimulateFingerprintCaptureDelegate? simulateFingerprintCapture = null,
         SimulateBuiltInUvDelegate? simulateBuiltInUv = null,
         SimulateUserPresenceDelegate? simulateUserPresence = null,
@@ -656,7 +656,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
     /// <summary>
     /// Constructs a CTAP2 authenticator simulator that persists through, and rehydrates from, a state-
-    /// custody backend (contract R-1/R-3): a static factory rather than a further-widened constructor
+    /// custody backend: a static factory rather than a further-widened constructor
     /// overload, since load-or-<see cref="CtapAuthenticatorState.Initial"/> resolution requires an
     /// asynchronous read a constructor cannot perform. Every parameter beyond <paramref name="custody"/>,
     /// <paramref name="encodeSnapshot"/>, and <paramref name="decodeSnapshot"/> has exactly the same
@@ -687,7 +687,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <param name="aaguid">
     /// See the constructor parameter of the same name — for a custody-composed simulator this SHOULD be a
     /// stable, explicitly supplied value rather than <see langword="null"/>: rehydration's own fingerprint
-    /// check (R-2b) compares a loaded snapshot's AAGUID against this value, so a random draw would fail
+    /// check compares a loaded snapshot's AAGUID against this value, so a random draw would fail
     /// that check on every genuine restart.
     /// </param>
     /// <param name="supportedExtensions">See the constructor parameter of the same name.</param>
@@ -715,28 +715,28 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// </param>
     /// <param name="signatureCounterCustody">
     /// The NV-counter-backed signature-counter custody seam bundle to mint, advance, and retire per-credential
-    /// counters through (contract R-9, wavenv), or <see langword="null"/> (the default) to keep every
-    /// credential's signature counter riding the whole-snapshot cache exactly as before this wave —
+    /// counters through, or <see langword="null"/> (the default) to keep every
+    /// credential's signature counter riding the whole-snapshot cache —
     /// entirely independent of <paramref name="custody"/>.
     /// </param>
     /// <param name="pinRetriesCustody">
     /// The NV-backed persistent-tier PIN-retries custody seam bundle to provision, verify, penalize, and
-    /// retire CTAP 2.3 §6.5.5.2's <c>pinRetries</c> counter through (contract R-1..R-6, wavepin), or
+    /// retire CTAP 2.3 §6.5.5.2's <c>pinRetries</c> counter through, or
     /// <see langword="null"/> (the default) to keep <c>PinRetries</c> riding the whole-snapshot cache
-    /// exactly as before this wave — entirely independent of <paramref name="custody"/>/
+    /// — entirely independent of <paramref name="custody"/>/
     /// <paramref name="signatureCounterCustody"/>. When supplied, this call re-synchronizes the
     /// <c>PinRetries</c> mirror from <see cref="CtapPinRetriesCustody.ReadRetriesAsync"/> AFTER any
-    /// snapshot rehydration above, overriding whatever the snapshot said (contract R-4), AND reconciles
+    /// snapshot rehydration above, overriding whatever the snapshot said, AND reconciles
     /// the provisioning-state split-brain the durable tier and the local <c>CurrentStoredPin</c> cache can
-    /// fall into (<see cref="ReconcilePinCustodyState"/>, wavepin review fixes F-1/F-2).
+    /// fall into (<see cref="ReconcilePinCustodyState"/>).
     /// </param>
     /// <param name="cancellationToken">A cancellation token for the load attempt.</param>
     /// <returns>A simulator wired to <paramref name="custody"/> — rehydrated from a snapshot if one existed, otherwise a first-boot instance identical to the ordinary constructor's own result.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="custody"/> is <see langword="null"/>, or any parameter the constructor itself requires is <see langword="null"/>.</exception>
     /// <exception cref="CtapAuthenticatorSnapshotException">
-    /// A snapshot was found but failed to parse, or its R-2b personalization fingerprint (AAGUID and
+    /// A snapshot was found but failed to parse, or its personalization fingerprint (AAGUID and
     /// firmware version) does not match this call's own <paramref name="aaguid"/>/<paramref name="firmwareVersion"/> —
-    /// rehydration fails closed (R-2b) rather than silently re-personalizing a differently-composed
+    /// rehydration fails closed rather than silently re-personalizing a differently-composed
     /// authenticator.
     /// </exception>
     public static async ValueTask<CtapAuthenticatorSimulator> CreateWithCustodyAsync(
@@ -766,7 +766,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         FillEntropyDelegate? rng = null,
         CtapCredentialSigningBackend? credentialSigningBackend = null,
         TimeProvider? timeProvider = null,
-        MemoryPool<byte>? pinUvAuthKeyAgreementPool = null,
+        BaseMemoryPool? pinUvAuthKeyAgreementPool = null,
         SimulateFingerprintCaptureDelegate? simulateFingerprintCapture = null,
         SimulateBuiltInUvDelegate? simulateBuiltInUv = null,
         SimulateUserPresenceDelegate? simulateUserPresence = null,
@@ -783,7 +783,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
         EncodeCtapAuthenticatorSnapshotDelegate resolvedEncodeSnapshot = encodeSnapshot ?? CtapAuthenticatorSnapshotCborWriter.Write;
         DecodeCtapAuthenticatorSnapshotDelegate resolvedDecodeSnapshot = decodeSnapshot ?? CtapAuthenticatorSnapshotCborReader.Read;
-        MemoryPool<byte> resolvedPool = pinUvAuthKeyAgreementPool ?? BaseMemoryPool.Shared;
+        BaseMemoryPool resolvedPool = pinUvAuthKeyAgreementPool ?? BaseMemoryPool.Shared;
 
         CtapAuthenticatorSimulator simulator = new(
             runId, encodeGetInfoResponse, decodeMakeCredentialRequest, encodeMakeCredentialResponse, decodeGetAssertionRequest,
@@ -810,10 +810,10 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
                 }
             }
 
-            //Contract R-4 (wavepin): runs AFTER any snapshot rehydration above, so a custody-authoritative
+            //Runs AFTER any snapshot rehydration above, so a custody-authoritative
             //retry budget always wins over whatever the (possibly stale/replayed) snapshot's own PinRetries
             //field said — the exact move that closes the stale-snapshot rollback hole a bare mirror cannot.
-            //Wavepin review fixes F-1/F-2: the SAME call also reconciles the provisioning-state split-brain
+            //The SAME call also reconciles the provisioning-state split-brain
             //between the durable TPM tier and the local CurrentStoredPin cache, in both directions.
             if(pinRetriesCustody is not null)
             {
@@ -842,8 +842,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <see cref="CtapAuthenticatorState.PinRetries"/> mirror AND reconciles the provisioning-state
     /// split-brain between the durable TPM tier and the local <see cref="CtapAuthenticatorState.CurrentStoredPin"/>
     /// cache — ONE state replacement, reassigning <see cref="Automaton"/> around it, the same "reassign
-    /// around a modified snapshot" seam <see cref="PowerCycle"/>/<see cref="RehydratePersistentSubset"/> use
-    /// (contract R-4/wavepin review fixes F-1/F-2).
+    /// around a modified snapshot" seam <see cref="PowerCycle"/>/<see cref="RehydratePersistentSubset"/> use.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -913,7 +912,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
     /// <summary>
     /// Overlays a decoded snapshot's persistent subset onto this JUST-CONSTRUCTED instance's own
-    /// <see cref="CtapAuthenticatorState.Initial"/> state (contract R-1): the volatile fields
+    /// <see cref="CtapAuthenticatorState.Initial"/> state: the volatile fields
     /// <see cref="CtapAuthenticatorState.Initial"/> already seeded — fresh key-agreement pairs and
     /// tokens, cleared remembered/pending slots, <c>ConsecutivePinMismatches</c>/<c>IsPowerCycleRequired</c>
     /// clear, <c>PoweredOnAt</c> stamped to now — are EXACTLY the values <c>PowerCycle</c>'s own volatile-
@@ -925,9 +924,9 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <param name="pool">The memory pool the parsed snapshot's carriers rent from.</param>
     /// <exception cref="CtapAuthenticatorSnapshotException">
     /// The bytes failed to parse, or the parsed snapshot's AAGUID/firmware-version fingerprint does not
-    /// match this instance's own personalization (R-2b, fail closed).
+    /// match this instance's own personalization (fail closed).
     /// </exception>
-    private void RehydratePersistentSubset(ReadOnlyMemory<byte> snapshotCbor, DecodeCtapAuthenticatorSnapshotDelegate decodeSnapshot, MemoryPool<byte> pool)
+    private void RehydratePersistentSubset(ReadOnlyMemory<byte> snapshotCbor, DecodeCtapAuthenticatorSnapshotDelegate decodeSnapshot, BaseMemoryPool pool)
     {
         CtapAuthenticatorSnapshot snapshot = decodeSnapshot(snapshotCbor, pool);
         try
@@ -979,13 +978,13 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
 
     /// <summary>
-    /// Determines whether any field in contract R-2's persistent subset differs, by reference for every
+    /// Determines whether any field in the persistent subset differs, by reference for every
     /// reference-typed member (an unchanged <c>with</c>-copied field keeps the SAME reference, so a
     /// reference difference is exactly "this step touched it") and by value for every value-typed member.
     /// </summary>
     /// <param name="before">The state immediately before the command's effectful loop ran.</param>
     /// <param name="after">The state immediately after.</param>
-    /// <returns><see langword="true"/> if persisting is required (contract R-4); otherwise <see langword="false"/>.</returns>
+    /// <returns><see langword="true"/> if persisting is required; otherwise <see langword="false"/>.</returns>
     private static bool PersistentSubsetChanged(CtapAuthenticatorState before, CtapAuthenticatorState after) =>
         !ReferenceEquals(before.CredentialsByCredentialId, after.CredentialsByCredentialId)
         || before.NextCredentialSequence != after.NextCredentialSequence
@@ -1003,19 +1002,19 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
 
     /// <summary>
-    /// Applies contract R-4's persist-then-respond custody consequence for one completed command, before
+    /// Applies the persist-then-respond custody consequence for one completed command, before
     /// the caller frames its final response: a no-op when <see cref="Custody"/> is absent (byte-identical
     /// to no-custody behavior); <see cref="CtapStateCustody.WipeSnapshotAsync"/> — never persist — when
-    /// <paramref name="intent"/> is <see cref="AuthenticatorResetResponseReady"/> (wipe-only, R-4); a
+    /// <paramref name="intent"/> is <see cref="AuthenticatorResetResponseReady"/> (wipe-only); a
     /// persist when <paramref name="stateBeforeCommand"/>'s and the automaton's now-current state differ
-    /// anywhere in R-2's persistent subset; otherwise nothing (a pure read never touches custody I/O).
+    /// anywhere in the persistent subset; otherwise nothing (a pure read never touches custody I/O).
     /// </summary>
     /// <param name="stateBeforeCommand">The state captured immediately before this command's effectful loop ran.</param>
     /// <param name="intent">The command's resolved response intent.</param>
     /// <param name="pool">The memory pool available to this command's own call — reused for the snapshot encode/copy scratch work rather than reaching for a separate default.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     private async ValueTask ApplyCustodyPostCommandAsync(
-        CtapAuthenticatorState stateBeforeCommand, CtapAuthenticatorResponseIntent intent, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapAuthenticatorState stateBeforeCommand, CtapAuthenticatorResponseIntent intent, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         if(Custody is null)
         {
@@ -1044,8 +1043,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
     /// <summary>
     /// Retires <see cref="SignatureCounterCustody"/>'s counter for every credential that disappeared from
-    /// <see cref="CtapAuthenticatorState.CredentialsByCredentialId"/> across one completed command (contract
-    /// R-9, wavenv): a no-op when <see cref="SignatureCounterCustody"/> is absent (byte-identical to
+    /// <see cref="CtapAuthenticatorState.CredentialsByCredentialId"/> across one completed command: a no-op when <see cref="SignatureCounterCustody"/> is absent (byte-identical to
     /// no-custody behavior). A single reference/key diff against <paramref name="stateBeforeCommand"/>
     /// covers every removal path uniformly — <c>deleteCredential</c>, a same-(rp, account) resident
     /// overwrite (<c>OnCredentialMinted</c>'s own overwrite-erase), and <c>authenticatorReset</c>'s full
@@ -1081,7 +1079,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
     /// <summary>
     /// Retires <see cref="PinRetriesCustody"/>'s persistent tier once an <c>authenticatorReset</c> completes
-    /// (contract R-3/R-9, wavepin: the same post-command retirement SLOT/TIMING
+    /// (the same post-command retirement SLOT/TIMING
     /// <see cref="ApplySignatureCounterRetirementPostCommandAsync"/> uses for per-credential signature
     /// counters, mirrored here for the authenticator-global PIN throttle): a no-op when
     /// <see cref="PinRetriesCustody"/> is absent (byte-identical to no-custody behavior) or
@@ -1128,7 +1126,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <see cref="BaseMemoryPool.Shared"/> when <see langword="null"/>.
     /// </param>
     /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
-    public void PowerCycle(MemoryPool<byte>? keyAgreementPool = null)
+    public void PowerCycle(BaseMemoryPool? keyAgreementPool = null)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
@@ -1160,12 +1158,12 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <remarks>
     /// Never allows a user-presence wait to defer (<see cref="MakeCredentialRequested.IsUserPresenceDeferralAllowed"/>/
     /// <see cref="GetAssertionRequested.IsUserPresenceDeferralAllowed"/> stay <see langword="false"/> on
-    /// every input this call builds, R2) — use <see cref="BeginDeferredTransceiveAsync"/> for a transport
+    /// every input this call builds) — use <see cref="BeginDeferredTransceiveAsync"/> for a transport
     /// that supports deferral.
     /// </remarks>
     /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
-    public async ValueTask<PooledMemory> TransceiveAsync(ReadOnlyMemory<byte> request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public async ValueTask<PooledMemory> TransceiveAsync(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         ArgumentNullException.ThrowIfNull(pool);
@@ -1197,14 +1195,14 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             CtapAuthenticatorResponseIntent intent = Automaton.CurrentState.ResponseIntent
                 ?? throw new InvalidOperationException("The automaton completed a step without producing a response intent.");
 
-            //Contract R-4 (persist-then-respond): completes BEFORE the response below is returned.
+            //Persist-then-respond: completes BEFORE the response below is returned.
             await ApplyCustodyPostCommandAsync(stateBeforeCommand, intent, pool, cancellationToken).ConfigureAwait(false);
 
-            //Contract R-9 (wavenv): retires every credential this command removed, also BEFORE the
+            //Retires every credential this command removed, also BEFORE the
             //response below is returned.
             await ApplySignatureCounterRetirementPostCommandAsync(stateBeforeCommand, cancellationToken).ConfigureAwait(false);
 
-            //Contract R-3/R-9 (wavepin): retires the persistent PIN-retries tier on authenticatorReset, also BEFORE the response below is returned.
+            //Retires the persistent PIN-retries tier on authenticatorReset, also BEFORE the response below is returned.
             await ApplyPinRetriesRetirementPostCommandAsync(intent, cancellationToken).ConfigureAwait(false);
 
             return FrameFinalResponse(intent, pool);
@@ -1218,7 +1216,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
     /// <summary>
     /// Processes one complete CTAP2 request envelope over a transport that supports deferring a
-    /// user-presence wait across separate wire round trips (CTAP 2.3 :10798, R2): decodes exactly like
+    /// user-presence wait across separate wire round trips (CTAP 2.3 :10798): decodes exactly like
     /// <see cref="TransceiveAsync"/>, but sets <see cref="MakeCredentialRequested.IsUserPresenceDeferralAllowed"/>/
     /// <see cref="GetAssertionRequested.IsUserPresenceDeferralAllowed"/> <see langword="true"/> on
     /// <c>authenticatorMakeCredential</c>/<c>authenticatorGetAssertion</c> inputs — every other command's
@@ -1239,7 +1237,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// </returns>
     /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
-    public async ValueTask<PooledMemory> BeginDeferredTransceiveAsync(ReadOnlyMemory<byte> request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public async ValueTask<PooledMemory> BeginDeferredTransceiveAsync(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         ArgumentNullException.ThrowIfNull(pool);
@@ -1263,7 +1261,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             return FrameError(MapDecodeFailureToStatusCode(exception.FailureKind), pool);
         }
 
-        //Only mc/ga ever collect user presence (R1) — every other command's input is unaffected.
+        //Only mc/ga ever collect user presence — every other command's input is unaffected.
         input = input switch
         {
             MakeCredentialRequested makeCredential => makeCredential with { IsUserPresenceDeferralAllowed = true },
@@ -1298,42 +1296,42 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             if(intent is UserPresencePending)
             {
                 //Ownership of the decoded request's carriers transferred into
-                //Automaton.CurrentState.PendingUserPresenceWait (R2, trap 2) — this call must NOT dispose
+                //Automaton.CurrentState.PendingUserPresenceWait — this call must NOT dispose
                 //them; they are released once the wait resolves, is cancelled, is superseded, or is
                 //discarded by PowerCycle/FactoryReset.
                 parked = true;
 
-                //Contract R-4 (persist-then-respond) still applies on the parked branch: a command can
+                //Persist-then-respond still applies on the parked branch: a command can
                 //commit a PERSISTENT-subset change and THEN arm the parkable wait in the SAME step — a
                 //successful built-in-UV resets UvRetries (OnBuiltInUvAttempted) before collecting user
                 //presence — so the parked state already carries a durable change the wire has exposed
                 //(getUvRetries) even though the command has not resolved. Persist it now, before the
-                //pending marker: a process death while parked must not lose it, and rehydration (R-1)
+                //pending marker: a process death while parked must not lose it, and rehydration
                 //restoring only the persistent subset while discarding the volatile wait is exactly a
                 //power cycle. When nothing persistent changed (the common case — an mc/ga that parks
                 //without a built-in-UV reset), PersistentSubsetChanged is false and no persist happens.
                 await ApplyCustodyPostCommandAsync(stateBeforeCommand, intent, pool, cancellationToken).ConfigureAwait(false);
 
-                //Contract R-9 (wavenv): a park never removes a credential (mint/delete only completes once
+                //A park never removes a credential (mint/delete only completes once
                 //the effectful loop resolves), so this is a no-op here in practice — called anyway to keep
                 //every completion path uniform with the rest of this class's own custody wiring.
                 await ApplySignatureCounterRetirementPostCommandAsync(stateBeforeCommand, cancellationToken).ConfigureAwait(false);
 
-                //Contract R-3/R-9 (wavepin): a park never completes authenticatorReset, so this is a no-op
+                //A park never completes authenticatorReset, so this is a no-op
                 //here in practice — called anyway to keep every completion path uniform.
                 await ApplyPinRetriesRetirementPostCommandAsync(intent, cancellationToken).ConfigureAwait(false);
 
                 return FrameDeferralPendingMarker(pool);
             }
 
-            //Contract R-4 (persist-then-respond): completes BEFORE the response below is returned.
+            //Persist-then-respond: completes BEFORE the response below is returned.
             await ApplyCustodyPostCommandAsync(stateBeforeCommand, intent, pool, cancellationToken).ConfigureAwait(false);
 
-            //Contract R-9 (wavenv): retires every credential this command removed, also BEFORE the
+            //Retires every credential this command removed, also BEFORE the
             //response below is returned.
             await ApplySignatureCounterRetirementPostCommandAsync(stateBeforeCommand, cancellationToken).ConfigureAwait(false);
 
-            //Contract R-3/R-9 (wavepin): retires the persistent PIN-retries tier on authenticatorReset, also BEFORE the response below is returned.
+            //Retires the persistent PIN-retries tier on authenticatorReset, also BEFORE the response below is returned.
             await ApplyPinRetriesRetirementPostCommandAsync(intent, cancellationToken).ConfigureAwait(false);
 
             return FrameFinalResponse(intent, pool);
@@ -1382,7 +1380,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
 
     /// <summary>
-    /// Polls a parked user-presence wait (CTAP 2.3 :2840/:10818, R2).
+    /// Polls a parked user-presence wait (CTAP 2.3 :2840/:10818).
     /// </summary>
     /// <param name="pool">The memory pool available for allocating the response buffer.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
@@ -1394,7 +1392,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">No user-presence wait is currently pending (internal-misuse guard: the pure transition itself never throws).</exception>
-    public async ValueTask<PooledMemory> PollDeferredTransceiveAsync(MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public async ValueTask<PooledMemory> PollDeferredTransceiveAsync(BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         ArgumentNullException.ThrowIfNull(pool);
@@ -1428,13 +1426,13 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         //own effectful loop has fully returned.
         pendingBeforePoll.Dispose();
 
-        //Contract R-4 (persist-then-respond): completes BEFORE the response below is returned.
+        //Persist-then-respond: completes BEFORE the response below is returned.
         await ApplyCustodyPostCommandAsync(stateBeforeCommand, intent, pool, cancellationToken).ConfigureAwait(false);
 
-        //Contract R-9 (wavenv): retires every credential this command removed, also BEFORE the response below is returned.
+        //Retires every credential this command removed, also BEFORE the response below is returned.
         await ApplySignatureCounterRetirementPostCommandAsync(stateBeforeCommand, cancellationToken).ConfigureAwait(false);
 
-        //Contract R-3/R-9 (wavepin): retires the persistent PIN-retries tier on authenticatorReset, also BEFORE the response below is returned.
+        //Retires the persistent PIN-retries tier on authenticatorReset, also BEFORE the response below is returned.
         await ApplyPinRetriesRetirementPostCommandAsync(intent, cancellationToken).ConfigureAwait(false);
 
         return FrameFinalResponse(intent, pool);
@@ -1442,7 +1440,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
 
     /// <summary>
-    /// Cancels a parked user-presence wait (CTAP 2.3 :10821, R2).
+    /// Cancels a parked user-presence wait (CTAP 2.3 :10821).
     /// </summary>
     /// <param name="pool">The memory pool available for allocating the response buffer.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
@@ -1450,7 +1448,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <exception cref="ObjectDisposedException">This instance has been disposed.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">No user-presence wait is currently pending (internal-misuse guard: the pure transition itself never throws).</exception>
-    public async ValueTask<PooledMemory> CancelDeferredTransceiveAsync(MemoryPool<byte> pool, CancellationToken cancellationToken)
+    public async ValueTask<PooledMemory> CancelDeferredTransceiveAsync(BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         ArgumentNullException.ThrowIfNull(pool);
@@ -1467,13 +1465,13 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         CtapAuthenticatorResponseIntent intent = Automaton.CurrentState.ResponseIntent
             ?? throw new InvalidOperationException("The automaton completed a step without producing a response intent.");
 
-        //Contract R-4 (persist-then-respond): completes BEFORE the response below is returned.
+        //Persist-then-respond: completes BEFORE the response below is returned.
         await ApplyCustodyPostCommandAsync(stateBeforeCommand, intent, pool, cancellationToken).ConfigureAwait(false);
 
-        //Contract R-9 (wavenv): retires every credential this command removed, also BEFORE the response below is returned.
+        //Retires every credential this command removed, also BEFORE the response below is returned.
         await ApplySignatureCounterRetirementPostCommandAsync(stateBeforeCommand, cancellationToken).ConfigureAwait(false);
 
-        //Contract R-3/R-9 (wavepin): retires the persistent PIN-retries tier on authenticatorReset, also BEFORE the response below is returned.
+        //Retires the persistent PIN-retries tier on authenticatorReset, also BEFORE the response below is returned.
         await ApplyPinRetriesRetirementPostCommandAsync(intent, cancellationToken).ConfigureAwait(false);
 
         return FrameFinalResponse(intent, pool);
@@ -1494,7 +1492,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <exception cref="Fido2FormatException">The request's parameters did not decode.</exception>
     private CtapAuthenticatorInput DecodeRequest(
         ReadOnlyMemory<byte> request,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         out CtapMakeCredentialRequest? makeCredentialRequest,
         out CtapGetAssertionRequest? getAssertionRequest,
         out CtapCredentialManagementRequest? credentialManagementRequest)
@@ -1528,7 +1526,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             //decode boundary — mirroring every other command's required-field-absence handling
             //(e.g. CtapClientPinRequestCborReader's own subCommand throw) rather than as a separate
             //pure-transition check, since a decoded request model has no way to represent "subCommand
-            //was absent" once decoding has already failed. R7's classification (via
+            //was absent" once decoding has already failed. The decode-boundary classification (via
             //MapDecodeFailureToStatusCode) now discriminates that case from a genuinely malformed or
             //wrong-typed request instead of collapsing every decode failure onto MissingParameter; the
             //subCommand-absent sub-case this profile's own test matrix pins still resolves to the
@@ -1564,7 +1562,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// intent; <see cref="BeginDeferredTransceiveAsync"/>/<see cref="PollDeferredTransceiveAsync"/> check
     /// for it themselves and map it to the empty "still pending" marker before ever reaching this method.
     /// </exception>
-    private PooledMemory FrameFinalResponse(CtapAuthenticatorResponseIntent intent, MemoryPool<byte> pool) =>
+    private PooledMemory FrameFinalResponse(CtapAuthenticatorResponseIntent intent, BaseMemoryPool pool) =>
         intent switch
         {
             GetInfoResponseReady getInfo => FrameSuccess(EncodeGetInfoResponse(getInfo.Response), pool),
@@ -1596,7 +1594,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// the pool: the one copy of the payload's bytes happens here, out of the codec seam's own wrapped
     /// array and into the pooled envelope the caller owns.
     /// </summary>
-    private static PooledMemory FrameSuccess(TaggedMemory<byte> payload, MemoryPool<byte> pool)
+    private static PooledMemory FrameSuccess(TaggedMemory<byte> payload, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> storage = pool.Rent(payload.Length + 1);
         try
@@ -1619,7 +1617,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// Frames a bare status-byte error response (CTAP 2.3 section 8.2: Status codes) with no CBOR body,
     /// into a one-byte buffer rented from the pool.
     /// </summary>
-    private static PooledMemory FrameError(byte statusCode, MemoryPool<byte> pool)
+    private static PooledMemory FrameError(byte statusCode, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> storage = pool.Rent(1);
         try
@@ -1637,17 +1635,17 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
 
     /// <summary>
-    /// Builds the "command parked awaiting user presence" marker (R2): a ZERO-LENGTH <see cref="PooledMemory"/>,
+    /// Builds the "command parked awaiting user presence" marker: a ZERO-LENGTH <see cref="PooledMemory"/>,
     /// unambiguous since every real CTAP2 response carries at least one status byte.
     /// </summary>
-    private static PooledMemory FrameDeferralPendingMarker(MemoryPool<byte> pool) =>
+    private static PooledMemory FrameDeferralPendingMarker(BaseMemoryPool pool) =>
         PooledMemory.FromBytes(ReadOnlySpan<byte>.Empty, pool, Fido2BufferTags.CtapResponseEnvelope);
 
 
     /// <summary>
-    /// Maps a decode-boundary Fido2FormatException's classification to its CTAP2 status byte (R7): the
+    /// Maps a decode-boundary Fido2FormatException's classification to its CTAP2 status byte: the
     /// tri-code split ships uniformly across every body-carrying command boundary <see cref="DecodeRequest"/>
-    /// covers, so this one method is the entire classification-to-status-byte seam this wave adds.
+    /// covers, so this one method is the entire classification-to-status-byte seam.
     /// </summary>
     private static byte MapDecodeFailureToStatusCode(Fido2FormatFailureKind failureKind) => failureKind switch
     {
@@ -1667,7 +1665,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// </summary>
     private static MakeCredentialRequested BuildMakeCredentialInput(
         ReadOnlyMemory<byte> parameters,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         DecodeCtapMakeCredentialRequestDelegate decodeMakeCredentialRequest,
         IReadOnlyList<int>? supportedAlgorithms,
         TimeProvider timeProvider,
@@ -1687,7 +1685,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// </summary>
     private static GetAssertionRequested BuildGetAssertionInput(
         ReadOnlyMemory<byte> parameters,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         DecodeCtapGetAssertionRequestDelegate decodeGetAssertionRequest,
         TimeProvider timeProvider,
         out CtapGetAssertionRequest getAssertionRequest)
@@ -1705,7 +1703,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// </summary>
     private static CredentialManagementRequested BuildCredentialManagementInput(
         ReadOnlyMemory<byte> parameters,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         DecodeCtapCredentialManagementRequestDelegate decodeCredentialManagementRequest,
         TimeProvider timeProvider,
         out CtapCredentialManagementRequest credentialManagementRequest)
@@ -1765,7 +1763,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// Drives the automaton through the effectful loop: step, execute any action the new state
     /// declares, feed the result back, repeat until no action remains.
     /// </summary>
-    private async ValueTask RunWithEffectsAsync(CtapAuthenticatorInput input, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private async ValueTask RunWithEffectsAsync(CtapAuthenticatorInput input, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         _ = await PdaRunner.StepWithEffectsAsync<CtapAuthenticatorState, CtapAuthenticatorInput, CtapActionContext>(
             Automaton.CurrentState,
@@ -1861,7 +1859,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
 
     /// <summary>
-    /// The user-presence collection effect (CTAP 2.3 :2840, R1): consults the injected
+    /// The user-presence collection effect (CTAP 2.3 :2840): consults the injected
     /// <see cref="SimulateUserPresenceDelegate"/> and folds its answer back with the instant it was
     /// collected — the pure transition never reads a clock itself.
     /// </summary>
@@ -1962,7 +1960,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
                 DigestValue newPinHash = ComputeStoredPinHash(newPin, context.Pool);
 
-                //Contract R-2 (wavepin): with custody composed, setPIN's own persistent-tier provisioning
+                //With custody composed, setPIN's own persistent-tier provisioning
                 //IS the establishment — a thrown exception here fails the whole command uncaught (no
                 //response ever escapes), mirroring GenerateCredentialAsync's EnsureCounterAsync precedent;
                 //newPinHash has not yet transferred ownership to the returned record, so it is disposed on
@@ -2043,10 +2041,10 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         CtapPinUvAuthProtocol protocol = CtapPinUvAuthProtocol.CreateDefault(action.ProtocolId);
         IMemoryOwner<byte>? sharedSecret = null;
 
-        //Wavepin review fix F-4: a copy of the just-CONFIRMED current-PIN hash, captured while
+        //A copy of the just-CONFIRMED current-PIN hash, captured while
         //decryptedCurrentPinHash below is still in scope, so the forcePINChange same-PIN comparison
         //further down can compare against it instead of action.CurrentStoredPin (captured BEFORE this
-        //command ran, and therefore possibly stale once a custody bundle is composed — contract R-2's own
+        //command ran, and therefore possibly stale once a custody bundle is composed — the
         //"the custody verdict is authoritative" rule means action.CurrentStoredPin no longer reflects the
         //authoritative current hash once a match is custody-verified). Disposed in the outer finally
         //block on every path once minted, whether or not it is ever consulted.
@@ -2077,7 +2075,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
                 using DecryptedContent decryptedCurrentPinHash = await protocol.DecryptAsync(
                     sharedSecret.Memory, action.PinHashEnc, context.Pool, cancellationToken).ConfigureAwait(false);
 
-                //Contract R-2 (wavepin): with custody composed, the custody verdict REPLACES the local
+                //With custody composed, the custody verdict REPLACES the local
                 //FixedTimeEquals compare — the candidate is the just-decrypted hash, never the stored one.
                 if(context.PinRetriesCustody is CtapPinRetriesCustody verifyingCustody)
                 {
@@ -2098,7 +2096,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
                 if(isCurrentPinMatch)
                 {
-                    //Wavepin review fix F-4: captured here, while decryptedCurrentPinHash is still in
+                    //Captured here, while decryptedCurrentPinHash is still in
                     //scope, regardless of whether custody is composed — in the custody-absent case this
                     //copy's bytes equal action.CurrentStoredPin's own bytes exactly (that is what "match"
                     //just proved), so using it below is byte-identical to before this fix; in the
@@ -2110,7 +2108,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             {
                 CtapPinUvAuthKeyAgreementKeyPair regeneratedOnDecryptFailure = MintSingleKeyAgreementKeyPair(context.Pool);
 
-                //Contract R-2/R-3 (wavepin): a decrypt failure penalizes the persistent tier exactly like a
+                //A decrypt failure penalizes the persistent tier exactly like a
                 //recorded mismatch, instead of verifying a candidate that never existed.
                 CtapPinAttemptVerdict? penalizeVerdict = context.PinRetriesCustody is CtapPinRetriesCustody penalizingCustody
                     ? await penalizingCustody.PenalizeAttemptAsync(cancellationToken).ConfigureAwait(false)
@@ -2158,8 +2156,8 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
             //Line 5700: forcePINChange:true and the new PIN's hash equals the stored current PIN's hash
             //-> PinPolicyViolation, checked after the length check (line 5698) and before minting fresh
-            //tokens, constant-time since both operands are PIN-hash-derived. Wavepin review fix F-4:
-            //compares against confirmedCurrentPinHash (the just-verified, custody-confirmed current hash),
+            //tokens, constant-time since both operands are PIN-hash-derived. This compares
+            //against confirmedCurrentPinHash (the just-verified, custody-confirmed current hash),
             //never action.CurrentStoredPin (captured BEFORE this command ran, and possibly stale once a
             //custody bundle is composed — a rehydrated stale snapshot would otherwise wrongly reject a
             //legitimate change here).
@@ -2184,7 +2182,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
                 throw;
             }
 
-            //Contract R-2 (wavepin): setPIN's own successor — a successful changePIN's new PIN hash
+            //setPIN's own successor — a successful changePIN's new PIN hash
             //replaces the persistent tier's provisioned value, rotating its authorization secret so a
             //replayed stale snapshot's own CurrentStoredPin can never resurrect the superseded PIN. A
             //thrown exception here fails the whole command uncaught, mirroring EstablishPinAsync's own
@@ -2219,12 +2217,12 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             }
         }
 
-        //Wavepin review fix F-4: copies decryptedCurrentPinHash's bytes into a carrier that outlives its
+        //Copies decryptedCurrentPinHash's bytes into a carrier that outlives its
         //own using-scope, so the forcePINChange same-PIN comparison further up this method can compare
         //against the just-verified current hash rather than the possibly-stale action.CurrentStoredPin.
-        static DigestValue CopyConfirmedCurrentPinHash(ReadOnlySpan<byte> confirmedHash, MemoryPool<byte> pool)
+        static DigestValue CopyConfirmedCurrentPinHash(ReadOnlySpan<byte> confirmedHash, BaseMemoryPool pool)
         {
-            IMemoryOwner<byte> copy = pool.Rent(confirmedHash.Length);
+            IMemoryOwner<byte> copy = pool.Rent(confirmedHash.Length, AllocationKind.Pinned);
             try
             {
                 confirmedHash.CopyTo(copy.Memory.Span);
@@ -2278,7 +2276,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
                 using DecryptedContent decryptedCurrentPinHash = await protocol.DecryptAsync(
                     sharedSecret.Memory, action.PinHashEnc, context.Pool, cancellationToken).ConfigureAwait(false);
 
-                //Contract R-2 (wavepin): with custody composed, the custody verdict REPLACES the local
+                //With custody composed, the custody verdict REPLACES the local
                 //FixedTimeEquals compare — the candidate is the just-decrypted hash, never the stored one.
                 if(context.PinRetriesCustody is CtapPinRetriesCustody verifyingCustody)
                 {
@@ -2300,7 +2298,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             {
                 CtapPinUvAuthKeyAgreementKeyPair regeneratedOnDecryptFailure = MintSingleKeyAgreementKeyPair(context.Pool);
 
-                //Contract R-2/R-3 (wavepin): a decrypt failure penalizes the persistent tier exactly like a
+                //A decrypt failure penalizes the persistent tier exactly like a
                 //recorded mismatch, instead of verifying a candidate that never existed.
                 CtapPinAttemptVerdict? penalizeVerdict = context.PinRetriesCustody is CtapPinRetriesCustody penalizingCustody
                     ? await penalizingCustody.PenalizeAttemptAsync(cancellationToken).ConfigureAwait(false)
@@ -2399,13 +2397,13 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// Runs <c>performBuiltInUv(internalRetry)</c>'s attempt loop (CTAP 2.3 §6.5.3.1, steps 4-11),
     /// shared by <see cref="IssueUvTokenAsync"/> (0x06) and <see cref="PerformBuiltInUvAsync"/> (mc/ga) —
     /// the loop MECHANICS are a plain I/O composition and are shared; each caller's own
-    /// <paramref name="internalRetry"/> VALUE is never computed by this or any other shared helper (uv
-    /// scout trap 2). The caller has already confirmed <paramref name="startingUvRetries"/> is non-zero
+    /// <paramref name="internalRetry"/> VALUE is never computed by this or any other shared helper.
+    /// The caller has already confirmed <paramref name="startingUvRetries"/> is non-zero
     /// and evaluated the pinRetries-exhaustion drag-down (step 3) purely, without ever reaching this
     /// loop — so step 4's own "uvRetries is 0" check here only ever fires MID-loop, after an earlier
     /// iteration's own decrement.
     /// </summary>
-    /// <param name="simulateBuiltInUv">The per-attempt outcome delegate (R8).</param>
+    /// <param name="simulateBuiltInUv">The per-attempt outcome delegate.</param>
     /// <param name="internalRetry">Whether the caller intends multiple internal attempts (step 1-2).</param>
     /// <param name="startingUvRetries">The confirmed-non-zero <c>uvRetries</c> value to decrement a local copy of.</param>
     /// <returns>The loop's final outcome and how many attempts (decrements) it consumed.</returns>
@@ -2488,7 +2486,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
             //Steps 13-14 (lines 6111-6115): the simulated fingerprint touch supplies evidence of user
             //interaction, so this token begins using with userIsPresent TRUE — the FIRST tokens in this
-            //codebase minted that way (uv scout delta (a), R9); PIN-path tokens still begin with FALSE.
+            //codebase minted that way; PIN-path tokens still begin with FALSE.
             CtapPinUvAuthTokenState selectedToken = (action.ProtocolId == CtapPinUvAuthProtocolId.One ? freshProtocolOneToken : freshProtocolTwoToken)
                 .BeginUsing(userIsPresent: true, action.Now) with
                 {
@@ -2622,11 +2620,11 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// digest primitive always produces its algorithm's native output length, so the truncation happens
     /// as a separate copy rather than by requesting a short digest.
     /// </summary>
-    private static DigestValue ComputeStoredPinHash(ReadOnlySpan<byte> newPin, MemoryPool<byte> pool)
+    private static DigestValue ComputeStoredPinHash(ReadOnlySpan<byte> newPin, BaseMemoryPool pool)
     {
         using DigestValue fullDigest = CryptographicKeyEvents.ComputeDigest(newPin, Sha256Length, CryptoTags.Sha256Digest, pool);
 
-        IMemoryOwner<byte> truncated = pool.Rent(StoredPinHashLength);
+        IMemoryOwner<byte> truncated = pool.Rent(StoredPinHashLength, AllocationKind.Pinned);
         try
         {
             fullDigest.AsReadOnlySpan()[..StoredPinHashLength].CopyTo(truncated.Memory.Span);
@@ -2647,7 +2645,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <c>regenerate()</c> effect (CTAP 2.3, line 5674 and analogously for <c>getPinToken</c>/
     /// <c>getPinUvAuthTokenUsingPinWithPermissions</c>), which replaces only the SELECTED protocol's pair.
     /// </summary>
-    private static CtapPinUvAuthKeyAgreementKeyPair MintSingleKeyAgreementKeyPair(MemoryPool<byte> pool)
+    private static CtapPinUvAuthKeyAgreementKeyPair MintSingleKeyAgreementKeyPair(BaseMemoryPool pool)
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
             CryptographicKeyEvents.CreateKeyPair(CryptoAlgorithm.P256, Purpose.Exchange, pool);
@@ -2662,7 +2660,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// (non-secret), but the buffer is still pool-allocated rather than a bare <c>byte[]</c>, matching
     /// this library's uniform pooled-buffer convention.
     /// </summary>
-    private static SlicedMemoryOwner BuildConcatenatedMessage(ReadOnlyMemory<byte> left, ReadOnlyMemory<byte> right, MemoryPool<byte> pool)
+    private static SlicedMemoryOwner BuildConcatenatedMessage(ReadOnlyMemory<byte> left, ReadOnlyMemory<byte> right, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> combined = pool.Rent(left.Length + right.Length);
         try
@@ -2711,11 +2709,11 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <c>authenticatorMakeCredential</c>'s effect: mints the key pair through the injected
     /// <see cref="CtapCredentialSigningBackend"/>, draws a fresh credential identifier,
     /// UNCONDITIONALLY two fresh 32-byte CredRandom values (CTAP 2.3 §12.7, snapshot line 13191/13192's
-    /// SHOULD adopted — contract R2, regardless of <see cref="CtapGenerateCredentialKeyAction.HmacSecretRequested"/>)
+    /// SHOULD adopted, regardless of <see cref="CtapGenerateCredentialKeyAction.HmacSecretRequested"/>)
     /// and, iff §12.3's <c>largeBlobKey</c> extension was validated-and-requested, a fresh 32-byte
-    /// largeBlobKey (R8); when <see cref="CtapGenerateCredentialKeyAction.HmacSecretMc"/> is present,
+    /// largeBlobKey; when <see cref="CtapGenerateCredentialKeyAction.HmacSecretMc"/> is present,
     /// completes it with the just-minted CredRandom pair and runs <see cref="ComputeHmacSecretOutputAsync"/>
-    /// — the SAME crypto routine the <c>authenticatorGetAssertion</c> effect runs (contract R6, snapshot
+    /// — the SAME crypto routine the <c>authenticatorGetAssertion</c> effect runs (snapshot
     /// line 13402's pure delegation) — aborting the whole command with
     /// <see cref="MakeCredentialHmacSecretMcFailed"/> on anything short of success; encodes the
     /// <c>credProtect</c>/<c>hmac-secret</c>/<c>minPinLength</c>/<c>hmac-secret-mc</c> extensions output
@@ -2758,22 +2756,22 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             context.Rng(credentialIdBytes);
             credentialId = CredentialId.Create(credentialIdBytes, context.Pool);
 
-            //R2/§12.7 lines 13191-13192: two fresh, independently random 32-byte CredRandom values,
+            //§12.7 lines 13191-13192: two fresh, independently random 32-byte CredRandom values,
             //minted on EVERY mint regardless of action.HmacSecretRequested — the LargeBlobKey mint/dispose
             //shape below (stackalloc scratch -> pool rental -> copy -> clear scratch), run twice.
             Span<byte> credRandomWithUVBytes = stackalloc byte[CredRandomLength];
             context.Rng(credRandomWithUVBytes);
-            credRandomWithUV = context.Pool.Rent(CredRandomLength);
+            credRandomWithUV = context.Pool.Rent(CredRandomLength, AllocationKind.Pinned);
             credRandomWithUVBytes.CopyTo(credRandomWithUV.Memory.Span);
             credRandomWithUVBytes.Clear();
 
             Span<byte> credRandomWithoutUVBytes = stackalloc byte[CredRandomLength];
             context.Rng(credRandomWithoutUVBytes);
-            credRandomWithoutUV = context.Pool.Rent(CredRandomLength);
+            credRandomWithoutUV = context.Pool.Rent(CredRandomLength, AllocationKind.Pinned);
             credRandomWithoutUVBytes.CopyTo(credRandomWithoutUV.Memory.Span);
             credRandomWithoutUVBytes.Clear();
 
-            //R8/§12.3 line 12851: "store a freshly generated 32-byte key" — minted from the SAME entropy
+            //§12.3 line 12851: "store a freshly generated 32-byte key" — minted from the SAME entropy
             //provider as the credential identifier, beside it, iff the pure transition already validated
             //the request's largeBlobKey extension (value true AND options.rk true).
             if(action.LargeBlobKeyRequested)
@@ -2782,18 +2780,18 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
                 //authoritative custody home, so the stack scratch is cleared the moment the copy lands.
                 Span<byte> largeBlobKeyBytes = stackalloc byte[LargeBlobKeyLength];
                 context.Rng(largeBlobKeyBytes);
-                largeBlobKey = context.Pool.Rent(LargeBlobKeyLength);
+                largeBlobKey = context.Pool.Rent(LargeBlobKeyLength, AllocationKind.Pinned);
                 largeBlobKeyBytes.CopyTo(largeBlobKey.Memory.Span);
                 largeBlobKeyBytes.Clear();
             }
 
             TaggedMemory<byte> credentialPublicKeyCbor = context.EncodeCredentialPublicKey(keyPair.PublicKey);
 
-            //R6/§12.8 line 13402: hmac-secret-mc's processing is the SAME routine
+            //§12.8 line 13402: hmac-secret-mc's processing is the SAME routine
             //(ComputeHmacSecretOutputAsync, delegated) hmac-secret's own authenticatorGetAssertion effect
             //runs — executed here, against the CredRandom pair just minted above, since that pair does
             //not exist until this point. The response's own uv bit (action.UserVerified) selects which
-            //CredRandom half feeds the HMAC (trap 4), exactly as ComputeHmacSecretOutputAsync's ga caller
+            //CredRandom half feeds the HMAC, exactly as ComputeHmacSecretOutputAsync's ga caller
             //does. A non-Success outcome aborts the whole authenticatorMakeCredential command outright —
             //CredentialMinted is never produced on this path, so every resource minted so far is disposed
             //explicitly here rather than relying on the method's own catch block, which never runs for an
@@ -2823,16 +2821,16 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
                 hmacSecretMcOutput = hmacSecretMcOutputOwner!.Memory[..mcOutputLength];
             }
 
-            //R6/R3: the credProtect key is emitted iff the request carried a valid credProtect entry
+            //The credProtect key is emitted iff the request carried a valid credProtect entry
             //(action.CredProtectRequested), never unsolicited; the minPinLength key is emitted iff the
             //pure transition resolved an authorized output value; the hmac-secret key is emitted iff the
             //request's own value was literal true (action.HmacSecretRequested) — NEVER false, since
-            //CredRandom generation above never fails (contract R2b, snapshot lines 13204-13209
+            //CredRandom generation above never fails (snapshot lines 13204-13209
             //antecedent-false-by-construction). hmac-secret-mc's own slot carries the just-computed
             //encrypted output, or stays null when the request carried no hmac-secret-mc extension. All
             //four null (no extension requested, or requested but unauthorized/unsolicited) resolves to an
             //empty encoded map — TaggedMemory<byte>.Empty — which keeps ED at zero, matching every
-            //pre-wave mc response byte-for-byte (trap 17).
+            //existing mc response byte-for-byte.
             int? credProtectOutput = action.CredProtectRequested ? action.CredProtectLevel : null;
             bool? hmacSecretOutput = action.HmacSecretRequested ? true : null;
             TaggedMemory<byte> extensionsOutput;
@@ -2846,12 +2844,12 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
                 hmacSecretMcOutputOwner?.Dispose();
             }
 
-            //Contract R-9 (wavenv): with signature-counter custody composed, the credential's INITIAL
+            //With signature-counter custody composed, the credential's INITIAL
             //signCount is whatever EnsureCounterAsync mints it at (never 0 — see that delegate's own
             //remarks) rather than the pure literal 0 below; the returned value feeds BOTH the signed
             //authData (mint-time attestation covers this same authData) and the persisted record, so the
             //wire-visible registration count and the stored count never disagree. Absent custody, mintSignCount
-            //stays the pre-wave literal 0 — byte-identical (contract R-9's opt-in discipline).
+            //stays the literal 0 — byte-identical (an opt-in discipline).
             uint mintSignCount = 0;
             if(context.SignatureCounterCustody is CtapSignatureCounterCustody signatureCounterCustody)
             {
@@ -2883,9 +2881,9 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             CtapMakeCredentialResponse response = await BuildAttestationResponseAsync(
                 action, keyPair.PrivateKey, authData.Memory, context, cancellationToken).ConfigureAwait(false);
 
-            //R8/§12.3 line 12853: the TOP-LEVEL mc response member, never routed through the
+            //§12.3 line 12853: the TOP-LEVEL mc response member, never routed through the
             //authData-extensions writer above (line 12857's "not in the extensions field"). CredRandom
-            //never appears in this or any other response (trap 9) — deliberately absent here.
+            //never appears in this or any other response — deliberately absent here.
             if(largeBlobKey is not null)
             {
                 response = response with { LargeBlobKey = largeBlobKey.Memory };
@@ -2909,7 +2907,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <summary>
     /// Builds the <c>authenticatorMakeCredential</c> response's <c>fmt</c>/<c>attStmt</c>/<c>epAtt</c> per
     /// <paramref name="action"/>'s resolved <see cref="CtapAttestationFormatChoice"/> (CTAP 2.3, section
-    /// 6.1.2, step 17; waveep R7/R9 for the certified branch): a packed self-attestation statement signed
+    /// 6.1.2, step 17): a packed self-attestation statement signed
     /// over <paramref name="authData"/> and <see cref="CtapGenerateCredentialKeyAction.ClientDataHash"/>
     /// with the just-minted credential key through <see cref="Fido2CredentialSigner.SignAssertionAsync"/>,
     /// a packed CERTIFIED statement over the same transcript signed with the SEEDED enterprise
@@ -2945,10 +2943,10 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             return new CtapMakeCredentialResponse(WellKnownWebAuthnAttestationFormats.Packed, authData, attStmt.Memory);
         }
 
-        //Waveep R7: signs authData || clientDataHash with the SEEDED enterprise attestation private key
-        //(never action's credential key, trap 11) via the SAME project signing delegate the self path
+        //Signs authData || clientDataHash with the SEEDED enterprise attestation private key
+        //(never action's credential key) via the SAME project signing delegate the self path
         //uses, over the SAME transcript-building helper (Fido2CredentialSigner.SignAssertionAsync is
-        //generic over which PrivateKey is handed to it). R9: epAtt is set true exactly here, the ONLY
+        //generic over which PrivateKey is handed to it). epAtt is set true exactly here, the ONLY
         //site that ever produces this format choice.
         static async ValueTask<CtapMakeCredentialResponse> BuildPackedCertifiedResponseAsync(
             CtapGenerateCredentialKeyAction action, ReadOnlyMemory<byte> authData, CtapActionContext context, CancellationToken cancellationToken)
@@ -2979,7 +2977,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <see cref="CtapSignAssertionAction.HmacSecret"/> is present, runs CTAP 2.3 §12.7's processing
     /// algorithm's crypto half (<see cref="ComputeHmacSecretOutputAsync"/>, steps 4-9 — decapsulate,
     /// verify, decrypt, CredRandom selection, HMAC, encrypt) exactly ONCE and aborts the whole command
-    /// with <see cref="GetAssertionHmacSecretFailed"/> on anything short of success (trap 5); otherwise
+    /// with <see cref="GetAssertionHmacSecretFailed"/> on anything short of success; otherwise
     /// builds the signed-over <c>authData</c> — with the hmac-secret authData extensions map embedded
     /// and the <c>ED</c> flag set iff that map is non-empty, mirroring
     /// <see cref="GenerateCredentialAsync"/>'s own mc-side composition — and signs
@@ -2991,10 +2989,10 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// the pure transition cannot allocate that copy itself, since it has no memory pool. When
     /// <see cref="CtapSignAssertionAction.HmacSecret"/> is absent, <c>authData</c>'s <c>ED</c> flag stays
     /// zero and the encode call returns <see cref="TaggedMemory{T}.Empty"/> — BYTE-IDENTICAL to every
-    /// pre-existing <c>authenticatorGetAssertion</c> test's authData (trap 16); neither <c>credProtect</c>
+    /// pre-existing <c>authenticatorGetAssertion</c> test's authData; neither <c>credProtect</c>
     /// nor <c>minPinLength</c> defines an <c>authenticatorGetAssertion</c> output (both are
     /// registration-only extensions, CTAP 2.3 §12.1/§12.5). <see cref="CtapSignAssertionAction.LargeBlobKey"/>
-    /// (§12.3, R8) travels the SAME TOP-LEVEL-not-authData path <c>credProtect</c>/<c>minPinLength</c>
+    /// (§12.3) travels the SAME TOP-LEVEL-not-authData path <c>credProtect</c>/<c>minPinLength</c>
     /// use on the mc side — echoed verbatim onto the response's own <c>0x07</c> member, needing no
     /// further resolution here (the pure transition already decided its final value).
     /// </summary>
@@ -3021,7 +3019,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         uint newSignCount;
         try
         {
-            //Contract R-9 (wavenv): with signature-counter custody composed, the count the SIGNED authData
+            //With signature-counter custody composed, the count the SIGNED authData
             //below carries — and the count OnAssertionSigned persists back into the credential record — is
             //the CUSTODY-RETURNED value, never the pure transition's own action.NewSignCount (SignCount+1).
             //The increment runs INSIDE this try so a thrown exception still releases hmacSecretOutputOwner
@@ -3029,7 +3027,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             //framed, no signature ever computed, and no response ever escapes TransceiveAsync with a count
             //that did not durably advance (increment-before-response, mirroring how a failing
             //PersistSnapshotAsync already aborts the command today). Absent custody, newSignCount stays the
-            //pure action.NewSignCount — byte-identical (contract R-9's opt-in discipline).
+            //pure action.NewSignCount — byte-identical (an opt-in discipline).
             newSignCount = action.NewSignCount;
             if(context.SignatureCounterCustody is CtapSignatureCounterCustody signatureCounterCustody)
             {
@@ -3076,7 +3074,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
         PublicKeyCredentialDescriptor descriptor = new() { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Id = action.CredentialId };
 
-        //R8/§12.3 line 12867: the TOP-LEVEL ga response member, already resolved by the pure transition
+        //§12.3 line 12867: the TOP-LEVEL ga response member, already resolved by the pure transition
         //(DeclareSignAssertion) to null unless requested-AND-present — never routed through authData.
         CtapGetAssertionResponse response = new(
             descriptor, authData.Memory, signatureBytes.Memory, action.ResponseUser, action.NumberOfCredentials, UserSelected: null, LargeBlobKey: action.LargeBlobKey);
@@ -3099,33 +3097,33 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
     /// <summary>
     /// Runs CTAP 2.3 §12.7's <c>hmac-secret</c> processing algorithm's crypto half (snapshot lines
-    /// 13292-13339, contract R4 steps 4-9), composed entirely from <paramref name="request"/>'s already
-    /// selected <see cref="CtapPinUvAuthProtocol"/> operations (trap 22 — no second ECDH/AES/HMAC path).
+    /// 13292-13339), composed entirely from <paramref name="request"/>'s already
+    /// selected <see cref="CtapPinUvAuthProtocol"/> operations (no second ECDH/AES/HMAC path).
     /// Called from <see cref="SignAssertionAsync"/> for <c>authenticatorGetAssertion</c>'s own
     /// <c>hmac-secret</c> extension AND from <see cref="GenerateCredentialAsync"/> for
     /// <c>authenticatorMakeCredential</c>'s <c>hmac-secret-mc</c> extension (CTAP 2.3 §12.8, snapshot
-    /// line 13402 — contract R6's pure delegation: the identical routine, never a second implementation):
+    /// line 13402 — a pure delegation: the identical routine, never a second implementation):
     /// <c>decapsulate</c> → <c>verify(sharedSecret, saltEnc, saltAuth)</c> (failure →
-    /// <see cref="CtapGetAssertionHmacSecretOutcomeKind.VerifyFailed"/>, trap 2, checked BEFORE decrypt
-    /// is ever attempted, trap 5) → <c>decrypt(sharedSecret, saltEnc)</c>, gated on the DECRYPTED
+    /// <see cref="CtapGetAssertionHmacSecretOutcomeKind.VerifyFailed"/>, checked BEFORE decrypt
+    /// is ever attempted) → <c>decrypt(sharedSecret, saltEnc)</c>, gated on the DECRYPTED
     /// plaintext being exactly 32 or 64 bytes (failure or wrong length →
-    /// <see cref="CtapGetAssertionHmacSecretOutcomeKind.DecryptFailed"/>, trap 3; never gated on
+    /// <see cref="CtapGetAssertionHmacSecretOutcomeKind.DecryptFailed"/>; never gated on
     /// <paramref name="request"/>'s own <see cref="CtapGetAssertionHmacSecretRequest.SaltEnc"/> ciphertext
-    /// length, which is IV-prefixed and longer for protocol two, trap 7) → CredRandom selection keyed on
+    /// length, which is IV-prefixed and longer for protocol two) → CredRandom selection keyed on
     /// <paramref name="userVerified"/> — THIS response's own resolved <c>uv</c> bit, not any cached value
-    /// (trap 4) → <c>HMAC-SHA-256(CredRandom, salt)</c> per salt via
+    /// → <c>HMAC-SHA-256(CredRandom, salt)</c> per salt via
     /// <see cref="CryptographicKeyEvents"/>'s <c>ComputeHmacAsync</c> convenience wrapper (the same
     /// registered <see cref="ComputeHmacDelegate"/> <see cref="CtapPinUvAuthProtocol.ComputeHmac"/>
-    /// itself resolves — trap 22's "ComputeHmacDelegate is the only HMAC entry") → <c>encrypt(sharedSecret,
+    /// itself resolves — "ComputeHmacDelegate is the only HMAC entry") → <c>encrypt(sharedSecret,
     /// output1 [|| output2])</c>. Every pooled intermediate (the shared secret, the decrypted salts, both
-    /// HMAC outputs, the assembled plaintext) is cleared before disposal (R10); the resolved credential's
+    /// HMAC outputs, the assembled plaintext) is cleared before disposal; the resolved credential's
     /// borrowed CredRandom pair is never cleared or disposed here — the record retains ownership for its
     /// whole lifetime.
     /// </summary>
     /// <returns>
     /// The outcome and, on <see cref="CtapGetAssertionHmacSecretOutcomeKind.Success"/>, a pool-owned
     /// buffer holding the encrypted output (<paramref name="request"/>'s protocol prefixes a fresh
-    /// 16-byte IV for protocol two — trap 6) together with its exact length (the rental may be
+    /// 16-byte IV for protocol two) together with its exact length (the rental may be
     /// longer-than-requested; the caller slices). <see langword="null"/>/<c>0</c> on any other outcome.
     /// Ownership of a non-null buffer transfers to the caller.
     /// </returns>
@@ -3209,7 +3207,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// (64 bytes).
     /// </summary>
     /// <param name="salts">The decrypted salt1 (and, for a two-salt request, salt2) plaintext — already length-validated by the caller.</param>
-    /// <param name="credRandom">The selected CredRandom (contract R4 step 7), borrowed — read, never cleared or disposed.</param>
+    /// <param name="credRandom">The selected CredRandom (CTAP 2.3 §12.7 step 7), borrowed — read, never cleared or disposed.</param>
     /// <param name="context">The action context supplying the memory pool every allocation rents from.</param>
     /// <param name="cancellationToken">A token observed across both HMAC computations.</param>
     /// <returns>A pool-owned buffer holding the assembled plaintext. Ownership transfers to the caller, which must clear and dispose it.</returns>
@@ -3224,7 +3222,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
         if(saltBytes.Length == HmacSecretSaltLength)
         {
-            IMemoryOwner<byte> plaintext = context.Pool.Rent(HmacSecretSaltLength);
+            IMemoryOwner<byte> plaintext = context.Pool.Rent(HmacSecretSaltLength, AllocationKind.Pinned);
             output1.AsReadOnlySpan().CopyTo(plaintext.Memory.Span);
 
             return plaintext;
@@ -3234,7 +3232,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         using HmacValue output2 = await CryptographicKeyEvents.ComputeHmacAsync(
             salt2, credRandom.Memory, HmacSecretSaltLength, CryptoTags.HmacSha256Value, context.Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        IMemoryOwner<byte> twoSaltPlaintext = context.Pool.Rent(HmacSecretTwoSaltLength);
+        IMemoryOwner<byte> twoSaltPlaintext = context.Pool.Rent(HmacSecretTwoSaltLength, AllocationKind.Pinned);
         output1.AsReadOnlySpan().CopyTo(twoSaltPlaintext.Memory.Span);
         output2.AsReadOnlySpan().CopyTo(twoSaltPlaintext.Memory.Span[HmacSecretSaltLength..]);
 
@@ -3272,7 +3270,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// in a pooled buffer (<see cref="BuildAuthenticatorConfigMessage"/>), then runs the SAME
     /// state-aware <c>verify</c> composition <see cref="VerifyPinUvAuthTokenAsync"/> uses. The assembled
     /// message is non-secret wire data (the platform's own request bytes), but is still cleared and
-    /// disposed in <see langword="finally"/> rather than left to the pool's own reuse, per R6.
+    /// disposed in <see langword="finally"/> rather than left to the pool's own reuse.
     /// </summary>
     private static async ValueTask<CtapAuthenticatorInput> VerifyAuthenticatorConfigTokenAsync(
         CtapVerifyAuthenticatorConfigTokenAction action, CtapActionContext context, CancellationToken cancellationToken)
@@ -3302,7 +3300,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
     /// <summary>
     /// Assembles <c>authenticatorConfig</c>'s pinUvAuthParam verify message (CTAP 2.3 §6.11, lines
-    /// 7947/6321): <c>32×0xff || 0x0d || uint8(subCommand) || subCommandParams</c>. R5's elision ruling:
+    /// 7947/6321): <c>32×0xff || 0x0d || uint8(subCommand) || subCommandParams</c>.
     /// <paramref name="subCommandParams"/> is empty when the platform sent none, contributing zero
     /// trailing bytes rather than an encoded empty CBOR map — the caller resolves that emptiness before
     /// calling this method (<see cref="OnAuthenticatorConfigRequested"/>'s <c>?? ReadOnlyMemory&lt;byte&gt;.Empty</c>).
@@ -3310,7 +3308,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// it, since this message has a fixed 32-byte prefix and a command byte <c>BuildConcatenatedMessage</c>'s
     /// two-segment shape does not carry.
     /// </summary>
-    private static SlicedMemoryOwner BuildAuthenticatorConfigMessage(int subCommand, ReadOnlyMemory<byte> subCommandParams, MemoryPool<byte> pool)
+    private static SlicedMemoryOwner BuildAuthenticatorConfigMessage(int subCommand, ReadOnlyMemory<byte> subCommandParams, BaseMemoryPool pool)
     {
         const int PrefixLength = 32;
         IMemoryOwner<byte> combined = pool.Rent(PrefixLength + 1 + 1 + subCommandParams.Length);
@@ -3371,11 +3369,11 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// Assembles <c>authenticatorCredentialManagement</c>'s pinUvAuthParam verify message (CTAP 2.3
     /// §6.5.8, line 6309-6315): <c>uint8(subCommand) [|| subCommandParams]</c> — NO 32-byte <c>0xff</c>
     /// prefix, NO command byte, unlike <see cref="BuildAuthenticatorConfigMessage"/>'s own compound
-    /// shape (R4). <paramref name="subCommandParams"/> is empty for <c>getCredsMetadata</c>/
+    /// shape. <paramref name="subCommandParams"/> is empty for <c>getCredsMetadata</c>/
     /// <c>enumerateRPsBegin</c>, which structurally never carry one — the message then elides this
     /// segment entirely, contributing zero trailing bytes.
     /// </summary>
-    private static SlicedMemoryOwner BuildCredentialManagementMessage(int subCommand, ReadOnlyMemory<byte> subCommandParams, MemoryPool<byte> pool)
+    private static SlicedMemoryOwner BuildCredentialManagementMessage(int subCommand, ReadOnlyMemory<byte> subCommandParams, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> combined = pool.Rent(1 + subCommandParams.Length);
         try
@@ -3395,7 +3393,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
 
     /// <summary>
-    /// <c>authenticatorBioEnrollment</c>'s own verify effect (CTAP 2.3 §6.7, bio scout Finding C):
+    /// <c>authenticatorBioEnrollment</c>'s own verify effect (CTAP 2.3 §6.7):
     /// assembles the FOURTH verify-message shape <c>uint8(modality) || uint8(subCommand) [||
     /// subCommandParams]</c> in a pooled buffer (<see cref="BuildBioEnrollmentMessage"/>), then runs the
     /// SAME state-aware <c>verify</c> composition every other verify executor uses.
@@ -3427,14 +3425,14 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
 
     /// <summary>
-    /// Assembles <c>authenticatorBioEnrollment</c>'s pinUvAuthParam verify message (bio scout Finding C):
+    /// Assembles <c>authenticatorBioEnrollment</c>'s pinUvAuthParam verify message:
     /// <c>uint8(modality) || uint8(subCommand) [|| subCommandParams]</c> — a TWO-byte leading prefix,
     /// unlike <see cref="BuildCredentialManagementMessage"/>'s single leading byte.
     /// <paramref name="subCommandParams"/> is empty for <c>enumerateEnrollments</c>, which structurally
     /// never carries one — the message then elides this segment entirely, contributing zero trailing
     /// bytes.
     /// </summary>
-    private static SlicedMemoryOwner BuildBioEnrollmentMessage(int modality, int subCommand, ReadOnlyMemory<byte> subCommandParams, MemoryPool<byte> pool)
+    private static SlicedMemoryOwner BuildBioEnrollmentMessage(int modality, int subCommand, ReadOnlyMemory<byte> subCommandParams, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> combined = pool.Rent(2 + subCommandParams.Length);
         try
@@ -3496,14 +3494,13 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// tag)</c>. Reuses <see cref="BuildAuthenticatorConfigMessage"/>'s own 32-byte <c>0xff</c> prefix
     /// (<c>span[..PrefixLength].Fill(0xff)</c>), but the command segment is TWO fixed bytes
     /// (<c>0x0c 0x00</c>, not a bare command byte), <paramref name="offset"/> is written
-    /// LITTLE-endian — the surface's ONLY little-endian integer (seams trap 2;
+    /// LITTLE-endian — the surface's ONLY little-endian integer (seams;
     /// <see cref="BinaryPrimitives.WriteUInt32LittleEndian"/>) — and the final segment is a live SHA-256
     /// digest of <paramref name="fragment"/> (<see cref="CryptographicKeyEvents.ComputeDigest"/>, the
     /// <see cref="ComputeStoredPinHash"/> precedent's digest primitive), computed here because a digest
-    /// is not a pure byte concatenation the pure transition function could assemble itself (D3, seams
-    /// Finding D).
+    /// is not a pure byte concatenation the pure transition function could assemble itself.
     /// </summary>
-    private static SlicedMemoryOwner BuildLargeBlobsMessage(uint offset, ReadOnlySpan<byte> fragment, MemoryPool<byte> pool)
+    private static SlicedMemoryOwner BuildLargeBlobsMessage(uint offset, ReadOnlySpan<byte> fragment, BaseMemoryPool pool)
     {
         const int PrefixLength = 32;
         const int CommandSegmentLength = 2;
@@ -3533,7 +3530,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
     /// <summary>
     /// <c>authenticatorLargeBlobs</c> <c>set</c>'s append/commit effect (CTAP 2.3 §6.10.2, lines
-    /// 7657-7671, seams Finding E): writes <see cref="CtapCommitLargeBlobArrayAction.Fragment"/> into the
+    /// 7657-7671): writes <see cref="CtapCommitLargeBlobArrayAction.Fragment"/> into the
     /// pending buffer at <see cref="CtapCommitLargeBlobArrayAction.Offset"/> — renting a fresh buffer
     /// sized <see cref="CtapCommitLargeBlobArrayAction.ExpectedLength"/> when
     /// <see cref="CtapCommitLargeBlobArrayAction.ExistingPendingBuffer"/> is <see langword="null"/> (a
@@ -3543,7 +3540,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <c>LEFT(SHA-256(preceding bytes), 16)</c> compared, in constant time, against the completed
     /// buffer's own trailing <see cref="LargeBlobArrayTrailingHashLength"/> bytes (line 7666) — the OTHER
     /// SHA-256 on this surface, distinct from <see cref="BuildLargeBlobsMessage"/>'s per-fragment digest
-    /// (seams trap 3): on success, adopts the buffer into a <see cref="PooledMemory"/> with NO further
+    /// (seams): on success, adopts the buffer into a <see cref="PooledMemory"/> with NO further
     /// copy (ownership transfers directly); on failure, disposes the buffer — the previously stored
     /// <see cref="CtapAuthenticatorState.SerializedLargeBlobArray"/> is never touched either way (line
     /// 7666's "the stored array UNCHANGED"). Runs identically whether <see cref="CtapCommitLargeBlobArrayAction.AuthenticatingPinUvAuthProtocol"/>
@@ -3598,8 +3595,8 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <summary>
     /// <c>enrollBegin</c>'s own effect (CTAP 2.3 §6.7.4, steps 8-9): mints a fresh 16-byte template
     /// identifier from the entropy provider — mirroring <see cref="GenerateCredentialAsync"/>'s own
-    /// credential-identifier minting exactly (R6) — then simulates the enrollment's first sample capture
-    /// through the injected <see cref="SimulateFingerprintCaptureDelegate"/> (R8).
+    /// credential-identifier minting exactly — then simulates the enrollment's first sample capture
+    /// through the injected <see cref="SimulateFingerprintCaptureDelegate"/>.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the minted BioEnrollmentTemplateId transfers to the returned BioEnrollmentCaptureStarted input (disposed in the catch block on capture-simulation failure); the analyzer cannot see this transfer through the record construction.")]
@@ -3627,7 +3624,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <summary>
     /// <c>enrollCaptureNextSample</c>'s own effect (CTAP 2.3 §6.7.4): simulates the in-progress
     /// enrollment's next sample capture through the injected <see cref="SimulateFingerprintCaptureDelegate"/>
-    /// (R8) — no entropy draw, since the template identifier was already minted by <c>enrollBegin</c>.
+    /// — no entropy draw, since the template identifier was already minted by <c>enrollBegin</c>.
     /// </summary>
     private static ValueTask<CtapAuthenticatorInput> ContinueBioEnrollmentCaptureAsync(CtapActionContext context, CancellationToken cancellationToken)
     {
@@ -3686,7 +3683,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <c>enumerateCredentialsBegin</c>'s own effect: since no by-hash index exists on the store, matches
     /// the request's <c>rpIDHash</c> against every resident credential's own freshly computed hash (CTAP
     /// 2.3 §6.8.4, line 7297), one <see cref="ComputeRpIdHash"/> call per candidate, ordering the matches
-    /// <see cref="CtapCredentialRecord.CreationSequence"/>-ascending (R9) before folding back.
+    /// <see cref="CtapCredentialRecord.CreationSequence"/>-ascending before folding back.
     /// </summary>
     private static ValueTask<CtapAuthenticatorInput> LocateCredentialManagementCredentialsAsync(
         CtapLocateCredentialManagementCredentialsAction action, CtapActionContext context, CancellationToken cancellationToken)
@@ -3812,7 +3809,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// decoded <c>authenticatorGetAssertion</c> request that carried it, which the transport layer
     /// disposes once that single command completes.
     /// </summary>
-    private static DigestValue CopyClientDataHash(DigestValue source, MemoryPool<byte> pool)
+    private static DigestValue CopyClientDataHash(DigestValue source, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(source.Length);
         try
@@ -3835,7 +3832,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <c>clientDataHash</c>, this is a public-data digest sent openly on the wire, not a trust/custody
     /// hash.
     /// </summary>
-    private static DigestValue ComputeRpIdHash(string rpId, MemoryPool<byte> pool)
+    private static DigestValue ComputeRpIdHash(string rpId, BaseMemoryPool pool)
     {
         int maxByteCount = Encoding.UTF8.GetMaxByteCount(rpId.Length);
         using IMemoryOwner<byte> rpIdBytes = pool.Rent(maxByteCount);
@@ -3940,7 +3937,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <see cref="CtapAuthenticatorState.EnterpriseAttestationProvisioning"/> record, if this simulator
     /// was constructed enterprise-attestation-capable, and disposes a parked
     /// <see cref="CtapAuthenticatorState.PendingUserPresenceWait"/>'s own request carriers, if a wait was
-    /// left pending (R2).
+    /// left pending.
     /// </remarks>
     public void Dispose()
     {
@@ -3990,15 +3987,15 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// <param name="enterpriseAttestationProvisioning">The vendor-burned-in enterprise attestation material, or <see langword="null"/> if this authenticator was never provisioned with any.</param>
     /// <param name="encodeMakeCredentialExtensionOutputs">The codec seam that CBOR-encodes the resolved <c>credProtect</c>/<c>hmac-secret</c>/<c>minPinLength</c>/<c>hmac-secret-mc</c> authData extensions output map.</param>
     /// <param name="encodeGetAssertionExtensionOutputs">The codec seam that CBOR-encodes the resolved <c>hmac-secret</c> <c>authenticatorGetAssertion</c> authData extensions output map.</param>
-    /// <param name="simulateFingerprintCapture">The R8 outcome-injection knob for a simulated fingerprint sensor capture.</param>
-    /// <param name="simulateBuiltInUv">The R8 outcome-injection knob for a simulated built-in user verification gesture.</param>
-    /// <param name="simulateUserPresence">The R1 outcome-injection knob for a simulated :2840 user-presence collection.</param>
+    /// <param name="simulateFingerprintCapture">The outcome-injection knob for a simulated fingerprint sensor capture.</param>
+    /// <param name="simulateBuiltInUv">The outcome-injection knob for a simulated built-in user verification gesture.</param>
+    /// <param name="simulateUserPresence">The outcome-injection knob for a simulated :2840 user-presence collection.</param>
     /// <param name="timeProvider">The time source the <see cref="CtapCollectUserPresenceAction"/> executor stamps a collected decision's <c>Now</c> with.</param>
-    /// <param name="signatureCounterCustody">The NV-counter-backed signature-counter custody seam bundle, or <see langword="null"/> when none is composed (contract R-9, wavenv).</param>
-    /// <param name="pinRetriesCustody">The NV-backed persistent-tier PIN-retries custody seam bundle, or <see langword="null"/> when none is composed (contract R-1..R-6, wavepin).</param>
+    /// <param name="signatureCounterCustody">The NV-counter-backed signature-counter custody seam bundle, or <see langword="null"/> when none is composed.</param>
+    /// <param name="pinRetriesCustody">The NV-backed persistent-tier PIN-retries custody seam bundle, or <see langword="null"/> when none is composed.</param>
     private readonly struct CtapActionContext(
         FillEntropyDelegate rng,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         Guid aaguid,
         CtapCredentialSigningBackend? credentialSigningBackend,
         EncodeCredentialPublicKeyDelegate encodeCredentialPublicKey,
@@ -4018,7 +4015,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         public FillEntropyDelegate Rng { get; } = rng;
 
         /// <summary>The memory pool backing every effect's allocations.</summary>
-        public MemoryPool<byte> Pool { get; } = pool;
+        public BaseMemoryPool Pool { get; } = pool;
 
         /// <summary>The authenticator's own AAGUID, embedded in every minted credential's <c>attestedCredentialData</c>.</summary>
         public Guid Aaguid { get; } = aaguid;
@@ -4044,22 +4041,22 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
         /// <summary>The codec seam that CBOR-encodes the resolved <c>hmac-secret</c> <c>authenticatorGetAssertion</c> authData extensions output map.</summary>
         public EncodeCtapGetAssertionExtensionOutputsDelegate EncodeGetAssertionExtensionOutputs { get; } = encodeGetAssertionExtensionOutputs;
 
-        /// <summary>The R8 outcome-injection knob for a simulated fingerprint sensor capture.</summary>
+        /// <summary>The outcome-injection knob for a simulated fingerprint sensor capture.</summary>
         public SimulateFingerprintCaptureDelegate SimulateFingerprintCapture { get; } = simulateFingerprintCapture;
 
-        /// <summary>The R8 outcome-injection knob for a simulated built-in user verification gesture.</summary>
+        /// <summary>The outcome-injection knob for a simulated built-in user verification gesture.</summary>
         public SimulateBuiltInUvDelegate SimulateBuiltInUv { get; } = simulateBuiltInUv;
 
-        /// <summary>The R1 outcome-injection knob for a simulated :2840 user-presence collection.</summary>
+        /// <summary>The outcome-injection knob for a simulated :2840 user-presence collection.</summary>
         public SimulateUserPresenceDelegate SimulateUserPresence { get; } = simulateUserPresence;
 
         /// <summary>The time source the <see cref="CtapCollectUserPresenceAction"/> executor stamps a collected decision's <c>Now</c> with.</summary>
         public TimeProvider TimeProvider { get; } = timeProvider;
 
-        /// <summary>The NV-counter-backed signature-counter custody seam bundle, or <see langword="null"/> when none is composed (contract R-9, wavenv).</summary>
+        /// <summary>The NV-counter-backed signature-counter custody seam bundle, or <see langword="null"/> when none is composed.</summary>
         public CtapSignatureCounterCustody? SignatureCounterCustody { get; } = signatureCounterCustody;
 
-        /// <summary>The NV-backed persistent-tier PIN-retries custody seam bundle, or <see langword="null"/> when none is composed (contract R-1..R-6, wavepin).</summary>
+        /// <summary>The NV-backed persistent-tier PIN-retries custody seam bundle, or <see langword="null"/> when none is composed.</summary>
         public CtapPinRetriesCustody? PinRetriesCustody { get; } = pinRetriesCustody;
     }
 

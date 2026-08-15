@@ -91,8 +91,8 @@ public static class PublicKeyCredentialRequestOptionsJsonWriter
 
 
     /// <summary>
-    /// Writes the <c>extensions</c> member when at least one of the two named carve-outs this wave
-    /// ships is populated; omits the member entirely otherwise.
+    /// Writes the <c>extensions</c> member when at least one of the two named carve-outs this writer
+    /// supports is populated; omits the member entirely otherwise.
     /// </summary>
     private static void WriteExtensions(Utf8JsonWriter writer, string? appId, Fido2LargeBlobAssertionExtensionInput? largeBlob)
     {

@@ -350,7 +350,7 @@ public static class AndroidKeyAttestation
     /// and fills it with their concatenation — the bytes every android-key attestation signature covers.
     /// </summary>
     /// <param name="length">The exact number of meaningful bytes in the returned owner's memory.</param>
-    private static IMemoryOwner<byte> RentToBeSigned(ReadOnlyMemory<byte> authenticatorData, DigestValue clientDataHash, MemoryPool<byte> pool, out int length)
+    private static IMemoryOwner<byte> RentToBeSigned(ReadOnlyMemory<byte> authenticatorData, DigestValue clientDataHash, BaseMemoryPool pool, out int length)
     {
         length = authenticatorData.Length + clientDataHash.Length;
         IMemoryOwner<byte> owner = pool.Rent(length);

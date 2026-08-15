@@ -19,7 +19,7 @@ namespace Verifiable.Tests.DidComm;
 
 /// <summary>
 /// Anchors the DIDComm v2.1 authcrypt UNPACK (decrypt) path
-/// (<see cref="DidCommEncryptedExtensions.UnpackAuthcryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, AuthenticatedKeyAgreementDecryptDelegate, AuthenticatedKeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, MemoryPool{byte}, System.Threading.CancellationToken)"/>)
+/// (<see cref="DidCommEncryptedExtensions.UnpackAuthcryptAsync(DidCommEncryptedMessage, string, PrivateKeyMemory, DidResolver, ExchangeContext, DidCommMessageParser, JwsMessageParser, DecodeDelegate, EncodeDelegate, AuthenticatedKeyAgreementDecryptDelegate, AuthenticatedKeyDerivationDelegate, KeyUnwrapDelegate, AeadDecryptDelegate, BaseMemoryPool, System.Threading.CancellationToken)"/>)
 /// to the DIDComm Messaging v2.1 Appendix C.3 example 4 vector: ECDH-1PU over X25519 with A256CBC-HS512,
 /// sent from <c>did:example:alice#key-x25519-1</c> (the <c>skid</c>) to three of Bob's <c>keyAgreement</c>
 /// keys. Each recipient decrypts with Bob's Appendix A.2 static private key and MUST recover the
@@ -31,7 +31,7 @@ internal sealed class DidCommEncryptedAuthcryptVectorTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly MemoryPool<byte> Pool = BaseMemoryPool.Shared;
+    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
     private static readonly ExchangeContext Context = new();

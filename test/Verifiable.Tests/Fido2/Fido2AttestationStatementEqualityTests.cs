@@ -20,10 +20,6 @@ internal sealed class Fido2AttestationStatementEqualityTests
     public TestContext TestContext { get; set; } = null!;
 
 
-    // ---------------------------------------------------------------------------------------
-    // PackedAttestationStatement
-    // ---------------------------------------------------------------------------------------
-
     /// <summary>
     /// Two <see cref="PackedAttestationStatement"/> instances built from independently-minted
     /// <see cref="PkiCertificateMemory"/> instances over the same certificate bytes, and independently
@@ -124,10 +120,6 @@ internal sealed class Fido2AttestationStatementEqualityTests
     }
 
 
-    // ---------------------------------------------------------------------------------------
-    // AndroidKeyAttestationStatement
-    // ---------------------------------------------------------------------------------------
-
     /// <summary>
     /// Two <see cref="AndroidKeyAttestationStatement"/> instances built from independently-minted
     /// <see cref="PkiCertificateMemory"/> instances over the same certificate bytes, and independently
@@ -209,10 +201,6 @@ internal sealed class Fido2AttestationStatementEqualityTests
         Assert.AreNotEqual(statementA, statementB);
     }
 
-
-    // ---------------------------------------------------------------------------------------
-    // FidoU2fAttestationStatement
-    // ---------------------------------------------------------------------------------------
 
     /// <summary>
     /// Two <see cref="FidoU2fAttestationStatement"/> instances built from independently-minted

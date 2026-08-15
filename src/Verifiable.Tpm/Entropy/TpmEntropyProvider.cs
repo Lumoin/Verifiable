@@ -57,7 +57,7 @@ public sealed class TpmEntropyProvider
 {
     private TpmDevice Device { get; }
     private TpmResponseRegistry Registry { get; }
-    private MemoryPool<byte> Pool { get; }
+    private BaseMemoryPool Pool { get; }
     private TimeProvider TimeProvider { get; }
     private string EmittedBy { get; }
     private EntropyHealthObservation currentHealth = EntropyHealthObservation.Unknown;
@@ -76,7 +76,7 @@ public sealed class TpmEntropyProvider
     /// so events can be attributed and filtered.
     /// </param>
     /// <param name="timeProvider">The time source for event and observation timestamps.</param>
-    public TpmEntropyProvider(TpmDevice device, MemoryPool<byte> pool, string? emittedBy = null, TimeProvider? timeProvider = null)
+    public TpmEntropyProvider(TpmDevice device, BaseMemoryPool pool, string? emittedBy = null, TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(pool);
@@ -102,7 +102,7 @@ public sealed class TpmEntropyProvider
     /// <see cref="Purpose.Nonce"/> by default) is recorded on the event.</param>
     /// <param name="pool">The memory pool for the returned nonce's buffer.</param>
     /// <returns>The nonce and an <see cref="EntropyConsumedEvent"/> tagged <see cref="EntropySource.Tpm"/>.</returns>
-    public (Nonce Result, CryptoEvent? Event) GenerateNonce(int byteLength, Tag tag, MemoryPool<byte> pool)
+    public (Nonce Result, CryptoEvent? Event) GenerateNonce(int byteLength, Tag tag, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);
@@ -123,7 +123,7 @@ public sealed class TpmEntropyProvider
     /// <see cref="Purpose.Salt"/> by default) is recorded on the event.</param>
     /// <param name="pool">The memory pool for the returned salt's buffer.</param>
     /// <returns>The salt and an <see cref="EntropyConsumedEvent"/> tagged <see cref="EntropySource.Tpm"/>.</returns>
-    public (Salt Result, CryptoEvent? Event) GenerateSalt(int byteLength, Tag tag, MemoryPool<byte> pool)
+    public (Salt Result, CryptoEvent? Event) GenerateSalt(int byteLength, Tag tag, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);

@@ -106,7 +106,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
     [TestMethod]
     public async Task MultiQuoteAttestationLogReplaysAndAccumulatesState()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -150,7 +150,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
     [TestMethod]
     public async Task QuoteFromUnenrolledKeyIsRejected()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -208,7 +208,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
     [TestMethod]
     public async Task EnrolledViaActivationThenAttestationLogReplays()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -273,7 +273,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
     /// <param name="ak">The attestation key being enrolled.</param>
     /// <returns><see langword="true"/> when activation recovers the challenge, proving AK↔EK co-residence.</returns>
     private async Task<bool> EnrollByActivationAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, CreatePrimaryResponse ek, CreatePrimaryResponse ak)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, CreatePrimaryResponse ek, CreatePrimaryResponse ak)
     {
         byte[] objectName = ak.Name.Span.ToArray();
         using MakeCredentialInput makeInput = MakeCredentialInput.Create(ek.ObjectHandle, EnrollmentChallenge, objectName, pool);
@@ -308,7 +308,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
     /// <param name="hierarchy">The hierarchy under which to create the key.</param>
     /// <returns>The CreatePrimary response (the caller owns it and flushes the handle).</returns>
     private async Task<CreatePrimaryResponse> CreateStoragePrimaryAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmRh hierarchy)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForEccStorageParent(
             hierarchy, null, TpmEccCurveConstants.TPM_ECC_NIST_P256, pool, noDa: true);
@@ -429,7 +429,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
     /// <returns>The canonical bytes, the parsed operation, and the projected signature (the caller owns it).</returns>
     [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned Signature transfers to the caller.")]
     private async Task<(byte[] Canonical, TpmQuoteOperation Operation, Signature Signature)> QuoteAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmiDhObject signHandle, byte[] nonce)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmiDhObject signHandle, byte[] nonce)
     {
         using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
         using TpmlPcrSelection pcrSelection = TpmlPcrSelection.Create(PcrBank, PcrIndices, pool);
@@ -485,7 +485,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
     /// <param name="hierarchy">The hierarchy under which to create the key.</param>
     /// <returns>The CreatePrimary response (the caller owns it and flushes the handle).</returns>
     private async Task<CreatePrimaryResponse> CreateSigningPrimaryAsync(
-        TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmRh hierarchy)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForEccSigningKey(
             hierarchy,
@@ -526,7 +526,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
     /// <param name="registry">The response codec registry.</param>
     /// <param name="handle">The handle to flush.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task FlushAsync(TpmDevice tpm, TpmResponseRegistry registry, uint handle, MemoryPool<byte> pool)
+    private async Task FlushAsync(TpmDevice tpm, TpmResponseRegistry registry, uint handle, BaseMemoryPool pool)
     {
         var flush = FlushContextInput.ForHandle(handle);
         _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
@@ -559,7 +559,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator("tpm-in-house-attestationlog", signingBackend: BouncyCastleTpmEccSigningBackend.Create());
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -574,7 +574,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
     /// </summary>
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();

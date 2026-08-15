@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core.Assessment;
 using Verifiable.OAuth.Validation;
 
@@ -28,7 +27,6 @@ namespace Verifiable.OAuth.Client;
 /// own.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("ClientPolicyProfiles")]
 public static class ClientPolicyProfiles
 {
     /// <summary>

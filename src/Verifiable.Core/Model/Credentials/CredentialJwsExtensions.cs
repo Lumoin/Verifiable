@@ -6,6 +6,9 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Verifiable.Core;
+using Verifiable.Core.Model.Did;
+using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
@@ -72,7 +75,7 @@ public static class CredentialJwsExtensions
         CredentialToJsonBytesDelegate credentialSerializer,
         JwtHeaderSerializer headerSerializer,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         string? mediaType = null,
         string? contentType = null,
         CancellationToken cancellationToken = default)
@@ -125,7 +128,7 @@ public static class CredentialJwsExtensions
         JwtHeaderSerializer headerSerializer,
         EncodeDelegate base64UrlEncoder,
         SigningDelegate signingDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         string? mediaType = null,
         string? contentType = null,
         CancellationToken cancellationToken = default)
@@ -204,7 +207,7 @@ public static class CredentialJwsExtensions
         DecodeDelegate base64UrlDecoder,
         JwtHeaderDeserializer headerDeserializer,
         CredentialFromJsonBytesDelegate credentialDeserializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(publicKey);
@@ -233,6 +236,15 @@ public static class CredentialJwsExtensions
     /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
     /// from <paramref name="publicKey"/>'s <see cref="SensitiveMemory.Tag"/>.
     /// </summary>
+    /// <remarks>
+    /// This is a bring-your-own-key primitive: <paramref name="publicKey"/> is a plain parameter
+    /// this method never resolves or cross-checks against anything, so the <c>kid</c> recorded onto
+    /// the result's <see cref="Verified{T}"/> context is a wire label the check never tied to
+    /// <paramref name="publicKey"/> — an <see cref="AssertedProvenance"/>, never a principal
+    /// authentication. It exists for callers whose key trust is established out of band (a pinned
+    /// key, a key fetched and vetted by the caller's own process). The resolving overload below —
+    /// taking a <see cref="DidResolver"/> instead of a key — is the recommended default.
+    /// </remarks>
     /// <param name="jws">The JWS compact serialization to verify.</param>
     /// <param name="publicKey">The public key for verification.</param>
     /// <param name="base64UrlDecoder">Delegate for Base64Url decoding.</param>
@@ -250,7 +262,7 @@ public static class CredentialJwsExtensions
         JwtHeaderDeserializer headerDeserializer,
         CredentialFromJsonBytesDelegate credentialDeserializer,
         VerificationDelegate verificationDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(jws);
@@ -311,7 +323,132 @@ public static class CredentialJwsExtensions
 
             using IMemoryOwner<byte> payloadBytesOwner = base64UrlDecoder(parts[1], memoryPool);
             VerifiableCredential credential = credentialDeserializer(payloadBytesOwner.Memory.Span);
-            var verifiedCredential = new Verified<VerifiableCredential>(credential, VerificationContextTag.Create(ExtractKeyId(header)));
+            var verifiedCredential = Verified<VerifiableCredential>.CreateAsserted(credential, AssertedProvenance.OfLabel(ExtractKeyId(header)));
+
+            return new JwsCredentialVerificationResult(true, header, verifiedCredential);
+        }
+        catch(OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return new JwsCredentialVerificationResult(false, header, null);
+        }
+    }
+
+
+    /// <summary>
+    /// Verifies a JWS-secured credential from compact serialization by RESOLVING the signer's
+    /// verification method — the recommended default shape.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Implements the DIDComm Tier-A recipe (<c>DidCommSignedExtensions.UnpackSignedAsync</c>)
+    /// adapted to a credential's own signed <c>issuer</c> claim, every gate a fail-closed
+    /// short-circuit before the cryptographic check:
+    /// </para>
+    /// <list type="number">
+    /// <item><description>Extract <c>kid</c> from the protected header. Absent → refuse.</description></item>
+    /// <item><description><c>kid</c>'s base DID MUST equal the credential's own signed <c>issuer</c> claim. Mismatch/unparseable → refuse.</description></item>
+    /// <item><description>Resolve INSIDE this method via <paramref name="didResolver"/> — never a caller-handed document. Resolution failure → refuse.</description></item>
+    /// <item><description>The method MUST be listed under the resolved document's <c>assertionMethod</c> relationship, not merely the flat array. Not listed → refuse.</description></item>
+    /// <item><description>Key material and algorithm come from the RESOLVED method only — never the wire <c>alg</c>, defeating algorithm substitution — via <see cref="VerificationMethodExtensions.VerifySignatureAsync"/>.</description></item>
+    /// <item><description>Only past every gate does <see cref="BoundProvenance.TryBindByResolvedMethod"/> mint a <see cref="Verified{T}"/> whose <see cref="Verified{T}.IsIdentityBound"/> is <see langword="true"/>.</description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="jws">The JWS compact serialization to verify.</param>
+    /// <param name="didResolver">The resolver this method calls to resolve the signer's DID.</param>
+    /// <param name="exchangeContext">The per-operation exchange context threaded to resolution.</param>
+    /// <param name="base64UrlDecoder">Delegate for Base64Url decoding.</param>
+    /// <param name="headerDeserializer">Delegate for deserializing the JWT header.</param>
+    /// <param name="credentialDeserializer">Delegate for deserializing the credential from UTF-8 JSON bytes.</param>
+    /// <param name="memoryPool">Memory pool for allocations.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// The verification result. <see cref="JwsCredentialVerificationResult.Credential"/> is non-null
+    /// and identity-bound only when every gate above holds and the signature verifies; a caught
+    /// malformed header/payload also refuses rather than escaping as an exception.
+    /// </returns>
+    /// <exception cref="ArgumentException">Thrown when the JWS does not have exactly three parts.</exception>
+    public static async ValueTask<JwsCredentialVerificationResult> VerifyJwsAsync(
+        string jws,
+        DidResolver didResolver,
+        ExchangeContext exchangeContext,
+        DecodeDelegate base64UrlDecoder,
+        JwtHeaderDeserializer headerDeserializer,
+        CredentialFromJsonBytesDelegate credentialDeserializer,
+        BaseMemoryPool memoryPool,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(jws);
+        ArgumentNullException.ThrowIfNull(didResolver);
+        ArgumentNullException.ThrowIfNull(exchangeContext);
+        ArgumentNullException.ThrowIfNull(base64UrlDecoder);
+        ArgumentNullException.ThrowIfNull(headerDeserializer);
+        ArgumentNullException.ThrowIfNull(credentialDeserializer);
+        ArgumentNullException.ThrowIfNull(memoryPool);
+
+        string[] parts = jws.Split('.');
+        if(parts.Length != 3)
+        {
+            throw new ArgumentException("JWS compact serialization must have exactly three parts.", nameof(jws));
+        }
+
+        Dictionary<string, object>? header = null;
+        try
+        {
+            using IMemoryOwner<byte> headerBytesOwner = base64UrlDecoder(parts[0], memoryPool);
+            header = headerDeserializer(headerBytesOwner.Memory.Span);
+            string? kid = ExtractKeyId(header);
+
+            //The credential must be decoded before the signature is checked -- its signed `issuer`
+            //claim is the identity the kid is bound to (gate 2), so it must be readable before the
+            //resolve+authorize gates run, exactly as DIDComm reads its signed `from` before verifying.
+            //A malformed payload is untrusted input that cannot verify either way, so a decode failure
+            //here fails closed via the catch below rather than escaping as an exception.
+            using IMemoryOwner<byte> payloadBytesOwner = base64UrlDecoder(parts[1], memoryPool);
+            VerifiableCredential credential = credentialDeserializer(payloadBytesOwner.Memory.Span);
+
+            (VerificationMethod Method, DidDocument Document)? resolved = await CredentialEnvelopeIdentityBinding
+                .TryResolveAssertionMethodAsync(kid, credential.Issuer?.Id, didResolver, exchangeContext, cancellationToken)
+                .ConfigureAwait(false);
+
+            if(resolved is not { } binding)
+            {
+                return new JwsCredentialVerificationResult(false, header, null);
+            }
+
+            using IMemoryOwner<byte> signatureBytesOwner = base64UrlDecoder(parts[2], memoryPool);
+
+            //Per RFC 7515 Section 5.2, verification uses the same ASCII signing input.
+            int verifyInputLength = parts[0].Length + 1 + parts[1].Length;
+            using IMemoryOwner<byte> verifyInputOwner = memoryPool.Rent(verifyInputLength);
+            Memory<byte> verifyInputMemory = verifyInputOwner.Memory[..verifyInputLength];
+
+            int written = Encoding.ASCII.GetBytes(parts[0], verifyInputMemory.Span);
+            verifyInputMemory.Span[written] = (byte)'.';
+            written += 1;
+            written += Encoding.ASCII.GetBytes(parts[1], verifyInputMemory.Span[written..]);
+
+            Debug.Assert(written == verifyInputLength, "Verification input length must match the expected size.");
+
+            using var signature = new Signature(signatureBytesOwner, Tag.Create(Purpose.Verification));
+            bool isValid = await binding.Method.VerifySignatureAsync(verifyInputMemory, signature, memoryPool).ConfigureAwait(false);
+            if(!isValid)
+            {
+                return new JwsCredentialVerificationResult(false, header, null);
+            }
+
+            string absoluteMethodId = CredentialEnvelopeIdentityBinding.ExpandMethodId(binding.Method, binding.Document) ?? kid!;
+            BoundProvenance? provenance = BoundProvenance.TryBindByResolvedMethod(
+                new KeyId(kid!), absoluteMethodId, VerificationRelationship.AssertionMethod, credential);
+
+            if(provenance is null
+                || Verified<VerifiableCredential>.TryCreateBound(credential, provenance) is not { } verifiedCredential)
+            {
+                return new JwsCredentialVerificationResult(false, header, null);
+            }
 
             return new JwsCredentialVerificationResult(true, header, verifiedCredential);
         }
@@ -342,7 +479,7 @@ public static class CredentialJwsExtensions
         PublicKeyMemory publicKey,
         EncodeDelegate base64UrlEncoder,
         CredentialFromJsonBytesDelegate credentialDeserializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(publicKey);
@@ -370,6 +507,15 @@ public static class CredentialJwsExtensions
     /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
     /// from <paramref name="publicKey"/>'s <see cref="SensitiveMemory.Tag"/>.
     /// </summary>
+    /// <remarks>
+    /// This is a bring-your-own-key primitive: <paramref name="publicKey"/> is a plain parameter
+    /// this method never resolves or cross-checks against anything, so the <c>kid</c> recorded onto
+    /// the result's <see cref="Verified{T}"/> context is a wire label the check never tied to
+    /// <paramref name="publicKey"/> — an <see cref="AssertedProvenance"/>, never a principal
+    /// authentication. It exists for callers whose key trust is established out of band. The
+    /// resolving overload below — taking a <see cref="DidResolver"/> instead of a key — is the
+    /// recommended default.
+    /// </remarks>
     /// <param name="message">The JWS message to verify.</param>
     /// <param name="publicKey">The public key for verification.</param>
     /// <param name="base64UrlEncoder">Delegate for Base64Url encoding.</param>
@@ -385,7 +531,7 @@ public static class CredentialJwsExtensions
         EncodeDelegate base64UrlEncoder,
         CredentialFromJsonBytesDelegate credentialDeserializer,
         VerificationDelegate verificationDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -433,7 +579,112 @@ public static class CredentialJwsExtensions
         }
 
         VerifiableCredential credential = credentialDeserializer(message.Payload.Span);
-        var verifiedCredential = new Verified<VerifiableCredential>(credential, VerificationContextTag.Create(ExtractKeyId(header)));
+        var verifiedCredential = Verified<VerifiableCredential>.CreateAsserted(credential, AssertedProvenance.OfLabel(ExtractKeyId(header)));
+
+        return new JwsCredentialVerificationResult(true, header, verifiedCredential);
+    }
+
+
+    /// <summary>
+    /// Verifies a JWS message directly by RESOLVING the signer's verification method — the
+    /// recommended default shape. Implements the same DIDComm Tier-A recipe as the compact-form
+    /// resolving overload above (see its remarks for the six gates), adapted to the already-parsed
+    /// <see cref="JwsMessage"/> shape.
+    /// </summary>
+    /// <param name="message">The JWS message to verify.</param>
+    /// <param name="didResolver">The resolver this method calls to resolve the signer's DID.</param>
+    /// <param name="exchangeContext">The per-operation exchange context threaded to resolution.</param>
+    /// <param name="base64UrlEncoder">Delegate for Base64Url encoding, used to reconstruct the signing input.</param>
+    /// <param name="credentialDeserializer">Delegate for deserializing the credential from UTF-8 JSON bytes.</param>
+    /// <param name="memoryPool">Memory pool for allocations.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// The verification result. <see cref="JwsCredentialVerificationResult.Credential"/> is non-null
+    /// and identity-bound only when every gate holds and the signature verifies; a caught malformed
+    /// payload also refuses rather than escaping as an exception.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">Thrown when the message has more than one signature.</exception>
+    public static async ValueTask<JwsCredentialVerificationResult> VerifyJwsAsync(
+        JwsMessage message,
+        DidResolver didResolver,
+        ExchangeContext exchangeContext,
+        EncodeDelegate base64UrlEncoder,
+        CredentialFromJsonBytesDelegate credentialDeserializer,
+        BaseMemoryPool memoryPool,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(didResolver);
+        ArgumentNullException.ThrowIfNull(exchangeContext);
+        ArgumentNullException.ThrowIfNull(base64UrlEncoder);
+        ArgumentNullException.ThrowIfNull(credentialDeserializer);
+        ArgumentNullException.ThrowIfNull(memoryPool);
+
+        if(message.Signatures.Count != 1)
+        {
+            throw new InvalidOperationException(
+                $"This method verifies a single signature. Message has {message.Signatures.Count} signatures.");
+        }
+
+        JwsSignatureComponent signature = message.Signatures[0];
+        var header = new Dictionary<string, object>(signature.ProtectedHeader);
+
+        VerifiableCredential credential;
+        try
+        {
+            //The credential must be decoded before the signature is checked -- its signed `issuer`
+            //claim is the identity the kid is bound to (gate 2). A malformed payload cannot verify
+            //either way, so a decode failure here fails closed rather than escaping as an exception.
+            credential = credentialDeserializer(message.Payload.Span);
+        }
+        catch(OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return new JwsCredentialVerificationResult(false, header, null);
+        }
+
+        string? kid = ExtractKeyId(header);
+        (VerificationMethod Method, DidDocument Document)? resolved = await CredentialEnvelopeIdentityBinding
+            .TryResolveAssertionMethodAsync(kid, credential.Issuer?.Id, didResolver, exchangeContext, cancellationToken)
+            .ConfigureAwait(false);
+
+        if(resolved is not { } binding)
+        {
+            return new JwsCredentialVerificationResult(false, header, null);
+        }
+
+        string payloadSegment = base64UrlEncoder(message.Payload.Span);
+
+        //Per RFC 7515 Section 5.2, verification uses the same ASCII signing input.
+        int verifyInputLength = signature.Protected.Length + 1 + payloadSegment.Length;
+        using IMemoryOwner<byte> verifyInputOwner = memoryPool.Rent(verifyInputLength);
+        Memory<byte> verifyInputMemory = verifyInputOwner.Memory[..verifyInputLength];
+
+        int written = Encoding.ASCII.GetBytes(signature.Protected, verifyInputMemory.Span);
+        verifyInputMemory.Span[written] = (byte)'.';
+        written += 1;
+        written += Encoding.ASCII.GetBytes(payloadSegment, verifyInputMemory.Span[written..]);
+
+        Debug.Assert(written == verifyInputLength, "Verification input length must match the expected size.");
+
+        bool isValid = await binding.Method.VerifySignatureAsync(verifyInputMemory, signature.Signature, memoryPool).ConfigureAwait(false);
+        if(!isValid)
+        {
+            return new JwsCredentialVerificationResult(false, header, null);
+        }
+
+        string absoluteMethodId = CredentialEnvelopeIdentityBinding.ExpandMethodId(binding.Method, binding.Document) ?? kid!;
+        BoundProvenance? provenance = BoundProvenance.TryBindByResolvedMethod(
+            new KeyId(kid!), absoluteMethodId, VerificationRelationship.AssertionMethod, credential);
+
+        if(provenance is null
+            || Verified<VerifiableCredential>.TryCreateBound(credential, provenance) is not { } verifiedCredential)
+        {
+            return new JwsCredentialVerificationResult(false, header, null);
+        }
 
         return new JwsCredentialVerificationResult(true, header, verifiedCredential);
     }

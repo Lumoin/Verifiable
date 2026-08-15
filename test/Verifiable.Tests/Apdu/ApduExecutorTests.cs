@@ -21,7 +21,7 @@ internal sealed class ApduExecutorTests
         virtualCard.Register(command, response);
 
         using var device = ApduDevice.Create(virtualCard.TransceiveAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ApduResult<ApduResponse> result = await ApduExecutor.ExecuteAsync(
             device, command, pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -41,7 +41,7 @@ internal sealed class ApduExecutorTests
         virtualCard.Register(command, response);
 
         using var device = ApduDevice.Create(virtualCard.TransceiveAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ApduResult<ApduResponse> result = await ApduExecutor.ExecuteAsync(
             device, command, pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -63,7 +63,7 @@ internal sealed class ApduExecutorTests
 
         ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             byte ins = commandApdu.Span[1];
@@ -93,7 +93,7 @@ internal sealed class ApduExecutorTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] command = [0x00, 0xCB, 0x3F, 0xFF, 0x00];
 
         ApduResult<ApduResponse> result = await ApduExecutor.ExecuteAsync(
@@ -122,7 +122,7 @@ internal sealed class ApduExecutorTests
 
         ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             callCount++;
@@ -146,7 +146,7 @@ internal sealed class ApduExecutorTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //Case 2 command with Le=0 (ask for max).
         byte[] command = [0x00, 0xCA, 0xDF, 0x30, 0x00];
@@ -166,14 +166,14 @@ internal sealed class ApduExecutorTests
     {
         ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             return ValueTask.FromResult(ApduResult<ApduResponse>.TransportError(0x80100069));
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] command = [0x00, 0xA4, 0x04, 0x00];
 
         ApduResult<ApduResponse> result = await ApduExecutor.ExecuteAsync(
@@ -193,7 +193,7 @@ internal sealed class ApduExecutorTests
 
         ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             byte cla = commandApdu.Span[0];
@@ -220,7 +220,7 @@ internal sealed class ApduExecutorTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //Case 2 short command with CLA 0x0C.
         byte[] command = [SecureMessagingCla, 0xB0, 0x00, 0x00, 0x00];
@@ -246,7 +246,7 @@ internal sealed class ApduExecutorTests
 
         ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             byte cla = commandApdu.Span[0];
@@ -272,7 +272,7 @@ internal sealed class ApduExecutorTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         byte[] command = [ChainedChannelOneCla, 0xB0, 0x00, 0x00, 0x00];
 
@@ -293,7 +293,7 @@ internal sealed class ApduExecutorTests
 
         ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             byte ins = commandApdu.Span[1];
@@ -331,7 +331,7 @@ internal sealed class ApduExecutorTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //Case 2 short command (Le=0 asks for max).
         byte[] command = [0x00, 0xB0, 0x00, 0x00, 0x00];
@@ -363,7 +363,7 @@ internal sealed class ApduExecutorTests
 
         ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             callCount++;
@@ -378,7 +378,7 @@ internal sealed class ApduExecutorTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         byte[] command = [0x00, 0xCA, 0xDF, 0x30, 0x00];
 
@@ -404,7 +404,7 @@ internal sealed class ApduExecutorTests
 
         ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             callCount++;
@@ -419,7 +419,7 @@ internal sealed class ApduExecutorTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         byte[] command = [0x00, 0xB0, 0x00, 0x00, 0x00];
 
@@ -453,7 +453,7 @@ internal sealed class ApduExecutorTests
 
         ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             byte ins = commandApdu.Span[1];
@@ -479,7 +479,7 @@ internal sealed class ApduExecutorTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //Case 2 short command requesting Le=3.
         byte[] command = [0x00, 0xB0, 0x00, 0x00, OriginalLe];
@@ -507,7 +507,7 @@ internal sealed class ApduExecutorTests
         //result channel as a transport error rather than throwing while reading the status word.
         ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             //A single byte: too short to contain SW1-SW2.
@@ -520,7 +520,7 @@ internal sealed class ApduExecutorTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] command = [0x00, 0xCA, 0xDF, 0x30, 0x00];
 
         ApduResult<ApduResponse> result = await ApduExecutor.ExecuteAsync(
@@ -541,7 +541,7 @@ internal sealed class ApduExecutorTests
 
         ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken)
         {
             callCount++;
@@ -559,7 +559,7 @@ internal sealed class ApduExecutorTests
         }
 
         using var device = ApduDevice.Create(Handler);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //Case 1 command: header only, no Le field. P2 is 0x42.
         byte[] command = [0x00, 0xA4, 0x04, 0x42];

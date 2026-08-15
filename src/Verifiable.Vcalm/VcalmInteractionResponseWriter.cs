@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 
 namespace Verifiable.Vcalm;
@@ -9,7 +8,6 @@ namespace Verifiable.Vcalm;
 /// through <see cref="JsonAppender"/> per the <c>Verifiable.Vcalm</c> serialization firewall (no
 /// <c>System.Text.Json</c>; the HTML is a fixed static document built as a string).
 /// </summary>
-[DebuggerDisplay("VcalmInteractionResponseWriter")]
 public static class VcalmInteractionResponseWriter
 {
     /// <summary>

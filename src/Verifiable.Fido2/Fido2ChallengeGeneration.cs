@@ -22,7 +22,7 @@ namespace Verifiable.Fido2;
 /// </para>
 /// <para>
 /// This is the provider-agnostic entropy seam every other consumer in this codebase calls —
-/// <see cref="CryptographicKeyEvents.GenerateNonce(int, Tag, MemoryPool{byte}, string?)"/> — not the
+/// <see cref="CryptographicKeyEvents.GenerateNonce(int, Tag, BaseMemoryPool, string?)"/> — not the
 /// provider-internal <c>FillEntropyDelegate</c>/<c>Nonce.Generate</c> pair those providers use
 /// internally. Calling the low-level pair directly would bypass the registered-provider
 /// indirection and the <see cref="CryptoEvent"/> emission the CBOM observability wiring depends on.
@@ -53,7 +53,7 @@ public static class Fido2ChallengeGeneration
     /// <see cref="RegistrationCeremonyInput.ExpectedChallenge"/> and
     /// <see cref="AssertionCeremonyInput.ExpectedChallenge"/> already require.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
-    public static string Generate(MemoryPool<byte> pool) => Generate(DefaultByteLength, pool);
+    public static string Generate(BaseMemoryPool pool) => Generate(DefaultByteLength, pool);
 
 
     /// <summary>
@@ -76,7 +76,7 @@ public static class Fido2ChallengeGeneration
     /// <paramref name="byteLength"/> is less than <see cref="MinimumByteLength"/>.
     /// </exception>
     /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
-    public static string Generate(int byteLength, MemoryPool<byte> pool)
+    public static string Generate(int byteLength, BaseMemoryPool pool)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(byteLength, MinimumByteLength);
         ArgumentNullException.ThrowIfNull(pool);

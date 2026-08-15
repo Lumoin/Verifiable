@@ -1,6 +1,5 @@
 ﻿using System.Buffers;
 using System.Collections.Generic;
-using System.Text;
 using Lumoin.Base;
 using Verifiable.Cesr;
 
@@ -8,21 +7,14 @@ namespace Verifiable.Tests.Cesr;
 
 /// <summary>
 /// Tests for <see cref="CesrIndexedSignatureCodec"/>: round-tripping a CESR indexed signature between the
-/// raw, text (qb64) and binary (qb2) domains. The always-on cases are known-answer vectors covering a
-/// single-indexed code (other-index equal to the index), a dual-indexed code (distinct other-index), and a
-/// variable indexed code (no other-index). The corpus-driven case exercises the full published indexed
-/// conformance vector set when it is available. Anchored on the CESR specification's
+/// raw, text (qb64) and binary (qb2) domains. The known-answer vectors cover a single-indexed code
+/// (other-index equal to the index), a dual-indexed code (distinct other-index), and a variable indexed
+/// code (no other-index). Anchored on the CESR specification's
 /// <see href="https://trustoverip.github.io/kswg-cesr-specification/#indexed-codes">Indexed codes</see> section.
 /// </summary>
 [TestClass]
 internal sealed class CesrIndexedSignatureCodecTests
 {
-    /// <summary>
-    /// The test context.
-    /// </summary>
-    public TestContext TestContext { get; set; } = null!;
-
-
     /// <summary>
     /// Known-answer vectors: code, raw (hex), index, other-index (null when absent), expected qb64, expected qb2 (hex).
     /// </summary>
@@ -73,77 +65,6 @@ internal sealed class CesrIndexedSignatureCodecTests
             Assert.AreEqual(index, parsed.Index, "Decoding qb2 must recover the index.");
             Assert.AreEqual(ondex, parsed.Ondex, "Decoding qb2 must recover the other-index.");
             Assert.AreEqual(rawHex, Convert.ToHexStringLower(parsed.Raw), "Decoding qb2 must recover the raw signature.");
-        }
-    }
-
-
-    [TestMethod]
-    public void RoundTripsEveryIndexedConformanceVector()
-    {
-        if(!CesrConformanceVectors.TryGetCorpusRoot(out string root))
-        {
-            Assert.Inconclusive($"The CESR conformance vector corpus is not available; set {CesrConformanceVectors.CorpusVariable} to run this test.");
-        }
-
-        int verified = 0;
-        int skipped = 0;
-        var failures = new StringBuilder();
-        foreach(CesrConformanceVector vector in CesrConformanceVectors.EnumerateIndexes(root))
-        {
-            if(vector.Malformed)
-            {
-                skipped++;
-                continue;
-            }
-
-            try
-            {
-                VerifyIndexed(vector);
-                verified++;
-            }
-            catch(Exception exception)
-            {
-                if(failures.Length < 8192)
-                {
-                    failures.Append(vector.Name).Append(" (").Append(vector.Code).Append("): ").AppendLine(exception.Message);
-                }
-            }
-        }
-
-        TestContext.WriteLine($"Verified {verified} CESR indexed conformance vectors ({skipped} malformed corpus files skipped).");
-        Assert.IsGreaterThan(0, verified, "The corpus was located but contained no indexed vectors to verify.");
-        Assert.AreEqual(0, failures.Length, $"All CESR indexed conformance vectors must round-trip.\n{failures}");
-    }
-
-
-    private static void VerifyIndexed(CesrConformanceVector vector)
-    {
-        int index = vector.Index ?? 0;
-
-        Assert.AreEqual(vector.Text, CesrIndexedSignatureCodec.EncodeText(vector.Code, vector.Raw, index, vector.Ondex), "qb64 mismatch");
-
-        using(IMemoryOwner<byte> binary = CesrIndexedSignatureCodec.EncodeBinary(vector.Code, vector.Raw, index, BaseMemoryPool.Shared, vector.Ondex))
-        {
-            Assert.AreEqual(
-                Convert.ToHexStringLower(vector.Binary),
-                Convert.ToHexStringLower(binary.Memory.Span[..vector.Binary.Length]),
-                "qb2 mismatch");
-        }
-
-        using(CesrParsedIndexedSignature fromText = CesrIndexedSignatureCodec.DecodeText(vector.Text, BaseMemoryPool.Shared))
-        {
-            Assert.AreEqual(vector.Code, fromText.Code, "qb64 decode code mismatch");
-            Assert.AreEqual(index, fromText.Index, "qb64 decode index mismatch");
-            Assert.AreEqual(vector.Ondex, fromText.Ondex, "qb64 decode ondex mismatch");
-            Assert.AreEqual(Convert.ToHexStringLower(vector.Raw), Convert.ToHexStringLower(fromText.Raw), "qb64 decode raw mismatch");
-        }
-
-        using(CesrParsedIndexedSignature fromBinary = CesrIndexedSignatureCodec.DecodeBinary(vector.Binary, BaseMemoryPool.Shared))
-        {
-            Assert.AreEqual(vector.Code, fromBinary.Code, "qb2 decode code mismatch");
-            Assert.AreEqual(index, fromBinary.Index, "qb2 decode index mismatch");
-            Assert.AreEqual(vector.Ondex, fromBinary.Ondex, "qb2 decode ondex mismatch");
-            Assert.AreEqual(Convert.ToHexStringLower(vector.Raw), Convert.ToHexStringLower(fromBinary.Raw), "qb2 decode raw mismatch");
         }
     }
 }

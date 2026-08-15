@@ -21,15 +21,15 @@ namespace Verifiable.Cryptography;
 /// <param name="cancellationToken">Cancellation token for async operations.</param>
 /// <returns>
 /// The signature as pooled memory that the caller must dispose, paired with an optional
-/// <see cref="SignatureProducedEvent"/> describing the operation — the same tuple shape wave 4 gave
-/// <see cref="SigningDelegate"/>, completing the CryptoEvent seam for the last sign/verify delegate family
+/// <see cref="SignatureProducedEvent"/> describing the operation — the same tuple shape
+/// <see cref="SigningDelegate"/> gives, completing the CryptoEvent seam for the last sign/verify delegate family
 /// that lacked it (ISO/IEC 9796-2 message recovery has no detached-signature contract to share the plain
 /// delegate pair, so it was given its own registry, but the event shape now matches).
 /// </returns>
 public delegate ValueTask<(Signature Signature, CryptoEvent? Event)> RecoverableSigningDelegate(
     ReadOnlyMemory<byte> privateKeyBytes,
     ReadOnlyMemory<byte> nonRecoverableMessage,
-    MemoryPool<byte> signaturePool,
+    BaseMemoryPool signaturePool,
     FrozenDictionary<string, object>? context = null,
     CancellationToken cancellationToken = default);
 

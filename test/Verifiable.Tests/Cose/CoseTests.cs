@@ -238,6 +238,74 @@ internal sealed class CoseTests
     }
 
 
+    /// <summary>
+    /// RFC 9052 §3's <c>empty_or_serialized_map</c> CDDL (<c>bstr
+    /// .cbor header_map / bstr .size 0</c>) admits a genuinely zero-length protected header, distinct from a
+    /// serialized empty map (<c>{}</c> encodes to <c>0xa0</c>, a one-byte bstr payload). <see cref="BaseMemoryPool.Rent"/>
+    /// refuses a zero-length rental, so <see cref="CoseSerialization.ParseCoseSign1"/> must route this through
+    /// the <c>EncodedCoseProtectedHeader.FromBytes</c> <c>EmptyMemoryOwner</c> idiom rather than a bare rental,
+    /// or this KAT throws instead of round-tripping.
+    /// </summary>
+    [TestMethod]
+    public async Task ParseCoseSign1AcceptsGenuinelyZeroLengthProtectedHeader()
+    {
+        EncodedCoseProtectedHeader protectedHeader = EncodedCoseProtectedHeader.FromBytes(ReadOnlySpan<byte>.Empty, BaseMemoryPool.Shared);
+        byte[] payload = BuildTestPayload();
+
+        var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
+        var message = await Verifiable.JCose.Cose.SignAsync(
+            protectedHeader,
+            unprotectedHeader: null,
+            payload,
+            CoseSerialization.BuildSigStructure,
+            privateKey,
+            MicrosoftCryptographicFunctions.SignP256Async,
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(0, message.ProtectedHeader.Length, "Precondition: the signed message's own protected header is genuinely zero-length.");
+
+        using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, BaseMemoryPool.Shared);
+        using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(coseBytes.AsReadOnlyMemory(), BaseMemoryPool.Shared);
+
+        Assert.AreEqual(0, parsed.ProtectedHeader.Length, "A genuinely zero-length protected header must parse, not throw on a zero-length pool rental.");
+
+        bool isValid = await Verifiable.JCose.Cose.VerifyAsync(
+            parsed,
+            CoseSerialization.BuildSigStructure,
+            publicKey,
+            MicrosoftCryptographicFunctions.VerifyP256Async,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(isValid, "The parsed message with a zero-length protected header must still verify.");
+    }
+
+
+    /// <summary>The <see cref="CoseSerialization.ParseCoseSign1AllowingNilPayload"/> sibling of the test above.</summary>
+    [TestMethod]
+    public void ParseCoseSign1AllowingNilPayloadAcceptsGenuinelyZeroLengthProtectedHeader()
+    {
+        var writer = new CborWriter(CborConformanceMode.Canonical);
+        writer.WriteTag((CborTag)CoseTags.Sign1);
+        writer.WriteStartArray(4);
+        writer.WriteByteString([]);
+        writer.WriteStartMap(0);
+        writer.WriteEndMap();
+        writer.WriteNull();
+        writer.WriteByteString([1, 2, 3, 4]);
+        writer.WriteEndArray();
+        byte[] wireBytes = writer.Encode();
+
+        using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1AllowingNilPayload(wireBytes, BaseMemoryPool.Shared);
+
+        Assert.AreEqual(0, parsed.ProtectedHeader.Length, "A genuinely zero-length protected header must parse, not throw on a zero-length pool rental.");
+        Assert.IsTrue(parsed.Payload.IsEmpty, "The nil payload sentinel must still decode to the detached (empty) form.");
+    }
+
+
     [TestMethod]
     public async Task VerifyAndDecodeReturnsValidResultForGenuineSignature()
     {
@@ -420,7 +488,7 @@ internal sealed class CoseTests
         Justification = "Ownership transfers to the caller which disposes via PrivateKey.")]
     private static ValueTask<PrivateKeyMemory?> ResolvePrivateKeyMaterial(
         CoseKeyContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TestResolverState state,
         CancellationToken cancellationToken)
     {
@@ -434,7 +502,7 @@ internal sealed class CoseTests
         Justification = "Ownership transfers to the caller which disposes via PublicKey.")]
     private static ValueTask<PublicKeyMemory?> ResolvePublicKeyMaterial(
         CoseKeyContext context,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TestResolverState state,
         CancellationToken cancellationToken)
     {

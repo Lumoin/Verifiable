@@ -98,7 +98,7 @@ public class SdToken<TEnvelope>: IEquatable<SdToken<TEnvelope>>, IDisposable whe
     /// <exception cref="ObjectDisposedException">
     /// Thrown when this token has been disposed.
     /// </exception>
-    public SdToken<TEnvelope> SelectDisclosures(Func<SdDisclosure, bool> selector, MemoryPool<byte> pool)
+    public SdToken<TEnvelope> SelectDisclosures(Func<SdDisclosure, bool> selector, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(selector);
         ArgumentNullException.ThrowIfNull(pool);
@@ -144,7 +144,7 @@ public class SdToken<TEnvelope>: IEquatable<SdToken<TEnvelope>>, IDisposable whe
     /// <exception cref="ObjectDisposedException">
     /// Thrown when this token has been disposed.
     /// </exception>
-    public SdToken<TEnvelope> SelectDisclosures(IEnumerable<SdDisclosure> disclosures, MemoryPool<byte> pool)
+    public SdToken<TEnvelope> SelectDisclosures(IEnumerable<SdDisclosure> disclosures, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(disclosures);
         ArgumentNullException.ThrowIfNull(pool);
@@ -194,7 +194,7 @@ public class SdToken<TEnvelope>: IEquatable<SdToken<TEnvelope>>, IDisposable whe
     /// <exception cref="ObjectDisposedException">
     /// Thrown when this token has been disposed.
     /// </exception>
-    public SdToken<TEnvelope> WithKeyBinding(TEnvelope keyBinding, MemoryPool<byte> pool)
+    public SdToken<TEnvelope> WithKeyBinding(TEnvelope keyBinding, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(keyBinding);
         ArgumentNullException.ThrowIfNull(pool);
@@ -228,7 +228,7 @@ public class SdToken<TEnvelope>: IEquatable<SdToken<TEnvelope>>, IDisposable whe
     /// </summary>
     /// <param name="pool">Memory pool to allocate the copies' salt buffers from.</param>
     /// <returns>A new token without key binding and with copied disclosures.</returns>
-    public SdToken<TEnvelope> WithoutKeyBinding(MemoryPool<byte> pool)
+    public SdToken<TEnvelope> WithoutKeyBinding(BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ObjectDisposedException.ThrowIf(disposed, this);

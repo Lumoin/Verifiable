@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Oid4Vp.Wallet;
@@ -21,7 +20,6 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet;
 /// direction. It throws to signal incorrect use.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("WalletFlowKind")]
 public sealed class WalletFlowKind: StatefulFlowKind
 {
     /// <summary>The singleton instance.</summary>

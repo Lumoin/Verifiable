@@ -17,7 +17,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.ToolTests;
 
 /// <summary>
-/// Wave-8 test-gap closure for the FIDO2 CLI/MCP composition root (synthesis package F): drives the
+/// Test-gap closure for the FIDO2 CLI/MCP composition root: drives the
 /// <c>android-key</c>/<c>fido-u2f</c> attestation formats, the <c>VerifyFido2Registration</c>/
 /// <c>VerifyFido2Assertion</c> MCP tools, the ECDSA P-384/P-521 and RSASSA-PSS assertion algorithms, the
 /// <c>--trust-anchor</c>/<c>--mds-blob</c> mutual-exclusion guard, the newly wired
@@ -65,10 +65,8 @@ internal sealed class Fido2CliCompositionRootGapTests
     }
 
 
-    // ---------------------------------------------------------------------------------------
-    // Finding #11 — MCP VerifyFido2Registration/VerifyFido2Assertion are never actually invoked
+    // MCP VerifyFido2Registration/VerifyFido2Assertion are never actually invoked
     // (only ListToolsAsync presence + CreateFido2Challenge are covered elsewhere).
-    // ---------------------------------------------------------------------------------------
 
     /// <summary>
     /// The MCP <c>VerifyFido2Registration</c>/<c>VerifyFido2Assertion</c> tools, driven over a real
@@ -233,9 +231,7 @@ internal sealed class Fido2CliCompositionRootGapTests
     }
 
 
-    // ---------------------------------------------------------------------------------------
-    // Finding #12 — the --trust-anchor / --mds-blob+--mds-root mutual-exclusion guard is untested.
-    // ---------------------------------------------------------------------------------------
+    // The --trust-anchor / --mds-blob+--mds-root mutual-exclusion guard is untested.
 
     /// <summary>
     /// Supplying both <c>--trust-anchor</c> and <c>--mds-blob</c>/<c>--mds-root</c> together is
@@ -277,10 +273,8 @@ internal sealed class Fido2CliCompositionRootGapTests
     }
 
 
-    // ---------------------------------------------------------------------------------------
-    // Finding #13 — android-key/fido-u2f are never driven through the CLI/MCP composition root
+    // android-key/fido-u2f are never driven through the CLI/MCP composition root
     // (Fido2CliTests only mints none/packed fixtures).
-    // ---------------------------------------------------------------------------------------
 
     /// <summary>
     /// An <c>android-key</c> registration, minted as real wire <c>attestationObject</c> bytes, verifies
@@ -348,13 +342,11 @@ internal sealed class Fido2CliCompositionRootGapTests
     }
 
 
-    // ---------------------------------------------------------------------------------------
-    // Finding #14 — requireTeeEnforcedAuthorizations was unreachable from either front door.
+    // requireTeeEnforcedAuthorizations was unreachable from either front door.
     // Source fix landed in this change: Program.cs's verify-registration command now exposes
     // --require-tee-enforced-authorizations, and VerifiableMcpServer's VerifyFido2Registration
     // now exposes the matching parameter. These two tests prove the knob is load-bearing through
     // the real CLI composition root (the MCP side reuses the identical VerifiableOperations call).
-    // ---------------------------------------------------------------------------------------
 
     /// <summary>
     /// A software-only android-key credential (origin/purpose satisfied only by <c>softwareEnforced</c>,
@@ -423,10 +415,8 @@ internal sealed class Fido2CliCompositionRootGapTests
     }
 
 
-    // ---------------------------------------------------------------------------------------
-    // Finding #28 — only ES256/RS256 round-trip through a live CLI signature; ES384/ES512/PS256
+    // Only ES256/RS256 round-trip through a live CLI signature; ES384/ES512/PS256
     // (and by extension the registry entries backing them) are never exercised.
-    // ---------------------------------------------------------------------------------------
 
     /// <summary>An ES384 assertion, signed by an independent P-384 <see cref="ECDsa"/> oracle, verifies through the real CLI.</summary>
     [TestMethod]
@@ -566,10 +556,8 @@ internal sealed class Fido2CliCompositionRootGapTests
     }
 
 
-    // ---------------------------------------------------------------------------------------
-    // Finding #29 — the nine purpose-built file-read catch blocks are never driven with a missing path;
+    // The nine purpose-built file-read catch blocks are never driven with a missing path;
     // only the outer catch-all's exit code (not the verb-specific message) would be proven either way.
-    // ---------------------------------------------------------------------------------------
 
     /// <summary>A missing <c>attestation-object</c> path fails with the registration verb's own file-read message.</summary>
     [TestMethod]
@@ -729,9 +717,7 @@ internal sealed class Fido2CliCompositionRootGapTests
     }
 
 
-    // ---------------------------------------------------------------------------------------
     // Shared helpers (file-local; this file never edits VerifiableCliTestHelpers.cs or Fido2CliTests.cs).
-    // ---------------------------------------------------------------------------------------
 
     /// <summary>Fails the caller's test with <see cref="Assert.Inconclusive(string)"/> when the CLI executable is not built, else returns its path.</summary>
     private static string? RequireExecutable()
@@ -788,7 +774,7 @@ internal sealed class Fido2CliCompositionRootGapTests
     /// <summary>
     /// Builds a <c>none</c>-format registration's <c>attestationObject</c>/<c>clientDataJSON</c> wire
     /// bytes for <paramref name="credentialPublicKey"/> — the same fixture shape
-    /// <see cref="Fido2CliTests"/> builds privately, duplicated here rather than shared per this wave's
+    /// <see cref="Fido2CliTests"/> builds privately, duplicated here rather than shared, per this project's
     /// file-discipline rule (no edits to existing test files).
     /// </summary>
     private static (byte[] AttestationObjectBytes, byte[] ClientDataJsonBytes, Guid Aaguid) BuildNoneRegistrationMaterial(

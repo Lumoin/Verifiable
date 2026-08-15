@@ -67,7 +67,7 @@ internal static class Fido2EcdsaWireSignature
     /// <returns>A pooled <see cref="Signature"/> carrier ready for verification. The caller owns and disposes it.</returns>
     /// <exception cref="System.Security.Cryptography.CryptographicException">A decoded DER coordinate exceeds the curve field width.</exception>
     /// <exception cref="System.Formats.Asn1.AsnContentException"><paramref name="wireSignature"/> is not a well-formed DER <c>Ecdsa-Sig-Value</c>.</exception>
-    internal static Signature WrapWireSignatureForVerification(ReadOnlySpan<byte> wireSignature, CryptoAlgorithm algorithm, MemoryPool<byte> pool)
+    internal static Signature WrapWireSignatureForVerification(ReadOnlySpan<byte> wireSignature, CryptoAlgorithm algorithm, BaseMemoryPool pool)
     {
         if(TryGetEcFieldWidth(algorithm, out int fieldWidth))
         {
@@ -85,7 +85,7 @@ internal static class Fido2EcdsaWireSignature
     /// determined by the verification key, so the carrier is tagged algorithm-agnostically.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned Signature; the catch disposes it on failure.")]
-    private static Signature CopySignature(ReadOnlySpan<byte> value, MemoryPool<byte> pool)
+    private static Signature CopySignature(ReadOnlySpan<byte> value, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(value.Length);
         try

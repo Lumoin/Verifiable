@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -26,7 +25,6 @@ namespace Verifiable.OAuth.Client;
 /// <see cref="JwtHeaderExtensions.ForSigning"/> and <see cref="JwtSigningExtensions.SignAsync"/> — the
 /// same JCose composition the JAR signer (<see cref="AuthCode.AuthCodeJarSigning"/>) uses.
 /// </remarks>
-[DebuggerDisplay("ClientAssertionSigning")]
 public static class ClientAssertionSigning
 {
     /// <summary>
@@ -62,7 +60,7 @@ public static class ClientAssertionSigning
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(clientId);

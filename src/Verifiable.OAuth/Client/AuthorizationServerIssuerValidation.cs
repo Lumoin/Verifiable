@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.OAuth.Client;
 
@@ -24,7 +23,6 @@ public delegate bool KnownAuthorizationServerIssuerResolver(string issuer);
 /// issuer validation over an application-owned authorization-server store, reached through a
 /// <see cref="KnownAuthorizationServerIssuerResolver"/>.
 /// </summary>
-[DebuggerDisplay("AuthorizationServerIssuerValidation")]
 public static class AuthorizationServerIssuerValidation
 {
     /// <summary>

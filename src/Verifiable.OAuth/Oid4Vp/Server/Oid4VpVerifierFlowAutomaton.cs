@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.Oid4Vp.Server.States;
 using Verifiable.OAuth.Oid4Vp.States;
@@ -15,7 +14,6 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 /// Authorization Response. Each call to <c>StepAsync</c> corresponds to one HTTP
 /// endpoint handling.
 /// </remarks>
-[DebuggerDisplay("Oid4VpVerifierFlowAutomaton")]
 public static class Oid4VpVerifierFlowAutomaton
 {
     /// <summary>

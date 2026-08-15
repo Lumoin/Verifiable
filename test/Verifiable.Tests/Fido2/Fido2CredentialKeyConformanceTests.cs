@@ -110,7 +110,7 @@ internal sealed class Fido2CredentialKeyConformanceTests
     /// <see cref="TestCredentialPublicKeyReader"/>: <see cref="Verifiable.Cbor.Mdoc.MdocCborCoseKeyReader"/>
     /// cannot parse RSA COSE_Keys at all today (label -1 collides with <c>crv</c> and is always read as an
     /// integer, so RSA's byte-string <c>n</c> throws before this test's enforcement is even reached) — a
-    /// confirmed, separate, pre-existing defect this wave leaves deferred to the CBOR codec switch. The
+    /// confirmed, separate, pre-existing defect left deferred to the CBOR codec switch. The
     /// stub exercises the real <see cref="AuthenticatorDataReader.Read"/> conformance enforcement this test
     /// targets without depending on that unrelated, out-of-scope defect.
     /// </summary>

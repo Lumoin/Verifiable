@@ -70,7 +70,7 @@ internal sealed class CAdESVerificationTests
         using CAdESVerificationResult result = await CAdESVerification.VerifyAsync(carrier, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(CAdESVerificationStatus.Valid, result.Status, "A CAdES-T signature with a timestamp binding the signature verifies.");
-        Assert.AreEqual(CAdESLevel.Timestamp, result.Level, "A verified signature timestamp raises the level to T.");
+        Assert.AreEqual(AdESBaselineLevel.BT, result.Level, "A verified signature timestamp raises the level to T.");
         Assert.AreEqual(timestampTime, result.TimestampTime, "The trusted time from the timestamp token must surface.");
     }
 
@@ -84,7 +84,7 @@ internal sealed class CAdESVerificationTests
 
         using CAdESVerificationResult result = await CAdESVerification.VerifyAsync(carrier, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(CAdESLevel.Baseline, result.Level, "A signature without a timestamp is a baseline (B) signature.");
+        Assert.AreEqual(AdESBaselineLevel.BB, result.Level, "A signature without a timestamp is a baseline (B) signature.");
         Assert.IsNull(result.TimestampTime, "A baseline signature carries no timestamp time.");
     }
 

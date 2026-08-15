@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.JCose;
 
@@ -30,7 +29,6 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// can, the deployment has a bigger problem than this validation can solve.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("AuthorizationRequestObjectFormFields")]
 public static class AuthorizationRequestObjectFormFields
 {
     /// <summary>

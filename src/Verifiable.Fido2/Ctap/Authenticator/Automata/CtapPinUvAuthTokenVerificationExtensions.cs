@@ -43,7 +43,7 @@ public static class CtapPinUvAuthTokenVerificationExtensions
             ReadOnlyMemory<byte> key,
             ReadOnlyMemory<byte> message,
             ReadOnlyMemory<byte> signature,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(tokenState);

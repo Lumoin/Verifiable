@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -25,7 +24,6 @@ namespace Verifiable.OAuth.AuthCode;
 /// Verifier attestation pipeline.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("AuthCodeJarSigning")]
 public static class AuthCodeJarSigning
 {
     /// <summary>
@@ -48,7 +46,7 @@ public static class AuthCodeJarSigning
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(requestObject);

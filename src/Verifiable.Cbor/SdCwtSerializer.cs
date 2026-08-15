@@ -136,7 +136,7 @@ public static class SdCwtSerializer
     /// <returns>The parsed SD-CWT message. Caller owns and disposes (which disposes
     /// every contained disclosure and salt).</returns>
     /// <exception cref="CborContentException">Thrown when the format is invalid.</exception>
-    public static SdCwtMessage Parse(ReadOnlyMemory<byte> coseSign1, Tag saltTag, MemoryPool<byte> pool)
+    public static SdCwtMessage Parse(ReadOnlyMemory<byte> coseSign1, Tag saltTag, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(saltTag);
         ArgumentNullException.ThrowIfNull(pool);
@@ -320,7 +320,7 @@ public static class SdCwtSerializer
     public static SdDisclosure ParseDisclosure(
         ReadOnlySpan<byte> disclosureCbor,
         Tag saltTag,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(saltTag);
         ArgumentNullException.ThrowIfNull(pool);
@@ -375,7 +375,7 @@ public static class SdCwtSerializer
             "construction failure. The remaining failure cases (mid-parse) explicitly " +
             "dispose `salt` before throwing. The analyzer cannot see this ownership " +
             "transfer through factory methods.")]
-    public static SdDisclosure ReadDisclosure(ref CborReader reader, Tag saltTag, MemoryPool<byte> pool)
+    public static SdDisclosure ReadDisclosure(ref CborReader reader, Tag saltTag, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(reader);
         ArgumentNullException.ThrowIfNull(saltTag);
@@ -445,7 +445,7 @@ public static class SdCwtSerializer
     public static IReadOnlyList<SdDisclosure> ReadSdClaimsHeader(
         ref CborReader reader,
         Tag saltTag,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(reader);
         ArgumentNullException.ThrowIfNull(saltTag);

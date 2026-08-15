@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using System.Security;
 using Verifiable.Core;
 using Verifiable.Core.Model.Did;
@@ -41,7 +40,6 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// <see cref="FederationBoundJarKeyResolver"/> respectively).
 /// </para>
 /// </remarks>
-[DebuggerDisplay("CompositeClientIdSigningKeyResolver")]
 public static class CompositeClientIdSigningKeyResolver
 {
     /// <summary>
@@ -104,7 +102,7 @@ public static class CompositeClientIdSigningKeyResolver
         DecodeDelegate base64UrlDecoder,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>> headerDeserializer,
         Func<ReadOnlySpan<byte>, Dictionary<string, object>> payloadDeserializer,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
         ArgumentNullException.ThrowIfNull(headerDeserializer);
@@ -179,7 +177,7 @@ public static class CompositeClientIdSigningKeyResolver
         TimeSpan clockSkew,
         ValidateTrustChainAsyncDelegate validateChain,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(validateChain);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
@@ -261,7 +259,7 @@ public static class CompositeClientIdSigningKeyResolver
         ParseX5cDelegate parseX5c,
         ValidateCertificateChainAsyncDelegate validateChain,
         VerifyDnsSanDelegate verifyDnsSan,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(parseX5c);
         ArgumentNullException.ThrowIfNull(validateChain);
@@ -331,7 +329,7 @@ public static class CompositeClientIdSigningKeyResolver
         IsSelfSignedCertificateDelegate isSelfSigned,
         HashFunctionDelegate hashFunction,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(parseX5c);
         ArgumentNullException.ThrowIfNull(validateChain);
@@ -394,7 +392,7 @@ public static class CompositeClientIdSigningKeyResolver
     /// <param name="pool">Memory pool for the decoded verification-method key bytes.</param>
     public static ResolveClientIdSigningKeyAsyncDelegate BuildDecentralizedIdentifierHandler(
         DidResolver didResolver,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(didResolver);
         ArgumentNullException.ThrowIfNull(pool);

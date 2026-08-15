@@ -44,7 +44,7 @@ public delegate ValueTask<(SdTokenResult Result, ReadOnlyMemory<byte> RedactedPa
     GenerateDisclosureSaltDelegate generateSalt,
     PrivateKeyMemory privateKey,
     string keyId,
-    MemoryPool<byte> memoryPool,
+    BaseMemoryPool memoryPool,
     SigningDelegate signingDelegate,
     string? hashAlgorithm,
     string? mediaType,

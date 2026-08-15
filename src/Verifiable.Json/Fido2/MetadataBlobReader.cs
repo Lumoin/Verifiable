@@ -121,7 +121,7 @@ public static class MetadataBlobReader
     /// </exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the returned UnverifiedMetadataBlob (and the UnverifiedMetadataBlobPayload it wraps) transfers to the caller, who disposes it once no longer needed — the CA2000 flag on ReadPayload's return is a false positive since that return value's ownership passes straight into the constructed UnverifiedMetadataBlob.")]
-    public static UnverifiedMetadataBlob Read(ReadOnlyMemory<byte> blobBytes, MemoryPool<byte> pool)
+    public static UnverifiedMetadataBlob Read(ReadOnlyMemory<byte> blobBytes, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -192,7 +192,7 @@ public static class MetadataBlobReader
     /// Decodes and parses the JWT Header segment, returning its <c>alg</c> value and <c>x5c</c>
     /// certificate chain.
     /// </summary>
-    private static string ReadHeader(ReadOnlySpan<byte> headerSegment, MemoryPool<byte> pool, out List<PkiCertificateMemory> x5c)
+    private static string ReadHeader(ReadOnlySpan<byte> headerSegment, BaseMemoryPool pool, out List<PkiCertificateMemory> x5c)
     {
         byte[] headerJson = DecodeBase64UrlToArray(headerSegment);
 
@@ -204,7 +204,7 @@ public static class MetadataBlobReader
     /// Reads the JWT Header JSON object, requiring <c>alg</c> and <c>x5c</c>, rejecting an <c>x5u</c>
     /// member outright (fetcher territory, out of scope), and skipping every other member.
     /// </summary>
-    private static string ReadHeaderObject(ReadOnlySpan<byte> headerJson, MemoryPool<byte> pool, out List<PkiCertificateMemory> x5c)
+    private static string ReadHeaderObject(ReadOnlySpan<byte> headerJson, BaseMemoryPool pool, out List<PkiCertificateMemory> x5c)
     {
         Utf8JsonReader reader = new(headerJson, ReaderOptions);
         if(!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
@@ -278,7 +278,7 @@ public static class MetadataBlobReader
         }
 
         //Assigns the decoded x5c certificate chain to certificates.
-        static bool AssignCertificates(ref Utf8JsonReader reader, MemoryPool<byte> pool, string memberName, ref List<PkiCertificateMemory>? certificates)
+        static bool AssignCertificates(ref Utf8JsonReader reader, BaseMemoryPool pool, string memberName, ref List<PkiCertificateMemory>? certificates)
         {
             certificates = ReadBase64DerCertificateArray(ref reader, pool, memberName, requireNonEmpty: true);
 
@@ -309,7 +309,7 @@ public static class MetadataBlobReader
     /// library's own secure default even though <c>x5c</c> is an RFC 7515 header member, not an MDS
     /// v3.1 WebIDL dictionary member itself.
     /// </param>
-    private static List<PkiCertificateMemory> ReadBase64DerCertificateArray(ref Utf8JsonReader reader, MemoryPool<byte> pool, string memberName, bool requireNonEmpty)
+    private static List<PkiCertificateMemory> ReadBase64DerCertificateArray(ref Utf8JsonReader reader, BaseMemoryPool pool, string memberName, bool requireNonEmpty)
     {
         RejectNull(ref reader, memberName);
 
@@ -362,7 +362,7 @@ public static class MetadataBlobReader
     /// <see cref="MetadataBlobPayloadEntry.RawMetadataStatement"/> copy is taken from.
     /// </param>
     /// <param name="pool">The memory pool a matched entry's attestation root certificates rent from.</param>
-    private static UnverifiedMetadataBlobPayload ReadPayload(ReadOnlySpan<byte> payloadJson, MemoryPool<byte> pool)
+    private static UnverifiedMetadataBlobPayload ReadPayload(ReadOnlySpan<byte> payloadJson, BaseMemoryPool pool)
     {
         Utf8JsonReader reader = new(payloadJson, ReaderOptions);
         if(!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
@@ -453,7 +453,7 @@ public static class MetadataBlobReader
         }
 
         //Assigns the decoded entries array to entries.
-        static bool AssignEntries(ref Utf8JsonReader reader, ReadOnlySpan<byte> payloadJson, MemoryPool<byte> pool, ref List<MetadataBlobPayloadEntry>? entries)
+        static bool AssignEntries(ref Utf8JsonReader reader, ReadOnlySpan<byte> payloadJson, BaseMemoryPool pool, ref List<MetadataBlobPayloadEntry>? entries)
         {
             entries = ReadEntriesArray(ref reader, payloadJson, pool);
 
@@ -477,7 +477,7 @@ public static class MetadataBlobReader
     /// or more MetadataBLOBPayloadEntry objects" — so section 1's general WebIDL list-emptiness rule
     /// is expressly overridden for this member.
     /// </summary>
-    private static List<MetadataBlobPayloadEntry> ReadEntriesArray(ref Utf8JsonReader reader, ReadOnlySpan<byte> payloadJson, MemoryPool<byte> pool)
+    private static List<MetadataBlobPayloadEntry> ReadEntriesArray(ref Utf8JsonReader reader, ReadOnlySpan<byte> payloadJson, BaseMemoryPool pool)
     {
         RejectNull(ref reader, EntriesMember);
 
@@ -518,7 +518,7 @@ public static class MetadataBlobReader
     /// Reads a single Metadata BLOB Payload Entry object, requiring <c>metadataStatement</c> and
     /// <c>statusReports</c>.
     /// </summary>
-    private static MetadataBlobPayloadEntry ReadEntryObject(ref Utf8JsonReader reader, ReadOnlySpan<byte> payloadJson, MemoryPool<byte> pool)
+    private static MetadataBlobPayloadEntry ReadEntryObject(ref Utf8JsonReader reader, ReadOnlySpan<byte> payloadJson, BaseMemoryPool pool)
     {
         HashSet<string> seenMembers = new(StringComparer.Ordinal);
         string? aaid = null;
@@ -620,7 +620,7 @@ public static class MetadataBlobReader
         //Assigns the decoded metadataStatement's attestation root certificates and raw JSON
         //bytes to attestationRootCertificates and rawMetadataStatement.
         static bool AssignMetadataStatement(
-            ref Utf8JsonReader reader, ReadOnlySpan<byte> payloadJson, MemoryPool<byte> pool,
+            ref Utf8JsonReader reader, ReadOnlySpan<byte> payloadJson, BaseMemoryPool pool,
             ref List<PkiCertificateMemory>? attestationRootCertificates, ref ReadOnlyMemory<byte>? rawMetadataStatement)
         {
             (attestationRootCertificates, rawMetadataStatement) = ReadMetadataStatement(ref reader, payloadJson, pool);
@@ -668,7 +668,7 @@ public static class MetadataBlobReader
     /// already treats "absent" and "present but empty" identically (zero trust anchors either way).
     /// </summary>
     private static (List<PkiCertificateMemory>? AttestationRootCertificates, byte[] Raw) ReadMetadataStatement(
-        ref Utf8JsonReader reader, ReadOnlySpan<byte> payloadJson, MemoryPool<byte> pool)
+        ref Utf8JsonReader reader, ReadOnlySpan<byte> payloadJson, BaseMemoryPool pool)
     {
         RejectNull(ref reader, MetadataStatementMember);
 
@@ -1004,7 +1004,7 @@ public static class MetadataBlobReader
     /// independent copy, not an alias into this buffer, so the caller disposes this buffer as soon
     /// as parsing completes.
     /// </summary>
-    private static IMemoryOwner<byte> DecodeBase64UrlToPooledBuffer(ReadOnlySpan<byte> segment, MemoryPool<byte> pool, out int length)
+    private static IMemoryOwner<byte> DecodeBase64UrlToPooledBuffer(ReadOnlySpan<byte> segment, BaseMemoryPool pool, out int length)
     {
         int maxLength = Base64Url.GetMaxDecodedLength(segment.Length);
         IMemoryOwner<byte> owner = pool.Rent(maxLength);

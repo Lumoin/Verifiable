@@ -169,7 +169,7 @@ public static class CredentialDataIntegrityExtensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             EncodeDelegate encoder,
             ComputeDigestDelegate computeDigest,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext context,
             CancellationToken cancellationToken = default)
         {
@@ -335,7 +335,7 @@ public static class CredentialDataIntegrityExtensions
             ProofOptionsSerializeDelegate serializeProofOptions,
             DecodeDelegate decoder,
             ComputeDigestDelegate computeDigest,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             ExchangeContext context,
             CancellationToken cancellationToken = default)
         {
@@ -358,11 +358,14 @@ public static class CredentialDataIntegrityExtensions
             }
 
             //The chain walk computes a plain validity outcome; the public result then mints a
-            //Verified<DataIntegritySecuredCredential> from the receiver on success.
+            //Verified<DataIntegritySecuredCredential> from the receiver on success, bound to the
+            //chain root's identity (issuer == resolved-controller, controller-RESOLUTION
+            //semantics).
             CredentialVerificationResult outcome;
+            BoundProvenance? rootProvenance;
             if(proofs.Count == 1)
             {
-                outcome = await VerifyChainLinkAsync(
+                ChainLinkVerificationOutcome linkOutcome = await VerifyChainLinkAsync(
                     credential,
                     proofs[0],
                     precedingProofs: null,
@@ -377,6 +380,9 @@ public static class CredentialDataIntegrityExtensions
                     memoryPool,
                     context,
                     cancellationToken).ConfigureAwait(false);
+
+                outcome = linkOutcome.Result;
+                rootProvenance = linkOutcome.Provenance;
             }
             else
             {
@@ -387,10 +393,11 @@ public static class CredentialDataIntegrityExtensions
                 }
 
                 outcome = CredentialVerificationResult.Success();
+                rootProvenance = null;
                 for(int i = 0; i < orderedChain.Count; ++i)
                 {
                     var precedingProofs = i == 0 ? null : orderedChain.GetRange(0, i);
-                    var linkResult = await VerifyChainLinkAsync(
+                    ChainLinkVerificationOutcome linkOutcome = await VerifyChainLinkAsync(
                         credential,
                         orderedChain[i],
                         precedingProofs,
@@ -406,20 +413,41 @@ public static class CredentialDataIntegrityExtensions
                         context,
                         cancellationToken).ConfigureAwait(false);
 
-                    if(!linkResult.IsValid)
+                    if(!linkOutcome.Result.IsValid)
                     {
-                        outcome = linkResult;
+                        outcome = linkOutcome.Result;
+                        rootProvenance = null;
                         break;
+                    }
+
+                    if(i == 0)
+                    {
+                        rootProvenance = linkOutcome.Provenance;
                     }
                 }
             }
 
-            return outcome.IsValid
-                ? CredentialVerificationResult<DataIntegritySecuredCredential>.Success(
-                    new Verified<DataIntegritySecuredCredential>(credential, VerificationContextTag.Create(proofs[0].VerificationMethod?.Id)))
-                : CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(outcome.FailureReason);
+            if(!outcome.IsValid)
+            {
+                return CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(outcome.FailureReason);
+            }
+
+            //rootProvenance witnesses this exact credential instance; TryCreateBound refuses
+            //otherwise, which cannot happen here since the gate above bound the same reference.
+            if(rootProvenance is null
+                || Verified<DataIntegritySecuredCredential>.TryCreateBound(credential, rootProvenance) is not { } verified)
+            {
+                return CredentialVerificationResult<DataIntegritySecuredCredential>.Failed(VerificationFailureReason.ControllerMismatch);
+            }
+
+            return CredentialVerificationResult<DataIntegritySecuredCredential>.Success(verified);
         }
     }
+
+
+    //Carries a chain link's plain validity outcome alongside the BoundProvenance the link's own
+    //identity check produced on success (null on any failure, including a bind refusal).
+    private readonly record struct ChainLinkVerificationOutcome(CredentialVerificationResult Result, BoundProvenance? Provenance);
 
 
     //Generates a fresh URN:UUID proof identifier so proofs can be linked into a chain
@@ -430,7 +458,7 @@ public static class CredentialDataIntegrityExtensions
     //Verifies one Data Integrity proof against the document view that carries exactly the
     //proofs preceding it in the chain (none for a single or root proof). This reconstructs the
     //hashing input the signer used when that proof was created.
-    private static async ValueTask<CredentialVerificationResult> VerifyChainLinkAsync(
+    private static async ValueTask<ChainLinkVerificationOutcome> VerifyChainLinkAsync(
         VerifiableCredential credential,
         DataIntegrityProof proof,
         List<DataIntegrityProof>? precedingProofs,
@@ -442,26 +470,37 @@ public static class CredentialDataIntegrityExtensions
         ProofOptionsSerializeDelegate serializeProofOptions,
         DecodeDelegate decoder,
         ComputeDigestDelegate computeDigest,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
         if(proof.Cryptosuite is null)
         {
-            return CredentialVerificationResult.Failed(VerificationFailureReason.MissingCryptosuite);
+            return new(CredentialVerificationResult.Failed(VerificationFailureReason.MissingCryptosuite), null);
+        }
+
+        //Data Integrity 1.0 §4.2: when an expected proof purpose is given and does not match
+        //proof.proofPurpose, an error MUST be raised. A credential proof's purpose is
+        //assertionMethod (VC-DM 2.0); checked BEFORE resolving anything, mirroring the
+        //presentation path's ProofPurposeMismatch gate.
+        if(!string.Equals(proof.ProofPurpose, AssertionMethod.Purpose, StringComparison.Ordinal))
+        {
+            return new(CredentialVerificationResult.Failed(VerificationFailureReason.ProofPurposeMismatch), null);
         }
 
         var verificationMethodId = proof.VerificationMethod?.Id;
         if(string.IsNullOrEmpty(verificationMethodId))
         {
-            return CredentialVerificationResult.Failed(VerificationFailureReason.MissingVerificationMethod);
+            return new(CredentialVerificationResult.Failed(VerificationFailureReason.MissingVerificationMethod), null);
         }
 
-        //Resolve verification method from issuer's DID document.
-        var verificationMethod = issuerDidDocument.ResolveVerificationMethodReference(verificationMethodId);
+        //Resolve through assertionMethod to enforce the correct verification relationship -- a key
+        //that exists in the flat verificationMethod array but is not referenced from assertionMethod
+        //must not authenticate an issuer claim.
+        var verificationMethod = issuerDidDocument.GetLocalAssertionMethodById(verificationMethodId);
         if(verificationMethod is null)
         {
-            return CredentialVerificationResult.Failed(VerificationFailureReason.VerificationMethodNotFound);
+            return new(CredentialVerificationResult.Failed(VerificationFailureReason.VerificationMethodNotFound), null);
         }
 
         //Build the document view hashed when this proof was created: the credential carrying the
@@ -521,10 +560,37 @@ public static class CredentialDataIntegrityExtensions
         var signatureTag = Tag.Create(proof.Cryptosuite.SignatureAlgorithm).With(Purpose.Verification);
         using var signature = new Signature(signatureBytes, signatureTag);
         var isValid = await verificationMethod.VerifySignatureAsync(hashDataOwner.Memory, signature, memoryPool).ConfigureAwait(false);
+        if(!isValid)
+        {
+            return new(CredentialVerificationResult.Failed(VerificationFailureReason.SignatureInvalid), null);
+        }
 
-        return isValid
-            ? CredentialVerificationResult.Success()
-            : CredentialVerificationResult.Failed(VerificationFailureReason.SignatureInvalid);
+        //Controller-RESOLUTION semantics: bind issuer == the resolved method's own
+        //controller. A resolved method whose controller disagrees with the credential's issuer claim
+        //does not authenticate that issuer, even though the signature and relationship scoping both
+        //hold -- this is the deliberate did:web-aliasing / controller-indirection rejection.
+        var claimedController = credential.Issuer?.Id;
+        if(string.IsNullOrEmpty(claimedController)
+            || string.IsNullOrEmpty(verificationMethod.Controller)
+            || string.IsNullOrEmpty(verificationMethod.Id))
+        {
+            return new(CredentialVerificationResult.Failed(VerificationFailureReason.ControllerMismatch), null);
+        }
+
+        //Passing the proof's own purpose (not the expected literal) makes the gate independently
+        //re-check purpose-to-relationship correspondence; the proofPurpose guard above already
+        //returned on a null or mismatched value, so it is non-null and equal to AssertionMethod here.
+        BoundProvenance? provenance = BoundProvenance.TryBindByControllerArtifact(
+            claimedController,
+            verificationMethod.Id,
+            verificationMethod.Controller,
+            proof.ProofPurpose!,
+            VerificationRelationship.AssertionMethod,
+            credential);
+
+        return provenance is null
+            ? new(CredentialVerificationResult.Failed(VerificationFailureReason.ControllerMismatch), null)
+            : new(CredentialVerificationResult.Success(), provenance);
     }
 
 

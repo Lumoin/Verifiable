@@ -23,13 +23,13 @@ namespace Verifiable.Cbor.StatusList;
 /// </remarks>
 public sealed class StatusListCborConverter: CborConverter<Core.StatusList.StatusList>
 {
-    private MemoryPool<byte> Pool { get; }
+    private BaseMemoryPool Pool { get; }
 
     /// <summary>
     /// Creates a new converter using the specified memory pool.
     /// </summary>
     /// <param name="pool">The memory pool for allocating decompressed data.</param>
-    public StatusListCborConverter(MemoryPool<byte> pool)
+    public StatusListCborConverter(BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         this.Pool = pool;
@@ -198,7 +198,7 @@ public sealed class StatusListTokenCborConverter: CborConverter<StatusListToken>
     /// Creates a new converter using the specified memory pool.
     /// </summary>
     /// <param name="pool">The memory pool for the nested Status List converter.</param>
-    public StatusListTokenCborConverter(MemoryPool<byte> pool)
+    public StatusListTokenCborConverter(BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         StatusListConverter = new StatusListCborConverter(pool);

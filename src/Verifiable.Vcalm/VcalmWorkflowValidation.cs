@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Diagnostics;
 
 namespace Verifiable.Vcalm;
 
@@ -25,7 +24,6 @@ namespace Verifiable.Vcalm;
 /// The §3.6.1 step graph here is the LINEAR <c>nextStep</c> chain (no branching), so the final step is
 /// well defined: it is the unique step reachable from <c>initialStep</c> that has no <c>nextStep</c>.
 /// </remarks>
-[DebuggerDisplay("VcalmWorkflowValidation")]
 public static class VcalmWorkflowValidation
 {
     /// <summary>

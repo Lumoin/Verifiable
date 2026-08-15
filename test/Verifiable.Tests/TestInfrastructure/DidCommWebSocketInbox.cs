@@ -1,20 +1,11 @@
 using System;
-using System.Buffers;
-using System.Linq;
-using System.Net;
 using System.Net.WebSockets;
-using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Hosting.Server;
-using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Verifiable.DidComm;
 using Verifiable.DidComm.Transport;
 
@@ -80,30 +71,10 @@ internal sealed class DidCommWebSocketInbox: IAsyncDisposable
     /// <returns>The started inbox.</returns>
     public static async Task<DidCommWebSocketInbox> StartAsync(CancellationToken cancellationToken)
     {
-        X509Certificate2 certificate = LoopbackTls.CreateServerCertificate("didcomm-loopback-test-inbox");
-
-        WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
-        builder.Logging.ClearProviders();
-
-        //A single explicit HTTPS Listen call — no UseUrls — so there is no plaintext fallback on
-        //this host at all.
-        builder.WebHost.ConfigureKestrel(options =>
-            options.Listen(IPAddress.Loopback, port: 0, listenOptions => listenOptions.UseHttps(certificate)));
-
-        WebApplication app = builder.Build();
-        app.UseWebSockets();
+        (WebApplication app, X509Certificate2 certificate) = DidCommLoopbackWebSocketBootstrap.Build("didcomm-loopback-test-inbox");
 
         var inbox = new DidCommWebSocketInbox(app, certificate);
-        app.Run(context => inbox.HandleAsync(context));
-
-        await app.StartAsync(cancellationToken).ConfigureAwait(false);
-
-        IServerAddressesFeature addresses = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()
-            ?? throw new InvalidOperationException("Kestrel exposed no server addresses feature.");
-        string boundAddress = addresses.Addresses.FirstOrDefault()
-            ?? throw new InvalidOperationException("Kestrel bound no address.");
-
-        inbox.Endpoint = new UriBuilder(boundAddress) { Scheme = "wss", Path = "/" }.Uri;
+        inbox.Endpoint = await DidCommLoopbackWebSocketBootstrap.StartAsync(app, inbox.HandleAsync, cancellationToken).ConfigureAwait(false);
 
         return inbox;
     }
@@ -136,9 +107,7 @@ internal sealed class DidCommWebSocketInbox: IAsyncDisposable
             try
             {
                 using var client = new ClientWebSocket();
-                client.Options.RemoteCertificateValidationCallback = (sender, certificate, chain, sslPolicyErrors) =>
-                    certificate is not null
-                    && CryptographicOperations.FixedTimeEquals(certificate.GetRawCertData(), pinnedCertificate.RawData);
+                client.Options.RemoteCertificateValidationCallback = new WebSocketCertificatePinning(pinnedCertificate).Create();
 
                 await client.ConnectAsync(endpoint, cancellationToken).ConfigureAwait(false);
 
@@ -188,15 +157,15 @@ internal sealed class DidCommWebSocketInbox: IAsyncDisposable
         try
         {
             //Assert the channel's own framing contract: the media type is a leading text frame, the envelope a single
-            //binary frame. The receive helper turns an early peer close into a clear exception rather than an opaque
-            //WebSocketException, so a misbehaving channel produces a readable failure.
-            (WebSocketMessageType mediaTypeFrame, byte[] mediaTypeBytes) = await ReceiveMessageAsync(socket, context.RequestAborted).ConfigureAwait(false);
+            //binary frame. The shared receive helper turns an early peer close into a clear exception rather than an
+            //opaque WebSocketException, so a misbehaving channel produces a readable failure.
+            (WebSocketMessageType mediaTypeFrame, byte[] mediaTypeBytes) = await DidCommLoopbackWebSocketBootstrap.ReceiveMessageAsync(socket, context.RequestAborted).ConfigureAwait(false);
             if(mediaTypeFrame != WebSocketMessageType.Text)
             {
                 throw new InvalidOperationException($"The media type MUST arrive as a leading text frame, not {mediaTypeFrame}.");
             }
 
-            (WebSocketMessageType envelopeFrame, byte[] envelopeBytes) = await ReceiveMessageAsync(socket, context.RequestAborted).ConfigureAwait(false);
+            (WebSocketMessageType envelopeFrame, byte[] envelopeBytes) = await DidCommLoopbackWebSocketBootstrap.ReceiveMessageAsync(socket, context.RequestAborted).ConfigureAwait(false);
             if(envelopeFrame != WebSocketMessageType.Binary)
             {
                 throw new InvalidOperationException($"The envelope MUST arrive as a binary frame, not {envelopeFrame}.");
@@ -210,28 +179,5 @@ internal sealed class DidCommWebSocketInbox: IAsyncDisposable
         {
             received.TrySetException(ex);
         }
-    }
-
-
-    //Reads one whole WebSocket message (all continuation frames to EndOfMessage) into a byte array, returning its
-    //frame type. A Close frame arriving before the message completes is surfaced as a clear exception.
-    private static async Task<(WebSocketMessageType Type, byte[] Payload)> ReceiveMessageAsync(WebSocket socket, CancellationToken cancellationToken)
-    {
-        var writer = new ArrayBufferWriter<byte>(initialCapacity: 4096);
-        ValueWebSocketReceiveResult result;
-        do
-        {
-            Memory<byte> buffer = writer.GetMemory(4096);
-            result = await socket.ReceiveAsync(buffer, cancellationToken).ConfigureAwait(false);
-            if(result.MessageType == WebSocketMessageType.Close)
-            {
-                throw new InvalidOperationException("The peer closed the WebSocket before delivering the expected frame.");
-            }
-
-            writer.Advance(result.Count);
-        }
-        while(!result.EndOfMessage);
-
-        return (result.MessageType, writer.WrittenSpan.ToArray());
     }
 }

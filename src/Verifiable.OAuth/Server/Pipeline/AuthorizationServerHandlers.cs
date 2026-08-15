@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.OAuth.Server.Pipeline;
 
@@ -16,7 +15,6 @@ namespace Verifiable.OAuth.Server.Pipeline;
 /// <see cref="ExchangeContextServerExtensions"/>.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("AuthorizationServerHandlers")]
 internal static class AuthorizationServerHandlers
 {
     /// <summary>

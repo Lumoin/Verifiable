@@ -72,7 +72,7 @@ public sealed class CreateResponse: ITpmWireType, IDisposable
     /// <param name="reader">The reader positioned at the response parameters.</param>
     /// <param name="pool">The memory pool for allocations.</param>
     /// <returns>The parsed response.</returns>
-    public static CreateResponse Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static CreateResponse Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         Tpm2bPrivate outPrivate = Tpm2bPrivate.Parse(ref reader, pool);
         Tpm2bPublic outPublic = Tpm2bPublic.Parse(ref reader, pool);

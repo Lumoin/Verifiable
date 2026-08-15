@@ -83,7 +83,7 @@ public static class TpmObjectName
     /// <exception cref="NotSupportedException"><paramref name="nameAlg"/> is not a Name algorithm this model computes.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned buffer transfers to the caller, which disposes it.")]
     public static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> ComputeNameAsync(
-        ReadOnlyMemory<byte> marshalledPublicArea, ushort nameAlg, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> marshalledPublicArea, ushort nameAlg, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -117,7 +117,7 @@ public static class TpmObjectName
     /// <exception cref="NotSupportedException"><paramref name="nameAlg"/> is not a Name algorithm this model computes.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned buffer transfers to the caller, which disposes it.")]
     public static async ValueTask<(IMemoryOwner<byte> Owner, int Length)> ComputeQualifiedNameAsync(
-        ReadOnlyMemory<byte> parentQualifiedName, ReadOnlyMemory<byte> name, ushort nameAlg, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> parentQualifiedName, ReadOnlyMemory<byte> name, ushort nameAlg, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -145,7 +145,7 @@ public static class TpmObjectName
     /// <param name="pool">The memory pool backing the returned buffer.</param>
     /// <returns>The rented buffer holding the framed Name, and the number of valid octets within it.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned buffer transfers to the caller, which disposes it.")]
-    private static (IMemoryOwner<byte> Owner, int Length) FrameName(ushort nameAlg, ReadOnlySpan<byte> digest, MemoryPool<byte> pool)
+    private static (IMemoryOwner<byte> Owner, int Length) FrameName(ushort nameAlg, ReadOnlySpan<byte> digest, BaseMemoryPool pool)
     {
         int nameLength = NameAlgPrefixSize + digest.Length;
         IMemoryOwner<byte> name = pool.Rent(nameLength);

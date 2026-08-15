@@ -81,7 +81,7 @@ public sealed class Tpm2bEccParameter: SensitiveMemory, ITpmWireType
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed ECC parameter.</returns>
-    public static Tpm2bEccParameter Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static Tpm2bEccParameter Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ushort size = reader.ReadUInt16();
@@ -109,7 +109,7 @@ public sealed class Tpm2bEccParameter: SensitiveMemory, ITpmWireType
     /// <param name="bytes">The parameter bytes.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The created ECC parameter.</returns>
-    public static Tpm2bEccParameter Create(ReadOnlySpan<byte> bytes, MemoryPool<byte> pool)
+    public static Tpm2bEccParameter Create(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         if(bytes.IsEmpty)

@@ -26,7 +26,7 @@ internal sealed class DidCommSignedMessageTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
     private static readonly ExchangeContext Context = new();
@@ -84,6 +84,15 @@ internal sealed class DidCommSignedMessageTests
         Assert.AreEqual("1234567890", result.Message!.Id);
         Assert.AreEqual("did:example:alice", result.Message.From);
         Assert.IsTrue(result.IsToHeaderPresent);
+
+        //W6: the proof is IDENTITY-BOUND, not a bare asserted label -- BoundProvenance.TryBindByResolvedMethod
+        //witnessed that the signer kid names exactly the four-gate-resolved authentication method.
+        Verified<DidCommMessage> verified = result.Verified!.Value;
+        Assert.IsTrue(verified.IsIdentityBound, "The signed-path proof MUST be identity-bound.");
+        BoundProvenance provenance = Assert.IsInstanceOfType<BoundProvenance>(verified.Provenance);
+        Assert.AreEqual(ResolutionSource.MethodResolved, provenance.Source);
+        Assert.AreEqual(VerificationRelationship.Authentication, provenance.Relationship);
+        Assert.AreEqual(expectedKid, provenance.Identity?.Value);
     }
 
 
@@ -443,6 +452,44 @@ internal sealed class DidCommSignedMessageTests
 
         Assert.IsTrue(result.IsVerified, $"A relative '#key-1' id MUST normalize and verify. Error: {result.Error}.");
         Assert.AreEqual(EdDsaKid, result.SignerKid);
+
+        //W6: the relative "#key-1" the document declares MUST expand to the absolute kid before
+        //BoundProvenance.TryBindByResolvedMethod compares it -- the bound identity is the absolute form,
+        //never the raw relative fragment.
+        Assert.IsTrue(result.Verified!.Value.IsIdentityBound);
+        BoundProvenance provenance = Assert.IsInstanceOfType<BoundProvenance>(result.Verified.Value.Provenance);
+        Assert.AreEqual(EdDsaKid, provenance.Identity?.Value);
+    }
+
+
+    /// <summary>
+    /// W6 witness: a <see cref="BoundProvenance"/> minted for one verified message instance refuses to mint a
+    /// <see cref="Verified{T}"/> for a content-identical but DIFFERENT instance -- the witness is instance
+    /// identity, not content equality (mirrors the credential-envelope binding's own witness discipline).
+    /// </summary>
+    [TestMethod]
+    public async Task IdentityBoundProofDoesNotWitnessADifferentMessageInstance()
+    {
+        using DidCommSignedMessage signed = GeneralJsonSigned(EdDsaProtectedBase64Url, EdDsaSignatureBase64Url, EdDsaKid);
+
+        DidCommSignedVerificationResult result = await UnpackAsync(signed, CreateResolver(CreateAliceDidDocument())).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsVerified);
+        BoundProvenance provenance = Assert.IsInstanceOfType<BoundProvenance>(result.Verified!.Value.Provenance);
+
+        var contentIdenticalOtherInstance = new DidCommMessage
+        {
+            Id = result.Message!.Id,
+            Type = result.Message.Type,
+            From = result.Message.From,
+            To = result.Message.To,
+            Body = result.Message.Body
+        };
+
+        Verified<DidCommMessage>? boundToOtherInstance = Verified<DidCommMessage>.TryCreateBound(contentIdenticalOtherInstance, provenance);
+
+        Assert.IsFalse(boundToOtherInstance.HasValue,
+            "The witness ties BoundProvenance to the exact instance it was minted for; a distinct instance -- even a content-identical one -- MUST NOT be mintable from it.");
     }
 
 

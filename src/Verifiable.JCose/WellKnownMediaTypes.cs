@@ -238,7 +238,7 @@ namespace Verifiable.JCose
             /// whose body is the RP's Trust Chain — a JSON array of Entity
             /// Statements — rather than a single Entity Configuration
             /// (<see cref="EntityStatementJwt"/>).
-            /// See <see href="https://openid.net/specs/openid-federation-1_0.html#section-12.2.1">OpenID Federation 1.0 §12.2.1</see>.
+            /// See <see href="https://openid.net/specs/openid-federation-connect-1_1-final.html#section-12.2.1">OpenID Federation Connect 1.1 §12.2.1</see>.
             /// </summary>
             public static readonly string TrustChainJson = Utf8Constants.ToInternedString(TrustChainJsonUtf8);
 
@@ -264,7 +264,7 @@ namespace Verifiable.JCose
             /// as the HTTP Content-Type for the signed Entity Statement a
             /// <c>federation_registration_endpoint</c> returns to a Relying
             /// Party that registered explicitly.
-            /// See <see href="https://openid.net/specs/openid-federation-1_0.html#section-12.2">OpenID Federation 1.0 §12.2</see> / §15.8.
+            /// See <see href="https://openid.net/specs/openid-federation-connect-1_1-final.html#section-12.2">OpenID Federation Connect 1.1 §12.2</see> / §15.1.
             /// </summary>
             public static readonly string ExplicitRegistrationResponseJwt = Utf8Constants.ToInternedString(ExplicitRegistrationResponseJwtUtf8);
 

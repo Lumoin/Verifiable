@@ -108,7 +108,7 @@ public static class JarExtensions
             JarClaimSerializer<DcqlQuery> dcqlQuerySerializer,
             JarClaimSerializer<VerifierClientMetadata> clientMetadataSerializer,
             EncodeDelegate base64UrlEncoder,
-            MemoryPool<byte> memoryPool,
+            BaseMemoryPool memoryPool,
             IReadOnlyDictionary<string, object>? additionalHeaderClaims = null,
             CancellationToken cancellationToken = default)
         {
@@ -373,7 +373,7 @@ public static class JarExtensions
         JarClaimDeserializer<DcqlQuery> dcqlQueryDeserializer,
         JarClaimDeserializer<VerifierClientMetadata> clientMetadataDeserializer,
         StateParameterPolicy statePolicy,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(compactJar);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
@@ -537,7 +537,7 @@ public static class JarExtensions
         JarClaimDeserializer<DcqlQuery> dcqlQueryDeserializer,
         JarClaimDeserializer<VerifierClientMetadata> clientMetadataDeserializer,
         StateParameterPolicy statePolicy,
-        MemoryPool<byte> memoryPool)
+        BaseMemoryPool memoryPool)
     {
         ArgumentNullException.ThrowIfNull(compactJar);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
@@ -703,7 +703,7 @@ public static class JarExtensions
         JarClaimDeserializer<DcqlQuery> dcqlQueryDeserializer,
         JarClaimDeserializer<VerifierClientMetadata> clientMetadataDeserializer,
         StateParameterPolicy statePolicy,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(compactJar);

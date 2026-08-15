@@ -8,9 +8,9 @@ namespace Verifiable.Fido2.Ctap;
 /// CTAP 2.3, section 6.8: authenticatorCredentialManagement (0x0A)</see>, the response structure table
 /// (lines 7026-7081). Every constant from <c>0x01</c> through <c>0x0C</c> is modeled for wire
 /// completeness. <see cref="CredProtect"/> IS emitted, carrying the enumerated credential's real
-/// persisted level (R11) — <c>CtapCredentialManagementResponse.CredProtect</c> is the corresponding
+/// persisted level — <c>CtapCredentialManagementResponse.CredProtect</c> is the corresponding
 /// field. <see cref="LargeBlobKey"/> IS emitted, carrying the enumerated credential's real stored
-/// largeBlobKey when present (wavelb R8) — <c>CtapCredentialManagementResponse.LargeBlobKey</c> is the
+/// largeBlobKey when present — <c>CtapCredentialManagementResponse.LargeBlobKey</c> is the
 /// corresponding field. <see cref="ThirdPartyPayment"/> remains NEVER emitted by this profile (no
 /// third-party payment state is modeled, mirroring how
 /// <c>WellKnownCtapAuthenticatorConfigSubCommandParamsKeys.PinComplexityPolicy</c> models a key this
@@ -47,14 +47,14 @@ public static class WellKnownCtapCredentialManagementResponseKeys
 
     /// <summary>
     /// The <c>credProtect</c> member (<c>0x0A</c>): the credential's credential protection policy.
-    /// Emitted with the credential's real persisted level (CTAP 2.3 §12.1, R11).
+    /// Emitted with the credential's real persisted level (CTAP 2.3 §12.1).
     /// </summary>
     public const int CredProtect = 0x0A;
 
     /// <summary>
     /// The <c>largeBlobKey</c> member (<c>0x0B</c>): the credential's large blob encryption key, if
     /// any (CTAP 2.3 §12.3, lines 7312/7341). Emitted with the credential's real stored key when one
-    /// exists (wavelb R8).
+    /// exists.
     /// </summary>
     public const int LargeBlobKey = 0x0B;
 

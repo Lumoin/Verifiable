@@ -29,7 +29,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly MemoryPool<byte> Pool = BaseMemoryPool.Shared;
+    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
     private static readonly ExchangeContext Context = new();
@@ -451,7 +451,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
     //key material creator, the encrypt/decrypt agreement pair, the content encryption algorithm, and the
     //matching AEAD delegate pair. Asserts the recovered plaintext and the anoncrypt sender-anonymity flags.
     private async Task AssertDelegateRoundTripAsync(
-        Func<MemoryPool<byte>, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
+        Func<BaseMemoryPool, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
         MultiRecipientKeyAgreementEncryptDelegate encryptAgreement,
         KeyAgreementDecryptDelegate decryptAgreement,
         string contentEncryptionAlgorithm,
@@ -511,7 +511,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
     //key material creator and the content encryption algorithm (AES-GCM or XC20P — the families the registry
     //anoncrypt overloads resolve). Asserts the recovered plaintext and anoncrypt flags.
     private async Task AssertRegistryRoundTripAsync(
-        Func<MemoryPool<byte>, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
+        Func<BaseMemoryPool, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
         string contentEncryptionAlgorithm)
     {
         var message = NewMessage([BobDid]);

@@ -126,8 +126,9 @@ public static class WellKnownPublicKeyCredentialHints
     /// </returns>
     /// <remarks>
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-hints-extension">W3C Web Authentication
-    /// Level 3, section 5.8.8</see> — row 4470 of this arc's normative tally. Registration-options
-    /// only: request options carry no <c>authenticatorAttachment</c> member for this mapping to set.
+    /// Level 3, section 5.8.8</see> — tracked in this library's WebAuthn normative-statement coverage.
+    /// Registration-options only: request options carry no <c>authenticatorAttachment</c> member for
+    /// this mapping to set.
     /// </remarks>
     public static string ToCompatibilityAuthenticatorAttachment(PublicKeyCredentialHint value)
     {

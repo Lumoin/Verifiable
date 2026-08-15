@@ -24,7 +24,6 @@ namespace Verifiable.OAuth.AuthCode.Server;
 /// happens inside this helper; callers receive a single typed outcome.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("DpopTokenEndpointValidation")]
 internal static class DpopTokenEndpointValidation
 {
     /// <summary>

@@ -183,7 +183,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
         /// </summary>
         static async ValueTask<TpmResult<uint>?> StepSignedAsync(TpmDevice device, uint policySession, SignedPolicyAssertion assertion, CancellationToken cancellationToken)
         {
-            MemoryPool<byte> pool = BaseMemoryPool.Shared;
+            BaseMemoryPool pool = BaseMemoryPool.Shared;
             int aHashLength = TpmPolicyDigest.Size(assertion.SchemeHashAlg);
             IMemoryOwner<byte> aHashOwner = pool.Rent(aHashLength);
             _ = BuildPolicySignedAHash(assertion.Expiration, assertion.PolicyRef.Span, assertion.SchemeHashAlg, aHashOwner.Memory.Span[..aHashLength]);
@@ -233,7 +233,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
     /// <returns>The number of digest bytes written.</returns>
     private static int ExtendPcr(Span<byte> running, PcrPolicyAssertion assertion, TpmAlgIdConstants policyHash)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmlPcrSelection selection = TpmlPcrSelection.Create(assertion.PcrBank, assertion.PcrIndices, pool);
         int selectionSize = selection.GetSerializedSize();
         using IMemoryOwner<byte> owner = pool.Rent(selectionSize);

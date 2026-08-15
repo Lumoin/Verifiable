@@ -10,12 +10,13 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Cryptography;
 
 /// <summary>
-/// Coverage for the wave-7 <see cref="CryptoEventSink"/> seam itself: <see cref="CryptographicKeyEvents.DefaultSink"/>
-/// forwarding to <see cref="CryptographicKeyEvents.Events"/>, per-subscriber exception isolation, and
-/// snapshot-safe subscriber enumeration under concurrent subscribe/unsubscribe. These are the properties
-/// design item 2 of the wave-7 contract requires before any new emission site is widened — a throwing
-/// subscriber must never propagate into a crypto call site, and a subscriber list mutated concurrently with
-/// delivery must never throw "Collection was modified" out of <see cref="CryptographicKeyEvents.Events"/>.
+/// Coverage for this library <see cref="CryptoEventSink"/> seam itself: <see
+/// cref="CryptographicKeyEvents.DefaultSink"/> forwarding to <see cref="CryptographicKeyEvents.Events"/>,
+/// per-subscriber exception isolation, and snapshot-safe subscriber enumeration under concurrent
+/// subscribe/unsubscribe. These are the properties design item 2 of this library requires before any new emission site
+/// is widened — a throwing subscriber must never propagate into a crypto call site, and a subscriber list mutated
+/// concurrently with delivery must never throw "Collection was modified" out of <see
+/// cref="CryptographicKeyEvents.Events"/>.
 /// </summary>
 [TestClass]
 internal sealed class CryptoEventSinkTests
@@ -90,11 +91,11 @@ internal sealed class CryptoEventSinkTests
 
 
     /// <summary>
-    /// Concurrent subscribe, emit, and unsubscribe/dispose must never throw
-    /// "Collection was modified; enumeration operation may not execute" — the latent race the wave-6
-    /// verifier hit once under 32-way parallelism (<c>SignVerifyEventTests.MicrosoftSignAsyncEmitsSignatureProducedEvent</c>).
-    /// The subscriber list must be an immutable snapshot at the start of each emit, so a concurrent
-    /// Subscribe/Dispose never observes, nor is observed by, an in-flight enumeration.
+    /// Concurrent subscribe, emit, and unsubscribe/dispose must never throw "Collection was modified; enumeration operation
+    /// may not execute" — the latent race this library verifier hit once under 32-way parallelism
+    /// (<c>SignVerifyEventTests.MicrosoftSignAsyncEmitsSignatureProducedEvent</c>). The subscriber list must be an immutable
+    /// snapshot at the start of each emit, so a concurrent Subscribe/Dispose never observes, nor is observed by, an in-flight
+    /// enumeration.
     /// </summary>
     [TestMethod]
     public async Task ConcurrentSubscribeUnsubscribeDuringEmitDoesNotThrow()

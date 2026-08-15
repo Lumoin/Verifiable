@@ -16,7 +16,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Fido2;
 
 /// <summary>
-/// Regression coverage for the wave-8 fix to <see cref="Fido2CredentialSigner"/>'s <c>IsEcAlgorithm</c>
+/// Regression coverage for the fix to <see cref="Fido2CredentialSigner"/>'s <c>IsEcAlgorithm</c>
 /// table, which omitted ES256K (secp256k1, <c>COSEAlgorithmIdentifier</c> -47, RFC 8812 §3): signing an
 /// ES256K assertion through <see cref="Fido2CredentialSigner.SignAssertionAsync"/> left the wire
 /// signature in raw IEEE P1363 form instead of ASN.1 DER, so the shipped <see cref="Fido2AssertionVerifier"/>
@@ -26,7 +26,7 @@ namespace Verifiable.Tests.Fido2;
 /// <remarks>
 /// <para>
 /// Mirrors <c>Fido2CredentialSignerTests</c>'s shape for the ES256/384/512/RS256/EdDSA matrix, extended
-/// to ES256K in its own file per the wave-8 file discipline (new test files only). The credential key
+/// to ES256K in its own file per this project's new-test-files-only discipline. The credential key
 /// pair is minted directly through <see cref="TestKeyMaterialProvider.CreateFreshSecp256k1KeyMaterial"/>
 /// (mirroring <c>Fido2AssertionOracle.CreateEs256K</c>) and bound to a <see cref="PrivateKey"/> via
 /// <see cref="CryptographicKeyFactory"/>, so signing dispatches through the exact same

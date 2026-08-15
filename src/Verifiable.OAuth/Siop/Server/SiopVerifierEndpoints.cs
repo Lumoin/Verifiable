@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
@@ -41,7 +40,6 @@ namespace Verifiable.OAuth.Siop.Server;
 /// ]);
 /// </code>
 /// </remarks>
-[DebuggerDisplay("SiopVerifierEndpoints")]
 public static class SiopVerifierEndpoints
 {
     /// <summary>

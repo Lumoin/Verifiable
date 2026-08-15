@@ -57,6 +57,39 @@ internal sealed class JwsAccessTokenValidatorTests
     }
 
 
+    /// <summary>
+    /// Pins that the validator accepts a bare-string <c>aud</c> — RFC 7519 §4.1.3's single-audience
+    /// MAY special case — even though this library's own producer
+    /// (<see cref="Verifiable.JCose.JwtPayloadExtensions.ForAccessToken"/>) always emits the array
+    /// form and so never exercises the bare-string wire shape itself. A conformant foreign producer
+    /// that DOES take the MAY special case must still be accepted; the payload here bypasses
+    /// <see cref="OAuthAccessTokenFixtures"/> and sets <c>aud</c> to a raw string directly so the
+    /// producer-side unification can never narrow what this reader accepts.
+    /// </summary>
+    [TestMethod]
+    public async Task ValidatorAcceptsBareStringAudienceFromAForeignProducer()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: DefaultSubject,
+            scope: DefaultScope,
+            clientId: DefaultClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: DefaultIssuer,
+            audience: [DefaultAudience]);
+        //Overwrite the fixture's array-shaped aud with the RFC 7519 §4.1.3 bare-string form.
+        payload[WellKnownJwtClaimNames.Aud] = DefaultAudience;
+        string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
+
+        JwsAccessTokenValidationResult result = await ValidateAsync(token, keys.PublicKey).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccess, $"A bare-string aud must be accepted (RFC 7519 §4.1.3); got {result.FailureReason}: {result.FailureDescription}");
+        Assert.HasCount(1, result.Claims!.Audience);
+        Assert.AreEqual(DefaultAudience, result.Claims.Audience[0]);
+    }
+
+
     [TestMethod]
     public async Task ValidatorRejectsMalformedToken()
     {

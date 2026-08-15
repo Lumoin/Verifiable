@@ -56,7 +56,7 @@ public sealed class QuoteResponse: IDisposable, ITpmWireType
     /// <param name="reader">The reader positioned at the response parameters.</param>
     /// <param name="pool">The memory pool for parameter buffer allocation.</param>
     /// <returns>The parsed quote response.</returns>
-    public static QuoteResponse Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static QuoteResponse Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         Tpm2bAttest quoted = Tpm2bAttest.Parse(ref reader, pool);

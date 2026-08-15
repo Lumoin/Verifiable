@@ -51,7 +51,7 @@ internal static class BouncyCastleTpmEccSigningBackend
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the rented scalar and point buffers transfers to the returned carriers, which the simulator disposes.")]
-    private static ValueTask<TpmGeneratedEccKey> GenerateKeyAsync(TpmEccCurveConstants curve, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static ValueTask<TpmGeneratedEccKey> GenerateKeyAsync(TpmEccCurveConstants curve, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -77,7 +77,7 @@ internal static class BouncyCastleTpmEccSigningBackend
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the rented signature buffer transfers to the returned Signature, which the simulator disposes.")]
     private static ValueTask<Signature> SignDigestAsync(
-        ReadOnlyMemory<byte> privateScalar, ReadOnlyMemory<byte> digest, TpmEccCurveConstants curve, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> privateScalar, ReadOnlyMemory<byte> digest, TpmEccCurveConstants curve, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -157,7 +157,7 @@ internal static class BouncyCastleTpmEccSigningBackend
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the rented shared-value buffer transfers to the caller, which zeroes and disposes it.")]
     private static ValueTask<IMemoryOwner<byte>> ComputeSharedSecretAsync(
-        ReadOnlyMemory<byte> privateScalar, ReadOnlyMemory<byte> peerPublicPoint, TpmEccCurveConstants curve, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> privateScalar, ReadOnlyMemory<byte> peerPublicPoint, TpmEccCurveConstants curve, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -188,7 +188,7 @@ internal static class BouncyCastleTpmEccSigningBackend
     /// <param name="bytes">The bytes to copy.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The pooled buffer holding a copy of <paramref name="bytes"/>.</returns>
-    private static IMemoryOwner<byte> CopyToPooled(byte[] bytes, MemoryPool<byte> pool)
+    private static IMemoryOwner<byte> CopyToPooled(byte[] bytes, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(bytes.Length);
         if(owner.Memory.Length != bytes.Length)

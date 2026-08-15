@@ -47,7 +47,7 @@ public sealed class MakeCredentialResponse: IDisposable, ITpmWireType
     /// <param name="reader">The reader positioned at the response parameters.</param>
     /// <param name="pool">The memory pool for parameter buffer allocation.</param>
     /// <returns>The parsed response.</returns>
-    public static MakeCredentialResponse Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static MakeCredentialResponse Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         Tpm2bIdObject credentialBlob = Tpm2bIdObject.Parse(ref reader, pool);

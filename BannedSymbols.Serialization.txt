@@ -1,2 +1,5 @@
 N:System.Text.Json;Don't use JSON serialization in this project.
 N:System.Formats.Cbor;Don't use CBOR serialization in this project.
+N:System.Xml;Don't use XML serialization in this project.
+N:System.Xml.Linq;Don't use XML serialization in this project.
+N:System.Security.Cryptography.Xml;Don't use XML signature machinery in this project; the signature primitives are this library's own.

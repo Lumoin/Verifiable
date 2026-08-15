@@ -455,6 +455,155 @@ internal sealed class DataIntegrityProofTests
     private static string? ReadTrustedCredentialId(Verified<DataIntegritySecuredCredential> verified) => verified.Value.Id;
 
 
+    /// <summary>
+    /// Gap (1) closure: <c>VerifyChainLinkAsync</c> now checks <c>proof.proofPurpose</c> against
+    /// <see cref="AssertionMethod.Purpose"/> BEFORE resolving anything, mirroring the presentation
+    /// path. A proof minted for <c>authentication</c> rather than <c>assertionMethod</c> is rejected
+    /// even though the same key would otherwise resolve and verify.
+    /// </summary>
+    /// <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">VC Data Integrity §4.2 Verify Proof</see>
+    [TestMethod]
+    public async ValueTask WrongProofPurposeFailsCredentialVerification()
+    {
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+
+        using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
+        var didDocument = CreateDidDocument(CredentialSecuringMaterial.VerificationMethodId, CredentialSecuringMaterial.Ed25519PublicKeyMultibase);
+
+        var signedCredential = await SignJcsAsync(credential, privateKey).ConfigureAwait(false);
+
+        //Forge the purpose: the same key, the same signature, but a proof minted for authentication
+        //rather than assertionMethod.
+        signedCredential.Proof![0].ProofPurpose = AuthenticationMethod.Purpose;
+
+        var result = await VerifyJcsAsync(signedCredential, didDocument).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid);
+        Assert.AreEqual(VerificationFailureReason.ProofPurposeMismatch, result.FailureReason,
+            "The §4.2 purpose comparison must reject before any resolution or signature work.");
+    }
+
+
+    /// <summary>
+    /// Gap (1b) closure: resolution is now scoped to the issuer's <c>assertionMethod</c> relationship
+    /// (<see cref="VerificationMethodResolutionExtensions.GetLocalAssertionMethodById"/>), not the
+    /// flat <c>verificationMethod</c> array. A key that is present in the array and CAN
+    /// cryptographically verify, but was never granted the <c>assertionMethod</c> relationship, must
+    /// not authenticate an issuer claim.
+    /// </summary>
+    [TestMethod]
+    public async ValueTask VerificationMethodOutsideAssertionMethodIsRefused()
+    {
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+
+        using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
+        var signedCredential = await SignJcsAsync(credential, privateKey).ConfigureAwait(false);
+
+        var did = CredentialSecuringMaterial.VerificationMethodId.Split('#')[0];
+        var didDocumentWithoutAssertionMethod = new DidDocument
+        {
+            Id = new GenericDidMethod(did),
+            VerificationMethod =
+            [
+                new VerificationMethod
+                {
+                    Id = CredentialSecuringMaterial.VerificationMethodId,
+                    Type = "Multikey",
+                    Controller = CredentialSecuringMaterial.Credential.Issuer!.Id,
+                    KeyFormat = new PublicKeyMultibase(CredentialSecuringMaterial.Ed25519PublicKeyMultibase)
+                }
+            ]
+            //Deliberately no AssertionMethod array: the key exists but was never granted the relationship.
+        };
+
+        var result = await VerifyJcsAsync(signedCredential, didDocumentWithoutAssertionMethod).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid);
+        Assert.AreEqual(VerificationFailureReason.VerificationMethodNotFound, result.FailureReason,
+            "A key outside assertionMethod must not authenticate an issuer claim.");
+    }
+
+
+    /// <summary>
+    /// Controller-RESOLUTION semantics: a credential whose <c>issuer</c> does NOT equal the
+    /// resolved verification method's own <c>controller</c> is refused, even though the signature,
+    /// proof purpose, and <c>assertionMethod</c> relationship scoping all otherwise hold. This is the
+    /// deliberate rejection of controller indirection / <c>did:web</c> aliasing the ratified
+    /// controller-RESOLUTION semantics accept as a consequence.
+    /// </summary>
+    [TestMethod]
+    public async ValueTask IssuerControllerMismatchIsRefused()
+    {
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+
+        using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
+        var signedCredential = await SignJcsAsync(credential, privateKey).ConfigureAwait(false);
+
+        //The same document CreateDidDocument produces, but the resolved method's controller is
+        //deliberately NOT the credential's issuer.
+        var did = CredentialSecuringMaterial.VerificationMethodId.Split('#')[0];
+        var mismatchedDidDocument = new DidDocument
+        {
+            Id = new GenericDidMethod(did),
+            VerificationMethod =
+            [
+                new VerificationMethod
+                {
+                    Id = CredentialSecuringMaterial.VerificationMethodId,
+                    Type = "Multikey",
+                    Controller = "did:example:someone-else-entirely",
+                    KeyFormat = new PublicKeyMultibase(CredentialSecuringMaterial.Ed25519PublicKeyMultibase)
+                }
+            ],
+            AssertionMethod = [new AssertionMethod(CredentialSecuringMaterial.VerificationMethodId)]
+        };
+
+        var result = await VerifyJcsAsync(signedCredential, mismatchedDidDocument).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid);
+        Assert.AreEqual(VerificationFailureReason.ControllerMismatch, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// Positive Bound mint plus the witness-tie half: the credential path now mints
+    /// <see cref="BoundProvenance"/> (<see cref="ResolutionSource.CallerControllerArtifact"/>,
+    /// <see cref="VerificationRelationship.AssertionMethod"/>), and the SAME <see cref="BoundProvenance"/>,
+    /// established for THIS credential instance, refuses to mint over a DIFFERENT
+    /// <see cref="DataIntegritySecuredCredential"/> instance via <see cref="Verified{T}.TryCreateBound"/>
+    /// — a legitimate binding for one credential can never be paired with another.
+    /// </summary>
+    [TestMethod]
+    public async ValueTask VerifiedCredentialIsIdentityBoundAndWitnessRefusesADifferentCredential()
+    {
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+
+        using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
+        var didDocument = CreateDidDocument(CredentialSecuringMaterial.VerificationMethodId, CredentialSecuringMaterial.Ed25519PublicKeyMultibase);
+
+        var signedCredential = await SignJcsAsync(credential, privateKey).ConfigureAwait(false);
+        var result = await VerifyJcsAsync(signedCredential, didDocument).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsValid);
+        Assert.IsNotNull(result.Verified);
+        var verified = result.Verified!.Value;
+
+        Assert.IsTrue(verified.IsIdentityBound, "The credential path must mint Bound, not Asserted.");
+        Assert.IsTrue(verified.Provenance is BoundProvenance, "The credential path's provenance must be a BoundProvenance.");
+        var bound = (BoundProvenance)verified.Provenance!;
+        Assert.AreEqual(ResolutionSource.CallerControllerArtifact, bound.Source);
+        Assert.AreEqual(VerificationRelationship.AssertionMethod, bound.Relationship);
+        Assert.AreEqual(CredentialSecuringMaterial.VerificationMethodId, bound.Identity?.Value);
+
+        //Witness tie: the SAME BoundProvenance refuses to mint over a DIFFERENT credential instance.
+        var otherCredential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+        var otherSigned = await SignJcsAsync(otherCredential, privateKey).ConfigureAwait(false);
+
+        Verified<DataIntegritySecuredCredential>? witnessMismatch = Verified<DataIntegritySecuredCredential>.TryCreateBound(otherSigned, bound);
+        Assert.IsNull(witnessMismatch, "A BoundProvenance established for one credential instance must refuse to mint over a different instance.");
+    }
+
+
     private static ValueTask<DataIntegritySecuredCredential> SignJcsAsync(VerifiableCredential credential, PrivateKeyMemory privateKey) =>
         credential.SignAsync(
             privateKey,
@@ -507,6 +656,10 @@ internal sealed class DataIntegrityProofTests
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(CredentialSecuringMaterial.JsonOptions);
 
+    //Controller-RESOLUTION semantics: the verification method's controller is the
+    //credential's issuer, not the base DID of the verification method id -- modeling controller
+    //indirection (the entity named as issuer controls a key hosted under a differently-identified
+    //verification method), which is exactly the shape the credential-path Bound gate checks.
     private static DidDocument CreateDidDocument(string verificationMethodId, string publicKeyMultibase)
     {
         var did = verificationMethodId.Split('#')[0];
@@ -519,7 +672,7 @@ internal sealed class DataIntegrityProofTests
                 {
                     Id = verificationMethodId,
                     Type = "Multikey",
-                    Controller = did,
+                    Controller = CredentialSecuringMaterial.Credential.Issuer!.Id,
                     KeyFormat = new PublicKeyMultibase(publicKeyMultibase)
                 }
             ],

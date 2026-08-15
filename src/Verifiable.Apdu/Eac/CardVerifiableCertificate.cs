@@ -161,7 +161,7 @@ public sealed class CardVerifiableCertificate: SensitiveMemory
     /// <returns>The parsed <see cref="CardVerifiableCertificate"/>. The caller disposes it.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the structure is not a well-formed CV certificate, or an elliptic-curve certificate omits its domain parameters and no inherited curve was supplied.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer and the parsed carriers transfers to the returned certificate; the catch disposes them on a partial parse failure.")]
-    public static CardVerifiableCertificate Parse(ReadOnlySpan<byte> certificate, MemoryPool<byte> pool, Tag? inheritedCurve = null)
+    public static CardVerifiableCertificate Parse(ReadOnlySpan<byte> certificate, BaseMemoryPool pool, Tag? inheritedCurve = null)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -252,7 +252,7 @@ public sealed class CardVerifiableCertificate: SensitiveMemory
     /// domain parameters and public point or the RSA modulus and exponent.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the key carrier transfers to the returned public key; the catch disposes it on a partial parse failure.")]
-    private static CardVerifiableCertificatePublicKey ParsePublicKey(ref ApduReader body, MemoryPool<byte> pool, Tag? inheritedCurve)
+    private static CardVerifiableCertificatePublicKey ParsePublicKey(ref ApduReader body, BaseMemoryPool pool, Tag? inheritedCurve)
     {
         ApduReader publicKey = ReadConstructed(ref body, PublicKeyTag, "public key");
         ReadOnlySpan<byte> oid = ReadPrimitive(ref publicKey, ObjectIdentifierTag, "public-key object identifier");
@@ -269,7 +269,7 @@ public sealed class CardVerifiableCertificate: SensitiveMemory
     /// certificate, inherited otherwise), the mandatory uncompressed public point, and the optional cofactor.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the point carrier transfers to the returned public key; the catch disposes it on a partial parse failure.")]
-    private static CardVerifiableCertificatePublicKey ParseEllipticCurvePublicKey(ref ApduReader publicKey, CvcSignatureScheme scheme, MemoryPool<byte> pool, Tag? inheritedCurve)
+    private static CardVerifiableCertificatePublicKey ParseEllipticCurvePublicKey(ref ApduReader publicKey, CvcSignatureScheme scheme, BaseMemoryPool pool, Tag? inheritedCurve)
     {
         bool includesDomainParameters = !publicKey.IsEmpty && publicKey.PeekBytes(1)[0] == PrimeTag;
 
@@ -337,7 +337,7 @@ public sealed class CardVerifiableCertificate: SensitiveMemory
     /// Parses an RSA public key: the modulus and exponent, re-encoded into a DER <c>RSAPublicKey</c> sequence.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the RSA key carrier transfers to the returned public key; the catch disposes it on a partial parse failure.")]
-    private static CardVerifiableCertificatePublicKey ParseRsaPublicKey(ref ApduReader publicKey, CvcSignatureScheme scheme, MemoryPool<byte> pool)
+    private static CardVerifiableCertificatePublicKey ParseRsaPublicKey(ref ApduReader publicKey, CvcSignatureScheme scheme, BaseMemoryPool pool)
     {
         ReadOnlySpan<byte> modulus = ReadPrimitive(ref publicKey, RsaModulusTag, "RSA modulus");
         ReadOnlySpan<byte> exponent = ReadPrimitive(ref publicKey, RsaExponentTag, "RSA public exponent");
@@ -361,7 +361,7 @@ public sealed class CardVerifiableCertificate: SensitiveMemory
     /// library's RSA verification reconstructs a key from.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned RsaPublicKey; the catch disposes it on failure.")]
-    private static RsaPublicKey EncodeRsaPublicKey(ReadOnlySpan<byte> modulus, ReadOnlySpan<byte> exponent, MemoryPool<byte> pool)
+    private static RsaPublicKey EncodeRsaPublicKey(ReadOnlySpan<byte> modulus, ReadOnlySpan<byte> exponent, BaseMemoryPool pool)
     {
         int modulusContent = DerIntegerContentLength(modulus);
         int exponentContent = DerIntegerContentLength(exponent);
@@ -459,7 +459,7 @@ public sealed class CardVerifiableCertificate: SensitiveMemory
     /// identifier and the discretionary-data value carrying the role and access rights.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned template; the catch disposes it on failure.")]
-    private static CertificateHolderAuthorizationTemplate ParseChat(ref ApduReader body, MemoryPool<byte> pool)
+    private static CertificateHolderAuthorizationTemplate ParseChat(ref ApduReader body, BaseMemoryPool pool)
     {
         ApduReader chat = ReadConstructed(ref body, CertificateHolderAuthorizationTemplateTag, "Certificate Holder Authorization Template");
         ReadOnlySpan<byte> oid = ReadPrimitive(ref chat, ObjectIdentifierTag, "Certificate Holder Authorization object identifier");
@@ -563,7 +563,7 @@ public sealed class CardVerifiableCertificate: SensitiveMemory
     /// is determined by the issuing key, so the carrier is tagged algorithm-agnostically.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned Signature; the catch disposes it on failure.")]
-    private static Signature CopySignature(ReadOnlySpan<byte> value, MemoryPool<byte> pool)
+    private static Signature CopySignature(ReadOnlySpan<byte> value, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(value.Length);
         try

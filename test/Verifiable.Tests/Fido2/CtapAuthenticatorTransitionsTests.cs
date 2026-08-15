@@ -28,7 +28,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
     /// <summary>
     /// Builds a fresh automaton over the transitions under test, seeded with the given AAGUID, or with
     /// <paramref name="initialState"/> directly when the test needs a state shape
-    /// <see cref="CtapAuthenticatorState.Initial(Guid, DateTimeOffset, IReadOnlyList{string}?, int, MemoryPool{byte}?)"/>
+    /// <see cref="CtapAuthenticatorState.Initial(Guid, DateTimeOffset, IReadOnlyList{string}?, int, BaseMemoryPool?)"/>
     /// alone cannot produce (e.g. a pre-set PIN).
     /// </summary>
     private static PushdownAutomaton<CtapAuthenticatorState, CtapAuthenticatorInput, CtapAuthenticatorStackSymbol> BuildAutomaton(
@@ -42,7 +42,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
 
 
     /// <summary>Builds a fixed-content <see cref="DigestValue"/> standing in for a stored PIN hash, without a full <c>setPIN</c> round trip.</summary>
-    private static DigestValue BuildFixedDigest(byte seed, int length, MemoryPool<byte> pool)
+    private static DigestValue BuildFixedDigest(byte seed, int length, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(length);
         for(int i = 0; i < length; i++)
@@ -56,7 +56,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
 
     /// <summary>
     /// <see cref="GetInfoRequested"/> produces a <see cref="GetInfoResponseReady"/> intent carrying
-    /// the state's own AAGUID, the FIDO_2_3 version, and <c>options.rk = true</c> (wave 2: this
+    /// the state's own AAGUID, the FIDO_2_3 version, and <c>options.rk = true</c> (this
     /// authenticator can create discoverable credentials).
     /// </summary>
     [TestMethod]
@@ -97,8 +97,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
     /// <summary>
     /// A default-constructed automaton (no <c>supportedExtensions</c> personalization supplied)
     /// advertises exactly <c>["credProtect", "hmac-secret", "hmac-secret-mc", "largeBlobKey",
-    /// "minPinLength"]</c>, correctly cased, per <see cref="CtapAuthenticatorState.DefaultSupportedExtensions"/>
-    /// (contract R1).
+    /// "minPinLength"]</c>, correctly cased, per <see cref="CtapAuthenticatorState.DefaultSupportedExtensions"/>.
     /// </summary>
     [TestMethod]
     public async Task GetInfoRequestedDefaultsToRealSupportedExtensions()
@@ -125,8 +124,8 @@ internal sealed class CtapAuthenticatorTransitionsTests
     /// <c>authenticatorGetInfo</c> now advertises <c>clientPin:false</c> (no PIN can be set yet, but
     /// CTAP 2.3 §9 item 2 requires the boolean present once FIDO_2_3 is claimed),
     /// <c>pinUvAuthToken:true</c> (§9 item 5), and <c>pinUvAuthProtocols:[2, 1]</c> (§9 item 6:
-    /// protocol 2 MUST be included and is listed first, this authenticator's preference) — CTAP wave-a's
-    /// getInfo flips, decision 5.
+    /// protocol 2 MUST be included and is listed first, this authenticator's preference) — the getInfo flips
+    /// this test covers.
     /// </summary>
     [TestMethod]
     public async Task GetInfoRequestedAdvertisesClientPinFlips()
@@ -164,7 +163,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
     public async Task GetInfoRequestedAdvertisesMakeCredUvNotRqdDerivedFromAlwaysUv(bool isAlwaysUvEnabled)
     {
         Guid aaguid = Guid.NewGuid();
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapAuthenticatorState initialState = CtapAuthenticatorState.Initial(aaguid, TestClock.CanonicalEpoch, keyAgreementPool: pool) with
         {
             IsAlwaysUvEnabled = isAlwaysUvEnabled
@@ -192,8 +191,8 @@ internal sealed class CtapAuthenticatorTransitionsTests
     /// <summary>
     /// A default-constructed (non-enterprise-attestation-seeded) authenticator reports <c>ep</c> ABSENT
     /// (CTAP 2.3 lines 4744-4746: "the Enterprise Attestation feature is NOT supported") and
-    /// <c>authenticatorConfigCommands</c> stays <c>[2, 3]</c> (R1: the default profile's observable wire
-    /// behavior is byte-identical to a pre-waveep authenticator) — the regression-fence half of R2's
+    /// <c>authenticatorConfigCommands</c> stays <c>[2, 3]</c> (the default profile's observable wire
+    /// behavior is byte-identical to a non-capable authenticator) — the regression-fence half of this
     /// single-predicate proof, its capable+enabled sibling is
     /// <see cref="GetInfoRequestedAdvertisesEpTriStateAndConditionalConfigCommandsForCapableAuthenticator"/>.
     /// </summary>
@@ -213,11 +212,11 @@ internal sealed class CtapAuthenticatorTransitionsTests
 
 
     /// <summary>
-    /// An enterprise-attestation-CAPABLE authenticator (R1: a provisioning record seeded on
+    /// An enterprise-attestation-CAPABLE authenticator (a provisioning record seeded on
     /// <see cref="CtapAuthenticatorState.Initial"/>) reports <c>ep</c> present with the CURRENT
     /// <see cref="CtapAuthenticatorState.IsEnterpriseAttestationEnabled"/> value — never a second stored
-    /// flag (R2, trap 15: <c>capable ? enabled : null</c>) — and <c>authenticatorConfigCommands</c>
-    /// widens to the ascending <c>[1, 2, 3]</c> (trap 6), for BOTH the enabled and disabled states.
+    /// flag (<c>capable ? enabled : null</c>) — and <c>authenticatorConfigCommands</c>
+    /// widens to the ascending <c>[1, 2, 3]</c>, for BOTH the enabled and disabled states.
     /// </summary>
     [TestMethod]
     [DataRow(false, DisplayName = "capable, disabled")]
@@ -225,8 +224,8 @@ internal sealed class CtapAuthenticatorTransitionsTests
     public async Task GetInfoRequestedAdvertisesEpTriStateAndConditionalConfigCommandsForCapableAuthenticator(bool isEnterpriseAttestationEnabled)
     {
         Guid aaguid = Guid.NewGuid();
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
-        CtapEnterpriseAttestationProvisioning provisioning = CtapWaveEpFixtures.BuildProvisioning(pool);
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        CtapEnterpriseAttestationProvisioning provisioning = CtapEnterpriseAttestationFixtures.BuildProvisioning(pool);
         CtapAuthenticatorState initialState = CtapAuthenticatorState.Initial(
             aaguid, TestClock.CanonicalEpoch, keyAgreementPool: pool, enterpriseAttestationProvisioning: provisioning) with
         {
@@ -252,7 +251,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
     /// credentials placed directly into <see cref="CtapAuthenticatorState.CredentialsByCredentialId"/>
     /// drop the reported value to exactly <c>capacity - 3</c>, the same
     /// <see cref="CtapAuthenticatorState.ResidentCredentialCapacity"/>-minus-count computation the
-    /// empty-store case above already proves (R9's single-source-of-truth choice). Proven once, not
+    /// empty-store case above already proves (the single-source-of-truth choice). Proven once, not
     /// crossed with <c>alwaysUv</c> again — the empty-store test above already establishes that
     /// <c>credMgmt</c>'s surface is orthogonal to the config surface.
     /// </summary>
@@ -262,7 +261,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
     public async Task GetInfoRequestedAdvertisesRemainingDiscoverableCredentialsDerivedFromResidentCredentialCount()
     {
         Guid aaguid = Guid.NewGuid();
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapAuthenticatorState initialState = CtapAuthenticatorState.Initial(aaguid, TestClock.CanonicalEpoch, keyAgreementPool: pool);
 
         const int residentCredentialCount = 3;
@@ -300,9 +299,9 @@ internal sealed class CtapAuthenticatorTransitionsTests
 
 
     /// <summary>
-    /// <c>maxCredentialCountInList</c> (member <c>0x07</c>, R5's surface half) is populated
+    /// <c>maxCredentialCountInList</c> (member <c>0x07</c>) is populated
     /// UNCONDITIONALLY with <see cref="CtapAuthenticatorState.MaxCredentialCountInListCapacity"/> — the
-    /// same fixed constant mc's excludeList/ga's allowList bound check enforces (PKG-A) — and is
+    /// same fixed constant mc's excludeList/ga's allowList bound check enforces — and is
     /// strictly greater than zero, satisfying CTAP 2.3 snapshot lines 4405-4409's "MUST be greater than
     /// zero if present".
     /// </summary>
@@ -320,7 +319,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
 
 
     /// <summary>
-    /// The <c>algorithms</c> member (<c>0x0A</c>, R6) advertises exactly <c>[{alg: ES256, type:
+    /// The <c>algorithms</c> member (<c>0x0A</c>) advertises exactly <c>[{alg: ES256, type:
     /// "public-key"}]</c> when <see cref="GetInfoRequested.SupportedAlgorithms"/> carries the ES256-only
     /// default backend's supported set — the population path
     /// <see cref="Verifiable.Fido2.Ctap.Authenticator.Automata.CtapAuthenticatorSimulator"/> threads from
@@ -383,7 +382,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
 
 
     /// <summary>
-    /// <c>firmwareVersion</c> (member <c>0x0E</c>, R7) is populated unconditionally: a default-constructed
+    /// <c>firmwareVersion</c> (member <c>0x0E</c>) is populated unconditionally: a default-constructed
     /// state (<see cref="CtapAuthenticatorState.Initial"/>'s own <c>firmwareVersion = 1</c> seed default)
     /// reports exactly <c>1</c>.
     /// </summary>
@@ -436,7 +435,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
     /// content pattern, standing in for a minted <c>hmac-secret</c> CredRandom value without a full
     /// <c>authenticatorMakeCredential</c> round trip.
     /// </summary>
-    private static IMemoryOwner<byte> BuildFixedOwner(byte seed, int iteration, MemoryPool<byte> pool)
+    private static IMemoryOwner<byte> BuildFixedOwner(byte seed, int iteration, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(32);
         for(int i = 0; i < 32; i++)

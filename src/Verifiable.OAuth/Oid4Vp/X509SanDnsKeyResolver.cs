@@ -82,7 +82,7 @@ public static class X509SanDnsKeyResolver
         ParseX5cDelegate parseX5c,
         ValidateCertificateChainAsyncDelegate validateChain,
         VerifyDnsSanDelegate verifyDnsSan,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(x5cValues);

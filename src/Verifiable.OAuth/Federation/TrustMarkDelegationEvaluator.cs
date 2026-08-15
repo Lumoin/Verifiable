@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core.Assessment;
 
 namespace Verifiable.OAuth.Federation;
@@ -22,7 +21,6 @@ namespace Verifiable.OAuth.Federation;
 /// <see cref="WellKnownFederationClaimIds.TrustMarkDelegationValid"/>.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("TrustMarkDelegationEvaluator")]
 public static class TrustMarkDelegationEvaluator
 {
     /// <summary>

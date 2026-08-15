@@ -17,9 +17,9 @@ namespace Verifiable.Fido2.Ctap;
 /// shape). The shipped default, <c>Verifiable.Cbor.Ctap.CtapBioEnrollmentRequestCborReader.Read</c>, is
 /// method-group-compatible with this delegate. A REQUIRED
 /// <see cref="Ctap.Authenticator.Automata.CtapAuthenticatorSimulator"/> constructor parameter: this
-/// authenticator advertises <c>bioEnroll</c> present (true or false tri-state) unconditionally from
-/// this wave on, so an advertises-but-cannot-decode configuration is unrepresentable — the exact
-/// posture <see cref="DecodeCtapCredentialManagementRequestDelegate"/>'s own R1 precedent establishes.
+/// authenticator advertises <c>bioEnroll</c> present (true or false tri-state) unconditionally, so an
+/// advertises-but-cannot-decode configuration is unrepresentable — the exact
+/// posture <see cref="DecodeCtapCredentialManagementRequestDelegate"/> also establishes.
 /// </remarks>
 /// <exception cref="Fido2FormatException"><paramref name="parametersCbor"/> is not valid CTAP2 canonical CBOR.</exception>
 public delegate CtapBioEnrollmentRequest DecodeCtapBioEnrollmentRequestDelegate(ReadOnlyMemory<byte> parametersCbor);

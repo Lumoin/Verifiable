@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Jarm;
@@ -10,7 +9,6 @@ namespace Verifiable.OAuth.Jarm;
 /// <c>response_modes_supported</c> values an AS additionally advertises live in
 /// <see cref="JarmResponseModes"/>.
 /// </summary>
-[DebuggerDisplay("JarmServerMetadataParameterNames")]
 public static class JarmServerMetadataParameterNames
 {
     /// <summary>The UTF-8 source literal of <see cref="AuthorizationSigningAlgValuesSupported"/>.</summary>

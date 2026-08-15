@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Siop.Server;
@@ -15,7 +14,6 @@ namespace Verifiable.OAuth.Siop.Server;
 /// action) rather than inside a PDA transition, keeping the automaton pure and deterministic —
 /// the same effect-channeling the OID4VP verifier flow uses.
 /// </remarks>
-[DebuggerDisplay("SiopVerifierServerFlowKind")]
 public sealed class SiopVerifierServerFlowKind: StatefulFlowKind
 {
     /// <summary>The singleton instance.</summary>

@@ -11,12 +11,12 @@ using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
 using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
-using static Verifiable.Tests.TestInfrastructure.CtapWave2AuthenticatorFixtures;
+using static Verifiable.Tests.TestInfrastructure.CtapMakeCredentialGetAssertionFixtures;
 
 namespace Verifiable.Tests.Fido2;
 
 /// <summary>
-/// Tests for CTAP 2.3's power-cycle state operation (wave-5b PIN/UV contract decision 7): the pure
+/// Tests for CTAP 2.3's power-cycle state operation: the pure
 /// <see cref="CtapAuthenticatorState.PowerCycle"/> transform's exact preserve/refresh/clear sets, and
 /// <see cref="CtapAuthenticatorSimulator.PowerCycle"/>'s equivalent simulator-level seam — testable
 /// without reconstructing the simulator.
@@ -30,19 +30,19 @@ internal sealed class CtapAuthenticatorPowerCycleTests
 
     /// <summary>
     /// A power cycle preserves the stored PIN hash carrier, its code-point length, both retry
-    /// counters, and this wave's four config fields (<c>IsAlwaysUvEnabled</c>,
+    /// counters, and its four config fields (<c>IsAlwaysUvEnabled</c>,
     /// <c>MinPinCodePointLength</c>, <c>IsForcePinChangeRequired</c>, <c>MinPinLengthRpIds</c> — CTAP
     /// 2.3 §7.2.3/§7.4.3 revert these only "after an authenticator reset",
     /// <see cref="CtapAuthenticatorState.FactoryReset"/>'s own concern) while clearing the
     /// consecutive-mismatch counter and the power-cycle latch, refreshing both PIN/UV auth protocols'
-    /// key-agreement key pairs and pinUvAuthTokens, and leaving the AAGUID, <c>firmwareVersion</c> (R7:
-    /// device identity, the AAGUID analogy), advertised extensions, resident-credential capacity,
+    /// key-agreement key pairs and pinUvAuthTokens, and leaving the AAGUID, <c>firmwareVersion</c>
+    /// (device identity, the AAGUID analogy), advertised extensions, resident-credential capacity,
     /// credential store, and credential sequence counter untouched.
     /// </summary>
     [TestMethod]
     public void PowerCyclePreservesPinConfigurationClearsTheLatchAndRefreshesKeyMaterial()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         Guid aaguid = Guid.NewGuid();
         DateTimeOffset now = TestClock.CanonicalEpoch;
         DigestValue storedPin = BuildFixedDigest(0x77, 16, pool);
@@ -110,7 +110,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
 
 
     /// <summary>
-    /// A power cycle preserves a credential's CredRandom pair by reference (contract R2's
+    /// A power cycle preserves a credential's CredRandom pair by reference (the
     /// PowerCycle-preserves half): <see cref="CtapAuthenticatorState.PowerCycle"/> never touches
     /// <see cref="CtapAuthenticatorState.CredentialsByCredentialId"/> in its own <c>with</c> copy (proven
     /// generically above by <see cref="PowerCyclePreservesPinConfigurationClearsTheLatchAndRefreshesKeyMaterial"/>'s
@@ -123,7 +123,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
         Justification = "Ownership of the credential ID and user handle carriers transfers to the CtapCredentialRecord constructed immediately afterward; record.Dispose() releases both once the assertions complete.")]
     public async Task PowerCyclePreservesCredRandomWithUvAndWithoutUvByReference()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         Guid aaguid = Guid.NewGuid();
         DateTimeOffset now = TestClock.CanonicalEpoch;
 
@@ -166,16 +166,16 @@ internal sealed class CtapAuthenticatorPowerCycleTests
     /// A power cycle preserves BOTH the vendor-burned-in <see cref="CtapAuthenticatorState.EnterpriseAttestationProvisioning"/>
     /// record (the SAME reference, never re-minted) and the runtime-only
     /// <see cref="CtapAuthenticatorState.IsEnterpriseAttestationEnabled"/> flag, whichever value it
-    /// holds — R3: CTAP 2.3 §7.1.3/§6.6 name no power-cycle obligation for either, unlike
+    /// holds — CTAP 2.3 §7.1.3/§6.6 name no power-cycle obligation for either, unlike
     /// <see cref="CtapAuthenticatorState.FactoryReset"/>'s own reset-disables-the-feature behavior.
     /// </summary>
     [TestMethod]
     public void PowerCyclePreservesEnterpriseAttestationProvisioningAndEnabledFlag()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         Guid aaguid = Guid.NewGuid();
         DateTimeOffset now = TestClock.CanonicalEpoch;
-        CtapEnterpriseAttestationProvisioning provisioning = CtapWaveEpFixtures.BuildProvisioning(pool);
+        CtapEnterpriseAttestationProvisioning provisioning = CtapEnterpriseAttestationFixtures.BuildProvisioning(pool);
 
         CtapAuthenticatorState before = CtapAuthenticatorState.Initial(
             aaguid, now, keyAgreementPool: pool, enterpriseAttestationProvisioning: provisioning) with
@@ -199,7 +199,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
 
 
     /// <summary>
-    /// A power cycle discards ALL THREE remembered stateful-command sequences (R10):
+    /// A power cycle discards ALL THREE remembered stateful-command sequences:
     /// <see cref="CtapAuthenticatorState.RememberedGetAssertion"/> dies alongside the two credMgmt
     /// enumeration sequences on the same deliberate basis, CTAP 2.3, section 6, item 1 (line 2869):
     /// "The state SHOULD NOT be maintained across power cycles."
@@ -209,7 +209,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
         Justification = "Ownership of the DigestValue transfers into the CtapRememberedGetAssertionState installed on the state below, which CtapAuthenticatorState.PowerCycle disposes via its own RememberedGetAssertion?.Dispose() call; the analyzer cannot see this transfer through the with-expression and the method call.")]
     public void PowerCycleDiscardsAllThreeRememberedStatefulSequences()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         DateTimeOffset now = TestClock.CanonicalEpoch;
         DigestValue clientDataHash = BuildFixedDigest(0xA1, 32, pool);
         var rememberedGetAssertion = new CtapRememberedGetAssertionState([], clientDataHash, true, true, 1, now, CtapPinUvAuthProtocolId.Two, LargeBlobKeyRequested: false);
@@ -238,8 +238,8 @@ internal sealed class CtapAuthenticatorPowerCycleTests
 
 
     /// <summary>
-    /// A power cycle discards an in-progress <c>authenticatorBioEnrollment</c> capture sequence (R7,
-    /// joining the existing three-slot discard set), disposing its not-yet-persisted template identifier,
+    /// A power cycle discards an in-progress <c>authenticatorBioEnrollment</c> capture sequence,
+    /// joining the existing three-slot discard set, disposing its not-yet-persisted template identifier,
     /// while a provisioned (completed) fingerprint template SURVIVES — the fourth slot's own asymmetry:
     /// <see cref="CtapAuthenticatorState.BioEnrollmentTemplatesByTemplateId"/> is persistent state (the
     /// <see cref="CtapAuthenticatorState.CredentialsByCredentialId"/> analogy), never remembered-sequence-
@@ -250,7 +250,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
         Justification = "Ownership of the in-progress capture's template identifier transfers into the CtapRememberedBioEnrollmentState installed on `before`, which CtapAuthenticatorState.PowerCycle disposes via its own RememberedBioEnrollment?.Dispose() call; the provisioned template's identifier transfers into `before`'s BioEnrollmentTemplatesByTemplateId, disposed explicitly below since PowerCycle leaves the store untouched.")]
     public void PowerCyclePreservesProvisionedTemplatesButDiscardsInProgressCapture()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         DateTimeOffset now = TestClock.CanonicalEpoch;
 
         BioEnrollmentTemplateId provisionedTemplateId = BioEnrollmentTemplateId.Create(BuildFixedBytes(16, 0x60), pool);
@@ -270,7 +270,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
 
         Assert.AreSame(populatedStore, after.BioEnrollmentTemplatesByTemplateId, "the provisioned template store must survive a power cycle unchanged.");
         Assert.IsTrue(after.HasProvisionedBioEnrollments);
-        Assert.IsNull(after.RememberedBioEnrollment, "an in-progress capture sequence must not survive a power cycle (R7).");
+        Assert.IsNull(after.RememberedBioEnrollment, "an in-progress capture sequence must not survive a power cycle.");
 
         provisionedTemplateId.Dispose();
         after.ProtocolOneKeyAgreementKeyPair.Dispose();
@@ -292,7 +292,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
     public async Task SimulatorPowerCycleKeepsCredentialsUsableAndRefreshesBothProtocolsKeyAgreement()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulatorWithClientPinAndCredentials("power-cycle-sim");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         Guid aaguidBefore = simulator.Aaguid;
 
         byte[] credentialIdBytes = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x90), TestContext.CancellationToken);
@@ -324,8 +324,8 @@ internal sealed class CtapAuthenticatorPowerCycleTests
     /// <summary>
     /// Builds a simulator wired with both the credential-signing backend and the <c>clientPIN</c>
     /// codecs, so this file can exercise credential registration and <c>getKeyAgreement</c> together —
-    /// neither <see cref="TestInfrastructure.CtapWave2AuthenticatorFixtures"/> nor
-    /// <see cref="TestInfrastructure.CtapWave5AuthenticatorFixtures"/> combines both.
+    /// neither <see cref="TestInfrastructure.CtapMakeCredentialGetAssertionFixtures"/> nor
+    /// <see cref="TestInfrastructure.CtapClientPinFixtures"/> combines both.
     /// </summary>
     private static CtapAuthenticatorSimulator CreateSimulatorWithClientPinAndCredentials(string runId) =>
         new(
@@ -352,7 +352,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
 
 
     /// <summary>Sends a <c>getKeyAgreement</c> request for <paramref name="id"/> and returns the reported COSE_Key.</summary>
-    private async Task<CoseKey> GetKeyAgreementAsync(CtapAuthenticatorSimulator simulator, CtapPinUvAuthProtocolId id, MemoryPool<byte> pool)
+    private async Task<CoseKey> GetKeyAgreementAsync(CtapAuthenticatorSimulator simulator, CtapPinUvAuthProtocolId id, BaseMemoryPool pool)
     {
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.GetKeyAgreement, PinUvAuthProtocol: (int)id);
         CtapClientPinResponse response = await CtapAuthenticatorClientPinClient.ClientPinAsync(
@@ -374,13 +374,13 @@ internal sealed class CtapAuthenticatorPowerCycleTests
     public void StoredPinHashCarrierZeroesOnDispose()
     {
         const int PinHashLength = 16;
-        using var trackingPool = new ZeroOnDisposeTrackingMemoryPool(PinHashLength);
+        using var trackingPool = new MeteredHousePool();
 
-        DigestValue storedPin = BuildFixedDigest(0x99, PinHashLength, trackingPool);
+        DigestValue storedPin = BuildFixedDigest(0x99, PinHashLength, trackingPool.Pool);
         storedPin.Dispose();
 
-        Assert.AreEqual(1, trackingPool.TrackedDisposalCount);
-        Assert.IsTrue(trackingPool.AllTrackedDisposalsWereZero, "The stored PIN hash carrier must be zeroed before its buffer returns to the pool.");
+        Assert.AreEqual(1, trackingPool.RentedCountOfSize(PinHashLength));
+        Assert.AreEqual(0, trackingPool.OutstandingCount, "Disposing the stored PIN hash carrier returns its buffer; zeroing on return is the house pool's own dispose-time contract.");
     }
 
 
@@ -390,7 +390,7 @@ internal sealed class CtapAuthenticatorPowerCycleTests
     /// <see cref="CtapAuthenticatorState.CurrentStoredPin"/>'s chosen carrier type directly rather than
     /// through a full <c>setPIN</c> round trip.
     /// </summary>
-    private static DigestValue BuildFixedDigest(byte seed, int length, MemoryPool<byte> pool)
+    private static DigestValue BuildFixedDigest(byte seed, int length, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(length);
         for(int i = 0; i < length; i++)

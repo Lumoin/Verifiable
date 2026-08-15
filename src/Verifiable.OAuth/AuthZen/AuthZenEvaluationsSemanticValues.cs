@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.AuthZen;
@@ -17,7 +16,6 @@ namespace Verifiable.OAuth.AuthZen;
 /// an unrecognised value yields <see langword="false"/> and the caller
 /// (strict per spec) rejects it.
 /// </remarks>
-[DebuggerDisplay("AuthZenEvaluationsSemanticValues")]
 public static class AuthZenEvaluationsSemanticValues
 {
     /// <summary>The UTF-8 source literal of <see cref="ExecuteAll"/>.</summary>

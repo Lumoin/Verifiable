@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.JCose;
@@ -33,7 +32,6 @@ namespace Verifiable.Vcalm;
 /// validated URL).
 /// </para>
 /// </remarks>
-[DebuggerDisplay("VcalmInteractionEndpoints")]
 public static class VcalmInteractionEndpoints
 {
     //§3.7.5 path tail: the inviteRequest endpoint is POST /{localInviteId}/invite-request/response —

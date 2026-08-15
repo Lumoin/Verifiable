@@ -100,23 +100,23 @@ internal sealed class CbomCliTests
             root.GetProperty("dependencies").GetArrayLength(),
             "Observed CBOM must include a non-empty dependency graph.");
 
-        //Wave-7 regression guard: without --events, the CBOM JSON is the ENTIRE output, exactly as
-        //before this wave — the provenance summary section must never appear unrequested.
+        //Regression guard: without --events, the CBOM JSON is the ENTIRE output, exactly as
+        //by default — the provenance summary section must never appear unrequested.
         Assert.DoesNotContain(
             CryptoEventProvenance.SectionHeader, result.Stdout,
-            "Without --events, cbom --observe must reproduce its pre-wave-7 output exactly (CBOM JSON only).");
+            "Without --events, cbom --observe must reproduce its unadorned output exactly (CBOM JSON only).");
     }
 
 
     /// <summary>
-    /// The wave-7 consumer proof: <c>cbom --observe --events</c> subscribes to
+    /// Consumer proof: <c>cbom --observe --events</c> subscribes to
     /// <see cref="CryptographicKeyEvents"/> for the workload's duration and appends a compact provenance
     /// summary after the CBOM JSON. This is the ONLY test in the suite that can assert exact event
     /// counts — the CLI runs in its own freshly spawned process, so unlike an in-process test, nothing
     /// else in that process can add noise to the process-wide <see cref="CryptographicKeyEvents.Events"/>
     /// stream during the observation window. The counts prove BOTH the pre-existing choke-point path (the
-    /// FIDO2 leg's <c>PrivateKey.SignAsync</c>/<c>PublicKey.VerifyAsync</c>, wired since wave 4) and the
-    /// wave-7-widened path (the workload's new JOSE-signed leg, routed through <c>Jws.SignAsync</c>/
+    /// FIDO2 leg's <c>PrivateKey.SignAsync</c>/<c>PublicKey.VerifyAsync</c>) and the
+    /// JOSE-signed widened path (the workload's new JOSE-signed leg, routed through <c>Jws.SignAsync</c>/
     /// <c>VerifyAsync</c>'s <see cref="CryptoEventSink"/> seam) land in the same summary: two
     /// <c>KeyMaterialGeneratedEvent</c>s (one per workload leg's own mint), two
     /// <c>SignatureProducedEvent</c>s, and two <c>VerificationCompletedEvent</c>s — one of each pair from
@@ -158,7 +158,7 @@ internal sealed class CbomCliTests
 
 
     /// <summary>
-    /// Proves <c>CryptoProviderStartup</c>'s wave-7 key-creation registration is present and reachable
+    /// Proves <c>CryptoProviderStartup</c>'s key-creation registration is present and reachable
     /// through the real composition root. <c>RunObservableWorkloadAsync</c>/<c>RunFido2ObservedWorkloadAsync</c>
     /// mint their P-256 signing key through <c>CryptographicKeyEvents.CreateKeyPair(CryptoAlgorithm.P256,
     /// Purpose.Signing, pool)</c>, which throws unless <c>CryptoProviderStartup.RegisterKeyCreation()</c> has
@@ -247,7 +247,7 @@ internal sealed class CbomCliTests
 
 
     /// <summary>
-    /// MCP-mode parity for the wave-7 provenance summary: the <see cref="McpToolNames.EmitCbom"/> tool's
+    /// MCP-mode parity for the provenance summary: the <see cref="McpToolNames.EmitCbom"/> tool's
     /// <c>events</c> parameter reaches the exact same <c>VerifiableOperations.EmitObservedCbomAsync</c>
     /// call the CLI's <c>--events</c> flag does (see <c>VerifiableMcpServer.EmitCbom</c>), so calling it
     /// over MCP must append the same provenance summary the CLI flow test asserts on.
@@ -275,7 +275,7 @@ internal sealed class CbomCliTests
             .ConfigureAwait(false);
         await using(client.ConfigureAwait(false))
         {
-            //Without events: true, mode 'observed' must reproduce its pre-wave-7 output exactly.
+            //Without events: true, mode 'observed' must reproduce its unadorned output exactly.
             var withoutEvents = await client.CallToolAsync(
                 McpToolNames.EmitCbom,
                 new Dictionary<string, object?> { ["mode"] = "observed" },

@@ -15,7 +15,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// </remarks>
 /// <seealso cref="Tag"/>
 /// <seealso cref="BufferKind"/>
-[SuppressMessage("Design", "CA1515:Consider making public types internal", Justification = "Staged composition-edge code (layering-split-ledger.md): public by design so the boundary is already the future package's API boundary, per the promotability rules.")]
+[SuppressMessage("Design", "CA1515:Consider making public types internal", Justification = "Staged composition-edge code: public by design so the boundary is already the future package's API boundary, per the promotability rules.")]
 public static class TpmSealedStateCustodyBufferTags
 {
     /// <summary>

@@ -38,7 +38,7 @@ public delegate ValueTask<(Aead.Ciphertext Result, CryptoEvent? Event)> Symmetri
     ReadOnlyMemory<byte> keyBytes,
     ReadOnlyMemory<byte> iv,
     Tag tag,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     FrozenDictionary<string, object>? context = null,
     CancellationToken cancellationToken = default);
 
@@ -70,6 +70,6 @@ public delegate ValueTask<(DecryptedContent Result, CryptoEvent? Event)> Symmetr
     ReadOnlyMemory<byte> keyBytes,
     ReadOnlyMemory<byte> iv,
     Tag tag,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     FrozenDictionary<string, object>? context = null,
     CancellationToken cancellationToken = default);

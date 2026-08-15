@@ -25,6 +25,15 @@ public static class SsfTransmitterJsonWriting
     private const string SpecVersionFinal = "1_0";
 
 
+    //CAEP Interoperability Profile 1.0 §2.3.7 fixes the value: the document MUST
+    //include authorization_schemes and that value MUST include the OAuth 2.0
+    //entry. Because the value is spec-defined — and because every stream-management
+    //operation this transmitter serves is OAuth-gated — a contribution that stays
+    //silent gets the spec's own value rather than an omission.
+    private static IReadOnlyList<string> ProfileAuthorizationSchemeSpecUrns { get; } =
+        [SsfMetadataParameterNames.AuthorizationSchemeSpecUrnOAuth2];
+
+
     /// <summary>
     /// Serialises the SSF §7.1 Transmitter Configuration Metadata: the REQUIRED
     /// <c>issuer</c>, the <c>spec_version</c> of the implemented final spec, the
@@ -35,6 +44,24 @@ public static class SsfTransmitterJsonWriting
     /// <param name="issuer">The Transmitter's Issuer Identifier.</param>
     /// <param name="endpointMembers">Metadata member name to advertised URL, in emission order.</param>
     /// <param name="contribution">The application-supplied deployment policy.</param>
+    /// <returns>The Transmitter Configuration Metadata document.</returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="contribution"/> supplies no <c>delivery_methods_supported</c>, so no
+    /// profile-conformant document can be produced. The emission fails closed with a diagnostic
+    /// naming the member instead of publishing a document that violates §2.3.2.
+    /// </exception>
+    /// <remarks>
+    /// Two members SSF §7.1 leaves discretionary are MUST-include under
+    /// <see href="https://openid.net/specs/openid-caep-interoperability-profile-1_0-01.html">OpenID
+    /// CAEP Interoperability Profile 1.0, draft 01, sections 2.3.2 and 2.3.7</see> (no Final text
+    /// exists; draft 01 is the document under public review). The two are handled differently
+    /// because only one of them has a spec-defined value: §2.3.7 fixes
+    /// <c>authorization_schemes</c> to include <c>urn:ietf:rfc:6749</c>, so silence is answered
+    /// with that value, while <c>delivery_methods_supported</c> states which delivery methods a
+    /// deployment actually operates — a claim the library cannot derive and must not fabricate,
+    /// since advertising an unsupported method is a worse interop failure than refusing to serve
+    /// the document.
+    /// </remarks>
     public static string BuildTransmitterConfigurationJson(
         Uri issuer,
         IReadOnlyList<KeyValuePair<string, string>> endpointMembers,
@@ -43,6 +70,22 @@ public static class SsfTransmitterJsonWriting
         ArgumentNullException.ThrowIfNull(issuer);
         ArgumentNullException.ThrowIfNull(endpointMembers);
         ArgumentNullException.ThrowIfNull(contribution);
+
+        IReadOnlyList<string>? deliveryMethods = contribution.DeliveryMethodsSupported;
+        if(deliveryMethods is not { Count: > 0 })
+        {
+            throw new ArgumentException(
+                $"CAEP Interoperability Profile 1.0 §2.3.2 makes '{SsfMetadataParameterNames.DeliveryMethodsSupported}' "
+                + "a MUST-include member of the Transmitter Configuration Metadata, and its value is deployment "
+                + "truth the library cannot derive. Set "
+                + $"{nameof(SsfTransmitterMetadataContribution)}.{nameof(SsfTransmitterMetadataContribution.DeliveryMethodsSupported)} "
+                + "to the delivery methods this Transmitter operates.",
+                nameof(contribution));
+        }
+
+        IReadOnlyList<string> specUrns = contribution.AuthorizationSchemeSpecUrns is { Count: > 0 } supplied
+            ? supplied
+            : ProfileAuthorizationSchemeSpecUrns;
 
         StringBuilder sb = JsonAppender.Rent();
         try
@@ -58,11 +101,8 @@ public static class SsfTransmitterJsonWriting
                 JsonAppender.AppendStringField(sb, member.Key, member.Value, ref first);
             }
 
-            if(contribution.DeliveryMethodsSupported is { Count: > 0 } deliveryMethods)
-            {
-                JsonAppender.AppendStringArrayField(
-                    sb, SsfMetadataParameterNames.DeliveryMethodsSupported, deliveryMethods, ref first);
-            }
+            JsonAppender.AppendStringArrayField(
+                sb, SsfMetadataParameterNames.DeliveryMethodsSupported, deliveryMethods, ref first);
 
             if(contribution.CriticalSubjectMembers is { Count: > 0 } criticalMembers)
             {
@@ -70,10 +110,7 @@ public static class SsfTransmitterJsonWriting
                     sb, SsfMetadataParameterNames.CriticalSubjectMembers, criticalMembers, ref first);
             }
 
-            if(contribution.AuthorizationSchemeSpecUrns is { Count: > 0 } specUrns)
-            {
-                AppendAuthorizationSchemes(sb, specUrns, ref first);
-            }
+            AppendAuthorizationSchemes(sb, specUrns, ref first);
 
             if(!string.IsNullOrEmpty(contribution.DefaultSubjects))
             {

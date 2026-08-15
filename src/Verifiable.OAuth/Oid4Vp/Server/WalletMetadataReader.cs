@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using Verifiable.JCose;
 
@@ -24,7 +23,6 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 /// <see langword="null"/> when their respective member is absent or malformed.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("WalletMetadataReader")]
 public static class WalletMetadataReader
 {
     /// <summary>

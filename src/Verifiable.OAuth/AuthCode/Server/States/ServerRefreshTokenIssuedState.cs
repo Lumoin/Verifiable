@@ -108,7 +108,20 @@ public sealed record ServerRefreshTokenIssuedState: FlowState
     /// narrowed by a refresh-request subset per RFC 9396 §6.1 — re-emits the §7 token-response
     /// echo and the §9.1 access-token claim, and carries the value across rotation so a second
     /// refresh still carries the details. Mirrors <c>ServerCodeIssuedState.AuthorizationDetails</c>
-    /// so the granted details survive the authorization-code-to-refresh handover.
+    /// so the granted details survive the transition from authorization code to refresh.
     /// </summary>
     public string? AuthorizationDetails { get; init; }
+
+    /// <summary>
+    /// The <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>
+    /// <c>resource</c> indicator(s) granted to the authorization this refresh token descends
+    /// from (space-delimited when multiple), verbatim, or <see langword="null"/> when the grant
+    /// carried none. Per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">§2.2</see>, "any refresh
+    /// token that is returned is bound to the full original grant" — a refresh-request
+    /// <c>resource</c> narrows only the access token minted for that one exchange (mirrored on
+    /// <see cref="AuthorizationDetails"/> for RFC 9396); this field itself is never narrowed and
+    /// is propagated verbatim across every rotation.
+    /// </summary>
+    public string? Resource { get; init; }
 }

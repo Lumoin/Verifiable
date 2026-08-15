@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Siop;
@@ -14,7 +13,6 @@ namespace Verifiable.OAuth.Siop;
 /// Dynamic Client Registration member names MAY appear alongside these
 /// (<c>redirect_uris</c>, <c>jwks_uri</c>, <c>id_token_encrypted_response_alg</c>, …).
 /// </remarks>
-[DebuggerDisplay("SiopClientMetadataParameterNames")]
 public static class SiopClientMetadataParameterNames
 {
     /// <summary>The UTF-8 source literal of <see cref="SubjectSyntaxTypesSupported"/>.</summary>

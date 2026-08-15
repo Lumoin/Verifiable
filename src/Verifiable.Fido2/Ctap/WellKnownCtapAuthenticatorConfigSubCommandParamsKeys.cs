@@ -7,8 +7,8 @@ namespace Verifiable.Fido2.Ctap;
 /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorConfig">
 /// CTAP 2.3, section 6.11.4: setMinPINLength (0x03)</see>, the subCommandParams member table (lines
 /// 8087-8116). Every member is modeled, including <see cref="PinComplexityPolicy"/> — a fourth field
-/// the wave's own charter did not enumerate by name, but which shares this same map on the wire (wire
-/// completeness; <see cref="PinComplexityPolicy"/>'s value is decoded and then ignored, per the
+/// this library models for wire completeness even though it shares this same map on the wire (
+/// <see cref="PinComplexityPolicy"/>'s value is decoded and then ignored, per the
 /// line-8442 MUST — see <c>CtapAuthenticatorTransitions.OnSetMinPinLengthRequested</c>).
 /// </remarks>
 public static class WellKnownCtapAuthenticatorConfigSubCommandParamsKeys

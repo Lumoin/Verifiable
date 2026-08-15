@@ -6,11 +6,11 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// <summary>
 /// Stores the opaque, TPM-sealed snapshot blob bytes <see cref="TpmSealedStateCustody"/> produced for
 /// <paramref name="runId"/>, overwriting whatever was previously stored for the same identifier — the
-/// caller-supplied I/O half of the adapter's persist step (contract R-7).
+/// caller-supplied I/O half of the adapter's persist step.
 /// </summary>
 /// <param name="runId">
 /// The stable identifier of the authenticator instance this sealed blob belongs to — the explicit per-call
-/// context parameter this delegate takes instead of closing over any caller state (contract R-3, house
+/// context parameter this delegate takes instead of closing over any caller state (house
 /// rule: no closure capture).
 /// </param>
 /// <param name="sealedBlobBytes">

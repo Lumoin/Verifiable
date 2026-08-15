@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.DidComm;
+using Verifiable.DidComm.ReturnRoute;
 
 namespace Verifiable.Json.Converters;
 
@@ -36,9 +37,10 @@ namespace Verifiable.Json.Converters;
 /// <para>
 /// The integer typing of <c>created_time</c> and <c>expires_time</c> is enforced here at the wire
 /// level: a fractional, string, or otherwise non-integer value is rejected with
-/// <see cref="JsonThrowHelper.ThrowJsonException(string)"/>. The domain-level structural validation
-/// (required headers, message-type-URI shape, recipient identifier shape) is applied above this
-/// converter by <see cref="DidCommPlaintextExtensions.UnpackPlaintext"/>.
+/// <see cref="JsonThrowHelper.ThrowJsonException(string)"/>. The Return-Route extension's
+/// <c>return_route</c>/<c>return_route_thread</c> headers get the analogous string-typing check. The
+/// domain-level structural validation (required headers, message-type-URI shape, recipient identifier
+/// shape) is applied above this converter by <see cref="DidCommPlaintextExtensions.UnpackPlaintext"/>.
 /// </para>
 /// </remarks>
 public sealed class DidCommMessageConverter: JsonConverter<DidCommMessage>
@@ -139,6 +141,16 @@ public sealed class DidCommMessageConverter: JsonConverter<DidCommMessage>
             writer.WriteEndArray();
         }
 
+        if(value.ReturnRoute is not null)
+        {
+            writer.WriteString(WellKnownReturnRouteNames.ReturnRouteUtf8, value.ReturnRoute);
+        }
+
+        if(value.ReturnRouteThread is not null)
+        {
+            writer.WriteString(WellKnownReturnRouteNames.ReturnRouteThreadUtf8, value.ReturnRouteThread);
+        }
+
         if(value.Body is not null)
         {
             writer.WritePropertyName(WellKnownDidCommMemberNames.BodyUtf8);
@@ -160,6 +172,26 @@ public sealed class DidCommMessageConverter: JsonConverter<DidCommMessage>
         {
             foreach(KeyValuePair<string, object> header in value.AdditionalHeaders)
             {
+                //A hand-constructed message may carry a key in AdditionalHeaders that duplicates a typed
+                //member already written above (the read path never produces this — return_route/
+                //return_route_thread are consumed into their typed members, never left in the bag — but
+                //nothing stops a caller from setting both directly). The skip applies only when the typed
+                //member was actually WRITTEN, so a bag-only value still round-trips; when both are set the
+                //typed member wins and no duplicate JSON member is emitted. This is a minimal, targeted
+                //guard for the two headers this extension adds; no equivalent guard exists yet for the OTHER
+                //typed headers (id/type/from/thid/pthid/…), so a message that duplicates one of THOSE in
+                //AdditionalHeaders still writes a duplicate JSON member.
+                bool isShadowedByTypedMember =
+                    (string.Equals(header.Key, WellKnownReturnRouteNames.ReturnRoute, StringComparison.Ordinal)
+                        && value.ReturnRoute is not null)
+                    || (string.Equals(header.Key, WellKnownReturnRouteNames.ReturnRouteThread, StringComparison.Ordinal)
+                        && value.ReturnRouteThread is not null);
+
+                if(isShadowedByTypedMember)
+                {
+                    continue;
+                }
+
                 writer.WritePropertyName(header.Key);
                 ManualJsonWriter.WriteValue(writer, header.Value);
             }
@@ -221,6 +253,14 @@ public sealed class DidCommMessageConverter: JsonConverter<DidCommMessage>
             else if(property.NameEquals(WellKnownDidCommMemberNames.AckUtf8))
             {
                 message.Ack = ReadStringArray(property.Value, WellKnownDidCommMemberNames.Ack);
+            }
+            else if(property.NameEquals(WellKnownReturnRouteNames.ReturnRouteUtf8))
+            {
+                message.ReturnRoute = ReadStringMember(property.Value, WellKnownReturnRouteNames.ReturnRoute);
+            }
+            else if(property.NameEquals(WellKnownReturnRouteNames.ReturnRouteThreadUtf8))
+            {
+                message.ReturnRouteThread = ReadStringMember(property.Value, WellKnownReturnRouteNames.ReturnRouteThread);
             }
             else if(property.NameEquals(WellKnownDidCommMemberNames.BodyUtf8))
             {
@@ -473,6 +513,24 @@ public sealed class DidCommMessageConverter: JsonConverter<DidCommMessage>
         }
 
         return list;
+    }
+
+
+    //A string-valued member — return_route / return_route_thread (the Return-Route and Queue Transport
+    //extension's §Return Route Header) — MUST be a JSON string or JSON null (the DIDComm v2.1 §Message
+    //Headers "ignore/MUST NOT fail" rule for a null-valued header); a number, boolean, array, or object is
+    //rejected with this converter's own JsonException rather than JsonElement.GetString()'s bare
+    //InvalidOperationException, which is the wrong exception type to surface from this converter. The
+    //pre-existing typed string headers (id/type/from/thid/pthid/from_prior) call GetString() directly and
+    //are unchanged — this posture is applied only to the two headers this extension adds.
+    private static string? ReadStringMember(JsonElement element, string memberName)
+    {
+        if(element.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
+        {
+            JsonThrowHelper.ThrowJsonException($"The DIDComm '{memberName}' member MUST be a JSON string.");
+        }
+
+        return element.GetString();
     }
 
 

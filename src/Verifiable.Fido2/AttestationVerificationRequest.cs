@@ -44,7 +44,7 @@ public sealed class AttestationVerificationRequest
         ReadOnlyMemory<byte> attestationStatement,
         IReadOnlyList<PkiCertificateMemory> trustAnchors,
         DateTimeOffset validationTime,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(authenticatorData);
         ArgumentNullException.ThrowIfNull(clientDataHash);
@@ -147,7 +147,7 @@ public sealed class AttestationVerificationRequest
     /// concatenation of <see cref="AuthenticatorDataBytes"/> and <see cref="ClientDataHash"/>, or
     /// key material converted from a COSE_Key.
     /// </summary>
-    public MemoryPool<byte> Pool { get; }
+    public BaseMemoryPool Pool { get; }
 
 
     /// <summary>

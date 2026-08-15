@@ -39,15 +39,17 @@ namespace Verifiable.Cryptography;
 /// </para>
 /// <para>
 /// The inner hash routes through the registered <see cref="ComputeDigestDelegate"/> via
-/// <see cref="CryptographicKeyEvents.ComputeDigestAsync(ReadOnlyMemory{byte}, int, Tag, MemoryPool{byte}, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>,
+/// <see cref="CryptographicKeyEvents.ComputeDigestAsync(ReadOnlyMemory{byte}, int, Tag, BaseMemoryPool, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>,
 /// so KDFe inherits the same observability and provenance stamping as every other digest. The hash family is
 /// carried inline on the <see cref="Tag"/> via <see cref="HashAlgorithmName"/> because TPM sessions may use
 /// SHA-1 (which the convenience <see cref="CryptoTags"/> deliberately omit).
 /// </para>
 /// <para>
 /// All intermediate allocations come from the supplied <see cref="MemoryPool{T}"/>. The shared value <c>Z</c>
-/// is secret, so the assembled hash input (which embeds it) is zeroed before disposal. The returned owner holds
-/// derived key material; the caller must zero and dispose it after use.
+/// is secret, so the assembled hash input (which embeds it) and the derived output are both
+/// <see cref="AllocationKind.Pinned"/> and zeroed before disposal — pinning ensures the zeroize actually
+/// wipes the memory rather than a GC-moved copy. The returned owner holds derived key material; the caller
+/// must zero and dispose it after use.
 /// </para>
 /// </remarks>
 public static class Kdfe
@@ -78,7 +80,7 @@ public static class Kdfe
         ReadOnlyMemory<byte> partyUInfo,
         ReadOnlyMemory<byte> partyVInfo,
         int outputBits,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(label);
@@ -111,8 +113,8 @@ public static class Kdfe
             + partyUInfo.Length
             + partyVInfo.Length;
 
-        IMemoryOwner<byte> output = pool.Rent(outputBytes);
-        using IMemoryOwner<byte> inputOwner = pool.Rent(inputLength);
+        IMemoryOwner<byte> output = pool.Rent(outputBytes, AllocationKind.Pinned);
+        using IMemoryOwner<byte> inputOwner = pool.Rent(inputLength, AllocationKind.Pinned);
 
         //The buffer is held as Memory across the hash awaits; Span is taken only at synchronous points (a Span
         //cannot survive an await boundary).

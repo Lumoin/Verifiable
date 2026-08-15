@@ -8,7 +8,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// match the composed authenticator it was about to restore into.
 /// </summary>
 /// <remarks>
-/// Per contract ruling R-2b/R-5, rehydration FAILS CLOSED on either failure — a snapshot never silently
+/// Rehydration FAILS CLOSED on either failure — a snapshot never silently
 /// re-personalizes a differently-composed authenticator, and a truncated or tampered snapshot never
 /// yields a partially restored state. Both failure families share this one exception type rather than a
 /// finer-grained hierarchy, since every caller's correct reaction is identical: discard the snapshot,

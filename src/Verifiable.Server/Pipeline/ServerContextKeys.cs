@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.Server.Pipeline;
 
@@ -15,7 +14,6 @@ namespace Verifiable.Server.Pipeline;
 /// its own keys in its own internal key holder and surfaces them through its own accessors.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("ServerContextKeys")]
 internal static class ServerContextKeys
 {
     /// <summary>Key for the capability of the matched endpoint. Value type: <see cref="CapabilityIdentifier"/>.</summary>

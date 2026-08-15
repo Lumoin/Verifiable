@@ -73,7 +73,7 @@ namespace Verifiable.Cryptography;
 /// <seealso cref="SensitiveMemory"/>
 /// <seealso cref="PublicKeyMemory"/>
 /// <seealso cref="PrivateKeyMemory"/>
-public delegate ValueTask<TResult?> KeyMaterialResolver<TResult, TContext, TState>(TContext context, MemoryPool<byte> pool, TState state, CancellationToken cancellationToken = default) where TResult: SensitiveMemory;
+public delegate ValueTask<TResult?> KeyMaterialResolver<TResult, TContext, TState>(TContext context, BaseMemoryPool pool, TState state, CancellationToken cancellationToken = default) where TResult: SensitiveMemory;
 
 
 /// <summary>

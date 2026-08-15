@@ -101,7 +101,7 @@ public static class Oid4VpMdocPresentation
     public static IMemoryOwner<byte> DecodeVpTokenValue(
         string vpTokenValue,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentException.ThrowIfNullOrEmpty(vpTokenValue);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
@@ -146,7 +146,7 @@ public static class Oid4VpMdocPresentation
     public static IMemoryOwner<byte> DecodeMdocGeneratedNonceForTransmissionRoundTrip(
         string transmitted,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentException.ThrowIfNullOrEmpty(transmitted);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);

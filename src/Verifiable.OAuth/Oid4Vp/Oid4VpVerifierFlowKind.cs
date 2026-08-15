@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Oid4Vp;
@@ -11,7 +10,6 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// <remarks>
 /// Accessed via <c>FlowKind.Oid4VpVerifier</c>.
 /// </remarks>
-[DebuggerDisplay("Oid4VpVerifierFlowKind")]
 public sealed class Oid4VpVerifierFlowKind: StatefulFlowKind
 {
     /// <summary>The singleton instance.</summary>

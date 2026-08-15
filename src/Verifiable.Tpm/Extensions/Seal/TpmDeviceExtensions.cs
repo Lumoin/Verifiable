@@ -165,7 +165,7 @@ public static class TpmDeviceExtensions
         bool noDa,
         CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_Create, TpmResponseCodec.CreateObject);
 
@@ -196,7 +196,7 @@ public static class TpmDeviceExtensions
         ReadOnlyMemory<byte> sealAuth,
         CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateUnsealRegistry();
 
         (Tpm2bPrivate InPrivate, Tpm2bPublic InPublic) cloned = sealedBlob.CloneForLoad(pool);
@@ -238,7 +238,7 @@ public static class TpmDeviceExtensions
         uint policySession,
         CancellationToken cancellationToken)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateUnsealRegistry();
 
         (Tpm2bPrivate InPrivate, Tpm2bPublic InPublic) cloned = sealedBlob.CloneForLoad(pool);
@@ -303,7 +303,7 @@ public static class TpmDeviceExtensions
     /// <param name="pool">The memory pool.</param>
     /// <param name="cancellationToken">A token observed across the exchange.</param>
     private static async ValueTask FlushTransientHandleAsync(
-        TpmDevice device, TpmResponseRegistry registry, uint itemHandle, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        TpmDevice device, TpmResponseRegistry registry, uint itemHandle, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
             device, FlushContextInput.ForHandle(itemHandle), [], null, pool, registry, cancellationToken).ConfigureAwait(false);

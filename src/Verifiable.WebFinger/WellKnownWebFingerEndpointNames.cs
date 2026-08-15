@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.WebFinger;
 
@@ -13,7 +12,6 @@ namespace Verifiable.WebFinger;
 /// establishes in this assembly rather than the UTF-8-first pattern the OAuth and W3C VCALM endpoint-name
 /// catalogues use, since WebFinger has exactly one endpoint role to name.
 /// </remarks>
-[DebuggerDisplay("WellKnownWebFingerEndpointNames")]
 public static class WellKnownWebFingerEndpointNames
 {
     /// <summary>

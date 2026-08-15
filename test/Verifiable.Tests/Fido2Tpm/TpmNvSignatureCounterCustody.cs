@@ -13,7 +13,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 
 /// <summary>
 /// Composes a <see cref="CtapSignatureCounterCustody"/> bundle whose per-credential signature counters are
-/// each backed by their OWN NV Counter Index on an in-house simulated TPM (contract R-9, wavenv) — a thin
+/// each backed by their OWN NV Counter Index on an in-house simulated TPM — a thin
 /// adapter over the <see cref="TpmDeviceExtensions"/> business-capability verbs package B shipped
 /// (<c>DefineCounterAsync</c>/<c>IncrementCounterAsync</c>/<c>UndefineCounterAsync</c>), never a raw
 /// <c>TPM2_NV_Increment</c> input — the same dogfood posture <see cref="TpmSealedStateCustody"/> established
@@ -35,7 +35,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// example a retry, or a caller that skipped retirement) is NOT surfaced as an error: this adapter proceeds
 /// straight to the increment either way, so the ONLY externally visible difference between "freshly defined"
 /// and "already defined" is which value the increment returns. A credential's mint-time signature counter
-/// is therefore never <c>0</c> once this adapter is composed (contract R-9(3)(c)) — an accepted, opt-in
+/// is therefore never <c>0</c> once this adapter is composed — an accepted, opt-in
 /// behavioral difference from the whole-snapshot-only default.
 /// </para>
 /// <para>
@@ -44,7 +44,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// 2/NOTE 6) then guarantees that a LATER credential whose <c>creationSequence</c> collides with a retired
 /// one (an <c>authenticatorReset</c> restarts the mint-order sequence at zero) seeds its own first
 /// <see cref="CtapSignatureCounterCustody.EnsureCounterAsync"/> strictly above every value the retired Index
-/// ever held — the R-9(b) closure this wave delivers. An undefine answering <c>TPM_RC_HANDLE</c> (nothing
+/// ever held. An undefine answering <c>TPM_RC_HANDLE</c> (nothing
 /// was ever minted for this identity, or it was already retired) is treated as the ordinary idempotent
 /// no-op <see cref="RetireCounterAsyncDelegate"/>'s own contract recommends, never an error.
 /// </para>
@@ -54,7 +54,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// <see cref="TpmSealedStateCustody"/>'s own posture.
 /// </para>
 /// </remarks>
-[SuppressMessage("Design", "CA1515:Consider making public types internal", Justification = "Staged composition-edge code (layering-split-ledger.md): public by design so the boundary is already the future package's API boundary, per the promotability rules.")]
+[SuppressMessage("Design", "CA1515:Consider making public types internal", Justification = "Staged composition-edge code: public by design so the boundary is already the future package's API boundary, per the promotability rules.")]
 public static class TpmNvSignatureCounterCustody
 {
     /// <summary>

@@ -126,7 +126,7 @@ public sealed class TpmtPublic: IDisposable
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed public area.</returns>
-    public static TpmtPublic Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static TpmtPublic Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         var type = (TpmAlgIdConstants)reader.ReadUInt16();
         var nameAlg = (TpmAlgIdConstants)reader.ReadUInt16();
@@ -193,7 +193,7 @@ public sealed class TpmtPublic: IDisposable
         TpmEccCurveConstants curve,
         TpmtEccScheme scheme,
         TpmsEccPoint unique,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         ReadOnlySpan<byte> authPolicy = default)
     {
         ArgumentNullException.ThrowIfNull(unique);
@@ -255,7 +255,7 @@ public sealed class TpmtPublic: IDisposable
         ushort keyBits,
         TpmtRsaScheme scheme,
         ReadOnlySpan<byte> modulus,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         ReadOnlySpan<byte> authPolicy = default)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -383,7 +383,7 @@ public sealed class TpmtPublic: IDisposable
         TpmaObject objectAttributes,
         TpmEccCurveConstants curve,
         TpmsEccPoint unique,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         ReadOnlySpan<byte> authPolicy = default)
     {
         ArgumentNullException.ThrowIfNull(unique);
@@ -441,7 +441,7 @@ public sealed class TpmtPublic: IDisposable
     public static TpmtPublic CreateEccEndorsementKeyTemplate(
         TpmAlgIdConstants nameAlg,
         TpmEccCurveConstants curve,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         ReadOnlySpan<byte> authPolicy)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -513,7 +513,7 @@ public sealed class TpmtPublic: IDisposable
     public static TpmtPublic CreateRsaEndorsementKeyTemplate(
         TpmAlgIdConstants nameAlg,
         ushort keyBits,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         ReadOnlySpan<byte> authPolicy)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -564,7 +564,7 @@ public sealed class TpmtPublic: IDisposable
         TpmaObject objectAttributes,
         ushort keyBits,
         ReadOnlySpan<byte> modulus,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         ReadOnlySpan<byte> authPolicy = default)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -626,7 +626,7 @@ public sealed class TpmtPublic: IDisposable
     /// <returns>The public area template.</returns>
     public static TpmtPublic CreateSealedDataTemplate(
         TpmAlgIdConstants nameAlg,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         ReadOnlySpan<byte> authPolicy = default,
         bool noDa = false,
         bool userWithAuth = true)

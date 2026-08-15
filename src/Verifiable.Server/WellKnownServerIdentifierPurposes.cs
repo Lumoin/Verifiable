@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.Server;
 
@@ -12,7 +11,6 @@ namespace Verifiable.Server;
 /// endpoints generate; this class carries only the purposes the host's own dispatch loop
 /// generates.
 /// </remarks>
-[DebuggerDisplay("WellKnownServerIdentifierPurposes")]
 public static class WellKnownServerIdentifierPurposes
 {
     /// <summary>

@@ -5,14 +5,14 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// <summary>
 /// A backend-neutral seam bundling the three async delegates a <see cref="Automata.CtapAuthenticatorSimulator"/>
 /// needs to custody a credential's signature counter against a rollback-protected external counter primitive,
-/// SIBLING to <see cref="CtapStateCustody"/> rather than a widening of it (contract R-9, wavenv): mint a
+/// SIBLING to <see cref="CtapStateCustody"/> rather than a widening of it: mint a
 /// fresh credential's initial count, advance an existing credential's count at assertion time, and retire a
 /// removed credential's count.
 /// </summary>
 /// <remarks>
 /// <para>
 /// A plain seam-bundle record of delegates, never a behavioral interface — the same house convention
-/// <see cref="CtapStateCustody"/> establishes (contract R-3): any counter-backed store (an in-memory
+/// <see cref="CtapStateCustody"/> establishes: any counter-backed store (an in-memory
 /// dictionary, a database sequence, or package C's TPM-backed adapter over an NV Counter Index) implements
 /// this shape by supplying three delegates, with no interface to implement and no base type to derive from.
 /// </para>
@@ -25,7 +25,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// snapshot can then never roll it back. <see cref="Automata.CtapAuthenticatorSimulator.CreateWithCustodyAsync"/>'s
 /// own <c>signatureCounterCustody</c> parameter is the ONLY way a simulator gains this behavior, and it
 /// defaults to <see langword="null"/> — every existing composition root is unaffected (the same "absent
-/// bundle ⇒ today's behavior, byte-identical" discipline the wavect wave established for
+/// bundle ⇒ today's behavior, byte-identical" discipline established for
 /// <see cref="CtapStateCustody"/>).
 /// </para>
 /// </remarks>

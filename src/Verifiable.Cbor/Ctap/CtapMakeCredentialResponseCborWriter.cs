@@ -15,8 +15,8 @@ namespace Verifiable.Cbor.Ctap;
 /// CTAP 2.3, section 6.1: authenticatorMakeCredential (0x01)</see>. The response's keys
 /// (<c>fmt</c>=1, <c>authData</c>=2, <c>attStmt</c>=3, <c>epAtt</c>=4, <c>largeBlobKey</c>=5) are already
 /// in ascending order, so no run-time sort is needed, mirroring <see cref="CtapGetInfoResponseCborWriter"/>'s
-/// own convention — <c>epAtt</c> is written BETWEEN the <c>attStmt</c> and <c>largeBlobKey</c> blocks
-/// (waveep R9, trap 5/2), never appended after <c>largeBlobKey</c>: an enterprise-attested resident
+/// own convention — <c>epAtt</c> is written BETWEEN the <c>attStmt</c> and <c>largeBlobKey</c> blocks,
+/// never appended after <c>largeBlobKey</c>: an enterprise-attested resident
 /// credential with a <c>largeBlobKey</c> also requested is a genuinely reachable combination whose
 /// <c>epAtt</c>/<c>largeBlobKey</c> wire order must stay canonical.
 /// </remarks>
@@ -54,9 +54,9 @@ public static class CtapMakeCredentialResponseCborWriter
             writer.WriteEncodedValue(attStmt.Span);
         }
 
-        //R9: the writer emits whenever EpAtt has a value at all — a codec is faithful, so a foreign
+        //The writer emits whenever EpAtt has a value at all — a codec is faithful, so a foreign
         //present-false round-trips unchanged; only this authenticator's OWN response-build site (never
-        //this codec) chooses to omit rather than assert false (trap 18).
+        //this codec) chooses to omit rather than assert false.
         if(response.EpAtt is bool epAtt)
         {
             writer.WriteInt32(WellKnownCtapMakeCredentialResponseKeys.EpAtt);

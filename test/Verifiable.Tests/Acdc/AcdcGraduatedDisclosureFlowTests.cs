@@ -83,7 +83,7 @@ internal sealed class AcdcGraduatedDisclosureFlowTests
             //Proof of Issuance: one Issuer KEL anchor commits to the one SAID, covering both graduation levels.
             string kelJson = await httpClient.GetStringAsync(new Uri(issuer.BaseAddress, "/kel"), cancellationToken).ConfigureAwait(false);
             using AcdcTestSupport.EncodedSerialization kelBytes = AcdcTestSupport.Encode(kelJson);
-            IReadOnlyList<KeriSeal>? anchors = await AcdcFlowKit.VerifyKelAndReadAnchorsAsync(kelBytes.Memory, expandedMessage.Issuer, disposables, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
+            IReadOnlyList<KeriAnchoredSeal>? anchors = await AcdcFlowKit.VerifyKelAndReadAnchorsAsync(kelBytes.Memory, expandedMessage.Issuer, disposables, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
             Assert.IsNotNull(anchors, "The Issuer KEL MUST verify and be the credential Issuer's.");
             Assert.IsNotNull(AcdcKeriBinding.FindDirectIssuanceSeal(anchors, graduated.Said), "Proof of Issuance: one Issuer KEL anchor MUST commit to the committed SAID, covering both graduation levels.");
 

@@ -115,4 +115,16 @@ public sealed record ServerCodeIssuedState: FlowState
     /// <see langword="null"/> when the request carried no <c>response_mode</c>.
     /// </summary>
     public string? ResponseMode { get; init; }
+
+    /// <summary>
+    /// The <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>
+    /// <c>resource</c> indicator(s) the authorization request was granted with (space-delimited
+    /// when multiple), shape-validated at PAR/authorize receipt, or <see langword="null"/> when
+    /// none was requested. Per §2.1 the requested resource "is applicable to the full
+    /// authorization grant" — this is that grant. The token endpoint resolves the effective
+    /// access-token audience against it — optionally narrowed by a token-request subset per
+    /// §2.2 — and carries the value verbatim onto <c>ServerRefreshTokenIssuedState</c> so the
+    /// refresh token stays bound to the full original grant (§2.2).
+    /// </summary>
+    public string? Resource { get; init; }
 }

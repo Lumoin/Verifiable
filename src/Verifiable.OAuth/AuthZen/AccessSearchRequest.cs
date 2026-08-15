@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.OAuth.AuthZen;
 
@@ -31,7 +30,6 @@ namespace Verifiable.OAuth.AuthZen;
 /// and hands it to the endpoint's search seam; the seam owns enumeration and
 /// paging.
 /// </remarks>
-[DebuggerDisplay("AccessSearchRequest")]
 public sealed record AccessSearchRequest
 {
     /// <summary>The Subject — searched dimension (Subject Search) or criterion (otherwise). Optional per endpoint.</summary>

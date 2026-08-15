@@ -17,13 +17,13 @@ namespace Verifiable.Tests.TestInfrastructure;
 ///   <item><description>
 ///   <see cref="RetiredCreationSequences"/> — a context log of every creation sequence
 ///   <see cref="Custody"/>'s <c>RetireCounterAsync</c> delegate was called with, in call order, recorded by
-///   the delegate's OWN bound method rather than a captured test-local (wavenv capstone (3)'s "test-recorded
+///   the delegate's OWN bound method rather than a captured test-local ("test-recorded
 ///   via the delegate's own context log, no closure capture" requirement).
 ///   </description></item>
 ///   <item><description>
 ///   <see cref="FailNextIncrement"/> — arms the NEXT <c>IncrementCounterAsync</c> call (only) to throw
 ///   instead of reaching the inner bundle, so a capstone can prove a failed increment fails the whole
-///   assertion command on the wire (wavenv capstone (4)) without needing the real TPM itself to reject
+///   assertion command on the wire without needing the real TPM itself to reject
 ///   anything.
 ///   </description></item>
 /// </list>

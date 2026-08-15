@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Siop;
@@ -13,7 +12,6 @@ namespace Verifiable.OAuth.Siop;
 /// acting as a Self-Issued OP produces them. Base OAuth error codes live in
 /// <see cref="OAuthErrors"/>.
 /// </remarks>
-[DebuggerDisplay("SiopErrors")]
 public static class SiopErrors
 {
     /// <summary>The UTF-8 source literal of <see cref="UserCancelled"/>.</summary>

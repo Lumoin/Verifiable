@@ -14,8 +14,8 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
-/// Wave-4 D7 real-wire capstone for the <c>openid ⇒ end-user</c> data-minimization invariant on
-/// the access-token producer (contract §D4 consumer layer, <see cref="Rfc9068AccessTokenProducer"/>):
+/// Real-wire capstone for the <c>openid ⇒ end-user</c> data-minimization invariant on
+/// the access-token producer (<see cref="Rfc9068AccessTokenProducer"/>):
 /// a full PAR → authorize → callback → token authorization-code journey requesting
 /// <c>openid profile email address phone</c> must never carry end-user identity claims on the
 /// issued access token, even though every identity family is populated and the co-issued id_token
@@ -110,7 +110,7 @@ internal sealed class AccessTokenIdentityMinimizationTests
         string idToken = (string)drive.TokenResult.Body[OAuthRequestParameterNames.IdToken];
         Assert.IsFalse(string.IsNullOrEmpty(accessToken), "The AS must mint an access token.");
         Assert.IsFalse(string.IsNullOrEmpty(idToken),
-            "openid in scope on authorization_code must mint an id_token (contract D3).");
+            "openid in scope on authorization_code must mint an id_token.");
 
         using JsonDocument accessTokenPayload = JwtPayloadReader.ParsePayloadJson(accessToken);
         JsonElement accessTokenClaims = accessTokenPayload.RootElement;
@@ -150,7 +150,7 @@ internal sealed class AccessTokenIdentityMinimizationTests
 
 
     /// <summary>
-    /// Contract D7 data-minimization gate: a real-wire authorization_code journey that never
+    /// The data-minimization gate: a real-wire authorization_code journey that never
     /// requests <c>openid</c> must never invoke the application's
     /// <see cref="AuthorizationServerIntegration.ResolveOidcClaimsAsync"/> — the app's OIDC-claims
     /// resolver carries end-user identity data, and a request that never asked for identity must
@@ -197,12 +197,12 @@ internal sealed class AccessTokenIdentityMinimizationTests
         Assert.AreEqual(0, resolverInvocationCount,
             "The app's OIDC-claims resolver must not run when the request never carried openid.");
         Assert.IsFalse(drive.TokenResult.Body!.ContainsKey(OAuthRequestParameterNames.IdToken),
-            "No id_token is minted without openid in scope (contract D3), independent of the resolver gate.");
+            "No id_token is minted without openid in scope, independent of the resolver gate.");
     }
 
 
     /// <summary>
-    /// Contract D7 response_type validation: this authorization server issues the Authorization
+    /// Response_type validation: this authorization server issues the Authorization
     /// Code grant only (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.1">RFC 6749
     /// §4.1.1</see>). A real-wire PAR POST whose <c>response_type</c> requests <c>id_token</c> or
     /// <c>token</c> — the OIDC Core 1.0 §3 implicit response types this server does not implement —
@@ -253,7 +253,7 @@ internal sealed class AccessTokenIdentityMinimizationTests
 
 
     /// <summary>
-    /// Contract D7 response_type validation, the direct (non-PAR) Authorize entry point
+    /// Response_type validation, the direct (non-PAR) Authorize entry point
     /// (<c>AuthCodeEndpoints.BuildDirectAuthorize</c>): once <c>redirect_uri</c> has been parsed, RFC
     /// 6749 §4.1.2.1 requires an unsupported <c>response_type</c> to surface as an Authorization Error
     /// Response REDIRECT — <c>error=unsupported_response_type</c> on the registered <c>redirect_uri</c>

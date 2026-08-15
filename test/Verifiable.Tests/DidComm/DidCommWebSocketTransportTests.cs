@@ -30,7 +30,7 @@ internal sealed class DidCommWebSocketTransportTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static readonly MemoryPool<byte> Pool = BaseMemoryPool.Shared;
+    private static readonly BaseMemoryPool Pool = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter (the WebSocket path
     //does not route through OutboundFetch, so no scheme/host policy applies to the loopback wss:// endpoint).

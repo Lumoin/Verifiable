@@ -35,8 +35,8 @@ internal sealed class CtapAuthenticatorSimulatorTests
 
     /// <summary>
     /// An <c>authenticatorGetInfo</c> request returns a CTAP2_OK status byte followed by a decodable
-    /// response reporting FIDO_2_3, the simulator's own AAGUID, and <c>options.rk = true</c> (wave 2:
-    /// this authenticator can create discoverable credentials).
+    /// response reporting FIDO_2_3, the simulator's own AAGUID, and <c>options.rk = true</c> (this
+    /// authenticator can create discoverable credentials).
     /// </summary>
     [TestMethod]
     public async Task GetInfoRequestReturnsOkStatusAndDecodableResponse()
@@ -62,7 +62,7 @@ internal sealed class CtapAuthenticatorSimulatorTests
             CtapMakeCredentialExtensionOutputsCborWriter.Write,
             CtapGetAssertionExtensionOutputsCborWriter.Write,
             rng: FillFixedPattern);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //Independent oracle: computed from the same fixed fill pattern handed to the simulator,
         //not read back from the simulator's own state.
@@ -107,7 +107,7 @@ internal sealed class CtapAuthenticatorSimulatorTests
             CtapLargeBlobsResponseCborWriter.Write,
             CtapMakeCredentialExtensionOutputsCborWriter.Write,
             CtapGetAssertionExtensionOutputsCborWriter.Write);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //0xFE: unrecognized, unlike WellKnownCtapCommands.GetInfo (0x04) or any other registered command byte.
         byte[] request = [0xFE];
@@ -142,7 +142,7 @@ internal sealed class CtapAuthenticatorSimulatorTests
             CtapLargeBlobsResponseCborWriter.Write,
             CtapMakeCredentialExtensionOutputsCborWriter.Write,
             CtapGetAssertionExtensionOutputsCborWriter.Write);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using PooledMemory response = await simulator.TransceiveAsync(ReadOnlyMemory<byte>.Empty, pool, TestContext.CancellationToken);
 
@@ -176,7 +176,7 @@ internal sealed class CtapAuthenticatorSimulatorTests
             CtapMakeCredentialExtensionOutputsCborWriter.Write,
             CtapGetAssertionExtensionOutputsCborWriter.Write,
             rng: FillFixedPattern);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] request = [WellKnownCtapCommands.GetInfo];
 
         using PooledMemory first = await simulator.TransceiveAsync(request, pool, TestContext.CancellationToken);
@@ -201,15 +201,15 @@ internal sealed class CtapAuthenticatorSimulatorTests
     [TestMethod]
     public async Task MakeCredentialAssociatesUserNameAndDisplayNameWithTheStoredRecord()
     {
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-user-name-fidelity");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("user-name-fidelity");
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var trace = new TestObserver<TraceEntry<CtapAuthenticatorState, CtapAuthenticatorInput>>();
         byte[] credentialIdBytes;
         using(simulator.Subscribe(trace))
         {
-            CtapMakeCredentialRequest request = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(pool);
-            using PooledMemory response = await CtapWave2AuthenticatorFixtures.SendMakeCredentialAsync(simulator, request, pool, TestContext.CancellationToken);
+            CtapMakeCredentialRequest request = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(pool);
+            using PooledMemory response = await CtapMakeCredentialGetAssertionFixtures.SendMakeCredentialAsync(simulator, request, pool, TestContext.CancellationToken);
 
             Assert.AreEqual(WellKnownCtapStatusCodes.Ok, response.AsReadOnlySpan()[0]);
             CtapMakeCredentialResponse decoded = CtapMakeCredentialResponseCborReader.Read(response.AsReadOnlyMemory()[1..]);

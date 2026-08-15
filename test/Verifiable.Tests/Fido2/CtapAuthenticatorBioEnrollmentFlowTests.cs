@@ -9,19 +9,19 @@ using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
 using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
-using static Verifiable.Tests.TestInfrastructure.CtapWave2AuthenticatorFixtures;
-using static Verifiable.Tests.TestInfrastructure.CtapWaveBioFixtures;
+using static Verifiable.Tests.TestInfrastructure.CtapMakeCredentialGetAssertionFixtures;
+using static Verifiable.Tests.TestInfrastructure.CtapBioEnrollmentFixtures;
 
 namespace Verifiable.Tests.Fido2;
 
 /// <summary>
-/// The wavebio PKG-D real-wire capstones for <c>authenticatorBioEnrollment</c> (<c>0x09</c>) and the
+/// The real-wire capstones for <c>authenticatorBioEnrollment</c> (<c>0x09</c>) and the
 /// built-in-UV cluster: five flows, each reconstructing every fact from wire bytes only, over the same
-/// real, UNCHANGED APDU transport stack (<see cref="CtapWave2TransportHarness"/>)
+/// real, UNCHANGED APDU transport stack (<see cref="CtapNfcTransportHarness"/>)
 /// <see cref="CtapAuthenticatorCredentialManagementFlowTests"/> uses. Every <c>pinUvAuthParam</c> is
 /// computed with the real <see cref="CtapPinUvAuthProtocol.AuthenticateAsync"/> over wire-received
-/// bytes, via <see cref="CtapWaveBioFixtures"/>'s R4 message-assembly helpers and
-/// <see cref="CtapWave5bPinCryptoFixtures"/>'s key-agreement session. No assertion reads internal
+/// bytes, via <see cref="CtapBioEnrollmentFixtures"/>'s own message-assembly helpers and
+/// <see cref="CtapPinCryptoFixtures"/>'s key-agreement session. No assertion reads internal
 /// simulator state.
 /// </summary>
 [TestClass]
@@ -51,11 +51,11 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
     [TestMethod]
     public async Task FullBioEnrollmentLifecycleOverRealApduTransport()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("wavebio-capstone-1");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-capstone-1");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await EstablishPinAsync(harness, pool, cancellationToken).ConfigureAwait(false);
         byte[] token = await IssuePinPathTokenAsync(
@@ -77,7 +77,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
         Assert.IsTrue(templateId.AsSpan().SequenceEqual(enumerated.TemplateInfos![0].TemplateId.Span), "the enumerated templateId must equal enrollBegin's own minted id.");
         Assert.IsNull(enumerated.TemplateInfos[0].TemplateFriendlyName, "a freshly completed enrollment has no friendly name yet.");
 
-        const string FriendlyName = "wavebio-capstone-1-finger";
+        const string FriendlyName = "bio-capstone-1-finger";
         using(PooledMemory renameResponse = await SendSetFriendlyNameRawAsync(harness, pool, token, templateId, FriendlyName, cancellationToken).ConfigureAwait(false))
         {
             Assert.AreEqual(WellKnownCtapStatusCodes.Ok, renameResponse.AsReadOnlySpan()[0]);
@@ -91,7 +91,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
             Assert.AreEqual(WellKnownCtapStatusCodes.Ok, removeResponse.AsReadOnlySpan()[0]);
         }
 
-        byte[] mcParam = await CtapWaveConfigFixtures.ComputeSignatureAsync(token, ProtocolId, McClientDataHash, pool, cancellationToken).ConfigureAwait(false);
+        byte[] mcParam = await CtapConfigFixtures.ComputeSignatureAsync(token, ProtocolId, McClientDataHash, pool, cancellationToken).ConfigureAwait(false);
         CtapMakeCredentialRequest mcRequest = BuildMakeCredentialRequest(pool, pinUvAuthParam: mcParam, pinUvAuthProtocol: (int)ProtocolId);
         using PooledMemory mcResponse = await SendMakeCredentialWireAsync(harness, mcRequest, pool, cancellationToken).ConfigureAwait(false);
         Assert.AreEqual(
@@ -106,17 +106,17 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
     /// <c>authenticatorMakeCredential</c> with the response's own <c>uv</c> bit set, decoded straight
     /// from wire <c>authData</c>; <c>0x06</c> with <c>be</c> (<c>uvBioEnroll</c> true) authorizes a
     /// SECOND, distinct enrollment off the first finger's own token; <c>0x06</c> with <c>acfg</c>
-    /// answers <c>UNAUTHORIZED_PERMISSION</c> on the wire (0x06's own statement list, R5, never grants
+    /// answers <c>UNAUTHORIZED_PERMISSION</c> on the wire (0x06's own statement list never grants
     /// <c>acfg</c> since <c>uvAcfg</c> is permanently absent).
     /// </summary>
     [TestMethod]
     public async Task BuiltInUvMintedTokensOverRealApduTransport()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("wavebio-capstone-2");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-capstone-2");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await EstablishPinAsync(harness, pool, cancellationToken).ConfigureAwait(false);
         byte[] pinPathBeToken = await IssuePinPathTokenAsync(harness, pool, WellKnownCtapPinUvAuthTokenPermissions.Be, rpId: null, cancellationToken).ConfigureAwait(false);
@@ -126,7 +126,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
             harness, pool, WellKnownCtapPinUvAuthTokenPermissions.Mc | WellKnownCtapPinUvAuthTokenPermissions.Ga, DefaultRpId, cancellationToken)
             .ConfigureAwait(false);
 
-        byte[] mcParam = await CtapWaveConfigFixtures.ComputeSignatureAsync(uvMcGaToken, ProtocolId, McClientDataHash, pool, cancellationToken).ConfigureAwait(false);
+        byte[] mcParam = await CtapConfigFixtures.ComputeSignatureAsync(uvMcGaToken, ProtocolId, McClientDataHash, pool, cancellationToken).ConfigureAwait(false);
         CtapMakeCredentialRequest mcRequest = BuildMakeCredentialRequest(
             pool, userId: BuildFixedBytes(16, 0x70), pinUvAuthParam: mcParam, pinUvAuthProtocol: (int)ProtocolId);
         using(PooledMemory mcResponse = await SendMakeCredentialWireAsync(harness, mcRequest, pool, cancellationToken).ConfigureAwait(false))
@@ -164,11 +164,11 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
     [TestMethod]
     public async Task MakeCredentialGetAssertionOptionsUvOverRealApduTransport()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("wavebio-capstone-3");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-capstone-3");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         CtapGetAssertionRequest zeroEnrollmentUvRequest = BuildGetAssertionRequest(pool, options: new CtapCommandOptions(UserVerification: true));
         using(PooledMemory zeroEnrollmentUvResponse = await SendGetAssertionWireAsync(harness, zeroEnrollmentUvRequest, pool, cancellationToken).ConfigureAwait(false))
@@ -225,11 +225,11 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
     [TestMethod]
     public async Task UvRetriesLockoutAndResetArcOverRealApduTransport()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator lockoutSimulator = CreateSimulator("wavebio-capstone-4-lockout", simulateBuiltInUv: static () => CtapBuiltInUvAttemptOutcome.MatchFailure);
-        using CtapWave2TransportHarness lockoutHarness = await CtapWave2TransportHarness.CreateAsync(lockoutSimulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapAuthenticatorSimulator lockoutSimulator = CreateSimulator("bio-capstone-4-lockout", simulateBuiltInUv: static () => CtapBuiltInUvAttemptOutcome.MatchFailure);
+        using CtapNfcTransportHarness lockoutHarness = await CtapNfcTransportHarness.CreateAsync(lockoutSimulator, pool, cancellationToken).ConfigureAwait(false);
 
         await EstablishPinAsync(lockoutHarness, pool, cancellationToken).ConfigureAwait(false);
         byte[] beToken = await IssuePinPathTokenAsync(lockoutHarness, pool, WellKnownCtapPinUvAuthTokenPermissions.Be, rpId: null, cancellationToken).ConfigureAwait(false);
@@ -261,8 +261,8 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
             CtapAuthenticatorState.MaxUvRetries, await GetUvRetriesAsync(lockoutHarness, pool, cancellationToken).ConfigureAwait(false),
             "a correct clientPIN entry (0x09 issuance) must restore uvRetries to its maximum, observed on the wire.");
 
-        using CtapAuthenticatorSimulator resetSimulator = CreateSimulator("wavebio-capstone-4-reset");
-        using CtapWave2TransportHarness resetHarness = await CtapWave2TransportHarness.CreateAsync(resetSimulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapAuthenticatorSimulator resetSimulator = CreateSimulator("bio-capstone-4-reset");
+        using CtapNfcTransportHarness resetHarness = await CtapNfcTransportHarness.CreateAsync(resetSimulator, pool, cancellationToken).ConfigureAwait(false);
 
         await EstablishPinAsync(resetHarness, pool, cancellationToken).ConfigureAwait(false);
         byte[] resetBeToken = await IssuePinPathTokenAsync(resetHarness, pool, WellKnownCtapPinUvAuthTokenPermissions.Be, rpId: null, cancellationToken).ConfigureAwait(false);
@@ -294,11 +294,11 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
     [TestMethod]
     public async Task TokenFreeTrioOverRealApduTransport()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("wavebio-capstone-5");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-capstone-5");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         var getModalityRequest = new CtapBioEnrollmentRequest(GetModality: true);
         using(PooledMemory getModalityResponse = await SendBioEnrollmentWireAsync(harness, getModalityRequest, pool, cancellationToken).ConfigureAwait(false))
@@ -328,7 +328,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
 
 
     /// <summary>Sends an <c>authenticatorGetInfo</c> request over <paramref name="harness"/>'s real transport and decodes the response.</summary>
-    private static async Task<CtapGetInfoResponse> GetInfoAsync(CtapWave2TransportHarness harness, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<CtapGetInfoResponse> GetInfoAsync(CtapNfcTransportHarness harness, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] request = [WellKnownCtapCommands.GetInfo];
         using PooledMemory response = await harness.Transceive(request, pool, cancellationToken).ConfigureAwait(false);
@@ -338,7 +338,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
 
 
     /// <summary>Sends a bare <c>authenticatorReset</c> request over <paramref name="harness"/>'s real transport, returning the raw response envelope.</summary>
-    private static ValueTask<PooledMemory> SendResetAsync(CtapWave2TransportHarness harness, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static ValueTask<PooledMemory> SendResetAsync(CtapNfcTransportHarness harness, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] request = [WellKnownCtapCommands.Reset];
 
@@ -347,9 +347,9 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
 
 
     /// <summary>Establishes <see cref="Pin"/> as the authenticator's PIN over <paramref name="harness"/>'s real transport.</summary>
-    private static async Task EstablishPinAsync(CtapWave2TransportHarness harness, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task EstablishPinAsync(CtapNfcTransportHarness harness, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
-        using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
+        using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
             .ConfigureAwait(false);
         (byte[] newPinEnc, byte[] pinUvAuthParam) = await session.BuildSetPinMessagesAsync(Pin, cancellationToken).ConfigureAwait(false);
 
@@ -369,9 +369,9 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
     /// it from wire bytes only, over <paramref name="harness"/>'s real transport.
     /// </summary>
     private static async Task<byte[]> IssuePinPathTokenAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, int permissions, string? rpId, CancellationToken cancellationToken)
+        CtapNfcTransportHarness harness, BaseMemoryPool pool, int permissions, string? rpId, CancellationToken cancellationToken)
     {
-        using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
+        using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
             .ConfigureAwait(false);
         byte[] pinHashEnc = await session.BuildPinHashEncAsync(Pin, cancellationToken).ConfigureAwait(false);
 
@@ -394,9 +394,9 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
     /// <c>pinHashEnc</c> (0x06's own request carries none).
     /// </summary>
     private static async Task<byte[]> IssueUvPathTokenAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, int permissions, string? rpId, CancellationToken cancellationToken)
+        CtapNfcTransportHarness harness, BaseMemoryPool pool, int permissions, string? rpId, CancellationToken cancellationToken)
     {
-        using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
+        using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
             .ConfigureAwait(false);
 
         var request = new CtapClientPinRequest(
@@ -418,9 +418,9 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
     /// token.
     /// </summary>
     private static async Task<byte> SendUvTokenRequestRawStatusAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, int permissions, string? rpId, CancellationToken cancellationToken)
+        CtapNfcTransportHarness harness, BaseMemoryPool pool, int permissions, string? rpId, CancellationToken cancellationToken)
     {
-        using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
+        using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
             .ConfigureAwait(false);
 
         var request = new CtapClientPinRequest(
@@ -439,7 +439,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
 
 
     /// <summary>Reads the live <c>uvRetries</c> value via <c>getUVRetries</c> (<c>0x07</c>) over <paramref name="harness"/>'s real transport.</summary>
-    private static async Task<int> GetUvRetriesAsync(CtapWave2TransportHarness harness, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<int> GetUvRetriesAsync(CtapNfcTransportHarness harness, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.GetUvRetries);
         CtapClientPinResponse response = await CtapAuthenticatorClientPinClient.ClientPinAsync(
@@ -452,7 +452,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
 
     /// <summary>Encodes, sends, and returns the raw response envelope for an <c>authenticatorBioEnrollment</c> request over <paramref name="harness"/>'s real transport.</summary>
     private static ValueTask<PooledMemory> SendBioEnrollmentWireAsync(
-        CtapWave2TransportHarness harness, CtapBioEnrollmentRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapNfcTransportHarness harness, CtapBioEnrollmentRequest request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] envelope = BuildBioEnrollmentEnvelope(request);
 
@@ -460,21 +460,21 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
     }
 
 
-    /// <summary>Computes a gated bioEnrollment subcommand's own <c>pinUvAuthParam</c> (bio scout Finding C: the TWO-byte <c>modality || subCommand [|| subCommandParams]</c> prefix).</summary>
+    /// <summary>Computes a gated bioEnrollment subcommand's own <c>pinUvAuthParam</c> (the TWO-byte <c>modality || subCommand [|| subCommandParams]</c> prefix).</summary>
     private static async Task<byte[]> ComputeGatedBioSignatureAsync(
-        byte[] token, MemoryPool<byte> pool, int subCommand, ReadOnlyMemory<byte>? templateId, string? templateFriendlyName, CancellationToken cancellationToken)
+        byte[] token, BaseMemoryPool pool, int subCommand, ReadOnlyMemory<byte>? templateId, string? templateFriendlyName, CancellationToken cancellationToken)
     {
         ReadOnlyMemory<byte> subCommandParams = templateId is not null || templateFriendlyName is not null
             ? BuildSubCommandParams(templateId, templateFriendlyName)
             : ReadOnlyMemory<byte>.Empty;
         byte[] message = BuildMessage(WellKnownCtapBioEnrollmentModalities.Fingerprint, subCommand, subCommandParams);
 
-        return await CtapWaveConfigFixtures.ComputeSignatureAsync(token, ProtocolId, message, pool, cancellationToken).ConfigureAwait(false);
+        return await CtapConfigFixtures.ComputeSignatureAsync(token, ProtocolId, message, pool, cancellationToken).ConfigureAwait(false);
     }
 
 
     /// <summary>Sends a fully signed <c>enrollBegin</c> over <paramref name="harness"/>'s real transport, asserts <c>CTAP2_OK</c>, and returns the minted <c>templateId</c> bytes.</summary>
-    private static async Task<byte[]> SendEnrollBeginAsync(CtapWave2TransportHarness harness, MemoryPool<byte> pool, byte[] token, CancellationToken cancellationToken)
+    private static async Task<byte[]> SendEnrollBeginAsync(CtapNfcTransportHarness harness, BaseMemoryPool pool, byte[] token, CancellationToken cancellationToken)
     {
         byte[] param = await ComputeGatedBioSignatureAsync(token, pool, WellKnownCtapBioEnrollmentSubCommands.EnrollBegin, null, null, cancellationToken).ConfigureAwait(false);
         var request = new CtapBioEnrollmentRequest(
@@ -490,7 +490,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
 
     /// <summary>Sends a fully signed <c>enrollCaptureNextSample</c> for <paramref name="templateId"/> over <paramref name="harness"/>'s real transport, asserting <c>CTAP2_OK</c>.</summary>
     private static async Task SendEnrollCaptureNextSampleAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, byte[] token, byte[] templateId, CancellationToken cancellationToken)
+        CtapNfcTransportHarness harness, BaseMemoryPool pool, byte[] token, byte[] templateId, CancellationToken cancellationToken)
     {
         byte[] param = await ComputeGatedBioSignatureAsync(token, pool, WellKnownCtapBioEnrollmentSubCommands.EnrollCaptureNextSample, templateId, null, cancellationToken)
             .ConfigureAwait(false);
@@ -509,7 +509,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
     /// simulated sensor) to reach <c>remainingSamples</c> zero — and returns the persisted template's
     /// identifier bytes.
     /// </summary>
-    private static async Task<byte[]> CompleteEnrollmentOverWireAsync(CtapWave2TransportHarness harness, MemoryPool<byte> pool, byte[] token, CancellationToken cancellationToken)
+    private static async Task<byte[]> CompleteEnrollmentOverWireAsync(CtapNfcTransportHarness harness, BaseMemoryPool pool, byte[] token, CancellationToken cancellationToken)
     {
         byte[] templateId = await SendEnrollBeginAsync(harness, pool, token, cancellationToken).ConfigureAwait(false);
 
@@ -523,7 +523,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
 
 
     /// <summary>Sends a fully signed <c>enumerateEnrollments</c> over <paramref name="harness"/>'s real transport, asserts <c>CTAP2_OK</c>, and returns the decoded response.</summary>
-    private static async Task<CtapBioEnrollmentResponse> SendEnumerateEnrollmentsAsync(CtapWave2TransportHarness harness, MemoryPool<byte> pool, byte[] token, CancellationToken cancellationToken)
+    private static async Task<CtapBioEnrollmentResponse> SendEnumerateEnrollmentsAsync(CtapNfcTransportHarness harness, BaseMemoryPool pool, byte[] token, CancellationToken cancellationToken)
     {
         byte[] param = await ComputeGatedBioSignatureAsync(token, pool, WellKnownCtapBioEnrollmentSubCommands.EnumerateEnrollments, null, null, cancellationToken).ConfigureAwait(false);
         var request = new CtapBioEnrollmentRequest(
@@ -539,7 +539,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
 
     /// <summary>Sends a fully signed <c>setFriendlyName</c> for <paramref name="templateId"/> over <paramref name="harness"/>'s real transport, returning the raw response envelope.</summary>
     private static async Task<PooledMemory> SendSetFriendlyNameRawAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, byte[] token, byte[] templateId, string friendlyName, CancellationToken cancellationToken)
+        CtapNfcTransportHarness harness, BaseMemoryPool pool, byte[] token, byte[] templateId, string friendlyName, CancellationToken cancellationToken)
     {
         byte[] param = await ComputeGatedBioSignatureAsync(token, pool, WellKnownCtapBioEnrollmentSubCommands.SetFriendlyName, templateId, friendlyName, cancellationToken)
             .ConfigureAwait(false);
@@ -553,7 +553,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
 
     /// <summary>Sends a fully signed <c>removeEnrollment</c> for <paramref name="templateId"/> over <paramref name="harness"/>'s real transport, returning the raw response envelope.</summary>
     private static async Task<PooledMemory> SendRemoveEnrollmentRawAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, byte[] token, byte[] templateId, CancellationToken cancellationToken)
+        CtapNfcTransportHarness harness, BaseMemoryPool pool, byte[] token, byte[] templateId, CancellationToken cancellationToken)
     {
         byte[] param = await ComputeGatedBioSignatureAsync(token, pool, WellKnownCtapBioEnrollmentSubCommands.RemoveEnrollment, templateId, null, cancellationToken).ConfigureAwait(false);
         var request = new CtapBioEnrollmentRequest(
@@ -566,9 +566,9 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
 
     /// <summary>Encodes, sends, and disposes an <c>authenticatorMakeCredential</c> request over <paramref name="harness"/>'s real transport, returning the raw response envelope.</summary>
     private static async Task<PooledMemory> SendMakeCredentialWireAsync(
-        CtapWave2TransportHarness harness, CtapMakeCredentialRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapNfcTransportHarness harness, CtapMakeCredentialRequest request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
-        byte[] envelope = CtapWave2RequestEnvelopes.BuildMakeCredentialEnvelope(request);
+        byte[] envelope = CtapMakeCredentialGetAssertionRequestEnvelopes.BuildMakeCredentialEnvelope(request);
         DisposeMakeCredentialRequest(request);
 
         return await harness.Transceive(envelope, pool, cancellationToken).ConfigureAwait(false);
@@ -577,9 +577,9 @@ internal sealed class CtapAuthenticatorBioEnrollmentFlowTests
 
     /// <summary>Encodes, sends, and disposes an <c>authenticatorGetAssertion</c> request over <paramref name="harness"/>'s real transport, returning the raw response envelope.</summary>
     private static async Task<PooledMemory> SendGetAssertionWireAsync(
-        CtapWave2TransportHarness harness, CtapGetAssertionRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        CtapNfcTransportHarness harness, CtapGetAssertionRequest request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
-        byte[] envelope = CtapWave2RequestEnvelopes.BuildGetAssertionEnvelope(request);
+        byte[] envelope = CtapMakeCredentialGetAssertionRequestEnvelopes.BuildGetAssertionEnvelope(request);
         DisposeGetAssertionRequest(request);
 
         return await harness.Transceive(envelope, pool, cancellationToken).ConfigureAwait(false);

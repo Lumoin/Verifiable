@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using Verifiable.Cryptography;
@@ -34,11 +33,10 @@ namespace Verifiable.OAuth.Federation;
 /// The companion <see cref="EncodeJwtPart"/> wraps the UTF-8 bytes in a
 /// <see cref="TaggedMemory{T}"/> tagged with
 /// <see cref="BufferTags.Json"/> so callers can pass it directly to
-/// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, Cryptography.PrivateKeyMemory, MemoryPool{byte}, CancellationToken)"/>
+/// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, Cryptography.PrivateKeyMemory, BaseMemoryPool, CancellationToken)"/>
 /// as the <see cref="JwtPartEncoder{TJwtPart}"/> argument.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("EntityStatementJsonBuilder")]
 public static class EntityStatementJsonBuilder
 {
     /// <summary>
@@ -52,7 +50,10 @@ public static class EntityStatementJsonBuilder
     /// <c>ES256</c>, <c>RS256</c>, <c>Ed25519</c>). The caller derives this
     /// from the key's tag through
     /// <see cref="CryptoFormatConversions.DefaultTagToJwaConverter"/> so
-    /// no algorithm choice is hardcoded here.
+    /// no algorithm choice is hardcoded here — the algorithm-agility position of
+    /// <see href="https://openid.net/specs/openid-federation-1_1-final.html#section-3.1">OpenID Federation 1.1 §3.1</see>
+    /// ("Federations SHOULD specify mandatory-to-implement signing algorithms"), which drops the 1.0 RS256
+    /// SHOULD for non-OpenID-Connect deployments (that SHOULD is scoped to Connect-1.1 §3).
     /// </param>
     public static Dictionary<string, object> BuildHeader(string kid, string alg) =>
         BuildHeader(kid, alg, WellKnownFederationMediaTypes.EntityStatementJwt);
@@ -434,7 +435,7 @@ public static class EntityStatementJsonBuilder
     /// <summary>
     /// Builds an Explicit Registration Response payload — the wire body of a
     /// <c>federation_registration_endpoint</c> response per
-    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-12.2">Federation §12.2</see> / §3.1.5.
+    /// <see href="https://openid.net/specs/openid-federation-connect-1_1-final.html#section-12.2">Connect-1.1 §12.2</see> / §3.1.2.
     /// Structural claims (<c>iss</c> = the OP, <c>sub</c> = <c>aud</c> = the
     /// RP, <c>iat</c>, <c>exp</c>) and the registered <c>metadata</c> are
     /// always emitted; the optional <c>trust_anchor</c> and <c>jwks</c> come
@@ -512,7 +513,7 @@ public static class EntityStatementJsonBuilder
     /// Encodes a dictionary into UTF-8 JSON bytes tagged with
     /// <see cref="BufferTags.Json"/>. Suitable for passing as the
     /// <see cref="JwtPartEncoder{TJwtPart}"/> argument to
-    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, Cryptography.PrivateKeyMemory, MemoryPool{byte}, CancellationToken)"/>.
+    /// <see cref="Jws.SignAsync{TJwtPart}(TJwtPart, TJwtPart, JwtPartEncoder{TJwtPart}, EncodeDelegate, Cryptography.PrivateKeyMemory, BaseMemoryPool, CancellationToken)"/>.
     /// </summary>
     public static TaggedMemory<byte> EncodeJwtPart(Dictionary<string, object> part)
     {

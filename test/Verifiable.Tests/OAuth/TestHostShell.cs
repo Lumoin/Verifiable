@@ -220,7 +220,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     public static DecodeDelegate Base64UrlDecoder => TestSetup.Base64UrlDecoder;
 
     /// <summary>The memory pool used by the host for sensitive allocations.</summary>
-    public static MemoryPool<byte> MemoryPool => BaseMemoryPool.Shared;
+    public static BaseMemoryPool MemoryPool => BaseMemoryPool.Shared;
 
     /// <summary>
     /// Constant tenant segment used by dynamic-registration tests. The
@@ -1967,7 +1967,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        //Phase 9h chunk 8 — AuthorizationServer no longer exposes a public
+        //AuthorizationServer no longer exposes a public
         //GetEndpointsAsync. Tests inspect the chain directly via the proper
         //BuildForRequestAsync entry point; the context must carry the active
         //server so capability resolution and URL resolution can reach the
@@ -4298,14 +4298,16 @@ internal sealed class TestHostShell: IAsyncDisposable
         /// </summary>
         public async ValueTask<HttpResponseData> SendAsync(
             Uri endpoint,
-            IReadOnlyDictionary<string, string> fields,
+            IReadOnlyCollection<KeyValuePair<string, string>> fields,
             OutgoingHeaders headers,
             CancellationToken cancellationToken)
         {
             //The OAuth client's transport contract is form-POST: it speaks
-            //URLs and form fields. The matcher chain reads everything it
-            //needs from the IncomingRequest envelope; capability narrowing
-            //and method filtering happen inside the matchers themselves.
+            //URLs and form fields — a key MAY repeat (RFC 8707 §2's resource is
+            //the recurring example), so fields is a multi-value occurrence
+            //sequence, not a single-value dictionary. The matcher chain reads
+            //everything it needs from the IncomingRequest envelope; capability
+            //narrowing and method filtering happen inside the matchers themselves.
             RequestFields serverFields = new(fields);
 
             IncomingRequest request = new(
@@ -4401,7 +4403,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         /// </summary>
         public async ValueTask<HttpResponseData> SendAsync(
             Uri endpoint,
-            IReadOnlyDictionary<string, string> fields,
+            IReadOnlyCollection<KeyValuePair<string, string>> fields,
             OutgoingHeaders headers,
             CancellationToken cancellationToken)
         {

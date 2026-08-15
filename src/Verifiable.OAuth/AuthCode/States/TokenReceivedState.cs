@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using Verifiable.OAuth;
 
 namespace Verifiable.OAuth.AuthCode.States;
@@ -11,7 +10,6 @@ namespace Verifiable.OAuth.AuthCode.States;
 /// No further transitions are defined from this state. The PDA halts when it enters here
 /// and <c>PushdownAutomaton.IsAccepted</c> returns <see langword="true"/>.
 /// </remarks>
-[DebuggerDisplay("TokenReceived FlowId={FlowId}")]
 public sealed record TokenReceivedState: FlowState
 {
     /// <summary>The opaque access token. Must be treated as a secret.</summary>

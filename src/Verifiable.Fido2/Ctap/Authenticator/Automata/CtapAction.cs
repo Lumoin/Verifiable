@@ -17,7 +17,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// entropy provider, then feeds the result back as the next input.
 /// </summary>
 /// <remarks>
-/// Wave 1's single command (<c>authenticatorGetInfo</c>) declared no effects and left
+/// The single command (<c>authenticatorGetInfo</c>) declares no effects and leaves
 /// <see cref="NullAction.Instance"/> in place throughout. <c>authenticatorMakeCredential</c> and
 /// <c>authenticatorGetAssertion</c> are the first commands that need one, mirroring
 /// <c>Verifiable.Tpm.Automata.TpmAction</c>'s role in <c>Verifiable.Tpm.Automata.TpmSimulator</c>.
@@ -96,7 +96,7 @@ public sealed record CtapCollectUserPresenceAction: CtapAction;
 /// <param name="HmacSecretRequested">
 /// Whether the mc request's <c>hmac-secret</c> extension value was the literal <see langword="true"/>
 /// (CTAP 2.3 §12.7, snapshot line 13194's "has sent" gate, RULED as "sent with the value
-/// <see langword="true"/>" — contract R3: a request of <see langword="false"/> is treated as
+/// <see langword="true"/>": a request of <see langword="false"/> is treated as
 /// not-requested, since answering it with an affirmative annotation would be actively misleading). The
 /// effect mints <see cref="CtapCredentialRecord.CredRandomWithUV"/>/<see cref="CtapCredentialRecord.CredRandomWithoutUV"/>
 /// UNCONDITIONALLY regardless of this flag's value (snapshot line 13192's SHOULD, adopted); this flag
@@ -115,7 +115,7 @@ public sealed record CtapCollectUserPresenceAction: CtapAction;
 /// <param name="CreationSequence">
 /// The mint-order sequence number <see cref="CtapAuthenticatorState.NextCredentialSequence"/> holds at the
 /// moment this action is declared — the SAME value <c>OnCredentialMinted</c> stamps onto the new
-/// <see cref="CtapCredentialRecord"/> once the effect completes (contract R-9, wavenv). Read here, ahead of
+/// <see cref="CtapCredentialRecord"/> once the effect completes. Read here, ahead of
 /// that stamp, purely so the effect can key an optionally composed
 /// <see cref="CtapSignatureCounterCustody.EnsureCounterAsync"/> call by the credential's eventual
 /// identity before that identity is otherwise known to the effect — this simulator processes one command at
@@ -124,13 +124,13 @@ public sealed record CtapCollectUserPresenceAction: CtapAction;
 /// <param name="HmacSecretMc">
 /// The resolved <c>hmac-secret-mc</c> crypto request (CTAP 2.3 §12.8), already assembled by the pure
 /// transition from the mc request's compound extension input, or <see langword="null"/> when the
-/// request carried no <c>hmac-secret-mc</c> extension. The R6 pairing gate (<c>hmac-secret-mc</c>
+/// request carried no <c>hmac-secret-mc</c> extension. The pairing gate (<c>hmac-secret-mc</c>
 /// present while <see cref="HmacSecretRequested"/> is <see langword="false"/> is a request-shape error,
 /// snapshot line 13370, rejected before this action is ever declared) has already run by the time this
 /// field is non-null. The effect completes this partial request with the freshly minted
 /// <see cref="CtapCredentialRecord.CredRandomWithUV"/>/<see cref="CtapCredentialRecord.CredRandomWithoutUV"/>
 /// pair (which does not exist until the SAME effect mints it) and runs the SAME crypto routine
-/// <see cref="CtapSignAssertionAction.HmacSecret"/>'s own effect runs (contract R6, snapshot line
+/// <see cref="CtapSignAssertionAction.HmacSecret"/>'s own effect runs (snapshot line
 /// 13402's pure delegation), keyed off THIS mint's own <see cref="UserVerified"/> bit.
 /// </param>
 public sealed record CtapGenerateCredentialKeyAction(
@@ -157,7 +157,7 @@ public sealed record CtapGenerateCredentialKeyAction(
 /// <c>hmac-secret-mc</c> delegation (CTAP 2.3 §12.8, snapshot line 13402: "the same as the hmac secret
 /// extension's getAssertion processing") — every field <see cref="CtapGetAssertionHmacSecretRequest"/>
 /// carries EXCEPT the CredRandom pair, which does not exist until the SAME
-/// <c>authenticatorMakeCredential</c> effect mints it (contract R2): the effect combines this partial
+/// <c>authenticatorMakeCredential</c> effect mints it: the effect combines this partial
 /// request with the freshly minted pair before delegating to the shared crypto routine.
 /// </summary>
 /// <param name="ProtocolId">
@@ -236,13 +236,13 @@ public sealed record CtapMakeCredentialHmacSecretMcRequest(
 /// sign is an <c>authenticatorGetNextAssertion</c> continuation — the compound input belongs to the
 /// ORIGINATING <c>authenticatorGetAssertion</c> request alone; that command carries no parameters of its
 /// own to re-supply it, so this profile does not replay hmac-secret across a multi-account sequence).
-/// The effect runs the full CTAP 2.3 §12.7 processing algorithm's crypto half (steps 4-9, contract R4)
+/// The effect runs the full CTAP 2.3 §12.7 processing algorithm's crypto half (steps 4-9)
 /// exactly ONCE, computed after <see cref="UserVerified"/> is already resolved and threaded straight
-/// into the signed authData — never recomputed (trap 5).
+/// into the signed authData — never recomputed.
 /// </param>
 /// <param name="CreationSequence">
 /// The resolved credential's own <see cref="CtapCredentialRecord.CreationSequence"/>, borrowed from the
-/// store (contract R-9, wavenv) — the identity an optionally composed
+/// store — the identity an optionally composed
 /// <see cref="CtapSignatureCounterCustody.IncrementCounterAsync"/> call keys by. When no signature-
 /// counter custody is composed, this value is read but never used.
 /// </param>
@@ -271,7 +271,7 @@ public sealed record CtapSignAssertionAction(
 /// credential's own CredRandom pair — CredRandom SELECTION (which of the two the effect uses) is not
 /// decided here: it depends on THIS response's own <c>uv</c> bit, known only once the effect runs
 /// (<see cref="CtapSignAssertionAction.UserVerified"/>), so both values travel and the effect chooses
-/// (contract R4 step 7, trap 4).
+/// (CTAP 2.3 §12.7 step 7).
 /// </summary>
 /// <param name="ProtocolId">
 /// The PIN/UV auth protocol this hmac-secret request uses — the request's own <c>pinUvAuthProtocol</c>
@@ -283,7 +283,7 @@ public sealed record CtapSignAssertionAction(
 /// </param>
 /// <param name="PeerKeyAgreement">The platform's ephemeral key-agreement COSE_Key (the request's <c>hmac-secret</c> extension's <c>keyAgreement</c> member).</param>
 /// <param name="SaltEnc">The request's <c>saltEnc</c> member: the encrypted one- or two-salt plaintext.</param>
-/// <param name="SaltAuth">The request's <c>saltAuth</c> member: <c>authenticate(sharedSecret, saltEnc)</c>, verified before any decrypt is attempted (trap 2).</param>
+/// <param name="SaltAuth">The request's <c>saltAuth</c> member: <c>authenticate(sharedSecret, saltEnc)</c>, verified before any decrypt is attempted.</param>
 /// <param name="CredRandomWithUV">The resolved credential's <see cref="CtapCredentialRecord.CredRandomWithUV"/>, borrowed — selected when the response's <c>uv</c> bit is set.</param>
 /// <param name="CredRandomWithoutUV">The resolved credential's <see cref="CtapCredentialRecord.CredRandomWithoutUV"/>, borrowed — selected when the response's <c>uv</c> bit is clear.</param>
 public sealed record CtapGetAssertionHmacSecretRequest(
@@ -418,8 +418,8 @@ public sealed record CtapEstablishPinAction(
 /// The authenticator's current stored PIN hash, borrowed from <see cref="CtapAuthenticatorState"/> — the
 /// effect compares against it but neither copies nor disposes it. <see langword="null"/> when a
 /// <c>pinRetriesCustody</c> bundle is composed and the durable tier reports a genuinely provisioned PIN
-/// whose local hash this instance never (re)learned (<see cref="CtapAuthenticatorState.IsPinProvisionedWithUnknownLocalHash"/>,
-/// wavepin review fix F-1) — the effect's own custody-verified branch never dereferences it in that case;
+/// whose local hash this instance never (re)learned (<see cref="CtapAuthenticatorState.IsPinProvisionedWithUnknownLocalHash"/>)
+/// — the effect's own custody-verified branch never dereferences it in that case;
 /// the local <c>FixedTimeEquals</c> compare branch is reached only when custody is absent, at which point
 /// the pure pre-check (<see cref="CtapAuthenticatorState.IsPinEstablished"/>) already guarantees it is
 /// non-null.
@@ -471,8 +471,8 @@ public sealed record CtapChangePinAction(
 /// The authenticator's current stored PIN hash, borrowed from <see cref="CtapAuthenticatorState"/> — the
 /// effect compares against it but neither copies nor disposes it. <see langword="null"/> when a
 /// <c>pinRetriesCustody</c> bundle is composed and the durable tier reports a genuinely provisioned PIN
-/// whose local hash this instance never (re)learned (<see cref="CtapAuthenticatorState.IsPinProvisionedWithUnknownLocalHash"/>,
-/// wavepin review fix F-1) — see <see cref="CtapChangePinAction.CurrentStoredPin"/>'s identical note.
+/// whose local hash this instance never (re)learned (<see cref="CtapAuthenticatorState.IsPinProvisionedWithUnknownLocalHash"/>)
+/// — see <see cref="CtapChangePinAction.CurrentStoredPin"/>'s identical note.
 /// </param>
 /// <param name="PermissionsToAssign">
 /// The permissions bitfield to assign to the issued token — already resolved by the pure pre-check:
@@ -538,7 +538,7 @@ public abstract record CtapVerifyPinUvAuthTokenContinuation;
 /// <param name="EnterpriseAttestationGranted">
 /// The mc Step 9 enterprise-attestation grant decision, computed ONCE in <c>OnMakeCredentialRequested</c>
 /// before this verify action was declared, and threaded here so it survives the async verify round trip
-/// unchanged (waveep R6, trap 12) — never recomputed once the verify completes.
+/// unchanged — never recomputed once the verify completes.
 /// </param>
 public sealed record CtapMakeCredentialVerifyContinuation(MakeCredentialRequested Requested, bool EnterpriseAttestationGranted): CtapVerifyPinUvAuthTokenContinuation;
 
@@ -617,7 +617,7 @@ public sealed record CtapVerifyPinUvAuthTokenAction(
 /// <param name="SubCommandParams">
 /// The request's RAW, still-CBOR-encoded <c>subCommandParams</c> bytes as received; empty
 /// (<see cref="ReadOnlyMemory{T}.Empty"/>) when the member was absent — the message then elides this
-/// segment entirely (R5 ruling), contributing zero bytes rather than an encoded empty map.
+/// segment entirely, contributing zero bytes rather than an encoded empty map.
 /// </param>
 /// <param name="PinUvAuthParam">The request's presented <c>pinUvAuthParam</c>: the signature <c>verify</c> checks.</param>
 /// <param name="Continuation">The interrupted <c>authenticatorConfig</c> request context to resume once verification completes.</param>
@@ -687,7 +687,7 @@ public sealed record CtapBioEnrollmentVerifyContinuation(BioEnrollmentRequested 
 /// Declares that the simulator must run CTAP 2.3's state-aware <c>verify</c> composition
 /// (<see cref="CtapPinUvAuthTokenVerificationExtensions.VerifyPinUvAuthTokenAsync"/>) over
 /// <c>authenticatorBioEnrollment</c>'s own FOURTH verify-message shape before continuing an interrupted
-/// <c>authenticatorBioEnrollment</c> (CTAP 2.3 §6.7.4-§6.7.8, bio scout Finding C):
+/// <c>authenticatorBioEnrollment</c> (CTAP 2.3 §6.7.4-§6.7.8):
 /// <c>uint8(modality) || uint8(subCommand) [|| subCommandParams]</c> — a TWO-byte leading prefix, unlike
 /// <see cref="CtapVerifyCredentialManagementTokenAction"/>'s single leading byte. A FIFTH sibling of
 /// <see cref="CtapVerifyPinUvAuthTokenAction"/>, not a rework of it. The effectful executor
@@ -711,7 +711,7 @@ public sealed record CtapBioEnrollmentVerifyContinuation(BioEnrollmentRequested 
 /// <param name="SubCommandParams">
 /// The request's RAW, still-CBOR-encoded <c>subCommandParams</c> bytes as received; empty
 /// (<see cref="ReadOnlyMemory{T}.Empty"/>) for <c>enumerateEnrollments</c>, which structurally never
-/// carries one (bio scout §1.11, PRF pattern <c>0104</c>) — the message then elides this segment
+/// carries one (PRF pattern <c>0104</c>) — the message then elides this segment
 /// entirely, contributing zero trailing bytes.
 /// </param>
 /// <param name="PinUvAuthParam">The request's presented <c>pinUvAuthParam</c>: the signature <c>verify</c> checks.</param>
@@ -775,7 +775,7 @@ public sealed record CtapEmitCredentialManagementRpAction(string RpId, int? Tota
 /// for this RP ID hash exist..."). No by-hash index exists on the store, so this recomputes
 /// <c>ComputeRpIdHash</c> once per resident candidate — the same reason
 /// <see cref="CtapEmitCredentialManagementRpAction"/> needs the effectful loop's own memory pool. The
-/// effectful loop sorts the matches <see cref="CtapCredentialRecord.CreationSequence"/>-ascending (R9)
+/// effectful loop sorts the matches <see cref="CtapCredentialRecord.CreationSequence"/>-ascending
 /// and folds back a <see cref="CredentialManagementCredentialsLocated"/> input; the pure transition
 /// resolves the step-7 <c>CTAP2_ERR_NO_CREDENTIALS</c> decision and assembles the response from the
 /// already-known, already-stored fields of the first match.
@@ -842,7 +842,7 @@ public abstract record CtapPerformBuiltInUvContinuation;
 /// <param name="EnterpriseAttestationGranted">
 /// The mc Step 9 enterprise-attestation grant decision, computed ONCE in <c>OnMakeCredentialRequested</c>
 /// before this built-in-UV action was declared, and threaded here so it survives the async gesture round
-/// trip unchanged (waveep R6, trap 12) — never recomputed once the gesture concludes.
+/// trip unchanged — never recomputed once the gesture concludes.
 /// </param>
 public sealed record CtapMakeCredentialBuiltInUvContinuation(MakeCredentialRequested Requested, bool EnterpriseAttestationGranted): CtapPerformBuiltInUvContinuation;
 
@@ -867,8 +867,8 @@ public sealed record CtapGetAssertionBuiltInUvContinuation(GetAssertionRequested
 /// built-in UV method is configured (≥1 fingerprint enrollment), and — for this command family only —
 /// <see cref="InternalRetry"/> is HARDCODED <see langword="true"/> at the declaring call site (mc
 /// 11.2.1 / ga 6.2.1 verbatim), NEVER computed by a helper shared with
-/// <see cref="CtapIssueUvTokenAction"/>'s own <c>preferredPlatformUvAttempts</c>-derived value (uv scout
-/// trap 2). <see cref="CtapAuthenticatorSimulator"/>'s executor calls the shared attempt-loop helper —
+/// <see cref="CtapIssueUvTokenAction"/>'s own <c>preferredPlatformUvAttempts</c>-derived value.
+/// <see cref="CtapAuthenticatorSimulator"/>'s executor calls the shared attempt-loop helper —
 /// the loop mechanics ARE shared (a plain I/O composition), only the two callers' <c>internalRetry</c>
 /// VALUES are never computed by one function.
 /// </summary>
@@ -892,18 +892,18 @@ public sealed record CtapPerformBuiltInUvAction(
 /// (<c>resetPinUvAuthToken()</c> "for all", step 12), call <c>beginUsingPinUvAuthToken(userIsPresent:
 /// true)</c> on <see cref="ProtocolId"/>'s fresh token (steps 13-14 — the simulated gesture always
 /// supplies evidence of user interaction here, so this is the ONE token-issuance action in this codebase
-/// that begins using a token with <c>userIsPresent</c> already <see langword="true"/>, uv scout delta
-/// (a)), assign it <see cref="PermissionsToAssign"/>/<see cref="PermissionsRpId"/> (steps 15-16), and
+/// that begins using a token with <c>userIsPresent</c> already <see langword="true"/>), assign it
+/// <see cref="PermissionsToAssign"/>/<see cref="PermissionsRpId"/> (steps 15-16), and
 /// encrypt it for the response (step 17) — mirroring <see cref="CtapIssuePinTokenAction"/>'s own
 /// token-mint tail exactly, with the PIN-hash decrypt/compare step replaced by the attempt loop.
 /// <see cref="InternalRetry"/> is COMPUTED from <see cref="CtapAuthenticatorState.PreferredPlatformUvAttempts"/>
 /// by the pure request arm — NEVER the mc/ga-shared hardcoded-true value <see cref="CtapPerformBuiltInUvAction"/>
-/// carries (uv scout trap 2).
+/// carries.
 /// </summary>
 /// <param name="ProtocolId">The selected PIN/UV auth protocol.</param>
 /// <param name="OwnPrivateKey">The selected protocol's key-agreement private key, borrowed from <see cref="CtapAuthenticatorState"/>.</param>
 /// <param name="PeerKeyAgreement">The platform's ephemeral key-agreement COSE_Key (the request's <c>keyAgreement</c> parameter).</param>
-/// <param name="PermissionsToAssign">The requested permissions, already masked to this profile's grantable set (<c>mc|ga|cm|be</c>, R5), undefined bits ignored.</param>
+/// <param name="PermissionsToAssign">The requested permissions, already masked to this profile's grantable set (<c>mc|ga|cm|be</c>), undefined bits ignored.</param>
 /// <param name="PermissionsRpId">The permissions RP ID to bind the issued token to, or <see langword="null"/> when the request's own <c>rpId</c> was absent.</param>
 /// <param name="Now">
 /// The time this command was received, precomputed by the pure transition — the value
@@ -951,7 +951,7 @@ public sealed record CtapLargeBlobsVerifyContinuation(
 /// <c>authenticatorLargeBlobs</c>' own per-fragment verify message before continuing an interrupted
 /// <c>set</c> (CTAP 2.3 §6.10.2, lines 7578/7646: <c>authenticate(pinUvAuthToken, 32×0xff ||
 /// h'0c00' || uint32LittleEndian(offset) || SHA-256(contents of set byte string))</c>). The SIXTH verify
-/// action in this codebase (seams Finding D), and uniquely among its siblings NOT a pure byte
+/// action in this codebase, and uniquely among its siblings NOT a pure byte
 /// concatenation: the message embeds a live SHA-256 digest of <see cref="Fragment"/> and a
 /// LITTLE-endian <see cref="Offset"/> — the surface's ONLY little-endian integer — so
 /// <see cref="CtapAuthenticatorSimulator.BuildLargeBlobsMessage"/> cannot be a pure static
@@ -980,14 +980,14 @@ public sealed record CtapVerifyLargeBlobsTokenAction(
 /// <summary>
 /// Declares that the simulator must append <see cref="Fragment"/> into the pending serialized large-blob
 /// array — renting a fresh buffer sized <see cref="ExpectedLength"/> up front when
-/// <see cref="ExistingPendingBuffer"/> is <see langword="null"/> (a fresh <c>offset == 0</c> sequence,
-/// seams Q5), otherwise writing into the already-rented buffer at <see cref="Offset"/> — and, once the
+/// <see cref="ExistingPendingBuffer"/> is <see langword="null"/> (a fresh <c>offset == 0</c> sequence),
+/// otherwise writing into the already-rented buffer at <see cref="Offset"/> — and, once the
 /// pending length reaches <see cref="ExpectedLength"/>, run the commit-time integrity check (CTAP 2.3
 /// §6.10.2, lines 7659-7671): <c>LEFT(SHA-256(preceding bytes), 16)</c> compared against the completed
-/// buffer's trailing 16 bytes (seams Finding E — the OTHER SHA-256 on this surface, whole-array-minus-16
+/// buffer's trailing 16 bytes (the OTHER SHA-256 on this surface, whole-array-minus-16
 /// truncated-16, never conflated with <see cref="CtapVerifyLargeBlobsTokenAction"/>'s per-fragment
 /// digest). Declared on BOTH the gate-armed path (after <see cref="CtapVerifyLargeBlobsTokenAction"/>'s
-/// fold-back and the <c>lbw</c> permission check) and the tokenless path (R5's unarmed-gate direct
+/// fold-back and the <c>lbw</c> permission check) and the tokenless path (the unarmed-gate direct
 /// invoke) — the commit-time integrity check runs on a completed TOKENLESS write exactly as it does on a
 /// verified one.
 /// </summary>

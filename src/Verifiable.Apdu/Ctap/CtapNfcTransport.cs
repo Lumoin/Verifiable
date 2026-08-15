@@ -18,10 +18,10 @@ namespace Verifiable.Apdu.Ctap;
 /// (<c>useExtended: true</c>) to sidestep <em>outbound</em> short-APDU command chaining (CLA
 /// <c>0x90</c>/<c>0x80</c> per
 /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#nfc-fragmentation">
-/// section 11.3.6: Fragmentation</see>) entirely this wave — a spec-conforming client choice since
+/// section 11.3.6: Fragmentation</see>) entirely — a spec-conforming client choice since
 /// extended-length encoding is always an option, and the CTAP2 <c>authenticatorGetInfo</c> request this
-/// wave exercises has no data field to fragment in the first place. Building that outbound chaining is
-/// deferred to a later wave if a request ever needs it.
+/// type exercises has no data field to fragment in the first place. Building outbound chaining is
+/// deferred until a request needs it.
 /// </para>
 /// <para>
 /// <strong>Free response chaining.</strong> <c>61xx</c>/<c>GET RESPONSE</c> reassembly and <c>6Cxx</c>
@@ -99,7 +99,7 @@ public sealed class CtapNfcTransport
     /// </exception>
     public async ValueTask<PooledMemory> TransceiveAsync(
         ReadOnlyMemory<byte> request,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -150,7 +150,7 @@ public sealed class CtapNfcTransport
         //loop above) so the single command-build-then-execute shape stays simple regardless of which
         //loop iteration calls it. p1 selects the normal poll (0x00) or cancel (0x11) variant.
         static async ValueTask<ApduResult<ApduResponse>> IssueGetResponseAsync(
-            ApduDevice device, byte p1, MemoryPool<byte> pool, CancellationToken cancellationToken)
+            ApduDevice device, byte p1, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             using CommandApdu getResponseCommand = CommandApdu.BuildCase2(
                 WellKnownCtapCommandParameters.ClassByte, WellKnownCtapInstructionCodes.NfcCtapGetResponse.Code,

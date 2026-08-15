@@ -9,7 +9,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// <see cref="Verifiable.Tpm.Extensions.Seal.TpmSealedBlob"/>.
 /// </summary>
 /// <remarks>
-/// Per contract R-7's fail-closed requirement, every TPM-side failure this adapter can observe — a
+/// This adapter fails closed: every TPM-side failure it can observe — a
 /// <c>SealAsync</c>/<c>UnsealAsync</c> result whose <see cref="Verifiable.Tpm.TpmResult{T}.IsSuccess"/> is
 /// <see langword="false"/>, or a tampered/truncated sealed-blob byte sequence that does not parse — surfaces
 /// as this one exception type rather than a silently empty or partially rehydrated snapshot. The caller's
@@ -17,7 +17,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// to rehydrate, exactly the posture <see cref="CtapAuthenticatorSnapshotException"/> already establishes
 /// for a snapshot-FORMAT failure on the CTAP side of this same seam.
 /// </remarks>
-[SuppressMessage("Design", "CA1515:Consider making public types internal", Justification = "Staged composition-edge code (layering-split-ledger.md): public by design so the boundary is already the future package's API boundary, per the promotability rules.")]
+[SuppressMessage("Design", "CA1515:Consider making public types internal", Justification = "Staged composition-edge code: public by design so the boundary is already the future package's API boundary, per the promotability rules.")]
 public sealed class TpmSealedStateCustodyException: Exception
 {
     /// <summary>

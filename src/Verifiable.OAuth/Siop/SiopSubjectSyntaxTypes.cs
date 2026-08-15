@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Siop;
@@ -9,7 +8,6 @@ namespace Verifiable.OAuth.Siop;
 /// used in the <c>subject_syntax_types_supported</c> RP / OP metadata parameter and to
 /// classify the <c>sub</c> claim of a Self-Issued ID Token (§11.1).
 /// </summary>
-[DebuggerDisplay("SiopSubjectSyntaxTypes")]
 public static class SiopSubjectSyntaxTypes
 {
     /// <summary>The UTF-8 source literal of <see cref="JwkThumbprint"/>.</summary>

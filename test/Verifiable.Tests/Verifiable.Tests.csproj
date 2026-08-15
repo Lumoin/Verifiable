@@ -86,6 +86,7 @@
     <ProjectReference Include="..\..\src\Verifiable.OAuth\Verifiable.OAuth.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Vcalm\Verifiable.Vcalm.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.WebFinger\Verifiable.WebFinger.csproj" />
+    <ProjectReference Include="..\..\src\Verifiable.Xml\Verifiable.Xml.csproj" />
     <ProjectReference Include="..\..\src\Verifiable.Tpm\Verifiable.Tpm.csproj" />
     <ProjectReference Include="..\..\src\Verifiable\Verifiable.csproj" />
   </ItemGroup>

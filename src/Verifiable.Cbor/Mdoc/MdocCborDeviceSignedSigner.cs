@@ -51,7 +51,7 @@ public static class MdocCborDeviceSignedSigner
         string docType,
         ReadOnlyMemory<byte> encodedSessionTranscript,
         PrivateKeyMemory deviceSigningKey,
-        MemoryPool<byte> signaturePool,
+        BaseMemoryPool signaturePool,
         CancellationToken cancellationToken = default)
     {
         (MdocDeviceSigned deviceSigned, _) = await SignVerboseAsync(
@@ -105,7 +105,7 @@ public static class MdocCborDeviceSignedSigner
         string docType,
         ReadOnlyMemory<byte> encodedSessionTranscript,
         PrivateKeyMemory deviceSigningKey,
-        MemoryPool<byte> signaturePool,
+        BaseMemoryPool signaturePool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(nameSpaces);
@@ -150,7 +150,7 @@ public static class MdocCborDeviceSignedSigner
     }
 
 
-    private static EncodedCoseProtectedHeader BuildProtectedHeader(int coseAlgorithm, MemoryPool<byte> pool)
+    private static EncodedCoseProtectedHeader BuildProtectedHeader(int coseAlgorithm, BaseMemoryPool pool)
     {
         var writer = new CborWriter(CborConformanceMode.Canonical);
         writer.WriteStartMap(1);
@@ -180,7 +180,7 @@ public static class MdocCborDeviceSignedSigner
     /// empty payload, not nil). The detached form ISO 18013-5 mandates
     /// requires the actual nil sentinel. Output is pool-routed.
     /// </summary>
-    private static EncodedCoseSign1 SerializeCoseSign1WithNilPayload(CoseSign1Message message, MemoryPool<byte> pool)
+    private static EncodedCoseSign1 SerializeCoseSign1WithNilPayload(CoseSign1Message message, BaseMemoryPool pool)
     {
         var writer = new CborWriter(CborConformanceMode.Canonical);
 

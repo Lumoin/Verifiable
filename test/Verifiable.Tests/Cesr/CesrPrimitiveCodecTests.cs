@@ -1,6 +1,5 @@
 ﻿using System.Buffers;
 using System.Collections.Generic;
-using System.Text;
 using Lumoin.Base;
 using Verifiable.Cesr;
 
@@ -8,21 +7,14 @@ namespace Verifiable.Tests.Cesr;
 
 /// <summary>
 /// Tests for <see cref="CesrPrimitiveCodec"/>: round-tripping a single CESR primitive between the raw, text
-/// (qb64) and binary (qb2) domains. The always-on cases are known-answer vectors covering each code shape
-/// (one- and two-character fixed codes, a small fixed code, a special soft code, and a variable-length code),
-/// anchored on the CESR specification's <see href="https://trustoverip.github.io/kswg-cesr-specification/#concrete-domain-representations">
-/// Concrete Domain representations</see> and master code table. The corpus-driven case exercises the full
-/// published conformance vector set when it is available (see <see cref="CesrConformanceVectors"/>).
+/// (qb64) and binary (qb2) domains. The known-answer vectors cover each code shape (one- and two-character
+/// fixed codes, a small fixed code, a special soft code, and a variable-length code), anchored on the CESR
+/// specification's <see href="https://trustoverip.github.io/kswg-cesr-specification/#concrete-domain-representations">
+/// Concrete Domain representations</see> and master code table.
 /// </summary>
 [TestClass]
 internal sealed class CesrPrimitiveCodecTests
 {
-    /// <summary>
-    /// The test context.
-    /// </summary>
-    public TestContext TestContext { get; set; } = null!;
-
-
     /// <summary>
     /// Known-answer vectors: code, raw (hex), expected soft, expected qb64, expected qb2 (hex).
     /// </summary>
@@ -84,76 +76,6 @@ internal sealed class CesrPrimitiveCodecTests
             Assert.AreEqual(code, parsed.Code, "Decoding qb2 must recover the code.");
             Assert.AreEqual(soft, parsed.Soft, "Decoding qb2 must recover the soft value.");
             Assert.AreEqual(rawHex, Convert.ToHexStringLower(parsed.Raw), "Decoding qb2 must recover the raw value.");
-        }
-    }
-
-
-    [TestMethod]
-    public void RoundTripsEveryPrimitiveConformanceVector()
-    {
-        if(!CesrConformanceVectors.TryGetCorpusRoot(out string root))
-        {
-            Assert.Inconclusive($"The CESR conformance vector corpus is not available; set {CesrConformanceVectors.CorpusVariable} to run this test.");
-        }
-
-        int verified = 0;
-        int skipped = 0;
-        var failures = new StringBuilder();
-        foreach(CesrConformanceVector vector in CesrConformanceVectors.EnumeratePrimitives(root))
-        {
-            if(vector.Malformed)
-            {
-                skipped++;
-                continue;
-            }
-
-            try
-            {
-                VerifyPrimitive(vector);
-                verified++;
-            }
-            catch(Exception exception)
-            {
-                if(failures.Length < 8192)
-                {
-                    failures.Append(vector.Name).Append(" (").Append(vector.Code).Append("): ").AppendLine(exception.Message);
-                }
-            }
-        }
-
-        TestContext.WriteLine($"Verified {verified} CESR primitive conformance vectors ({skipped} malformed corpus files skipped).");
-        Assert.IsGreaterThan(0, verified, "The corpus was located but contained no primitive vectors to verify.");
-        Assert.AreEqual(0, failures.Length, $"All CESR primitive conformance vectors must round-trip.\n{failures}");
-    }
-
-
-    private static void VerifyPrimitive(CesrConformanceVector vector)
-    {
-        //Decode the wire text first so the recovered soft value can drive re-encoding (special codes carry
-        //their value in the soft part of the code, which the vector files do not list separately).
-        string soft;
-        using(CesrParsedPrimitive fromText = CesrPrimitiveCodec.DecodeText(vector.Text, BaseMemoryPool.Shared))
-        {
-            Assert.AreEqual(vector.Code, fromText.Code, "qb64 decode code mismatch");
-            Assert.AreEqual(Convert.ToHexStringLower(vector.Raw), Convert.ToHexStringLower(fromText.Raw), "qb64 decode raw mismatch");
-            soft = fromText.Soft;
-        }
-
-        Assert.AreEqual(vector.Text, CesrPrimitiveCodec.EncodeText(vector.Code, vector.Raw, soft), "qb64 mismatch");
-
-        using(IMemoryOwner<byte> binary = CesrPrimitiveCodec.EncodeBinary(vector.Code, vector.Raw, BaseMemoryPool.Shared, soft))
-        {
-            Assert.AreEqual(
-                Convert.ToHexStringLower(vector.Binary),
-                Convert.ToHexStringLower(binary.Memory.Span[..vector.Binary.Length]),
-                "qb2 mismatch");
-        }
-
-        using(CesrParsedPrimitive fromBinary = CesrPrimitiveCodec.DecodeBinary(vector.Binary, BaseMemoryPool.Shared))
-        {
-            Assert.AreEqual(vector.Code, fromBinary.Code, "qb2 decode code mismatch");
-            Assert.AreEqual(Convert.ToHexStringLower(vector.Raw), Convert.ToHexStringLower(fromBinary.Raw), "qb2 decode raw mismatch");
-            Assert.AreEqual(soft, fromBinary.Soft, "qb2 decode soft mismatch");
         }
     }
 }

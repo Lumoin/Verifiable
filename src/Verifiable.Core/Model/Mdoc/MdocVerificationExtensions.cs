@@ -51,7 +51,7 @@ public static class MdocVerificationExtensions
         /// <returns><see langword="true"/> when the signature is valid; otherwise <see langword="false"/>.</returns>
         public async ValueTask<bool> VerifyAsync(
             PublicKeyMemory issuerVerificationKey,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             ParseCoseSign1Delegate parseCoseSign1,
             BuildSigStructureDelegate buildSigStructure,
             CancellationToken cancellationToken = default)
@@ -86,7 +86,7 @@ public static class MdocVerificationExtensions
         /// </returns>
         public async ValueTask<bool> VerifyAsync(
             ResolveMdocIssuerKeyDelegate resolveIssuerKey,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             ParseCoseSign1Delegate parseCoseSign1,
             BuildSigStructureDelegate buildSigStructure,
             CancellationToken cancellationToken = default)
@@ -138,7 +138,7 @@ public static class MdocVerificationExtensions
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The returned MdocIssuerAuthVerificationContext takes ownership of the parsed message; the caller disposes the context.")]
         public async ValueTask<(bool Result, MdocIssuerAuthVerificationContext? Context)> VerifyIssuerAuthVerboseAsync(
             PublicKeyMemory issuerVerificationKey,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             ParseCoseSign1Delegate parseCoseSign1,
             BuildSigStructureDelegate buildSigStructure,
             CancellationToken cancellationToken = default)
@@ -179,7 +179,7 @@ public static class MdocVerificationExtensions
         /// <returns><see langword="true"/> when the issuer signature verifies; otherwise <see langword="false"/>.</returns>
         public async ValueTask<bool> VerifyIssuerAuthAsync(
             PublicKeyMemory issuerVerificationKey,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             ParseCoseSign1Delegate parseCoseSign1,
             BuildSigStructureDelegate buildSigStructure,
             CancellationToken cancellationToken = default)
@@ -220,7 +220,7 @@ public static class MdocVerificationExtensions
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The returned MdocIssuerAuthVerificationContext takes ownership of the parsed message and the successful trust resolution; failure paths dispose the resolution explicitly and the caller disposes the context.")]
         public async ValueTask<(bool Result, MdocIssuerAuthVerificationContext? Context)> VerifyIssuerAuthVerboseAsync(
             ResolveMdocIssuerKeyDelegate resolveIssuerKey,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             ParseCoseSign1Delegate parseCoseSign1,
             BuildSigStructureDelegate buildSigStructure,
             CancellationToken cancellationToken = default)
@@ -271,7 +271,7 @@ public static class MdocVerificationExtensions
         /// </returns>
         public async ValueTask<bool> VerifyIssuerAuthAsync(
             ResolveMdocIssuerKeyDelegate resolveIssuerKey,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             ParseCoseSign1Delegate parseCoseSign1,
             BuildSigStructureDelegate buildSigStructure,
             CancellationToken cancellationToken = default)
@@ -322,7 +322,7 @@ public static class MdocVerificationExtensions
             string docType,
             ReadOnlyMemory<byte> encodedSessionTranscript,
             PublicKeyMemory deviceVerificationKey,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             ParseCoseSign1Delegate parseCoseSign1AllowingNilPayload,
             EncodeDeviceAuthenticationBytesDelegate encodeDeviceAuthenticationBytes,
             BuildSigStructureDelegate buildSigStructure,
@@ -418,7 +418,7 @@ public static class MdocVerificationExtensions
             string docType,
             ReadOnlyMemory<byte> encodedSessionTranscript,
             PublicKeyMemory deviceVerificationKey,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             ParseCoseSign1Delegate parseCoseSign1AllowingNilPayload,
             EncodeDeviceAuthenticationBytesDelegate encodeDeviceAuthenticationBytes,
             BuildSigStructureDelegate buildSigStructure,
@@ -460,7 +460,7 @@ public static class MdocVerificationExtensions
         public async ValueTask<(bool Result, MdocDeviceSignedVerificationContext? Context)> VerifyDeviceSignedVerboseAsync(
             ReadOnlyMemory<byte> sessionTranscript,
             PublicKeyMemory deviceVerificationKey,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             ParseCoseSign1Delegate parseCoseSign1AllowingNilPayload,
             EncodeDeviceAuthenticationBytesDelegate encodeDeviceAuthenticationBytes,
             BuildSigStructureDelegate buildSigStructure,
@@ -497,7 +497,7 @@ public static class MdocVerificationExtensions
         public async ValueTask<bool> VerifyDeviceSignedAsync(
             ReadOnlyMemory<byte> sessionTranscript,
             PublicKeyMemory deviceVerificationKey,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             ParseCoseSign1Delegate parseCoseSign1AllowingNilPayload,
             EncodeDeviceAuthenticationBytesDelegate encodeDeviceAuthenticationBytes,
             BuildSigStructureDelegate buildSigStructure,

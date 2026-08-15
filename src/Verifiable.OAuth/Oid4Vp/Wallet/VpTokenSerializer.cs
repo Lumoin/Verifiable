@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using Verifiable.JCose;
 
@@ -25,7 +24,6 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet;
 /// <c>~</c>), a base64url mdoc DeviceResponse, or an SD-CWT presentation.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("VpTokenSerializer")]
 public static class VpTokenSerializer
 {
     /// <summary>

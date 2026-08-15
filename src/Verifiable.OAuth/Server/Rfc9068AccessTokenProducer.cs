@@ -45,13 +45,23 @@ namespace Verifiable.OAuth.Server;
 /// <item><description>
 /// <see cref="AccessTokenAudPolicy.Suppressed"/> — the producer never
 /// emits <c>aud</c>, even if audiences are available. Used by deployments
-/// that explicitly opt out during a phased rollout.
+/// that explicitly opt out during a phased rollout. This wins even over a
+/// validated, populated RFC 8707 <c>resource</c> request — §2's SHOULD to
+/// audience-restrict is a recommendation the deployment's own explicit
+/// Suppressed choice is entitled to override; see
+/// <see cref="AccessTokenAudPolicy.Suppressed"/>'s own remarks.
 /// </description></item>
 /// </list>
 /// <para>
 /// Multi-audience tokens are supported per RFC 7519 §4.1.3:
-/// <see cref="JwtPayloadExtensions.ForAccessToken"/> emits a single audience as
-/// a JSON string and multiple audiences as a JSON array.
+/// <see cref="JwtPayloadExtensions.ForAccessToken"/> always emits <c>aud</c> as a JSON array,
+/// including a single audience — RFC 7519 §4.1.3's general representation, deliberately not
+/// taking the bare-string single-audience MAY special case (see its <c>audience</c> parameter
+/// doc). <see cref="IssuanceContext.Audience"/> — populated by RFC 8693 §2.1.1 Token Exchange
+/// target binding, or by the RFC 8707 §2.2 granted/narrowed resource set on the
+/// <c>authorization_code</c>, <c>refresh_token</c>, and <c>client_credentials</c> grants — takes
+/// precedence over <see cref="ClientRecord.ScopeToAudience"/> when populated; ScopeToAudience is
+/// the fallback resolver for every issuance that resolved neither.
 /// </para>
 /// </remarks>
 internal static class Rfc9068AccessTokenProducer
@@ -166,10 +176,12 @@ internal static class Rfc9068AccessTokenProducer
             oauth.ResolveAccessTokenAudienceAsync
             ?? DefaultResolveAccessTokenAudienceAsync;
 
-        //RFC 8693 §2.1.1 target binding: an explicit audience override on the issuance context — the
-        //target(s) a Token Exchange authorization seam shaped the issued token for — is the issued
-        //token's aud verbatim, bypassing the scope→audience resolver. Every non-token-exchange
-        //issuance leaves Audience null, so this falls through to the resolver as before.
+        //An explicit audience override on the issuance context — RFC 8693 §2.1.1 Token Exchange
+        //target binding, or the RFC 8707 §2.2 granted/narrowed resource set on the
+        //authorization_code, refresh_token, and client_credentials grants — is the issued token's
+        //aud verbatim, taking precedence over the scope→audience resolver per §2's SHOULD.
+        //ScopeToAudience (via the resolver) is the fallback for every issuance that resolved
+        //neither: IssuanceContext.Audience stays null and this falls through as before.
         IReadOnlyList<string>? audiences = context.Audience is { Count: > 0 }
             ? context.Audience
             : await resolver(
@@ -186,6 +198,10 @@ internal static class Rfc9068AccessTokenProducer
                 "registration.ScopeToAudience, or set the policy to Optional or Suppressed.");
         }
 
+        //Suppressed wins even over a populated, resource-validated audiences (the block above may
+        //have set it from a genuine RFC 8707 §2.2 grant): the deployment's explicit
+        //"never emit aud" choice overrides §2's SHOULD to audience-restrict, which is a
+        //recommendation, not a MUST — see AccessTokenAudPolicy.Suppressed's own remarks.
         if(policy == AccessTokenAudPolicy.Suppressed)
         {
             audiences = null;

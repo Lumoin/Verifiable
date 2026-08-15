@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Oid4Vp;
@@ -13,7 +12,6 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// The <c>fragment</c> mode is defined for completeness but is NOT RECOMMENDED
 /// by EWC RFC002 for cross-device flows.
 /// </remarks>
-[DebuggerDisplay("WellKnownResponseModes")]
 public static class WellKnownResponseModes
 {
     //Response mode values — OID4VP 1.0 §8.

@@ -22,7 +22,7 @@ namespace Verifiable.Core.Did.Methods.Key;
 /// <param name="ed25519PublicKey">The Ed25519 public key — the 32-byte compressed Edwards point.</param>
 /// <param name="pool">Memory pool for the derived 32-byte X25519 public key.</param>
 /// <returns>The derived raw X25519 public key as 32 little-endian bytes. The caller owns the result.</returns>
-public delegate IMemoryOwner<byte> Ed25519ToX25519PublicKeyDelegate(ReadOnlySpan<byte> ed25519PublicKey, MemoryPool<byte> pool);
+public delegate IMemoryOwner<byte> Ed25519ToX25519PublicKeyDelegate(ReadOnlySpan<byte> ed25519PublicKey, BaseMemoryPool pool);
 
 /// <summary>
 /// Resolves <c>did:key</c> identifiers per the
@@ -44,7 +44,7 @@ public delegate IMemoryOwner<byte> Ed25519ToX25519PublicKeyDelegate(ReadOnlySpan
 /// material and a base58 <see cref="DecodeDelegate"/> for the multibase suffix,
 /// a static method group cannot be used directly with
 /// <see cref="DidMethodSelectors.FromResolvers"/>. Build the delegate via
-/// <see cref="Build(MemoryPool{byte})"/> and register the returned instance:
+/// <see cref="Build(BaseMemoryPool)"/> and register the returned instance:
 /// </para>
 /// <code>
 /// DidMethodResolverDelegate keyResolver = KeyDidResolver.Build(pool);
@@ -75,7 +75,7 @@ public static class KeyDidResolver
     /// A <see cref="DidMethodResolverDelegate"/> suitable for registration with
     /// <see cref="DidMethodSelectors.FromResolvers"/>.
     /// </returns>
-    public static DidMethodResolverDelegate Build(MemoryPool<byte> pool)
+    public static DidMethodResolverDelegate Build(BaseMemoryPool pool)
     {
         return Build(pool, ed25519ToX25519: null);
     }
@@ -94,7 +94,7 @@ public static class KeyDidResolver
     /// resolution fails with <see cref="DidResolutionErrors.FeatureNotSupported"/>.
     /// </param>
     /// <returns>A <see cref="DidMethodResolverDelegate"/> suitable for registration.</returns>
-    public static DidMethodResolverDelegate Build(MemoryPool<byte> pool, Ed25519ToX25519PublicKeyDelegate? ed25519ToX25519)
+    public static DidMethodResolverDelegate Build(BaseMemoryPool pool, Ed25519ToX25519PublicKeyDelegate? ed25519ToX25519)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

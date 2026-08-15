@@ -15,7 +15,7 @@ namespace Verifiable.Fido2.Ctap;
 /// <c>authenticatorConfigCommands</c> getInfo member. This authenticator supports
 /// <see cref="ToggleAlwaysUv"/> and <see cref="SetMinPinLength"/> unconditionally, and
 /// <see cref="EnableEnterpriseAttestation"/> exactly when it is enterprise attestation capable
-/// (<c>CtapAuthenticatorState.IsEnterpriseAttestationCapable</c>, waveep R12); every other value
+/// (<c>CtapAuthenticatorState.IsEnterpriseAttestationCapable</c>); every other value
 /// (including any out-of-table integer, or <see cref="EnableEnterpriseAttestation"/> on a non-capable
 /// authenticator) rejects with <see cref="WellKnownCtapStatusCodes.InvalidSubcommand"/> at the command's
 /// own step 2.
@@ -25,9 +25,9 @@ public static class WellKnownCtapAuthenticatorConfigSubCommands
     /// <summary>
     /// <c>enableEnterpriseAttestation</c> (<c>0x01</c>): idempotently enables the enterprise attestation
     /// feature (CTAP 2.3 §6.11.1). Supported exactly when the authenticator is enterprise attestation
-    /// capable (<c>CtapAuthenticatorState.IsEnterpriseAttestationCapable</c>, waveep R12); a non-capable
+    /// capable (<c>CtapAuthenticatorState.IsEnterpriseAttestationCapable</c>); a non-capable
     /// authenticator (the profile default — no provisioning record seeded) rejects it at step 2 with
-    /// <see cref="WellKnownCtapStatusCodes.InvalidSubcommand"/>, unchanged from before waveep.
+    /// <see cref="WellKnownCtapStatusCodes.InvalidSubcommand"/>.
     /// </summary>
     public const int EnableEnterpriseAttestation = 0x01;
 

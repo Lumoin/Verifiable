@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Introspection;
@@ -10,7 +9,6 @@ namespace Verifiable.OAuth.Introspection;
 /// resource server registers as a client; these parameters configure how its JWT
 /// introspection responses are secured.
 /// </summary>
-[DebuggerDisplay("IntrospectionClientMetadataParameterNames")]
 public static class IntrospectionClientMetadataParameterNames
 {
     /// <summary>The UTF-8 source literal of <see cref="IntrospectionSignedResponseAlg"/>.</summary>

@@ -8,8 +8,8 @@ namespace Verifiable.Tests.Fido2;
 
 /// <summary>
 /// Byte-exactness tests for <see cref="CtapMakeCredentialExtensionOutputsCborWriter"/>: the four-slot
-/// canonical order (contract R12, trap 1 — <c>hmac-secret-mc</c> sorts LAST despite its name prefix, since
-/// CTAP2 canonical CBOR sorts shorter keys first), the two-legacy-slot byte-fence (trap 17), the
+/// canonical order (<c>hmac-secret-mc</c> sorts LAST despite its name prefix, since
+/// CTAP2 canonical CBOR sorts shorter keys first), the two-legacy-slot byte-fence, the
 /// <c>hmac-secret</c> codec-faithfulness split (a foreign <see langword="false"/> round-trips through the
 /// writer and the generic <see cref="AuthenticatorExtensionOutputsCborReader"/> even though this
 /// authenticator's own call site never supplies one), and the empty-input-produces-absent-output rule.
@@ -72,7 +72,7 @@ internal sealed class CtapMakeCredentialExtensionOutputsCborWriterTests
 
 
     /// <summary>
-    /// The two-slot shape (contract R12's byte-fence, trap 17): with only
+    /// The two-slot shape (the byte-fence): with only
     /// <c>credProtect</c>/<c>minPinLength</c> non-null, <c>hmacSecret</c> and <c>hmacSecretMc</c> both
     /// contribute no map entry, so the emitted bytes carry only the two legacy slots —
     /// <c>credProtect</c> (11-character key) sorted before <c>minPinLength</c> (12-character key), per
@@ -136,7 +136,7 @@ internal sealed class CtapMakeCredentialExtensionOutputsCborWriterTests
 
 
     /// <summary>
-    /// All four slots together (contract R12, trap 1): the canonical key order is
+    /// All four slots together: the canonical key order is
     /// <c>credProtect</c> (11) &lt; <c>hmac-secret</c> (11, tie broken by <c>'c'</c> 0x63 &lt;
     /// <c>'h'</c> 0x68) &lt; <c>minPinLength</c> (12) &lt; <c>hmac-secret-mc</c> (14) — LAST, despite
     /// sharing <c>hmac-secret</c>'s name prefix, purely because CTAP2 canonical CBOR sorts shorter keys
@@ -162,7 +162,7 @@ internal sealed class CtapMakeCredentialExtensionOutputsCborWriterTests
 
 
     /// <summary>
-    /// The writer is a faithful codec (contract R2b, waveep <c>epAtt</c> R9 precedent): given a literal
+    /// The writer is a faithful codec (the <c>epAtt</c> precedent): given a literal
     /// <see langword="false"/> — a value this authenticator's own call site never supplies, since
     /// CredRandom generation never fails — it emits <c>"hmac-secret": false</c>, and the generic
     /// <see cref="AuthenticatorExtensionOutputsCborReader"/> round-trips that foreign value's raw encoded

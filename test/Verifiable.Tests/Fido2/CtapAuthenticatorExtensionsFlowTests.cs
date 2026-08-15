@@ -14,10 +14,10 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Fido2;
 
 /// <summary>
-/// The waveext real-wire capstones for the <c>credProtect</c> (CTAP 2.3 §12.1) and <c>minPinLength</c>
-/// (§12.5) extensions, joined by the waveclose mc-side <c>hmac-secret</c> annotation capstone (§12.7):
-/// the same real, unmodified APDU transport stack (<see cref="CtapWave2TransportHarness"/>)
-/// the waveconfig/wavecm/wavereset capstones use, driving the full happy path (both extensions live end
+/// The real-wire capstones for the <c>credProtect</c> (CTAP 2.3 §12.1) and <c>minPinLength</c>
+/// (§12.5) extensions, joined by the mc-side <c>hmac-secret</c> annotation capstone (§12.7):
+/// the same real, unmodified APDU transport stack (<see cref="CtapNfcTransportHarness"/>)
+/// the other capstones use, driving the full happy path (both extensions live end
 /// to end through the RP-side processors), the credProtect enforcement asymmetries, minPinLength's
 /// RP-ID authorization, <c>authenticatorReset</c>'s <c>minPinLengthRPIDs</c> clearing, and the
 /// <c>"hmac-secret"</c> annotation's true/false/absent trichotomy. Every
@@ -25,7 +25,7 @@ namespace Verifiable.Tests.Fido2;
 /// <see cref="CtapCommandException.StatusCode"/>, or a decoded <c>authenticatorMakeCredential</c>/
 /// <c>authenticatorGetAssertion</c> response — never internal simulator state; every
 /// <c>pinUvAuthParam</c> is computed with the real <see cref="CtapPinUvAuthProtocol.AuthenticateAsync"/>
-/// over wire-received bytes, via <see cref="CtapWaveConfigFixtures"/>'s shared message-assembly helpers.
+/// over wire-received bytes, via <see cref="CtapConfigFixtures"/>'s shared message-assembly helpers.
 /// </summary>
 [TestClass]
 internal sealed class CtapAuthenticatorExtensionsFlowTests
@@ -50,23 +50,23 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
     [TestMethod]
     public async Task FullHappyPathBothExtensionsOverRealApduTransport()
     {
-        const string RpId = "waveext-capstone-happy.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        const string RpId = "ext-capstone-happy.example";
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveext-capstone-happy");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("ext-capstone-happy");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await EstablishPinAsync(harness, pool, cancellationToken).ConfigureAwait(false);
         byte[] acfgToken = await IssueTokenAsync(harness, pool, WellKnownCtapPinUvAuthTokenPermissions.Acfg, rpId: null, cancellationToken).ConfigureAwait(false);
         await SendSetMinPinLengthRpIdsAsync(harness, pool, acfgToken, [RpId], cancellationToken).ConfigureAwait(false);
 
-        ReadOnlyMemory<byte> extensions = CtapWave2AuthenticatorFixtures.BuildMakeCredentialExtensionsInput(credProtect: 2, minPinLength: true);
-        CtapMakeCredentialRequest request = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(pool, rpId: RpId, extensions: extensions);
+        ReadOnlyMemory<byte> extensions = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialExtensionsInput(credProtect: 2, minPinLength: true);
+        CtapMakeCredentialRequest request = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(pool, rpId: RpId, extensions: extensions);
         CtapMakeCredentialResponse response = await CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
             harness.Transceive, CtapMakeCredentialRequestCborWriter.Write, request, CtapMakeCredentialResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(request);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(request);
 
         using AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(response.AuthData, CredentialPublicKeyCborReader.Read, pool);
         Assert.IsTrue(authenticatorData.Flags.ExtensionDataIncluded, "both extensions authorized -- the ED bit must be set on the wire.");
@@ -96,80 +96,80 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
     /// assertable once UV is collected; a level-2 discoverable credential is invisible to the UV-less
     /// discoverable scan yet assertable via an <c>allowList</c> without UV (the allowList bypass); a
     /// level-3 <c>excludeList</c> match with no UV collected in the same call is silently exempted, so
-    /// the <c>authenticatorMakeCredential</c> SUCCEEDS despite the match (R9's inversion).
+    /// the <c>authenticatorMakeCredential</c> SUCCEEDS despite the match (the inversion).
     /// </summary>
     [TestMethod]
     public async Task CredProtectEnforcementAcrossExcludeListAndGetAssertionOverRealApduTransport()
     {
-        const string Level3RpId = "waveext-capstone-l3.example";
-        const string Level2RpId = "waveext-capstone-l2.example";
-        const string ExcludeRpId = "waveext-capstone-excl.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        const string Level3RpId = "ext-capstone-l3.example";
+        const string Level2RpId = "ext-capstone-l2.example";
+        const string ExcludeRpId = "ext-capstone-excl.example";
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveext-capstone-enforcement");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("ext-capstone-enforcement");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         byte[] level3CredentialIdBytes = await RegisterCredentialOverRealTransportAsync(
-            harness, pool, Level3RpId, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xE0), credProtect: 3, cancellationToken).ConfigureAwait(false);
+            harness, pool, Level3RpId, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xE0), credProtect: 3, cancellationToken).ConfigureAwait(false);
         byte[] level2CredentialIdBytes = await RegisterCredentialOverRealTransportAsync(
-            harness, pool, Level2RpId, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xE2), credProtect: 2, cancellationToken).ConfigureAwait(false);
+            harness, pool, Level2RpId, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xE2), credProtect: 2, cancellationToken).ConfigureAwait(false);
         byte[] excludeCredentialIdBytes = await RegisterCredentialOverRealTransportAsync(
-            harness, pool, ExcludeRpId, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xE4), credProtect: 3, cancellationToken).ConfigureAwait(false);
+            harness, pool, ExcludeRpId, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xE4), credProtect: 3, cancellationToken).ConfigureAwait(false);
 
         //Level-3, uv-less ga -> NoCredentials, ON THE WIRE.
-        CtapGetAssertionRequest level3NoUvRequest = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(pool, rpId: Level3RpId);
+        CtapGetAssertionRequest level3NoUvRequest = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionRequest(pool, rpId: Level3RpId);
         CtapCommandException level3NoUvException = await Assert.ThrowsExactlyAsync<CtapCommandException>(() =>
             CtapAuthenticatorGetAssertionClient.GetAssertionAsync(
                 harness.Transceive, CtapGetAssertionRequestCborWriter.Write, level3NoUvRequest, CtapGetAssertionResponseCborReader.Read, pool, cancellationToken)
                 .AsTask());
         Assert.AreEqual(WellKnownCtapStatusCodes.NoCredentials, level3NoUvException.StatusCode, "a level-3 discoverable credential must be invisible to a UV-less ga, on the wire.");
-        CtapWave2AuthenticatorFixtures.DisposeGetAssertionRequest(level3NoUvRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(level3NoUvRequest);
 
         //Level-2 allowList bypass: the uv-less discoverable scan hides it, the uv-less allowList request sees it.
-        CtapGetAssertionRequest level2DiscoverableRequest = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(pool, rpId: Level2RpId);
+        CtapGetAssertionRequest level2DiscoverableRequest = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionRequest(pool, rpId: Level2RpId);
         CtapCommandException level2DiscoverableException = await Assert.ThrowsExactlyAsync<CtapCommandException>(() =>
             CtapAuthenticatorGetAssertionClient.GetAssertionAsync(
                 harness.Transceive, CtapGetAssertionRequestCborWriter.Write, level2DiscoverableRequest, CtapGetAssertionResponseCborReader.Read, pool, cancellationToken)
                 .AsTask());
         Assert.AreEqual(WellKnownCtapStatusCodes.NoCredentials, level2DiscoverableException.StatusCode, "level 2 is filtered from the uv-less discoverable scan, on the wire.");
-        CtapWave2AuthenticatorFixtures.DisposeGetAssertionRequest(level2DiscoverableRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(level2DiscoverableRequest);
 
-        CtapGetAssertionRequest level2AllowListRequest = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(
+        CtapGetAssertionRequest level2AllowListRequest = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionRequest(
             pool, rpId: Level2RpId,
             allowList: [new PublicKeyCredentialDescriptor { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Id = CredentialId.Create(level2CredentialIdBytes, pool) }]);
         CtapGetAssertionResponse level2AllowListResponse = await CtapAuthenticatorGetAssertionClient.GetAssertionAsync(
             harness.Transceive, CtapGetAssertionRequestCborWriter.Write, level2AllowListRequest, CtapGetAssertionResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeGetAssertionRequest(level2AllowListRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(level2AllowListRequest);
         level2AllowListResponse.Credential.Id.Dispose();
         level2AllowListResponse.User?.Id.Dispose();
         //Reaching here IS the wire proof: the allowList branch never applies the level-2 filter.
 
-        //ExcludeList level-3 exemption: no UV collected -> mc SUCCEEDS (R9's inversion).
-        CtapMakeCredentialRequest excludeAttemptRequest = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(
-            pool, rpId: ExcludeRpId, userId: CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xE6),
+        //ExcludeList level-3 exemption: no UV collected -> mc SUCCEEDS (the inversion).
+        CtapMakeCredentialRequest excludeAttemptRequest = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(
+            pool, rpId: ExcludeRpId, userId: CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xE6),
             excludeList: [new PublicKeyCredentialDescriptor { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Id = CredentialId.Create(excludeCredentialIdBytes, pool) }]);
         CtapMakeCredentialResponse excludeAttemptResponse = await CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
             harness.Transceive, CtapMakeCredentialRequestCborWriter.Write, excludeAttemptRequest, CtapMakeCredentialResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(excludeAttemptRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(excludeAttemptRequest);
         _ = excludeAttemptResponse;
         //Reaching here IS the wire proof: mc succeeded despite the excludeList match.
 
         //Level-3, WITH UV -> ga succeeds, on the wire.
         await EstablishPinAsync(harness, pool, cancellationToken).ConfigureAwait(false);
         byte[] gaToken = await IssueTokenAsync(harness, pool, WellKnownCtapPinUvAuthTokenPermissions.Ga, Level3RpId, cancellationToken).ConfigureAwait(false);
-        byte[] gaMessage = CtapWave2AuthenticatorFixtures.BuildFixedBytes(32, 0x20);
-        byte[] gaParam = await CtapWaveConfigFixtures.ComputeSignatureAsync(gaToken, ProtocolId, gaMessage, pool, cancellationToken).ConfigureAwait(false);
-        CtapGetAssertionRequest level3WithUvRequest = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(
+        byte[] gaMessage = CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(32, 0x20);
+        byte[] gaParam = await CtapConfigFixtures.ComputeSignatureAsync(gaToken, ProtocolId, gaMessage, pool, cancellationToken).ConfigureAwait(false);
+        CtapGetAssertionRequest level3WithUvRequest = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionRequest(
             pool, rpId: Level3RpId,
             allowList: [new PublicKeyCredentialDescriptor { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Id = CredentialId.Create(level3CredentialIdBytes, pool) }],
             pinUvAuthParam: gaParam, pinUvAuthProtocol: (int)ProtocolId);
         CtapGetAssertionResponse level3WithUvResponse = await CtapAuthenticatorGetAssertionClient.GetAssertionAsync(
             harness.Transceive, CtapGetAssertionRequestCborWriter.Write, level3WithUvRequest, CtapGetAssertionResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeGetAssertionRequest(level3WithUvRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(level3WithUvRequest);
         using(AuthenticatorData level3WithUvAuthenticatorData = AuthenticatorDataReader.Read(level3WithUvResponse.AuthData, CredentialPublicKeyCborReader.Read, pool))
         {
             Assert.IsTrue(level3WithUvAuthenticatorData.Flags.UserVerified, "with a valid pinUvAuthToken, ga must succeed with uv=1 for the level-3 credential.");
@@ -187,19 +187,19 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
     [TestMethod]
     public async Task UnauthorizedRpMinPinLengthRequestGetsOkWithNoExtensionsOutputOverRealApduTransport()
     {
-        const string RpId = "waveext-capstone-unauthorized.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        const string RpId = "ext-capstone-unauthorized.example";
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveext-capstone-unauthorized");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("ext-capstone-unauthorized");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
-        ReadOnlyMemory<byte> extensions = CtapWave2AuthenticatorFixtures.BuildMakeCredentialExtensionsInput(minPinLength: true);
-        CtapMakeCredentialRequest request = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(pool, rpId: RpId, extensions: extensions);
+        ReadOnlyMemory<byte> extensions = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialExtensionsInput(minPinLength: true);
+        CtapMakeCredentialRequest request = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(pool, rpId: RpId, extensions: extensions);
         CtapMakeCredentialResponse response = await CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
             harness.Transceive, CtapMakeCredentialRequestCborWriter.Write, request, CtapMakeCredentialResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(request);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(request);
         //Reaching here IS the wire proof of CTAP2_OK.
 
         using AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(response.AuthData, CredentialPublicKeyCborReader.Read, pool);
@@ -215,24 +215,24 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
     [TestMethod]
     public async Task ResetClearsMinPinLengthRpIdsOverRealApduTransport()
     {
-        const string RpId = "waveext-capstone-reset.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        const string RpId = "ext-capstone-reset.example";
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveext-capstone-reset");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("ext-capstone-reset");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await EstablishPinAsync(harness, pool, cancellationToken).ConfigureAwait(false);
         byte[] acfgToken = await IssueTokenAsync(harness, pool, WellKnownCtapPinUvAuthTokenPermissions.Acfg, rpId: null, cancellationToken).ConfigureAwait(false);
         await SendSetMinPinLengthRpIdsAsync(harness, pool, acfgToken, [RpId], cancellationToken).ConfigureAwait(false);
 
-        ReadOnlyMemory<byte> extensions = CtapWave2AuthenticatorFixtures.BuildMakeCredentialExtensionsInput(minPinLength: true);
+        ReadOnlyMemory<byte> extensions = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialExtensionsInput(minPinLength: true);
 
-        CtapMakeCredentialRequest beforeRequest = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(pool, rpId: RpId, extensions: extensions);
+        CtapMakeCredentialRequest beforeRequest = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(pool, rpId: RpId, extensions: extensions);
         CtapMakeCredentialResponse beforeResponse = await CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
             harness.Transceive, CtapMakeCredentialRequestCborWriter.Write, beforeRequest, CtapMakeCredentialResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(beforeRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(beforeRequest);
         using(AuthenticatorData beforeAuthenticatorData = AuthenticatorDataReader.Read(beforeResponse.AuthData, CredentialPublicKeyCborReader.Read, pool))
         {
             Assert.IsTrue(beforeAuthenticatorData.Flags.ExtensionDataIncluded, "the RP must be authorized before reset.");
@@ -244,12 +244,12 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
             Assert.AreEqual(WellKnownCtapStatusCodes.Ok, resetResponse.AsReadOnlySpan()[0], "authenticatorReset must succeed on the wire.");
         }
 
-        CtapMakeCredentialRequest afterRequest = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(
-            pool, rpId: RpId, userId: CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xF0), extensions: extensions);
+        CtapMakeCredentialRequest afterRequest = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(
+            pool, rpId: RpId, userId: CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xF0), extensions: extensions);
         CtapMakeCredentialResponse afterResponse = await CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
             harness.Transceive, CtapMakeCredentialRequestCborWriter.Write, afterRequest, CtapMakeCredentialResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(afterRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(afterRequest);
         using AuthenticatorData afterAuthenticatorData = AuthenticatorDataReader.Read(afterResponse.AuthData, CredentialPublicKeyCborReader.Read, pool);
         Assert.IsFalse(
             afterAuthenticatorData.Flags.ExtensionDataIncluded,
@@ -261,23 +261,23 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
     /// The mc-side <c>hmac-secret</c> annotation (CTAP 2.3 §12.7, snapshot lines 13198-13201) over the
     /// real APDU transport: a literal <c>hmac-secret: true</c> request carries <c>"hmac-secret": true</c>
     /// in the mc authData extensions map on the wire (ED flag set); a literal <c>hmac-secret: false</c>
-    /// request and an absent request both carry NO <c>"hmac-secret"</c> key at all — contract R3's ruled
-    /// reading of snapshot line 13194's "has sent" gate as "sent with the value true", and trap 10's
+    /// request and an absent request both carry NO <c>"hmac-secret"</c> key at all — the ruled
+    /// reading of snapshot line 13194's "has sent" gate as "sent with the value true", and
     /// "the authenticator never emits false" made observable on the wire (the ED flag itself stays clear
     /// for both negative cases, since no other extension is requested in this test).
     /// </summary>
     [TestMethod]
     public async Task HmacSecretMcAnnotationOverRealApduTransport()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("waveclose-hmac-secret-mc-annotation");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-mc-annotation");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
-        await AssertHmacSecretAnnotationAsync(harness, pool, "waveclose-mc-true.example", hmacSecret: true, expectAnnotation: true, cancellationToken).ConfigureAwait(false);
-        await AssertHmacSecretAnnotationAsync(harness, pool, "waveclose-mc-false.example", hmacSecret: false, expectAnnotation: false, cancellationToken).ConfigureAwait(false);
-        await AssertHmacSecretAnnotationAsync(harness, pool, "waveclose-mc-absent.example", hmacSecret: null, expectAnnotation: false, cancellationToken).ConfigureAwait(false);
+        await AssertHmacSecretAnnotationAsync(harness, pool, "mc-true.example", hmacSecret: true, expectAnnotation: true, cancellationToken).ConfigureAwait(false);
+        await AssertHmacSecretAnnotationAsync(harness, pool, "mc-false.example", hmacSecret: false, expectAnnotation: false, cancellationToken).ConfigureAwait(false);
+        await AssertHmacSecretAnnotationAsync(harness, pool, "mc-absent.example", hmacSecret: null, expectAnnotation: false, cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -287,14 +287,14 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
     /// whether the <c>"hmac-secret"</c> authData annotation appears, per <paramref name="expectAnnotation"/>.
     /// </summary>
     private static async Task AssertHmacSecretAnnotationAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, string rpId, bool? hmacSecret, bool expectAnnotation, CancellationToken cancellationToken)
+        CtapNfcTransportHarness harness, BaseMemoryPool pool, string rpId, bool? hmacSecret, bool expectAnnotation, CancellationToken cancellationToken)
     {
-        ReadOnlyMemory<byte> extensions = CtapWave2AuthenticatorFixtures.BuildMakeCredentialExtensionsInput(hmacSecret: hmacSecret);
-        CtapMakeCredentialRequest request = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(pool, rpId: rpId, extensions: extensions);
+        ReadOnlyMemory<byte> extensions = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialExtensionsInput(hmacSecret: hmacSecret);
+        CtapMakeCredentialRequest request = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(pool, rpId: rpId, extensions: extensions);
         CtapMakeCredentialResponse response = await CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
             harness.Transceive, CtapMakeCredentialRequestCborWriter.Write, request, CtapMakeCredentialResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(request);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(request);
 
         using AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(response.AuthData, CredentialPublicKeyCborReader.Read, pool);
 
@@ -321,28 +321,28 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
     /// and returns the minted credential ID's own bytes.
     /// </summary>
     private static async Task<byte[]> RegisterCredentialOverRealTransportAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, string rpId, byte[] userId, int? credProtect, CancellationToken cancellationToken)
+        CtapNfcTransportHarness harness, BaseMemoryPool pool, string rpId, byte[] userId, int? credProtect, CancellationToken cancellationToken)
     {
-        //Explicit if/else, not a ternary: CtapWave2AuthenticatorFixtures.BuildMakeCredentialExtensionsInput
+        //Explicit if/else, not a ternary: CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialExtensionsInput
         //returns a non-nullable ReadOnlyMemory<byte>, so a ternary against the null literal infers the
         //wrong Nullable<ReadOnlyMemory<byte>> shape for the absent branch (documented at
-        //CtapWave2AuthenticatorFixtures.RegisterCredentialAsync's own identical construction).
+        //CtapMakeCredentialGetAssertionFixtures.RegisterCredentialAsync's own identical construction).
         ReadOnlyMemory<byte>? extensions;
         if(credProtect is int requestedCredProtect)
         {
-            extensions = CtapWave2AuthenticatorFixtures.BuildMakeCredentialExtensionsInput(credProtect: requestedCredProtect);
+            extensions = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialExtensionsInput(credProtect: requestedCredProtect);
         }
         else
         {
             extensions = null;
         }
 
-        CtapMakeCredentialRequest request = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(
+        CtapMakeCredentialRequest request = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(
             pool, rpId: rpId, userId: userId, options: new CtapCommandOptions(ResidentKey: true), extensions: extensions);
         CtapMakeCredentialResponse response = await CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
             harness.Transceive, CtapMakeCredentialRequestCborWriter.Write, request, CtapMakeCredentialResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(request);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(request);
 
         using AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(response.AuthData, CredentialPublicKeyCborReader.Read, pool);
 
@@ -366,9 +366,9 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
 
 
     /// <summary>Establishes <see cref="Pin"/> as the authenticator's PIN over <paramref name="harness"/>'s real transport.</summary>
-    private static async Task EstablishPinAsync(CtapWave2TransportHarness harness, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task EstablishPinAsync(CtapNfcTransportHarness harness, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
-        using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
+        using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
             .ConfigureAwait(false);
         (byte[] newPinEnc, byte[] pinUvAuthParam) = await session.BuildSetPinMessagesAsync(Pin, cancellationToken).ConfigureAwait(false);
 
@@ -388,9 +388,9 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
     /// it from wire bytes only, over <paramref name="harness"/>'s real transport.
     /// </summary>
     private static async Task<byte[]> IssueTokenAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, int permissions, string? rpId, CancellationToken cancellationToken)
+        CtapNfcTransportHarness harness, BaseMemoryPool pool, int permissions, string? rpId, CancellationToken cancellationToken)
     {
-        using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
+        using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
             .ConfigureAwait(false);
         byte[] pinHashEnc = await session.BuildPinHashEncAsync(Pin, cancellationToken).ConfigureAwait(false);
 
@@ -412,17 +412,17 @@ internal sealed class CtapAuthenticatorExtensionsFlowTests
     /// <see cref="CtapCommandException"/> for a non-success status.
     /// </summary>
     private static async Task SendSetMinPinLengthRpIdsAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, byte[] token, IReadOnlyList<string> rpIds, CancellationToken cancellationToken)
+        CtapNfcTransportHarness harness, BaseMemoryPool pool, byte[] token, IReadOnlyList<string> rpIds, CancellationToken cancellationToken)
     {
-        byte[] subCommandParams = CtapWaveConfigFixtures.BuildSubCommandParams(minPinLengthRpIds: rpIds);
-        byte[] message = CtapWaveConfigFixtures.BuildMessage(WellKnownCtapAuthenticatorConfigSubCommands.SetMinPinLength, subCommandParams);
-        byte[] param = await CtapWaveConfigFixtures.ComputeSignatureAsync(token, ProtocolId, message, pool, cancellationToken).ConfigureAwait(false);
+        byte[] subCommandParams = CtapConfigFixtures.BuildSubCommandParams(minPinLengthRpIds: rpIds);
+        byte[] message = CtapConfigFixtures.BuildMessage(WellKnownCtapAuthenticatorConfigSubCommands.SetMinPinLength, subCommandParams);
+        byte[] param = await CtapConfigFixtures.ComputeSignatureAsync(token, ProtocolId, message, pool, cancellationToken).ConfigureAwait(false);
 
         var request = new CtapAuthenticatorConfigRequest(
             SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.SetMinPinLength, MinPinLengthRpIds: rpIds,
             PinUvAuthProtocol: (int)ProtocolId, PinUvAuthParam: param);
 
-        byte[] envelope = CtapWaveConfigFixtures.BuildAuthenticatorConfigEnvelope(request);
+        byte[] envelope = CtapConfigFixtures.BuildAuthenticatorConfigEnvelope(request);
         using PooledMemory response = await harness.Transceive(envelope, pool, cancellationToken).ConfigureAwait(false);
         if(!WellKnownCtapStatusCodes.IsOk(response.AsReadOnlySpan()[0]))
         {

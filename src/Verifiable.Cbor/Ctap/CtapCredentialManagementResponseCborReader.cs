@@ -17,8 +17,8 @@ namespace Verifiable.Cbor.Ctap;
 /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorCredentialManagement">
 /// CTAP 2.3, section 6.8: authenticatorCredentialManagement (0x0A)</see>. Read with
 /// <see cref="CborConformanceMode.Ctap2Canonical"/>, mirroring <see cref="CtapClientPinResponseCborReader"/>.
-/// <c>credProtect</c> (<c>0x0A</c>) is modeled (R11); <c>largeBlobKey</c> (<c>0x0B</c>) is modeled
-/// (wavelb R8); per section 8's forward-compatibility rule, any OTHER member key this reader does not
+/// <c>credProtect</c> (<c>0x0A</c>) is modeled; <c>largeBlobKey</c> (<c>0x0B</c>) is modeled;
+/// per section 8's forward-compatibility rule, any OTHER member key this reader does not
 /// model (<c>thirdPartyPayment</c>) is skipped rather than rejected. <c>rp</c>/<c>user</c>/<c>credentialID</c>
 /// reuse the SHARED <see cref="CtapCommandEntityCborCodec"/> readers; <c>publicKey</c>'s nested COSE_Key
 /// reuses <see cref="CredentialPublicKeyCborReader"/> rather than a second COSE_Key reader.
@@ -33,7 +33,7 @@ public static class CtapCredentialManagementResponseCborReader
     /// <param name="pool">The memory pool the decoded <c>credentialID</c>/<c>user</c> carriers rent from.</param>
     /// <returns>The decoded response model.</returns>
     /// <exception cref="Fido2FormatException"><paramref name="payload"/> is not valid CTAP2 canonical CBOR.</exception>
-    public static CtapCredentialManagementResponse Read(ReadOnlyMemory<byte> payload, MemoryPool<byte> pool)
+    public static CtapCredentialManagementResponse Read(ReadOnlyMemory<byte> payload, BaseMemoryPool pool)
     {
         try
         {

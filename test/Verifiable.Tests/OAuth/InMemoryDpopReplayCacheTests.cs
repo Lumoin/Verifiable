@@ -46,7 +46,7 @@ internal sealed class InMemoryDpopReplayCacheTests
     /// RFC 9449 §11.1: once the freshness window a jti was persisted under has elapsed, it MUST no
     /// longer be reported as seen — the replay window closes rather than tracking the jti forever. The
     /// prior test double's read path (a bare <c>ContainsKey</c>) never checked the stored expiry, so
-    /// this assertion fails against that logic; see the wave report for the recorded pre-fix failure.
+    /// this assertion fails against that logic, pinning the corrected behavior.
     /// </summary>
     [TestMethod]
     public async Task ExpiredJtiIsNotSeen()

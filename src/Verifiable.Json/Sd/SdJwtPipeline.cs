@@ -72,7 +72,7 @@ internal static class SdJwtPipeline
         string mediaType,
         PrivateKeyMemory privateKey,
         string keyId,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         string resolvedMediaType = string.IsNullOrEmpty(mediaType)

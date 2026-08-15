@@ -191,7 +191,7 @@ internal static class AuthCodeFlowDriver
     /// <see cref="AuthCodeClient.ExchangeTokenAsync(ClientRegistration, string, ExchangeContext, ClientAssertionOptions?, System.Threading.CancellationToken)"/>
     /// — the one real-client entry point for every declared
     /// <see cref="ClientRegistration.AuthenticationMethod"/>, since the client itself dispatches on
-    /// the method (contract wave-4 D6) — asserting every leg succeeded. The returned
+    /// the method — asserting every leg succeeded. The returned
     /// <see cref="AuthCodeFlowDriveResult"/> carries the issued tokens and the raw authorize
     /// redirect for the caller's own assertions.
     /// </summary>
@@ -238,7 +238,7 @@ internal static class AuthCodeFlowDriver
     /// Refreshes an access token through the real <see cref="AuthCodeClient.RefreshAsync(ClientRegistration, RefreshTokenRequest, ExchangeContext, ClientAssertionOptions?, System.Threading.CancellationToken)"/>
     /// entry point — the one real-client path for every declared
     /// <see cref="ClientRegistration.AuthenticationMethod"/>, since the client itself dispatches on the
-    /// method the same way the code-exchange leg does (contract wave-4 D6, item 2's refresh mirror) —
+    /// method the same way the code-exchange leg does —
     /// asserting the refresh succeeded over the real wire.
     /// </summary>
     /// <param name="client">The OAuth client whose infrastructure posts to the host's real wire.</param>

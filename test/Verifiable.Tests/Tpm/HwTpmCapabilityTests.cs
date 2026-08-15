@@ -69,7 +69,7 @@ internal class HwTpmCapabilityTests
     [TestMethod]
     public async Task DumpTpmFixedProperties()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_GetCapability, TpmResponseCodec.GetCapability);
@@ -85,7 +85,7 @@ internal class HwTpmCapabilityTests
     [TestMethod]
     public async Task DumpTpmVariableProperties()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_GetCapability, TpmResponseCodec.GetCapability);
@@ -101,7 +101,7 @@ internal class HwTpmCapabilityTests
     [TestMethod]
     public async Task DumpSupportedAlgorithms()
     {        
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_GetCapability, TpmResponseCodec.GetCapability);
@@ -133,7 +133,7 @@ internal class HwTpmCapabilityTests
     public async Task DumpSupportedEccCurves()
     {
         using TpmDevice device = TpmDevice.Open();
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_GetCapability, TpmResponseCodec.GetCapability);
@@ -163,7 +163,7 @@ internal class HwTpmCapabilityTests
     [TestMethod]
     public async Task DumpPcrBanks()
     {        
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_GetCapability, TpmResponseCodec.GetCapability);
@@ -192,7 +192,7 @@ internal class HwTpmCapabilityTests
     public async Task DumpPcrValues()
     {
         using TpmDevice device = TpmDevice.Open();
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_PCR_Read, TpmResponseCodec.PcrRead);
@@ -235,7 +235,7 @@ internal class HwTpmCapabilityTests
     [TestMethod]
     public async Task DumpAllPcrBanksAndValues()
     {        
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
         _ = registry.Register(TpmCcConstants.TPM_CC_GetCapability, TpmResponseCodec.GetCapability);
@@ -300,7 +300,7 @@ internal class HwTpmCapabilityTests
     /// <returns>A list of tuples containing PCR index, digest bytes, and update counter.</returns>
     private async Task<List<(int PcrIndex, byte[] Digest, uint UpdateCounter)>> ReadAllPcrs(
         TpmDevice device,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TpmResponseRegistry registry,
         TpmAlgIdConstants hashAlgorithm,
         int pcrCount)
@@ -374,7 +374,7 @@ internal class HwTpmCapabilityTests
         return results;
     }
 
-    private async Task DumpTpmProperties(TpmDevice device, MemoryPool<byte> pool, TpmResponseRegistry registry, uint startProperty)
+    private async Task DumpTpmProperties(TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry, uint startProperty)
     {
         uint property = startProperty;
         bool moreData = true;

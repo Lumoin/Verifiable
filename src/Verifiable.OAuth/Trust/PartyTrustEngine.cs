@@ -26,6 +26,20 @@ public readonly record struct TrustMechanism(string Value)
 
     /// <summary>A verifier-attestation JWT vouched for by a trusted attester.</summary>
     public static TrustMechanism VerifierAttestation { get; } = new("verifier_attestation");
+
+    /// <summary>
+    /// An ETSI Trusted List (ETSI TS 119 612) entry — the credential's issuing authority appears in a
+    /// trusted list, or one it cascades to. Mirrors the DCQL <c>trusted_authorities</c> query type
+    /// <c>etsi_tl</c> (<c>DcqlTrustedAuthorityTypes.EtsiTrustedList</c> in <c>Verifiable.Core.Model.Dcql</c>),
+    /// so a resolved trusted-authority match carries a <see cref="TrustMechanism"/> value an assessor
+    /// pipeline can dispatch on. The mechanism evidence an assessor for this value consumes is the parsed
+    /// <c>TrustedList</c> model and the outcome of the signature-verification seam, both in
+    /// <c>Verifiable.Cryptography.Pki</c> — this identifier is the wiring between the two; the assessor
+    /// itself, and the LOTL/pivot cascade walk that resolves which list a given issuer's entry lives in, are
+    /// deployment-specific composition left to the caller (the TS 119 615 qualification determination that
+    /// would classify what a matched entry qualifies the issuer for is a separate, later capability).
+    /// </summary>
+    public static TrustMechanism EtsiTrustedList { get; } = new("etsi_tl");
 }
 
 

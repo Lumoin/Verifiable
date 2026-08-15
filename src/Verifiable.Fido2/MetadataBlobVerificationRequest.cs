@@ -40,7 +40,7 @@ public sealed class MetadataBlobVerificationRequest
         TenantId tenantId,
         MetadataBlobSerialNumberPolicy serialNumberPolicy,
         MetadataBlobRevocationPolicy revocationPolicy,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(trustAnchors);
         ArgumentNullException.ThrowIfNull(pool);
@@ -77,7 +77,7 @@ public sealed class MetadataBlobVerificationRequest
         TenantId tenantId,
         MetadataBlobSerialNumberPolicy serialNumberPolicy,
         MetadataBlobRevocationPolicy revocationPolicy,
-        MemoryPool<byte> pool) : this(blobBytes, trustAnchors, ReadOnce(timeProvider), tenantId, serialNumberPolicy, revocationPolicy, pool)
+        BaseMemoryPool pool) : this(blobBytes, trustAnchors, ReadOnce(timeProvider), tenantId, serialNumberPolicy, revocationPolicy, pool)
     {
     }
 
@@ -158,7 +158,7 @@ public sealed class MetadataBlobVerificationRequest
     /// The memory pool a verification procedure allocates working buffers from — the decoded
     /// certificate carriers and the payload's shared raw-statement buffer.
     /// </summary>
-    public MemoryPool<byte> Pool { get; }
+    public BaseMemoryPool Pool { get; }
 
 
     /// <summary>

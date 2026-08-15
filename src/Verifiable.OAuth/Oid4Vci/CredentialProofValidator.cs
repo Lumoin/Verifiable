@@ -1,12 +1,10 @@
 using System.Buffers;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 using Verifiable.OAuth.Dpop;
@@ -39,7 +37,6 @@ namespace Verifiable.OAuth.Oid4Vci;
 /// <c>c_nonce</c> store and its single-use retirement remain the application's responsibility.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("CredentialProofValidator")]
 public static class CredentialProofValidator
 {
     //The §F.1 OPTIONAL key-reference JOSE headers whose mutual exclusivity §F.1 mandates. Only
@@ -103,7 +100,7 @@ public static class CredentialProofValidator
         EncodeDelegate base64UrlEncoder,
         DecodeDelegate base64UrlDecoder,
         TimeProvider timeProvider,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeSpan iatSkew,
         CancellationToken cancellationToken)
     {
@@ -147,7 +144,7 @@ public static class CredentialProofValidator
         EncodeDelegate base64UrlEncoder,
         DecodeDelegate base64UrlDecoder,
         TimeProvider timeProvider,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeSpan iatSkew,
         CancellationToken cancellationToken)
     {
@@ -194,7 +191,7 @@ public static class CredentialProofValidator
         EncodeDelegate base64UrlEncoder,
         DecodeDelegate base64UrlDecoder,
         TimeProvider timeProvider,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeSpan iatSkew,
         CancellationToken cancellationToken)
     {
@@ -327,13 +324,15 @@ public static class CredentialProofValidator
 
         if(result.IsValid && result.Verified is Verified<DataIntegritySecuredPresentation> verified)
         {
-            //The composed verifier carries the authenticated verification method id as a KeyId on
-            //the Verified value's provenance tag — the holder key the issued Credential binds to.
-            string? verificationMethodId = verified.Context.TryGet<KeyId>(out KeyId keyId)
-                ? keyId.Value
-                : null;
-
-            return DiVpProofValidationResult.Success(verificationMethodId ?? string.Empty);
+            //The compile-time authz seam: only a BoundProvenance -- the CONTROLLER-verified
+            //holder == resolved-controller binding the presentation verify path mints on success
+            // -- reaches DiVpProofValidationResult.Success. This assembly holds no
+            //InternalsVisibleTo grant into Verifiable.Cryptography, so it can only pattern-match an
+            //already-minted BoundProvenance, never construct one: an Asserted principal cannot be
+            //smuggled through this seam even at runtime, let alone compile time.
+            return verified.Provenance is BoundProvenance bound
+                ? DiVpProofValidationResult.Success(bound)
+                : DiVpProofValidationResult.Failure(DiVpProofValidationFailureReason.HolderNotBound);
         }
 
         return DiVpProofValidationResult.Failure(MapDiVpFailure(result.FailureReason));
@@ -376,6 +375,7 @@ public static class CredentialProofValidator
             VerificationFailureReason.DomainMismatch => DiVpProofValidationFailureReason.DomainMismatch,
             VerificationFailureReason.VerificationMethodNotFound => DiVpProofValidationFailureReason.VerificationMethodNotFound,
             VerificationFailureReason.MissingVerificationMethod => DiVpProofValidationFailureReason.VerificationMethodNotFound,
+            VerificationFailureReason.ControllerMismatch => DiVpProofValidationFailureReason.HolderControllerMismatch,
             _ => DiVpProofValidationFailureReason.SignatureInvalid
         };
 
@@ -393,7 +393,7 @@ public static class CredentialProofValidator
         EncodeDelegate base64UrlEncoder,
         DecodeDelegate base64UrlDecoder,
         TimeProvider timeProvider,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         TimeSpan iatSkew,
         CancellationToken cancellationToken)
     {

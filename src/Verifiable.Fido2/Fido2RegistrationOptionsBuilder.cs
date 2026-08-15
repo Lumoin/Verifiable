@@ -78,7 +78,7 @@ public sealed class Fido2RegistrationOptionsBuilder: Builder<PublicKeyCredential
 
             return ValueTask.FromResult(options);
         })
-        //Second transformation: the challenge, via the wave-4 entropy seam unless the caller supplied one.
+        //Second transformation: the challenge, via the entropy seam unless the caller supplied one.
         .With((options, builder, state) =>
         {
             options.Challenge = state!.Challenge ?? Fido2ChallengeGeneration.Generate(state.Pool);
@@ -193,7 +193,7 @@ public sealed class Fido2RegistrationOptionsBuilder: Builder<PublicKeyCredential
         UserHandle userId,
         string userName,
         string? userDisplayName,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         IReadOnlyList<Fido2CredentialRecord>? existingCredentials = null,
         string? challenge = null,
         uint? timeout = null,

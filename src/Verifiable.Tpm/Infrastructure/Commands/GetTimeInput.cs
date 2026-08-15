@@ -79,7 +79,7 @@ public sealed class GetTimeInput: ITpmCommandInput, IDisposable
         TpmiDhObject signHandle,
         ReadOnlySpan<byte> qualifyingData,
         TpmAlgIdConstants schemeHashAlg,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return Create(TpmRh.TPM_RH_ENDORSEMENT, signHandle, qualifyingData, TpmAlgIdConstants.TPM_ALG_ECDSA, schemeHashAlg, pool);
     }
@@ -97,7 +97,7 @@ public sealed class GetTimeInput: ITpmCommandInput, IDisposable
         TpmiDhObject signHandle,
         ReadOnlySpan<byte> qualifyingData,
         TpmAlgIdConstants schemeHashAlg,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return Create(TpmRh.TPM_RH_ENDORSEMENT, signHandle, qualifyingData, TpmAlgIdConstants.TPM_ALG_RSASSA, schemeHashAlg, pool);
     }
@@ -115,7 +115,7 @@ public sealed class GetTimeInput: ITpmCommandInput, IDisposable
         TpmiDhObject signHandle,
         ReadOnlySpan<byte> qualifyingData,
         TpmAlgIdConstants schemeHashAlg,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return Create(TpmRh.TPM_RH_ENDORSEMENT, signHandle, qualifyingData, TpmAlgIdConstants.TPM_ALG_RSAPSS, schemeHashAlg, pool);
     }
@@ -138,7 +138,7 @@ public sealed class GetTimeInput: ITpmCommandInput, IDisposable
         ReadOnlySpan<byte> qualifyingData,
         TpmAlgIdConstants signatureScheme,
         TpmAlgIdConstants schemeHashAlg,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         IMemoryOwner<byte> owner = pool.Rent(qualifyingData.Length);

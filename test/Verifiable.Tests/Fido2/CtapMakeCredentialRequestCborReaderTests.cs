@@ -150,7 +150,7 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
 
     /// <summary>
     /// A <c>credProtect</c>-only extensions map decodes <see cref="CtapMakeCredentialRequest.CredProtect"/>
-    /// while leaving <see cref="CtapMakeCredentialRequest.MinPinLength"/> <see langword="null"/> — R5's
+    /// while leaving <see cref="CtapMakeCredentialRequest.MinPinLength"/> <see langword="null"/> — the
     /// "each key alone" round trip.
     /// </summary>
     [TestMethod]
@@ -206,7 +206,7 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
 
     /// <summary>
     /// A <c>minPinLength: false</c> entry decodes to <see langword="false"/>, not <see langword="null"/>
-    /// — R5's rule that the reader faithfully reports what is on the wire, distinct from absence, even
+    /// — the reader faithfully reports what is on the wire, distinct from absence, even
     /// though the transition later treats <see langword="false"/> as semantically "not asking".
     /// </summary>
     [TestMethod]
@@ -259,7 +259,7 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
     /// <summary>
     /// A <c>largeBlobKey</c>-only extensions map decodes <see cref="CtapMakeCredentialRequest.LargeBlobKey"/>
     /// while leaving <see cref="CtapMakeCredentialRequest.CredProtect"/>/<see cref="CtapMakeCredentialRequest.MinPinLength"/>
-    /// <see langword="null"/> (wavelb R8's third known extension key).
+    /// <see langword="null"/> (the third known extension key).
     /// </summary>
     [TestMethod]
     public void DecodesLargeBlobKeyAloneFromExtensionsMap()
@@ -294,7 +294,7 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
     /// <summary>
     /// An <c>hmac-secret</c>-only extensions map decodes <see cref="CtapMakeCredentialRequest.HmacSecret"/>
     /// while leaving <see cref="CtapMakeCredentialRequest.CredProtect"/>/<see cref="CtapMakeCredentialRequest.MinPinLength"/>
-    /// <see langword="null"/> (contract R3's fourth known extension key).
+    /// <see langword="null"/> (the fourth known extension key).
     /// </summary>
     [TestMethod]
     public void DecodesHmacSecretAloneFromExtensionsMap()
@@ -329,7 +329,7 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
     /// <summary>
     /// An <c>hmac-secret: false</c> entry decodes to <see langword="false"/>, not <see langword="null"/>
     /// — the reader faithfully reports what is on the wire, distinct from absence, even though the
-    /// transition later treats <see langword="false"/> as semantically "not requested" (contract R3).
+    /// transition later treats <see langword="false"/> as semantically "not requested".
     /// </summary>
     [TestMethod]
     public void DecodesHmacSecretFalseAsFalseNotAsAbsent()
@@ -362,8 +362,8 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
 
     /// <summary>
     /// An <c>hmac-secret</c> entry encoded as an unsigned integer rather than a boolean is a
-    /// decode-shape failure, mirroring <see cref="ThrowsWhenCredProtectHasWrongCborType"/> — R7's
-    /// classification later maps this to <c>CborUnexpectedType</c> (0x11) at the simulator boundary.
+    /// decode-shape failure, mirroring <see cref="ThrowsWhenCredProtectHasWrongCborType"/> — this
+    /// classification later maps to <c>CborUnexpectedType</c> (0x11) at the simulator boundary.
     /// </summary>
     [TestMethod]
     public void ThrowsWhenHmacSecretHasWrongCborType()
@@ -390,7 +390,7 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
     /// <see cref="CtapMakeCredentialRequest.HmacSecret"/> all left <see langword="null"/> and the raw
     /// <see cref="CtapMakeCredentialRequest.Extensions"/> bytes intact — CTAP 2.3 section 6.1.2 line
     /// 3553's "ignoring any that it does not support" rule. Uses <c>credBlob</c> (CTAP 2.3 §12.2) as the
-    /// unrecognized key, since <c>hmac-secret</c> is itself now a recognized key (contract R3) and would
+    /// unrecognized key, since <c>hmac-secret</c> is itself now a recognized key and would
     /// no longer exercise this skip path.
     /// </summary>
     [TestMethod]
@@ -428,7 +428,7 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
     /// <summary>
     /// A <c>credProtect</c> entry encoded as a text string rather than an unsigned integer is a
     /// decode-shape failure, mirroring every other wrong-typed known member this reader already
-    /// rejects (<see cref="ThrowsWhenClientDataHashHasWrongCborType"/>) — R5's chosen posture for
+    /// rejects (<see cref="ThrowsWhenClientDataHashHasWrongCborType"/>) — the chosen posture for
     /// wrong-typed known extension-map keys.
     /// </summary>
     [TestMethod]

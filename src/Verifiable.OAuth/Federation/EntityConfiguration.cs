@@ -18,7 +18,7 @@ namespace Verifiable.OAuth.Federation;
 /// </para>
 /// <para>
 /// Validation of the <c>jwks</c>-presence invariant happens via the
-/// <see cref="WellKnownFederationClaimIds.JwksPresentWhenSelfSigned"/>
+/// <see cref="WellKnownFederationClaimIds.JwksPresentPerStatementShape"/>
 /// check; this record holds the structural classification only.
 /// </para>
 /// </remarks>

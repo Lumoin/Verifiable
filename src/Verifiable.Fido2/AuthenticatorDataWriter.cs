@@ -87,7 +87,7 @@ public static class AuthenticatorDataWriter
     /// </param>
     /// <param name="extensions">
     /// The already CBOR-encoded extension outputs map to append verbatim, or empty to omit it. Opaque at
-    /// this layer — no extension codec dependency exists in this wave.
+    /// this layer — no extension codec dependency exists here.
     /// </param>
     /// <returns>The assembled <c>authData</c> wire bytes, tagged <see cref="Fido2BufferTags.AuthenticatorDataPayload"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="rpIdHash"/> is <see langword="null"/>.</exception>

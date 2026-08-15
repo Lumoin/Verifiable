@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core.Assessment;
 
 namespace Verifiable.OAuth.Federation;
@@ -26,7 +25,6 @@ namespace Verifiable.OAuth.Federation;
 /// constructor to extend the §3.2 baseline with deployment-specific checks.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("EntityStatementValidator")]
 public sealed class EntityStatementValidator
 {
     private ClaimIssuer<EntityStatementValidationContext> Issuer { get; }

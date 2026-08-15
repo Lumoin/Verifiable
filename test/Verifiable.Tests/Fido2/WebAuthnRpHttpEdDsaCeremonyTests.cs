@@ -19,10 +19,10 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Fido2;
 
 /// <summary>
-/// Real-wire capstone proving waveref ruling R-1 (the verification input's accepted algorithms are
-/// DERIVED from the creation options they belong to, never independently hand-authored) together with
-/// ruling R-2 (an authenticator that honours the relying party's stated EdDSA-first preference is
-/// actually accepted, not silently rejected). Mirrors <see cref="WebAuthnRpHttpCeremonyTests"/>'s shape:
+/// Real-wire capstone proving the verification input's accepted algorithms are
+/// DERIVED from the creation options they belong to, never independently hand-authored, together with
+/// this library's own rule that an authenticator that honours the relying party's stated EdDSA-first
+/// preference is actually accepted, not silently rejected. Mirrors <see cref="WebAuthnRpHttpCeremonyTests"/>'s shape:
 /// a CTAP authenticator simulator — here composed with <see cref="CtapCredentialSigningBackend.CreateEdDsaDefault"/>
 /// rather than the ES256 default — driven over the REAL <see cref="Verifiable.Apdu.ApduExecutor"/>/
 /// <see cref="Verifiable.Apdu.ApduDevice"/> transport, completes a registration then an authentication
@@ -30,10 +30,10 @@ namespace Verifiable.Tests.Fido2;
 /// listener and reached only by a real <see cref="HttpClient"/>.
 /// </summary>
 /// <remarks>
-/// Before this wave, this exact round trip was structurally impossible to prove: the simulator shipped
+/// Previously, this exact round trip was structurally impossible to prove: the simulator shipped
 /// only an ES256 credential backend (so it could never pick the EdDSA entry the RP's own builder
 /// advertises first), and the RP skin hardcoded <c>AllowedAlgorithms = [ES256]</c> independently of what
-/// it offered — the two facts observed together are exactly the defect this wave closes. This class
+/// it offered — the two facts observed together are exactly the defect this fix closes. This class
 /// exercises both fixes through the same production code the HTTP/APDU capstone above already trusts,
 /// never a shortcut construction of either side.
 /// </remarks>
@@ -62,17 +62,17 @@ internal sealed class WebAuthnRpHttpEdDsaCeremonyTests
     [TestMethod]
     public async Task EdDsaFirstOfferIsHonouredByAnEdDsaOnlyAuthenticatorAndAcceptedByTheDerivedAllowedAlgorithms()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
         var skin = new WebAuthnRelyingPartyCeremonySkin(
-            RpId, Origin, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xEA), "eve", "Eve Example", pool);
+            RpId, Origin, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xEA), "eve", "Eve Example", pool);
         await using MinimalHttpHost host = await MinimalHttpHost.StartAsync(skin.HandleAsync, cancellationToken).ConfigureAwait(false);
         using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(host.Certificate, host.BaseAddress);
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulatorWithBackend(
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulatorWithBackend(
             "webauthn-rp-http-eddsa-authenticator", CtapCredentialSigningBackend.CreateEdDsaDefault());
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage optionsResponse = await PostAsync(
             httpClient, WebAuthnRelyingPartyCeremonySkin.AttestationOptionsPath, jsonBody: null, cancellationToken).ConfigureAwait(false);
@@ -87,13 +87,13 @@ internal sealed class WebAuthnRpHttpEdDsaCeremonyTests
             new ClientData(WellKnownClientDataTypes.Create, creationOptions.Challenge!, Origin));
         DigestValue createClientDataHash = Fido2ClientDataHash.Compute(createClientDataJson, pool);
 
-        CtapMakeCredentialRequest makeCredentialRequest = CtapWave2CapstoneFixtures.BuildMakeCredentialRequest(
+        CtapMakeCredentialRequest makeCredentialRequest = CtapCapstoneFixtures.BuildMakeCredentialRequest(
             creationOptions, createClientDataHash, pool, attestationFormatsPreference: [WellKnownWebAuthnAttestationFormats.None]);
 
         CtapMakeCredentialResponse makeCredentialResponse = await CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
             harness.Transceive, CtapMakeCredentialRequestCborWriter.Write, makeCredentialRequest, CtapMakeCredentialResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(makeCredentialRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(makeCredentialRequest);
 
         TaggedMemory<byte> attestationObject = CtapAuthenticatorMakeCredentialClient.BuildAttestationObject(makeCredentialResponse, AttestationObjectCborWriter.Write);
 
@@ -110,7 +110,7 @@ internal sealed class WebAuthnRpHttpEdDsaCeremonyTests
             httpClient, WebAuthnRelyingPartyCeremonySkin.AttestationResultPath, registrationEnvelopeJson, cancellationToken).ConfigureAwait(false);
         string resultBody = await resultResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         Assert.AreEqual(HttpStatusCode.OK, resultResponse.StatusCode,
-            $"An Ed25519 credential from an authenticator honouring the RP's own stated preference MUST be accepted — this is the exact case waveref R-1/R-2 fix. Body={resultBody}");
+            $"An Ed25519 credential from an authenticator honouring the RP's own stated preference MUST be accepted. Body={resultBody}");
         Assert.Contains("\"verified\":true", resultBody, StringComparison.Ordinal);
         Assert.IsNotNull(skin.StoredCredential, "A successful registration MUST store a credential record.");
         Assert.AreEqual(WellKnownCoseAlgorithms.EdDsa, skin.StoredCredential!.PublicKey.Alg);
@@ -146,7 +146,7 @@ internal sealed class WebAuthnRpHttpEdDsaCeremonyTests
     /// through the registered production seam, not merely that registration parsed the public key.
     /// </summary>
     private static async Task AssertOverRealTransportsAsync(
-        HttpClient httpClient, CtapWave2TransportHarness harness, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        HttpClient httpClient, CtapNfcTransportHarness harness, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using HttpResponseMessage optionsResponse = await PostAsync(
             httpClient, WebAuthnRelyingPartyCeremonySkin.AssertionOptionsPath, jsonBody: null, cancellationToken).ConfigureAwait(false);
@@ -158,12 +158,12 @@ internal sealed class WebAuthnRpHttpEdDsaCeremonyTests
             new ClientData(WellKnownClientDataTypes.Get, requestOptions.Challenge!, Origin));
         DigestValue getClientDataHash = Fido2ClientDataHash.Compute(getClientDataJson, pool);
 
-        CtapGetAssertionRequest getAssertionRequest = CtapWave2CapstoneFixtures.BuildGetAssertionRequest(requestOptions, getClientDataHash);
+        CtapGetAssertionRequest getAssertionRequest = CtapCapstoneFixtures.BuildGetAssertionRequest(requestOptions, getClientDataHash);
 
         CtapGetAssertionResponse getAssertionResponse = await CtapAuthenticatorGetAssertionClient.GetAssertionAsync(
             harness.Transceive, CtapGetAssertionRequestCborWriter.Write, getAssertionRequest, CtapGetAssertionResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeGetAssertionRequest(getAssertionRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(getAssertionRequest);
 
         bool hasUserHandle = getAssertionResponse.User is not null;
         string assertionEnvelopeJson = WebAuthnRelyingPartyCeremonySkin.BuildAssertionResponseJson(

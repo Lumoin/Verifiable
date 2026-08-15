@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Client;
@@ -15,7 +14,6 @@ namespace Verifiable.OAuth.AuthCode;
 /// <c>client_id</c> + <c>request</c> body, and persists the PKCE verifier for
 /// the eventual token exchange.
 /// </summary>
-[DebuggerDisplay("AuthCodeStartJarParOptions")]
 public sealed record AuthCodeStartJarParOptions
 {
     /// <summary>The space-separated scope string carried into the JAR's <c>scope</c> claim.</summary>
@@ -43,7 +41,7 @@ public sealed record AuthCodeStartJarParOptions
     public required JwtPayloadSerializer PayloadSerializer { get; init; }
 
     /// <summary>Memory pool for transient signing buffers.</summary>
-    public required MemoryPool<byte> MemoryPool { get; init; }
+    public required BaseMemoryPool MemoryPool { get; init; }
 
     /// <summary>
     /// Open-ended additional outer body fields for the POST to the PAR endpoint

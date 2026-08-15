@@ -8,7 +8,7 @@ namespace Verifiable.Tests.Fido2;
 
 /// <summary>
 /// Tests for <see cref="CtapBioEnrollmentRequestCborReader"/>: round-tripping against the paired
-/// <see cref="CtapBioEnrollmentRequestCborWriter"/> across the SIX-key envelope (Finding A — a
+/// <see cref="CtapBioEnrollmentRequestCborWriter"/> across the SIX-key envelope (a
 /// genuinely different key numbering from <see cref="CtapCredentialManagementRequestCborReader"/>'s
 /// four keys), the <c>subCommandParams</c> nesting, unknown-key tolerance, and wrong-CBOR-type
 /// negatives. Unlike every other CTAP request reader this codebase ships, NO top-level member is

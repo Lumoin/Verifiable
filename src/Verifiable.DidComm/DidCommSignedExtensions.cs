@@ -66,7 +66,7 @@ public static class DidCommSignedExtensions
         JwtPartEncoder<JwtHeader> protectedHeaderEncoder,
         JwsMessageSerializer signedSerializer,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         JoseSerializationFormat format = JoseSerializationFormat.GeneralJson,
         CancellationToken cancellationToken = default)
     {
@@ -119,7 +119,7 @@ public static class DidCommSignedExtensions
         JwsMessageSerializer signedSerializer,
         EncodeDelegate base64UrlEncoder,
         SigningDelegate signingDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         JoseSerializationFormat format = JoseSerializationFormat.GeneralJson,
         CancellationToken cancellationToken = default)
     {
@@ -237,7 +237,7 @@ public static class DidCommSignedExtensions
         JwsMessageParser signedParser,
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         JwtClaimsDeserializer? fromPriorPayloadDeserializer = null,
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer = null,
         CancellationToken cancellationToken = default)
@@ -372,6 +372,12 @@ public static class DidCommSignedExtensions
                 return DidCommSignedVerificationResult.Failed(DidCommSignatureVerificationError.KidNotAuthenticated);
             }
 
+            //The resolved method's own id, expanded to its absolute DID URL form when the document declares
+            //it relatively ("#key-1") -- the same normalization TryResolveAuthenticationKey already applied
+            //when matching it against kid, so BoundProvenance.TryBindByResolvedMethod below compares
+            //like-for-like against the absolute kid.
+            string resolvedMethodId = ExpandVerificationMethodId(verificationMethod!.Id, resolution.Document.Id?.Id);
+
             //Reconstruct the JWS signing input (ASCII(b64url(protected) "." b64url(payload))) and verify
             //with the key resolved from the verification method. The algorithm is taken from that key
             //via the registry, never from the claimed `alg`, defeating algorithm-substitution. This
@@ -434,10 +440,10 @@ public static class DidCommSignedExtensions
                     return DidCommSignedVerificationResult.Failed(MapRotationError(rotation.Error));
                 }
 
-                return DidCommSignedVerificationResult.Success(message, kid, isToHeaderPresent, isRotation: true, priorDid: rotation.PriorDid, rotationIat: rotation.Iat);
+                return DidCommSignedVerificationResult.Success(message, kid, resolvedMethodId, isToHeaderPresent, isRotation: true, priorDid: rotation.PriorDid, rotationIat: rotation.Iat);
             }
 
-            return DidCommSignedVerificationResult.Success(message, kid, isToHeaderPresent);
+            return DidCommSignedVerificationResult.Success(message, kid, resolvedMethodId, isToHeaderPresent);
         }
     }
 
@@ -453,7 +459,7 @@ public static class DidCommSignedExtensions
         Func<ReadOnlySpan<byte>, IReadOnlyDictionary<string, object>>? fromPriorHeaderDeserializer,
         DecodeDelegate base64UrlDecoder,
         EncodeDelegate base64UrlEncoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         if(fromPriorPayloadDeserializer is null || fromPriorHeaderDeserializer is null)
@@ -557,4 +563,18 @@ public static class DidCommSignedExtensions
     }
 
 
+    //Expands a possibly-relative verification method id ("#key-1") to its absolute DID URL form against
+    //documentDid, mirroring the normalization IsSameVerificationMethodId already applies when matching --
+    //so BoundProvenance.TryBindByResolvedMethod compares like-for-like against the absolute signer kid.
+    private static string ExpandVerificationMethodId(string? methodId, string? documentDid)
+    {
+        if(string.IsNullOrEmpty(methodId))
+        {
+            return string.Empty;
+        }
+
+        return methodId.StartsWith('#') && documentDid is not null
+            ? $"{documentDid}{methodId}"
+            : methodId;
+    }
 }

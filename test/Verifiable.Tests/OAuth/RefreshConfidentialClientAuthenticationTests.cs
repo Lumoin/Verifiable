@@ -45,11 +45,13 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
 
     private const string ClientSecret = "s3cret-of-the-confidential-refreshing-client";
 
+    private const string WrongClientSecret = "wrong-secret-not-matching-the-refresh-validator";
+
     private static Uri ClientBaseUri { get; } = new(ClientId);
 
     private static Uri RedirectUri { get; } = new("https://client.example.com/callback");
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
     /// <summary>
@@ -303,6 +305,81 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
         {
             secretMaterial.PublicKey.Dispose();
             secretMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// RFC 7523 §3.1: "if client credentials are present in the request, the authorization server
+    /// MUST validate them." <see cref="ClientRecord.TokenEndpointAuthMethod"/> is deliberately left
+    /// UNDECLARED — before this fix, <c>RequireClientAuthenticationIfDeclaredAsync</c>'s null/None
+    /// branch returned success immediately without consulting whether a credential was attached, so a
+    /// WRONG <c>client_secret</c> on an undeclared-method refresh was silently ignored and new tokens
+    /// were minted anyway. The initial issuance leg is not under test — it uses the no-credential
+    /// public path (the registration stays at its <see cref="ClientAuthenticationMethod.None"/>
+    /// default) and must succeed to obtain a refresh token; only the refresh leg attaches a
+    /// <c>client_secret_post</c> credential that does NOT match what the validator seam accepts.
+    /// </summary>
+    [TestMethod]
+    public async Task PresentedWrongSecretOnUndeclaredMethodRefreshFailsClosed()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> wrongSecretMaterial = BuildSecretKeyMaterial(WrongClientSecret);
+        try
+        {
+            await using TestHostShell host = new(TimeProvider);
+            using VerifierKeyMaterial material = host.RegisterDpopClient(
+                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+            //TokenEndpointAuthMethod deliberately left unset (null) — DeclareServerSideAuthMethod is
+            //never called, so the registration never declares a confidential method.
+
+            host.Server.OAuth().ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(
+                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+
+            (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+                await host.CreateOAuthClientAndRegistrationAsync(
+                    material.Registration,
+                    RedirectUri.OriginalString,
+                    profile: PolicyProfile.Rfc6749WithPkce,
+                    TestContext.CancellationToken).ConfigureAwait(false);
+
+            //The initial issuance leg uses the UNAUTHENTICATED (None-default) registration and must
+            //succeed to obtain a refresh token to attempt refreshing with.
+            using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(host.ServerCertificate);
+            HostedAuthorizationServer hosted = host.Host("default");
+            string segment = material.Registration.TenantId.Value;
+
+            AuthCodeFlowDriveResult drive = await AuthCodeFlowDriver.DriveParAuthorizeCallbackAndTokenAsync(
+                hosted, client, registration, clientFlowStore, segment, RedirectUri, SubjectId, browserClient,
+                scope: WellKnownScopes.OpenId, cancellationToken: TestContext.CancellationToken)
+                .ConfigureAwait(false);
+            string originalRefreshToken = (string)drive.TokenResult.Body![OAuthRequestParameterNames.RefreshToken];
+
+            //The refresh attempt attaches a WRONG client_secret via client_secret_post — the
+            //registration still declares no server-side method, so this exercises the closed
+            //fail-open on the undeclared-method branch specifically.
+            ClientRegistration wrongCredentialRegistration = registration with
+            {
+                AuthenticationMethod = ClientAuthenticationMethod.ClientSecretPost,
+                AuthenticationKeyMaterial = wrongSecretMaterial
+            };
+            RefreshTokenRequest refreshRequest = new()
+            {
+                ClientId = registration.ClientId.Value,
+                RefreshToken = originalRefreshToken
+            };
+            AuthCodeFlowEndpointResult refreshResult = await client.AuthCode.RefreshAsync(
+                wrongCredentialRegistration, refreshRequest, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreNotEqual(AuthCodeFlowEndpointOutcome.Ok, refreshResult.Outcome,
+                "A wrong client_secret presented on an undeclared token_endpoint_auth_method refresh must not be issued new tokens.");
+            Assert.AreEqual(OAuthErrors.InvalidClient, refreshResult.ErrorCode);
+        }
+        finally
+        {
+            wrongSecretMaterial.PublicKey.Dispose();
+            wrongSecretMaterial.PrivateKey.Dispose();
         }
     }
 

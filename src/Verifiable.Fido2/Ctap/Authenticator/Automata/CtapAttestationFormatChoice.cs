@@ -10,7 +10,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// shapes: <c>packed</c> self-attestation, <c>packed</c> certified (enterprise) attestation, and
 /// <c>none</c>. <see cref="PackedCertified"/> is never a direct product of this step's own
 /// <c>attestationFormatsPreference</c> resolution — it is <see cref="PackedSelf"/>'s resolution UPGRADED
-/// by mc Step 9's enterprise-attestation grant (waveep R6/R8: a granted request whose preference
+/// by mc Step 9's enterprise-attestation grant (a granted request whose preference
 /// resolution is <see cref="PackedSelf"/> upgrades to this member; a none-family resolution never does).
 /// </remarks>
 public enum CtapAttestationFormatChoice
@@ -26,11 +26,11 @@ public enum CtapAttestationFormatChoice
     /// <summary>
     /// Mint and sign a packed CERTIFIED (enterprise) attestation statement: the signature is over
     /// <c>authData ‖ clientDataHash</c> with the SEEDED enterprise attestation private key — never the
-    /// credential private key (CTAP 2.3 §7.1, waveep R7, trap 11) — and the attStmt carries the seeded
-    /// <c>x5c</c> chain. Reached only when mc Step 9 grants an enterprise attestation (waveep R6) AND the
-    /// request's own <c>attestationFormatsPreference</c> resolution is <see cref="PackedSelf"/> (waveep
-    /// R8: a none-family resolution declines the grant instead). The response's <c>epAtt</c> member is
-    /// <see langword="true"/> exactly when this member is chosen (waveep R9) — never a second, separately
+    /// credential private key (CTAP 2.3 §7.1) — and the attStmt carries the seeded
+    /// <c>x5c</c> chain. Reached only when mc Step 9 grants an enterprise attestation AND the
+    /// request's own <c>attestationFormatsPreference</c> resolution is <see cref="PackedSelf"/>
+    /// (a none-family resolution declines the grant instead). The response's <c>epAtt</c> member is
+    /// <see langword="true"/> exactly when this member is chosen — never a second, separately
     /// computed flag.
     /// </summary>
     PackedCertified,

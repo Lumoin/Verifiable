@@ -48,7 +48,7 @@ public sealed record GetAssertionResponseReady(CtapGetAssertionResponse Response
 
 /// <summary>
 /// A rejected command: a bare non-<c>CTAP2_OK</c> status byte, no CBOR body — the general-purpose shape
-/// every wave-2 <c>authenticatorMakeCredential</c>/<c>authenticatorGetAssertion</c> error path produces,
+/// every <c>authenticatorMakeCredential</c>/<c>authenticatorGetAssertion</c> error path produces,
 /// per <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#error-responses">
 /// CTAP 2.3, section 8.2: Status codes</see>.
 /// </summary>
@@ -132,7 +132,7 @@ public sealed record LargeBlobsResponseReady(CtapLargeBlobsResponse? Response): 
 
 /// <summary>
 /// An <c>authenticatorMakeCredential</c>/<c>authenticatorGetAssertion</c> user-presence wait remains
-/// parked (CTAP 2.3 :2840, R2): no gesture has been collected yet and the request's transport allows
+/// parked (CTAP 2.3 :2840): no gesture has been collected yet and the request's transport allows
 /// deferral. Carries no CBOR body — <see cref="CtapAuthenticatorSimulator.BeginDeferredTransceiveAsync"/>/
 /// <see cref="CtapAuthenticatorSimulator.PollDeferredTransceiveAsync"/> frame this intent as a
 /// zero-length <see cref="PooledMemory"/> "still pending" marker, never a legal final CTAP2 response

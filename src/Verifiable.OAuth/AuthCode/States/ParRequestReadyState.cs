@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Diagnostics;
 using Verifiable.OAuth.Pkce;
 
 namespace Verifiable.OAuth.AuthCode.States;
@@ -8,7 +7,6 @@ namespace Verifiable.OAuth.AuthCode.States;
 /// The PAR request body has been composed and is ready to POST to the authorization server.
 /// </summary>
 /// <remarks>Transitions to <see cref="ParCompletedState"/> when the PAR response is received.</remarks>
-[DebuggerDisplay("ParRequestReady FlowId={FlowId}")]
 public sealed record ParRequestReadyState: FlowState
 {
     /// <summary>The PKCE parameters carried forward from <see cref="PkceGeneratedState"/>.</summary>

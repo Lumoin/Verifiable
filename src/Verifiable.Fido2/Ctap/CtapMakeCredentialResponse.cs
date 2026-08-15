@@ -10,7 +10,7 @@ namespace Verifiable.Fido2.Ctap;
 /// <remarks>
 /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorMakeCredential">
 /// CTAP 2.3, section 6.1: authenticatorMakeCredential (0x01)</see>. <c>unsignedExtensionOutputs</c>
-/// (<c>0x06</c>) is not modeled this wave. <see cref="AuthData"/> and <see cref="AttStmt"/> carry raw
+/// (<c>0x06</c>) is not modeled. <see cref="AuthData"/> and <see cref="AttStmt"/> carry raw
 /// wire bytes rather than a parsed view: this library's <c>AuthenticatorDataWriter</c>/<c>NoneAttestation</c>
 /// (or a future attestation format) already produce exactly these bytes, and the WebAuthn client-side
 /// <c>attestationObject</c> translation this response feeds needs the same raw bytes verbatim, so no
@@ -24,10 +24,10 @@ namespace Verifiable.Fido2.Ctap;
 /// </param>
 /// <param name="EpAtt">
 /// Optional (<c>0x04</c>). Whether an enterprise attestation was returned for this credential (CTAP 2.3
-/// §7.1, waveep R6/R9). The AUTHENTICATOR sets this to <see langword="true"/> exactly when mc Step 9
+/// §7.1). The AUTHENTICATOR sets this to <see langword="true"/> exactly when mc Step 9
 /// granted an enterprise attestation and never emits an explicit <see langword="false"/> — both
 /// <see langword="null"/> (absent) and present-<see langword="false"/> are spec-legal encodings of "not
-/// returned" (lines 3623-3625), and this authenticator always chooses absence (trap 18). The CODEC stays
+/// returned" (lines 3623-3625), and this authenticator always chooses absence. The CODEC stays
 /// faithful to whichever value it is given: a foreign present-<see langword="false"/> round-trips
 /// unchanged through <c>Verifiable.Cbor.Ctap.CtapMakeCredentialResponseCborWriter</c>.
 /// </param>

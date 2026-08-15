@@ -94,7 +94,7 @@ public sealed class CreatePrimaryResponse: ITpmWireType, IDisposable
     /// <param name="objectHandle">The object handle from the response handle area.</param>
     /// <param name="pool">The memory pool for allocations.</param>
     /// <returns>The parsed response.</returns>
-    public static CreatePrimaryResponse Parse(ref TpmReader reader, TpmiDhObject objectHandle, MemoryPool<byte> pool)
+    public static CreatePrimaryResponse Parse(ref TpmReader reader, TpmiDhObject objectHandle, BaseMemoryPool pool)
     {
         Tpm2bPublic outPublic = Tpm2bPublic.Parse(ref reader, pool);
         Tpm2bCreationData creationData = Tpm2bCreationData.Parse(ref reader, pool);

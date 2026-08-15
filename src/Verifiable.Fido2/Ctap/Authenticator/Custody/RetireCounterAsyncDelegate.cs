@@ -7,8 +7,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// Retires the counter identified by <paramref name="creationSequence"/>, so a LATER
 /// <see cref="EnsureCounterAsyncDelegate"/> call that reuses the same identity (an
 /// <c>authenticatorReset</c> restarts the mint-order sequence at zero, so a post-reset credential can
-/// collide with a pre-reset one's identity) seeds strictly above every value the retired counter ever held
-/// (contract R-9, wavenv).
+/// collide with a pre-reset one's identity) seeds strictly above every value the retired counter ever held.
 /// </summary>
 /// <param name="creationSequence">
 /// The removed credential's own <see cref="Automata.CtapCredentialRecord.CreationSequence"/> value — the

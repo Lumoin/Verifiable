@@ -594,7 +594,7 @@ public static class TpmLifecycleTransitions
 
         //Of the six TPM_NT values the specification defines (Part 2, clause 13.2, Table 212), only the types
         //this simulator has a modifying command for are accepted: TPM_NT_ORDINARY (TPM2_NV_Write()),
-        //TPM_NT_COUNTER (TPM2_NV_Increment(), added this wave), and TPM_NT_PIN_FAIL/TPM_NT_PIN_PASS (also
+        //TPM_NT_COUNTER (TPM2_NV_Increment()), and TPM_NT_PIN_FAIL/TPM_NT_PIN_PASS (also
         //TPM2_NV_Write(), gated separately below). TPM_NT_BITS and TPM_NT_EXTEND are rejected here because
         //TPM2_NV_SetBits()/TPM2_NV_Extend() are unimplemented: TPM 2.0 Library Part 3, clause 31.3.1's
         //unsupported-command gate requires a TPM that does not implement a type's modifying command to refuse
@@ -656,7 +656,7 @@ public static class TpmLifecycleTransitions
     //The format-one session-index encoding (TPM 2.0 Library Part 2, clause 6.6.2): the P bit clear, N field 8..15
     //selecting a session by its zero-based index via TPM_RC_S (flips the N field's meaning from handle to session)
     //plus TPM_RC_n (the 1-based additive block, N = index + 1). Shared by every new session-command-HMAC failure
-    //site this wave adds; pre-existing bare-RC password sites (the W2b NV paths) are untouched.
+    //site added here; pre-existing bare-RC password sites (the W2b NV paths) are untouched.
     private static TpmRcConstants SessionEncodedRc(TpmRcConstants baseRc, int sessionIndex) =>
         (TpmRcConstants)((uint)baseRc + (uint)TpmRcConstants.TPM_RC_S + (0x100u * (uint)(sessionIndex + 1)));
 
@@ -1735,7 +1735,7 @@ public static class TpmLifecycleTransitions
     //object (empty userAuth, non-empty authPolicy) is never recoverable via a bare password, no matter what value
     //is supplied. Otherwise the supplied password is compared against the object's retained userAuth — both sides
     //trailing-zero-stripped (Part 1, clause 19.4) — a real compare rather than the vacuous "any password accepted"
-    //this path had before this wave; a DA-protected object's mismatch counts (Part 3, clause 5.6). The
+    //this path previously had; a DA-protected object's mismatch counts (Part 3, clause 5.6). The
     //policy-gated, encrypted-channel form is OnUnsealOverSessions.
     private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnUnseal(TpmSimulatorState state, TpmUnsealRequested request)
     {
@@ -1779,12 +1779,12 @@ public static class TpmLifecycleTransitions
     //(Part 3, clause 12.7; Part 1, clauses 18.7 and 19). The item must be loaded (TPM_RC_HANDLE otherwise). Every
     //session that resolves in state.HmacSessions needs its command HMAC verified through the shared mechanism
     //(TpmVerifyCommandHmacAction); a policy session at index 0 keeps its existing, unverified-HMAC digest gate
-    //(Part 1, clause 19.6 — policy-session command-HMAC verification remains out of this wave's scope). The
+    //(Part 1, clause 19.6 — policy-session command-HMAC verification remains out of scope). The
     //session area's own attribute rules (clause 5.5) are validated before any HMAC is evaluated: Unseal carries no
     //command parameters, so a decrypt-attributed session here is always rejected. DA/Lockout for a DA-protected
     //item is checked before any HMAC is evaluated (clause 5.6, check 3). When session 0 is the primary HMAC
     //authorizer AND a separate encrypt session is present, session 0's command HMAC folds the encrypt session's
-    //nonceTPM (clause 19.6.3.4) — the fold this wave's Package B wiring makes observable end to end.
+    //nonceTPM (clause 19.6.3.4) — the fold this wiring makes observable end to end.
     private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnUnsealOverSessions(TpmSimulatorState state, TpmUnsealOverSessionsRequested request)
     {
         if(!state.LoadedSealedObjects.TryGetValue(request.ItemHandle, out SealedObjectState? sealedObject))
@@ -3086,7 +3086,7 @@ public static class TpmLifecycleTransitions
     //(all-zero) bank. Synchronous, with its scratch buffer pooled and released before returning.
     private static byte[] ComputeLivePcrDigest(PcrBankState bank, ReadOnlyMemory<byte> selectionBytes)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         const int digestSize = 32;                  //SHA-256 composite width — the bank's (and these sessions') hash.
         ImmutableArray<ReadOnlyMemory<byte>> values = GatherSelectedPcrValues(bank, selectionBytes);
 
@@ -3206,7 +3206,7 @@ public static class TpmLifecycleTransitions
 
         //(2) expiration -> inline deadline: an empty caller nonce means an absolute Time-base deadline; a
         //non-empty one means a deadline relative to the session's captured StartTime. The sign of expiration only
-        //marks "ticket requested" (deferred this wave) — the magnitude is what the deadline check consumes.
+        //marks "ticket requested" (the real ticket mint is deferred) — the magnitude is what the deadline check consumes.
         if(request.Expiration != 0)
         {
             ulong magnitudeMs = (ulong)System.Math.Abs((long)request.Expiration) * 1000UL;
@@ -3284,8 +3284,8 @@ public static class TpmLifecycleTransitions
     }
 
     //Folds authObjectName + policyRef into the session's policyDigest via TpmPolicyDigest.ExtendForSigned and
-    //frames the always-NULL-ticket PolicySigned response (the real TPMT_TK_AUTH mint is deferred to a future
-    //wave, mirroring PolicySecret's shipped immediate-form slice). Shared by the trial-session immediate fold and
+    //frames the always-NULL-ticket PolicySigned response (the real TPMT_TK_AUTH mint is not yet
+    //implemented, mirroring PolicySecret's shipped immediate-form slice). Shared by the trial-session immediate fold and
     //the non-trial continuation's success branch, so both paths advance the digest identically.
     private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> FoldPolicySigned(
         TpmSimulatorState state, PolicySessionState session, ReadOnlyMemory<byte> authObjectName, ReadOnlyMemory<byte> policyRef)
@@ -3607,7 +3607,7 @@ public static class TpmLifecycleTransitions
     //type/handle/decrypt-attribute checks (secret recovery itself is asynchronous — the RSA and ECC arms dispatch
     //to TpmRecoverRsaSessionSaltAction/TpmRecoverEccSessionSaltAction, whose any internal recovery failure reports
     //TPM_RC_VALUE immediately, never poisoned-and-deferred); then the bind entity (a PIN Fail/Pass NV Index can
-    //never bind, closing the PIN-extraction vector the dictionary-attack wave's indexes would otherwise open);
+    //never bind, closing the PIN-extraction vector the NV PIN Fail/Pass indexes would otherwise open);
     //then the negotiated symmetric definition's mode. The session key derivation (KDFa keyed on bindAuthValue ‖
     //salt) and nonceTPM generation need the RNG and the HMAC seam, so this allocates a handle in the
     //TPM_HT_HMAC_SESSION range and declares whichever action the ladder selects; the effectful loop feeds the
@@ -3879,7 +3879,7 @@ public static class TpmLifecycleTransitions
     {
         //The session is guaranteed present (verification just resolved it); a re-lookup is used rather than
         //threading the resolved record through the verify queue, keeping TpmPendingSessionVerification's shape
-        //uniform across every session-authorized command this wave touches.
+        //uniform across every session-authorized command this simulator handles.
         HmacSessionState session = state.HmacSessions[request.SessionHandle];
 
         //A request larger than the largest digest is clamped, not rejected (clause 16.1), as in the no-session form.
@@ -3898,7 +3898,7 @@ public static class TpmLifecycleTransitions
     //Advances a command's session-verification queue (TpmVerifyCommandHmacAction's continuation, TPM 2.0 Library
     //Part 3, clause 5.6, check 8): a mismatch rejects, dictionary-attack-aware and session-index-encoded; a match
     //either declares the next queued session's verification or, once the queue empties, resumes the original
-    //command — the one shared mechanism every session-authorized command transition in this wave routes through.
+    //command — the one shared mechanism every session-authorized command transition routes through.
     private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> OnCommandHmacVerified(TpmSimulatorState state, TpmCommandHmacVerified verified)
     {
         if(!verified.Matched)

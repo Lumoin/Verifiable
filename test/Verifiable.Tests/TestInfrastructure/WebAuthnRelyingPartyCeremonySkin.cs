@@ -72,7 +72,7 @@ internal sealed class WebAuthnRelyingPartyCeremonySkin
     private readonly string userDisplayName;
 
     /// <summary>The memory pool every ceremony's working buffers rent from.</summary>
-    private readonly MemoryPool<byte> pool;
+    private readonly BaseMemoryPool pool;
 
     /// <summary>The user verification requirement every ceremony's options and verification input carry.</summary>
     private readonly UserVerificationRequirement userVerification;
@@ -117,16 +117,16 @@ internal sealed class WebAuthnRelyingPartyCeremonySkin
     /// <param name="userVerification">
     /// The user verification requirement every ceremony's options and verification input carry, or
     /// <see cref="UserVerificationRequirement.Discouraged"/> when omitted — the requirement every
-    /// capstone predating the wave-5c PIN/UV token leg exercised.
+    /// capstone predating the PIN/UV token leg exercised.
     /// </param>
     /// <param name="residentKey">
     /// The resident-key requirement the registration ceremony's options carry, or <see langword="null"/>
     /// to leave it to <see cref="Fido2RegistrationOptionsBuilder"/>'s own default
-    /// (<see cref="ResidentKeyRequirement.Discouraged"/>) — the wavecm capstone's own credMgmt-visible
+    /// (<see cref="ResidentKeyRequirement.Discouraged"/>) — the credential-management capstone's own credMgmt-visible
     /// discoverable credential passes <see cref="ResidentKeyRequirement.Required"/> here.
     /// </param>
     public WebAuthnRelyingPartyCeremonySkin(
-        string rpId, string origin, byte[] userIdSeed, string userName, string userDisplayName, MemoryPool<byte> pool,
+        string rpId, string origin, byte[] userIdSeed, string userName, string userDisplayName, BaseMemoryPool pool,
         UserVerificationRequirement userVerification = UserVerificationRequirement.Discouraged,
         ResidentKeyRequirement? residentKey = null)
     {
@@ -287,7 +287,7 @@ internal sealed class WebAuthnRelyingPartyCeremonySkin
                 AuthenticatorData = authenticatorData,
                 ExpectedChallenge = expectedChallenge,
                 ExpectedOrigins = new HashSet<string> { origin },
-                ExpectedRpIdHash = CtapWave2CapstoneFixtures.ComputeExpectedRpIdHash(rpId, pool),
+                ExpectedRpIdHash = CtapCapstoneFixtures.ComputeExpectedRpIdHash(rpId, pool),
                 UserVerification = userVerification,
                 ExpectedPubKeyCredParams = expectedPubKeyCredParams
             };
@@ -393,7 +393,7 @@ internal sealed class WebAuthnRelyingPartyCeremonySkin
                 AuthenticatorData = authenticatorData,
                 ExpectedChallenge = expectedChallenge,
                 ExpectedOrigins = new HashSet<string> { origin },
-                ExpectedRpIdHash = CtapWave2CapstoneFixtures.ComputeExpectedRpIdHash(rpId, pool),
+                ExpectedRpIdHash = CtapCapstoneFixtures.ComputeExpectedRpIdHash(rpId, pool),
                 UserVerification = userVerification,
                 AllowedCredentialIds = [allowedCredentialId],
                 CredentialId = assertedCredentialId,

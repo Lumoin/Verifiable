@@ -1,3 +1,4 @@
+using System;
 using System.Buffers;
 using System.Linq;
 
@@ -21,7 +22,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </exception>
 public delegate IReadOnlyList<PkiCertificateMemory> ParseX5cDelegate(
     IReadOnlyList<string> x5cValues,
-    MemoryPool<byte> pool);
+    BaseMemoryPool pool);
 
 
 /// <summary>
@@ -76,7 +77,7 @@ public delegate ValueTask<PublicKeyMemory> ValidateCertificateChainAsyncDelegate
     IReadOnlyList<PkiCertificateMemory> chain,
     IReadOnlyList<PkiCertificateMemory> trustAnchors,
     DateTimeOffset validationTime,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CheckCertificateRevocationStatusAsyncDelegate? checkRevocation = null,
     CancellationToken cancellationToken = default);
 
@@ -117,7 +118,7 @@ public delegate ValueTask<PublicKeyMemory> ValidateCertificateChainAsyncDelegate
 public delegate ValueTask<IReadOnlyList<PkiCertificateMemory>> CompleteCertificateChainAsyncDelegate(
     IReadOnlyList<PkiCertificateMemory> partialChain,
     IReadOnlyList<PkiCertificateMemory> trustAnchors,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);
 
 
@@ -226,7 +227,7 @@ public delegate X509CertificateProfile ReadCertificateProfileDelegate(
 /// A certificate whose relevant extension is absent reads every affected constraint as
 /// <see langword="false"/>.
 /// </summary>
-public sealed record X509CertificateProfile
+public sealed class X509CertificateProfile : IEquatable<X509CertificateProfile>
 {
     /// <summary>
     /// Gets whether the certificate's Key Usage asserts <c>digitalSignature</c>;
@@ -293,10 +294,10 @@ public sealed record X509CertificateProfile
     public required bool HasEmptySubject { get; init; }
 
     /// <summary>
-    /// Determines whether this profile and <paramref name="other"/> report the same constraints. The
-    /// compiler-synthesized record equality compares the Subject attribute lists by reference, which
-    /// would report two independently-read profiles with identical Subject attribute sequences as
-    /// unequal; this override compares each sequence by value instead.
+    /// Determines whether this profile and <paramref name="other"/> report the same constraints. The Subject
+    /// attribute lists are compared sequence by sequence rather than by reference, so two independently-read
+    /// profiles carrying identical Subject attribute sequences report equal even though each holds its own
+    /// list instance.
     /// </summary>
     /// <param name="other">The other profile to compare against.</param>
     /// <returns>
@@ -315,6 +316,12 @@ public sealed record X509CertificateProfile
         && SubjectCountries.SequenceEqual(other.SubjectCountries)
         && SubjectOrganizations.SequenceEqual(other.SubjectOrganizations)
         && SubjectCommonNames.SequenceEqual(other.SubjectCommonNames);
+
+    /// <inheritdoc/>
+    public override bool Equals(object? obj)
+    {
+        return Equals(obj as X509CertificateProfile);
+    }
 
     /// <summary>
     /// Computes a hash code consistent with <see cref="Equals(X509CertificateProfile?)"/> — combining the
@@ -352,19 +359,49 @@ public sealed record X509CertificateProfile
 
         return hash.ToHashCode();
     }
+
+    /// <summary>Reports whether two profiles report the same constraints.</summary>
+    public static bool operator ==(X509CertificateProfile? left, X509CertificateProfile? right)
+    {
+        return left is null ? right is null : left.Equals(right);
+    }
+
+    /// <summary>Reports whether two profiles report different constraints.</summary>
+    public static bool operator !=(X509CertificateProfile? left, X509CertificateProfile? right)
+    {
+        return !(left == right);
+    }
 }
 
 
 /// <summary>
 /// The value of a single X.509 certificate extension, read as backend-neutral bytes.
 /// </summary>
-/// <param name="Value">
-/// The DER contents of the extension's <c>extnValue</c> (RFC 5280 §4.2), exactly as the underlying
-/// platform exposes the extension's raw data — for example the DER OCTET STRING payload of a private
-/// extension, still requiring its own ASN.1 decoding by the caller.
-/// </param>
-/// <param name="IsCritical">The extension's <c>critical</c> flag (RFC 5280 §4.2).</param>
-public sealed record X509ExtensionValue(ReadOnlyMemory<byte> Value, bool IsCritical);
+public sealed class X509ExtensionValue
+{
+    /// <summary>Initializes a new <see cref="X509ExtensionValue"/>.</summary>
+    /// <param name="value">
+    /// The DER contents of the extension's <c>extnValue</c> (RFC 5280 §4.2), exactly as the underlying
+    /// platform exposes the extension's raw data — for example the DER OCTET STRING payload of a private
+    /// extension, still requiring its own ASN.1 decoding by the caller.
+    /// </param>
+    /// <param name="isCritical">The extension's <c>critical</c> flag (RFC 5280 §4.2).</param>
+    public X509ExtensionValue(ReadOnlyMemory<byte> value, bool isCritical)
+    {
+        Value = value;
+        IsCritical = isCritical;
+    }
+
+    /// <summary>
+    /// The DER contents of the extension's <c>extnValue</c> (RFC 5280 §4.2), exactly as the underlying
+    /// platform exposes the extension's raw data — for example the DER OCTET STRING payload of a private
+    /// extension, still requiring its own ASN.1 decoding by the caller.
+    /// </summary>
+    public ReadOnlyMemory<byte> Value { get; }
+
+    /// <summary>The extension's <c>critical</c> flag (RFC 5280 §4.2).</summary>
+    public bool IsCritical { get; }
+}
 
 
 /// <summary>
@@ -424,7 +461,7 @@ public delegate ValueTask<CertificateRevocationStatus> CheckCertificateRevocatio
     PkiCertificateMemory certificate,
     IReadOnlyList<PkiCertificateMemory> issuerCandidates,
     DateTimeOffset validationTime,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken);
 
 

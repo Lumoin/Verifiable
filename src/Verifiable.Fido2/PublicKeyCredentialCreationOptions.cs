@@ -33,7 +33,7 @@ namespace Verifiable.Fido2;
 /// extension-input members — <see cref="AppIdExclude"/>, <see cref="LargeBlob"/>,
 /// <see cref="MinPinLength"/>, and <see cref="CredProtect"/> here, and
 /// <c>PublicKeyCredentialRequestOptions.AppId</c>/<c>LargeBlob</c> on the assertion side — mirroring
-/// how the shipped <c>appid</c> support (wave 2) bypassed the generic extension-registry entirely.
+/// how the shipped <c>appid</c> support bypassed the generic extension-registry entirely.
 /// <c>minPinLength</c>/<c>credProtect</c> are registration-only (CTAP 2.3 §12.5's own "only applicable
 /// during credential creation"; §12.1's own extension-input section covers only <c>create()</c>) — the
 /// assertion-side options gain no corresponding members. The CR's generic <c>extensions</c>
@@ -59,7 +59,7 @@ public sealed record PublicKeyCredentialCreationOptions
     /// The base64url-encoded challenge the authenticator signs over. Required by the CR.
     /// </summary>
     /// <remarks>
-    /// Already base64url-encoded — <see cref="Fido2ChallengeGeneration.Generate(System.Buffers.MemoryPool{byte})"/>
+    /// Already base64url-encoded — <see cref="Fido2ChallengeGeneration.Generate(System.Buffers.BaseMemoryPool)"/>
     /// returns this exact shape, matching <c>RegistrationCeremonyInput.ExpectedChallenge</c>'s own
     /// plain-<see cref="string"/> modeling. See
     /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-cryptographic-challenges">section 13.4.3:

@@ -11,9 +11,9 @@ namespace Verifiable.Fido2.Ctap;
 /// text-string keys WebAuthn-level structures such as <c>attestationObject</c> use). These are true
 /// spec literals, hence <see langword="const"/> rather than static getters. Only the members this
 /// library's <c>CtapGetInfoResponse</c> model carries are listed; the response structure's ~30-member
-/// table has further optional keys this wave does not model. Every integer below was re-verified
+/// table has further optional keys this library does not model. Every integer below was re-verified
 /// directly against the response-structure table (never inherited from a prior extraction's
-/// paraphrase), per the wave's own R4 ruling.
+/// paraphrase).
 /// </remarks>
 public static class WellKnownCtapGetInfoMemberKeys
 {

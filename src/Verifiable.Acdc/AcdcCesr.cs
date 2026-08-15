@@ -1,3 +1,4 @@
+using Lumoin.Base;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
@@ -100,7 +101,7 @@ public static class AcdcCesr
     /// <returns>The decoded message field map, preserving field order: scalar fields as strings, section blocks as nested <see cref="MessageFieldMap"/> values, with the version field reconstructed as the in-memory placeholder.</returns>
     /// <exception cref="AcdcException">The bytes are not a single well-formed native field-map message.</exception>
     /// <exception cref="CesrFormatException">A field is not a well-formed CESR-native value.</exception>
-    public static MessageFieldMap DecodeFieldMap(ReadOnlyMemory<byte> nativeText, MemoryPool<byte> pool)
+    public static MessageFieldMap DecodeFieldMap(ReadOnlyMemory<byte> nativeText, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -121,7 +122,7 @@ public static class AcdcCesr
     //Walks the -G message body: the frame fixes the total size and the body is the top-level (label, value)
     //primitive pairs. Every field decodes through the generic field-map codec except the version, whose primitive
     //carries only the protocol and version and is reconstructed into the in-memory placeholder the spec prescribes.
-    private static MessageFieldMap Decode(ReadOnlySpan<char> message, MemoryPool<byte> pool)
+    private static MessageFieldMap Decode(ReadOnlySpan<char> message, BaseMemoryPool pool)
     {
         CesrParsedCountCode frame = CesrCountCodeCodec.DecodeText(message);
         if(frame.Code is not (MessageBodyGroupCode or BigMessageBodyGroupCode))
@@ -171,7 +172,7 @@ public static class AcdcCesr
     /// <param name="output">The buffer the CESR-native qb64 bytes (ASCII) are written to.</param>
     /// <exception cref="AcdcException">The version field is not a well-formed version string.</exception>
     /// <exception cref="CesrFormatException">A field value needs an encoding that is a later slice.</exception>
-    public static void EncodeFieldMap(MessageFieldMap message, MemoryPool<byte> pool, IBufferWriter<byte> output)
+    public static void EncodeFieldMap(MessageFieldMap message, BaseMemoryPool pool, IBufferWriter<byte> output)
     {
         ArgumentNullException.ThrowIfNull(message);
         ArgumentNullException.ThrowIfNull(pool);

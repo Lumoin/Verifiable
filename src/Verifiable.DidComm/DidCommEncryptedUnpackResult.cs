@@ -110,7 +110,15 @@ public enum DidCommDecryptionError
     RotationSignerNotAuthorized,
 
     /// <summary>The <c>from_prior</c> signature did not verify against the resolved prior-DID key.</summary>
-    RotationSignatureInvalid
+    RotationSignatureInvalid,
+
+    /// <summary>
+    /// Defensive fail-closed branch: the authcrypt sender identity could not be witnessed as consistent
+    /// (<see cref="BoundProvenance.TryBindByKeyAgreement"/>) when minting the identity-bound
+    /// <see cref="Verified{T}"/> proof. Should not occur in the honest flow — reaching this point already
+    /// required a successful ECDH-1PU decryption under the resolved sender key.
+    /// </summary>
+    IdentityBindingFailed
 }
 
 
@@ -131,7 +139,10 @@ public enum DidCommDecryptionError
 /// <see cref="Verified{T}"/> minted only when the sender is cryptographically authenticated (authcrypt, or a
 /// verified nested signature), and <see langword="null"/> for plain anoncrypt. So a consumer that requires an
 /// authenticated message uses <see cref="Verified"/>, which the compiler guarantees is absent for anoncrypt;
-/// <see cref="Message"/> alone is unauthenticated data.
+/// <see cref="Message"/> alone is unauthenticated data. When present, the proof is IDENTITY-BOUND
+/// (<see cref="Verified{T}.IsIdentityBound"/> is <see langword="true"/>): a nested signed inner message
+/// reuses the signed path's own <see cref="BoundProvenance.TryBindByResolvedMethod"/> proof, and a pure
+/// authcrypt sender is bound via <see cref="BoundProvenance.TryBindByKeyAgreement"/>.
 /// </para>
 /// </remarks>
 public sealed class DidCommEncryptedUnpackResult
@@ -245,10 +256,15 @@ public sealed class DidCommEncryptedUnpackResult
     public DidCommDecryptionError Error { get; }
 
 
-    //Mints a successful result. Internal so only the library's unpack path can produce one. A verified
-    //from_prior rotation surfaces the prior DID; a message without one is a non-rotation result.
+    //Mints a successful result. Internal so only the library's unpack path can produce one. verified is the
+    //already-minted authenticity proof -- the nested-signed caller REUSES the inner UnpackSignedAsync's own
+    //bound proof (it already ran the four-gate signed-path recipe over this exact message instance); the
+    //pure-authcrypt caller mints fresh via BoundProvenance.TryBindByKeyAgreement; plain anoncrypt (no nested
+    //signature) authenticates no sender and passes null. A verified from_prior rotation surfaces the prior
+    //DID; a message without one is a non-rotation result.
     internal static DidCommEncryptedUnpackResult Unpacked(
         DidCommMessage message,
+        Verified<DidCommMessage>? verified,
         DidCommEncryptionMode mode,
         string? senderKeyId,
         bool isSenderAuthenticated,
@@ -258,12 +274,6 @@ public sealed class DidCommEncryptedUnpackResult
         string? priorDid = null,
         long? rotationIat = null)
     {
-        //The authenticity proof exists only when the sender is authenticated (authcrypt or a verified nested
-        //signature); plain anoncrypt recovers the plaintext but proves no sender, so it carries no Verified<T>.
-        Verified<DidCommMessage>? verified = isSenderAuthenticated
-            ? new Verified<DidCommMessage>(message, VerificationContextTag.Create(senderKeyId))
-            : null;
-
         return new DidCommEncryptedUnpackResult(true, message, verified, mode, senderKeyId, isSenderAuthenticated, isSignedInner, isRecipientAddressedInTo, isRotation, priorDid, rotationIat, DidCommDecryptionError.None);
     }
 

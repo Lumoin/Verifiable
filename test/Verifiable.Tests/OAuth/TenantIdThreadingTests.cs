@@ -12,7 +12,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
-/// Phase 9e — audit drift D-3 closure. Confirms that the
+/// Confirms that the
 /// <see cref="TenantId"/> parameter added to
 /// <see cref="ServerSigningKeyResolverDelegate"/> and
 /// <see cref="ResolveServerHmacKeyDelegate"/> actually carries the
@@ -66,7 +66,7 @@ internal sealed class TenantIdThreadingTests
     {
         //The verification resolver is invoked when validating inbound JARs.
         //Driving a code exchange doesn't hit it; the OID4VP-side or JAR
-        //paths do. For phase 9e the structural confirmation is sufficient:
+        //paths do. The structural confirmation is sufficient:
         //the lambda installed on the test host has the new signature and
         //the build passes. The threaded value is exercised end-to-end by
         //the broader test suite's JAR-receiving paths.

@@ -34,7 +34,7 @@ public sealed record PublicKeyCredentialRequestOptions
     /// The base64url-encoded challenge the authenticator signs over. Required by the CR.
     /// </summary>
     /// <remarks>
-    /// Already base64url-encoded — <see cref="Fido2ChallengeGeneration.Generate(System.Buffers.MemoryPool{byte})"/>
+    /// Already base64url-encoded — <see cref="Fido2ChallengeGeneration.Generate(System.Buffers.BaseMemoryPool)"/>
     /// returns this exact shape, matching <c>AssertionCeremonyInput.ExpectedChallenge</c>'s own
     /// plain-<see cref="string"/> modeling.
     /// </remarks>
@@ -100,8 +100,8 @@ public sealed record PublicKeyCredentialRequestOptions
     /// Level 3, section 10.1.1: FIDO AppID Extension (appid)</see>. This member only assembles the
     /// options-side request; the response-side verification (matching <c>authData.rpIdHash</c>
     /// against this AppID's hash) is
-    /// <c>Fido2AssertionChecks.CheckAssertionRpIdHash</c>'s job, shipped in wave 2 and unchanged
-    /// since. One of this type's two named extension-input carve-outs (see the type-level remarks).
+    /// <c>Fido2AssertionChecks.CheckAssertionRpIdHash</c>'s job. One of this type's two named
+    /// extension-input carve-outs (see the type-level remarks).
     /// </remarks>
     public string? AppId { get; set; }
 

@@ -63,7 +63,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
 
 
     /// <summary>
-    /// RFC 9207 §2 / R9207-001 / R9207-012: "an authorization server supporting this
+    /// RFC 9207 §2: "an authorization server supporting this
     /// specification MUST indicate its identity by including the iss parameter in the
     /// response" applies to error responses too, not only the success redirect. Drives
     /// the same stale-authentication failure as

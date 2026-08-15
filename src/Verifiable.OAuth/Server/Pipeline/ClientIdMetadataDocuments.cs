@@ -21,7 +21,6 @@ namespace Verifiable.OAuth.Server.Pipeline;
 /// a typed <see cref="ClientIdMetadataResolutionOutcome"/> rather than a thrown exception —
 /// <see cref="OperationCanceledException"/> is the only exception that propagates.
 /// </remarks>
-[DebuggerDisplay("ClientIdMetadataDocuments")]
 public static class ClientIdMetadataDocuments
 {
     private const string ContentTypeHeaderName = "Content-Type";

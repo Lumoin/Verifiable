@@ -10,7 +10,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// Mirrors <see cref="Fido2BufferTags"/> exactly, but keeps its own numeric range (starting at 1200,
 /// comfortably clear of every kind already registered under 1000-1101 across
 /// <c>Verifiable.JCose.JoseBufferTags</c>, <see cref="Fido2BufferTags"/>, and
-/// <c>Verifiable.Apdu.Ctap.CtapTags</c>) so this wave's custody addition never collides with a kind
+/// <c>Verifiable.Apdu.Ctap.CtapTags</c>) so this custody addition never collides with a kind
 /// registered by a file outside this package's touch scope.
 /// </remarks>
 /// <seealso cref="Tag"/>

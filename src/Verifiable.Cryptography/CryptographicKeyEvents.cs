@@ -59,7 +59,7 @@ public static class CryptographicKeyEvents
     /// public API surface — an application has no legitimate reason to introspect subscriber count — this
     /// exists solely so a test can prove a consumer's subscription lifetime is bounded: subscribe, run its
     /// workload, dispose, and leave the count exactly as it found it (see <c>Verifiable</c>'s
-    /// <c>CryptoEventProvenance.CaptureAsync</c>, the wave-7 CLI/MCP consumer).
+    /// <c>CryptoEventProvenance.CaptureAsync</c>, the CLI/MCP consumer).
     /// </summary>
     internal static int SubscriberCountForTests => subject.ObserverCount;
 
@@ -115,7 +115,7 @@ public static class CryptographicKeyEvents
     public static Nonce GenerateNonce(
         int byteLength,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         string? qualifier = null)
     {
         ArgumentNullException.ThrowIfNull(tag);
@@ -172,7 +172,7 @@ public static class CryptographicKeyEvents
     public static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateKeyPair(
         CryptoAlgorithm algorithm,
         Purpose purpose,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         string? qualifier = null)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -206,7 +206,7 @@ public static class CryptographicKeyEvents
     public static Salt GenerateSalt(
         int byteLength,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         string? qualifier = null)
     {
         ArgumentNullException.ThrowIfNull(tag);
@@ -245,14 +245,13 @@ public static class CryptographicKeyEvents
         ReadOnlySequence<byte> input,
         int outputByteLength,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(computeDigest);
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);
-        AssertHousePool(pool);
 
         (DigestValue result, CryptoEvent? evt) = await computeDigest(
             input, outputByteLength, tag, pool, context, cancellationToken).ConfigureAwait(false);
@@ -277,7 +276,7 @@ public static class CryptographicKeyEvents
         ReadOnlySequence<byte> input,
         int outputByteLength,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         string? qualifier = null,
         CancellationToken cancellationToken = default)
@@ -308,7 +307,7 @@ public static class CryptographicKeyEvents
         ReadOnlyMemory<byte> input,
         int outputByteLength,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         string? qualifier = null,
         CancellationToken cancellationToken = default) =>
@@ -318,7 +317,7 @@ public static class CryptographicKeyEvents
     /// <summary>
     /// Computes a digest <strong>synchronously</strong> through the registered <see cref="HashFunctionDelegate"/> —
     /// the sync counterpart of
-    /// <see cref="ComputeDigestAsync(ReadOnlyMemory{byte}, int, Tag, MemoryPool{byte}, FrozenDictionary{string, object}?, string?, CancellationToken)"/>
+    /// <see cref="ComputeDigestAsync(ReadOnlyMemory{byte}, int, Tag, BaseMemoryPool, FrozenDictionary{string, object}?, string?, CancellationToken)"/>
     /// for a caller whose hash is sync by nature: a hash of public or local data that can never have a
     /// hardware-async backend (a JWK thumbprint, a PKCE S256 challenge, a Concat KDF round, an SD-JWT disclosure
     /// digest). Unlike the removed sync bridge, this consumes a genuinely synchronous
@@ -337,7 +336,7 @@ public static class CryptographicKeyEvents
         ReadOnlySpan<byte> input,
         int outputByteLength,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         string? qualifier = null)
     {
         ArgumentNullException.ThrowIfNull(tag);
@@ -366,14 +365,13 @@ public static class CryptographicKeyEvents
         ReadOnlyMemory<byte> keyBytes,
         int outputByteLength,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         string? qualifier = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);
-        AssertHousePool(pool);
 
         ComputeHmacDelegate? compute =
             CryptographicKeyFactory.GetFunction<ComputeHmacDelegate>(
@@ -404,7 +402,7 @@ public static class CryptographicKeyEvents
         ReadOnlyMemory<byte> keyBytes,
         int outputByteLength,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         string? qualifier = null,
         CancellationToken cancellationToken = default) =>
@@ -420,14 +418,13 @@ public static class CryptographicKeyEvents
         ReadOnlyMemory<byte> keyBytes,
         ReadOnlyMemory<byte> expectedMac,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         string? qualifier = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(tag);
         ArgumentNullException.ThrowIfNull(pool);
-        AssertHousePool(pool);
 
         VerifyHmacDelegate? verify =
             CryptographicKeyFactory.GetFunction<VerifyHmacDelegate>(
@@ -458,30 +455,11 @@ public static class CryptographicKeyEvents
         ReadOnlyMemory<byte> keyBytes,
         ReadOnlyMemory<byte> expectedMac,
         Tag tag,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         FrozenDictionary<string, object>? context = null,
         string? qualifier = null,
         CancellationToken cancellationToken = default) =>
         VerifyHmacAsync(new ReadOnlySequence<byte>(message), keyBytes, expectedMac, tag, pool, context, qualifier, cancellationToken);
-
-
-    /// <summary>
-    /// Asserts, in DEBUG builds only, that <paramref name="candidate"/> is the house
-    /// <see cref="BaseMemoryPool"/> family. <see cref="DigestValue"/> and <see cref="HmacValue"/> derive their
-    /// <c>Length</c> from the rented owner's <c>Memory.Length</c> without slicing, so a pool whose rentals are
-    /// not exact-length (e.g. <see cref="MemoryPool{T}.Shared"/>, which rounds up to a power-of-two bucket)
-    /// silently produces an over-long carrier. This catches a foreign pool arriving as a caller-supplied
-    /// parameter — the one case the <c>BannedSymbols.txt</c> compile-time ban cannot see — as a debug-time
-    /// failure instead of a wire-visible defect. Compiled out in Release builds.
-    /// </summary>
-    /// <param name="candidate">The pool passed by the caller at one of this class's public entry points.</param>
-    [Conditional("DEBUG")]
-    private static void AssertHousePool(MemoryPool<byte> candidate)
-    {
-        Debug.Assert(candidate is BaseMemoryPool,
-            "The memory pool must be Lumoin.Base.BaseMemoryPool (BaseMemoryPool.Shared, or a custom " +
-            "house-configured instance) for the exact-length rentals DigestValue and HmacValue depend on.");
-    }
 
 
     //Minimal IObservable/IObserver implementation — no System.Reactive dependency.

@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Diagnostics;
 using Verifiable.OAuth.Pkce;
 
 namespace Verifiable.OAuth.AuthCode.States;
@@ -8,7 +7,6 @@ namespace Verifiable.OAuth.AuthCode.States;
 /// Initial flow state. PKCE parameters have been generated but no network call has been made.
 /// </summary>
 /// <remarks>Transitions to <see cref="ParRequestReadyState"/> when the PAR request body is composed.</remarks>
-[DebuggerDisplay("PkceGenerated FlowId={FlowId}")]
 public sealed record PkceGeneratedState: FlowState
 {
     /// <summary>The PKCE verifier and challenge for this flow.</summary>

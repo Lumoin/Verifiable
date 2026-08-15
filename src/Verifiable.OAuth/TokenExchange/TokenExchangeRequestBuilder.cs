@@ -144,13 +144,13 @@ public static class TokenExchangeRequestBuilder
         }
 
         //RFC 8693 §2.1.1 / RFC 8707 §2: multiple resource values indicate the issued token is intended
-        //for all of them. OutgoingFormFields is a single-value-per-key dictionary, so repetition is
-        //represented the same way the shipped ID-JAG mint path represents it
-        //(IdJagFlowHandlers.MintAsync) — collapsed to one space-delimited field the authorization
-        //server's skin re-splits.
-        if(options.Resource.Count > 0)
+        //for all of them. Each entry becomes its OWN repeated resource occurrence on the wire
+        //(OutgoingFormFields.Add) — the genuine RFC 8707 §2 multi-resource wire form the
+        //authorization server's own ReadResource/RequestFields.GetValues read expects, never one
+        //occurrence carrying several space-joined URIs.
+        foreach(string resource in options.Resource)
         {
-            form[OAuthRequestParameterNames.Resource] = string.Join(' ', options.Resource);
+            form.Add(OAuthRequestParameterNames.Resource, resource);
         }
 
         if(!string.IsNullOrEmpty(options.Audience))

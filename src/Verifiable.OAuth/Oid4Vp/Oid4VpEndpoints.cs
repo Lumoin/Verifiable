@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
@@ -84,7 +83,6 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// CBOR-speaking or otherwise custom deployment supplies its own.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("Oid4VpEndpoints")]
 public static class Oid4VpEndpoints
 {
     //HTTP method names are compile-time string literals scoped to this file.

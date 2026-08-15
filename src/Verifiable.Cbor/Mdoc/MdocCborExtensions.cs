@@ -70,7 +70,7 @@ public static class MdocCborExtensions
         public async ValueTask<MdocDocument> SignAsync(
             MdocIssuerSigningConfig config,
             PrivateKeyMemory signingKey,
-            MemoryPool<byte> signaturePool,
+            BaseMemoryPool signaturePool,
             CancellationToken cancellationToken = default)
         {
             (MdocDocument document, _) = await logical.SignVerboseAsync(
@@ -99,7 +99,7 @@ public static class MdocCborExtensions
         public ValueTask<(MdocDocument Document, ReadOnlyMemory<byte> SignedMsoPayload)> SignVerboseAsync(
             MdocIssuerSigningConfig config,
             PrivateKeyMemory signingKey,
-            MemoryPool<byte> signaturePool,
+            BaseMemoryPool signaturePool,
             CancellationToken cancellationToken = default)
         {
             return MdocCborIssuance.SignVerboseAsync(
@@ -225,7 +225,7 @@ public static class MdocCborExtensions
             MdocDeviceNameSpaces nameSpaces,
             ReadOnlyMemory<byte> sessionTranscript,
             PrivateKeyMemory deviceSigningKey,
-            MemoryPool<byte> signaturePool,
+            BaseMemoryPool signaturePool,
             CancellationToken cancellationToken = default)
         {
             (MdocPresentationDocument signedPresentation, _) = await presentation.DeviceSignVerboseAsync(
@@ -266,7 +266,7 @@ public static class MdocCborExtensions
             MdocDeviceNameSpaces nameSpaces,
             ReadOnlyMemory<byte> sessionTranscript,
             PrivateKeyMemory deviceSigningKey,
-            MemoryPool<byte> signaturePool,
+            BaseMemoryPool signaturePool,
             CancellationToken cancellationToken = default)
         {
             (MdocDeviceSigned deviceSigned, ReadOnlyMemory<byte> deviceAuthenticationBytes) =

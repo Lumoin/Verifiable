@@ -62,7 +62,7 @@ internal sealed class TpmAttestStructureTests
     [TestMethod]
     public void TpmsClockInfoRoundTripsThroughTheWire()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var original = new TpmsClockInfo(Clock: 0x1122334455667788UL, ResetCount: 5, RestartCount: 3, Safe: TpmiYesNo.Yes);
 
@@ -84,7 +84,7 @@ internal sealed class TpmAttestStructureTests
     [TestMethod]
     public void TpmsQuoteInfoRoundTripsThroughTheWire()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //Redundant using locals satisfy CA2000; ownership transfers to original and disposal is idempotent.
         using TpmlPcrSelection pcrSelect = TpmlPcrSelection.Create(PcrBank, PcrIndices, pool);
@@ -108,7 +108,7 @@ internal sealed class TpmAttestStructureTests
     [TestMethod]
     public void TpmsAttestRoundTripsThroughTheWire()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using TpmsAttest original = BuildSampleQuoteAttest(pool);
         Assert.IsTrue(original.IsTpmGenerated);
@@ -145,7 +145,7 @@ internal sealed class TpmAttestStructureTests
     [TestMethod]
     public void Tpm2bAttestParsesAndRetainsRawBytes()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //Marshal a TPMS_ATTEST, wrap it in the TPM2B size prefix (as TPM2_Quote returns it), then parse.
         byte[] attestImage;
@@ -180,7 +180,7 @@ internal sealed class TpmAttestStructureTests
     [TestMethod]
     public void TpmsCertifyInfoRoundTripsThroughTheWire()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //Redundant using locals satisfy CA2000; ownership transfers to original and disposal is idempotent.
         using Tpm2bName name = Tpm2bName.Create(SampleCertifiedName, pool);
@@ -203,7 +203,7 @@ internal sealed class TpmAttestStructureTests
     [TestMethod]
     public void TpmsAttestCertifyArmRoundTripsThroughTheWire()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using TpmsAttest original = BuildSampleCertifyAttest(pool);
 
@@ -232,7 +232,7 @@ internal sealed class TpmAttestStructureTests
     /// <param name="pool">The memory pool.</param>
     /// <returns>The attestation structure (the caller owns it).</returns>
     [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the created structures transfers to the returned TpmsAttest, which the caller disposes.")]
-    private static TpmsAttest BuildSampleQuoteAttest(MemoryPool<byte> pool)
+    private static TpmsAttest BuildSampleQuoteAttest(BaseMemoryPool pool)
     {
         TpmuAttest attested = TpmuAttest.ForQuote(TpmsQuoteInfo.Create(
             TpmlPcrSelection.Create(PcrBank, PcrIndices, pool),
@@ -254,7 +254,7 @@ internal sealed class TpmAttestStructureTests
     /// <param name="pool">The memory pool.</param>
     /// <returns>The attestation structure (the caller owns it).</returns>
     [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the created structures transfers to the returned TpmsAttest, which the caller disposes.")]
-    private static TpmsAttest BuildSampleCertifyAttest(MemoryPool<byte> pool)
+    private static TpmsAttest BuildSampleCertifyAttest(BaseMemoryPool pool)
     {
         TpmuAttest attested = TpmuAttest.ForCertify(TpmsCertifyInfo.Create(
             Tpm2bName.Create(SampleCertifiedName, pool),

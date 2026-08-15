@@ -20,19 +20,19 @@ namespace Verifiable.Fido2.Ctap;
 /// in the record's own declaration order matching the canonical CBOR wire order documented on
 /// <see cref="Verifiable.Cbor.Ctap.CtapGetInfoResponseCborWriter"/> — <see cref="Ep"/> declares FIRST
 /// because <c>"ep"</c> (length 2, <c>'e'</c> 0x65) sorts before every other modeled option ID
-/// including the other length-2 pair <c>"rk"</c>/<c>"uv"</c> (R10; CTAP2 canonical CBOR sorts map keys
+/// including the other length-2 pair <c>"rk"</c>/<c>"uv"</c> (CTAP2 canonical CBOR sorts map keys
 /// shorter-first, then bytewise lexically for ties) — the remaining option-ID table
 /// entries (<c>uvAcfg</c>, <c>noMcGaPermissionsWithClientPin</c>, and so on) describe built-in
 /// user-verification surface this authenticator does not implement.
 /// </remarks>
 /// <param name="Ep">
 /// The <c>ep</c> option (CTAP 2.3 §7.1.1, snapshot lines 4730-4748): Enterprise Attestation feature
-/// support, a three-way switch faithfully round-tripped by the codec (R9's getInfo half) — present and
+/// support, a three-way switch faithfully round-tripped by the codec — present and
 /// <see langword="true"/> ("the authenticator is enterprise attestation capable, and enterprise
 /// attestation is enabled", line 4738-4740), present and <see langword="false"/> ("...capable, and
 /// enterprise attestation is disabled", line 4741-4743), or absent ("the Enterprise Attestation feature
 /// is NOT supported", line 4744-4746, the Default column value). This authenticator sources it as
-/// <c>capable ? enabled : null</c> — never a second stored flag (R2).
+/// <c>capable ? enabled : null</c> — never a second stored flag.
 /// </param>
 /// <param name="ResidentKey">
 /// The <c>rk</c> option: whether the authenticator can create discoverable credentials. Default
@@ -41,7 +41,7 @@ namespace Verifiable.Fido2.Ctap;
 /// <param name="Uv">
 /// The <c>uv</c> option (CTAP 2.3, snapshot lines 4658-4673): whether the authenticator has a built-in
 /// user verification method and, if so, whether it is presently configured. This authenticator always
-/// reports this option (never absent), from the wave the fingerprint-enrollment surface ships: DERIVED
+/// reports this option (never absent): DERIVED
 /// from <c>CtapAuthenticatorState.HasProvisionedBioEnrollments</c> (the SAME single source
 /// <see cref="BioEnroll"/> derives from) — <see langword="false"/> with zero enrollments,
 /// <see langword="true"/> with at least one.
@@ -70,8 +70,8 @@ namespace Verifiable.Fido2.Ctap;
 /// bio enrollment presently provisioned"), present-false ("supports the commands, and does not yet have
 /// any bio enrollments provisioned"), absent ("the commands are NOT supported"). This authenticator
 /// always reports this option present, DERIVED from <c>CtapAuthenticatorState.HasProvisionedBioEnrollments</c>
-/// (R2's single source, shared with <see cref="Uv"/>) — never absent, since
-/// <c>authenticatorBioEnrollment</c> is unconditionally supported from this wave on.
+/// (the single source shared with <see cref="Uv"/>) — never absent, since
+/// <c>authenticatorBioEnrollment</c> is unconditionally supported.
 /// </param>
 /// <param name="ClientPin">
 /// The <c>clientPin</c> option: <see langword="true"/> if a PIN has been set,

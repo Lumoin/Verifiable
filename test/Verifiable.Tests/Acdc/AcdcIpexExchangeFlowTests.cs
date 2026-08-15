@@ -165,7 +165,7 @@ internal sealed class AcdcIpexExchangeFlowTests
         //Proof of Issuance: the Issuer's KEL anchors a seal committing to the credential's SAID.
         string kelJson = await httpClient.GetStringAsync(new Uri(discloserBase, "/kel"), cancellationToken).ConfigureAwait(false);
         using AcdcTestSupport.EncodedSerialization kelBytes = AcdcTestSupport.Encode(kelJson);
-        IReadOnlyList<KeriSeal>? anchors = await AcdcFlowKit.VerifyKelAndReadAnchorsAsync(kelBytes.Memory, credentialIssuer, disposables, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<KeriAnchoredSeal>? anchors = await AcdcFlowKit.VerifyKelAndReadAnchorsAsync(kelBytes.Memory, credentialIssuer, disposables, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
         Assert.IsNotNull(anchors, "The Issuer KEL MUST verify and be the credential Issuer's.");
         Assert.IsNotNull(AcdcKeriBinding.FindDirectIssuanceSeal(anchors, credentialSaid), "Proof of Issuance: the Issuer KEL MUST anchor a seal committing to the credential's SAID.");
 

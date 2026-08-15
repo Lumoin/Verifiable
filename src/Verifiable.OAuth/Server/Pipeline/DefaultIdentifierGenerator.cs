@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Security.Cryptography;
 
 namespace Verifiable.OAuth.Server.Pipeline;
@@ -36,7 +35,6 @@ namespace Verifiable.OAuth.Server.Pipeline;
 /// <see cref="EndpointServer"/> construction) binds the time source.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("DefaultIdentifierGenerator")]
 public static class DefaultIdentifierGenerator
 {
     /// <summary>

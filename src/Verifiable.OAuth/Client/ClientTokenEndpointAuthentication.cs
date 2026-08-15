@@ -44,7 +44,6 @@ public sealed record ClientAssertionOptions
 /// exchanges, and the <see cref="Verifiable.OAuth.AuthCode.AuthCodeFlowHandlers"/> authorization-code
 /// token leg.
 /// </summary>
-[DebuggerDisplay("ClientTokenEndpointAuthentication")]
 public static class ClientTokenEndpointAuthentication
 {
     /// <summary>

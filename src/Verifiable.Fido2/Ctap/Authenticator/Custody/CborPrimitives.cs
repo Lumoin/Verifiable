@@ -15,8 +15,8 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// integer, byte string, text string, array, and the three simple values <see langword="true"/>/
 /// <see langword="false"/>/<see langword="null"/>) — no CBOR map support, no indefinite-length items, and
 /// no tag support, since a custody snapshot's shape is fully known ahead of time by both sides of the
-/// seam. This is why parsing is bounded and iterative rather than a general recursive-descent CBOR parser
-/// (R-5): every nesting level in this format is a specific, named field the higher-level reader visits
+/// seam. This is why parsing is bounded and iterative rather than a general recursive-descent CBOR parser:
+/// every nesting level in this format is a specific, named field the higher-level reader visits
 /// explicitly, never an arbitrary depth driven by the input bytes themselves.
 /// </remarks>
 internal static class CborPrimitives

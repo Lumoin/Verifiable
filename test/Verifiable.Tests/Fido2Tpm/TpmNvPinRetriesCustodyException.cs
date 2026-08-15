@@ -6,10 +6,10 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// <summary>
 /// A <see cref="TpmNvPinRetriesCustody"/> operation failed closed: the in-house simulated TPM rejected a
 /// provision, verify, penalize, read, or retire against the authenticator-global <c>TPM_NT_PIN_FAIL</c> NV
-/// Index (contract R-10, wavepin).
+/// Index.
 /// </summary>
 /// <remarks>
-/// Per contract R-10's fail-closed requirement, every TPM-side rejection this adapter can observe — a
+/// This adapter fails closed: every TPM-side rejection it can observe — a
 /// <c>DefinePinFailIndexAsync</c>/<c>VerifyPinAsync</c>/<c>ReadPinCountersAsync</c>/<c>ResetPinCountAsync</c>/
 /// <c>UndefinePinIndexAsync</c> result whose <see cref="Verifiable.Tpm.TpmResult{T}.IsSuccess"/> is
 /// <see langword="false"/> and is not one of the two tolerated idempotency cases
@@ -19,7 +19,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// adapter's delegate was called from fails outright, never with a silently unrotated PIN or a persistent
 /// retry budget that was not genuinely recorded.
 /// </remarks>
-[SuppressMessage("Design", "CA1515:Consider making public types internal", Justification = "Staged composition-edge code (layering-split-ledger.md): public by design so the boundary is already the future package's API boundary, per the promotability rules.")]
+[SuppressMessage("Design", "CA1515:Consider making public types internal", Justification = "Staged composition-edge code: public by design so the boundary is already the future package's API boundary, per the promotability rules.")]
 public sealed class TpmNvPinRetriesCustodyException: Exception
 {
     /// <summary>

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.WebFinger;
 
@@ -12,7 +11,6 @@ namespace Verifiable.WebFinger;
 /// <see cref="IRegistrationRecord.AllowedCapabilities"/> must contain this identifier for
 /// <see cref="WebFingerEndpoints.Builder"/> to emit the <c>GET /.well-known/webfinger</c> candidate.
 /// </remarks>
-[DebuggerDisplay("WellKnownWebFingerCapabilityIdentifiers")]
 public static class WellKnownWebFingerCapabilityIdentifiers
 {
     /// <summary>

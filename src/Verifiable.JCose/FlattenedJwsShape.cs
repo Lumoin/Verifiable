@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.JCose;
 
@@ -19,5 +18,4 @@ namespace Verifiable.JCose;
 /// </para>
 /// </remarks>
 /// <param name="Value">The raw Flattened JSON JWS wire string.</param>
-[DebuggerDisplay("FlattenedJwsShape")]
 public sealed record FlattenedJwsShape(string Value): JoseTokenShape;

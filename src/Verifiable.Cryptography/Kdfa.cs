@@ -33,7 +33,7 @@ namespace Verifiable.Cryptography;
 /// </para>
 /// <para>
 /// The inner HMAC routes through the registered <see cref="ComputeHmacDelegate"/> via
-/// <see cref="CryptographicKeyEvents.ComputeHmacAsync(ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, int, Tag, MemoryPool{byte}, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>,
+/// <see cref="CryptographicKeyEvents.ComputeHmacAsync(ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, int, Tag, BaseMemoryPool, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>,
 /// so KDFa inherits the same observability and provenance stamping as every other MAC. The function is
 /// asynchronous because the HMAC backend may be hardware-bound. The hash family is carried inline on the
 /// <see cref="Tag"/> via <see cref="HashAlgorithmName"/> rather than a convenience <see cref="CryptoTags"/>
@@ -41,7 +41,11 @@ namespace Verifiable.Cryptography;
 /// </para>
 /// <para>
 /// All intermediate allocations come from the supplied <see cref="MemoryPool{T}"/> and are zeroed before
-/// disposal. The returned owner holds secret key material; the caller must zero and dispose it after use.
+/// disposal. The output rental is <see cref="AllocationKind.Pinned"/> — it holds the derived secret key
+/// material, and pinning ensures the zeroize-on-dispose actually wipes the memory rather than a GC-moved
+/// copy. The iteration input holds only the counter, label, and the two public nonces, so it stays
+/// <see cref="AllocationKind.Managed"/>. The returned owner holds secret key material; the caller must
+/// zero and dispose it after use.
 /// </para>
 /// </remarks>
 public static class Kdfa
@@ -73,7 +77,7 @@ public static class Kdfa
         ReadOnlyMemory<byte> contextU,
         ReadOnlyMemory<byte> contextV,
         int outputBits,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(label);
@@ -106,7 +110,7 @@ public static class Kdfa
             + contextV.Length
             + sizeof(uint);               //bits.
 
-        IMemoryOwner<byte> output = pool.Rent(outputBytes);
+        IMemoryOwner<byte> output = pool.Rent(outputBytes, AllocationKind.Pinned);
         using IMemoryOwner<byte> inputOwner = pool.Rent(inputLength);
 
         //The buffer is held as Memory across the HMAC awaits; Span is taken only at synchronous points (a

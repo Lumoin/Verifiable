@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.Collections.Generic;
-using System.Diagnostics;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 
@@ -127,7 +126,6 @@ public delegate ValueTask<(int StatusCode, string Body)> Oid4VciFetchCredentialO
 /// wallet plumbing, transport-agnostic, with the application owning crypto and
 /// transport behind delegates.
 /// </summary>
-[DebuggerDisplay("Oid4VciWalletConfiguration")]
 public sealed record Oid4VciWalletConfiguration
 {
     /// <summary>Form-POST transport for the §6 Pre-Authorized Code Token Request.</summary>
@@ -158,7 +156,7 @@ public sealed record Oid4VciWalletConfiguration
     public TimeProvider TimeProvider { get; init; } = TimeProvider.System;
 
     /// <summary>Memory pool for transient signing buffers. Defaults to <see cref="BaseMemoryPool.Shared"/>.</summary>
-    public MemoryPool<byte> MemoryPool { get; init; } = BaseMemoryPool.Shared;
+    public BaseMemoryPool MemoryPool { get; init; } = BaseMemoryPool.Shared;
 
     /// <summary>
     /// Optional RFC 9449 DPoP proof producer. Required when the §6 Token Response

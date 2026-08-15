@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core;
 
@@ -14,7 +13,6 @@ namespace Verifiable.OAuth.Client;
 /// extension property. The struct is cheap to materialise (one reference
 /// field) and carries no per-call state of its own.
 /// </remarks>
-[DebuggerDisplay("OAuthDynamicRegistrationClient")]
 [SuppressMessage("Performance", "CA1815:Override equals and operator equals on value types", Justification = "OAuthDynamicRegistrationClient is a service-shaped wrapper around a single reference; value equality would compare reference identity of the underlying infrastructure, which is not a meaningful operation for callers.")]
 public readonly struct OAuthDynamicRegistrationClient
 {

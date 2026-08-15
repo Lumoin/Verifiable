@@ -135,7 +135,7 @@ public static class MetadataBlobPayloadQueries
     public static async ValueTask<(bool IsFound, MetadataBlobPayloadEntry? Entry)> TryFindEntryByAttestationCertificateKeyIdentifierAsync(
         MetadataBlobPayload payload,
         PkiCertificateMemory certificate,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(payload);
@@ -159,7 +159,7 @@ public static class MetadataBlobPayloadQueries
     /// <see cref="EntropyDelegates"/>'s remarks on the sync/async digest split).
     /// </summary>
     private static async ValueTask<string> ComputeAttestationCertificateKeyIdentifierAsync(
-        PkiCertificateMemory certificate, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        PkiCertificateMemory certificate, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] subjectPublicKeyBitString = ExtractSubjectPublicKeyBitString(certificate.AsReadOnlyMemory());
 
@@ -268,7 +268,7 @@ public static class MetadataBlobPayloadQueries
     /// disposed), mirroring the <see cref="Fido2CredentialRecord.Id"/> fresh-copy precedent.
     /// </returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="entry"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
-    public static IReadOnlyList<PkiCertificateMemory> GetAttestationTrustAnchors(MetadataBlobPayloadEntry entry, MemoryPool<byte> pool)
+    public static IReadOnlyList<PkiCertificateMemory> GetAttestationTrustAnchors(MetadataBlobPayloadEntry entry, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(entry);
         ArgumentNullException.ThrowIfNull(pool);

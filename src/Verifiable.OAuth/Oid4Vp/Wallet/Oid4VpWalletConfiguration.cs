@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Cryptography;
@@ -24,7 +23,6 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet;
 /// only the flow-agnostic identifiers and transport delegates that every
 /// client surface shares.
 /// </remarks>
-[DebuggerDisplay("Oid4VpWalletConfiguration")]
 public sealed record Oid4VpWalletConfiguration
 {
     /// <summary>
@@ -119,5 +117,5 @@ public sealed record Oid4VpWalletConfiguration
     public SendFormPostDelegate? SendFormPost { get; init; }
 
     /// <summary>Memory pool for transient cryptographic buffers.</summary>
-    public required MemoryPool<byte> MemoryPool { get; init; }
+    public required BaseMemoryPool MemoryPool { get; init; }
 }

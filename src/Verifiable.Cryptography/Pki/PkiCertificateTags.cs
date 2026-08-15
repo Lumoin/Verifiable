@@ -23,4 +23,19 @@ public static class PkiCertificateTags
 
     /// <summary>Tag for a DER-encoded RFC 3161 timestamp token.</summary>
     public static Tag TimestampToken { get; } = Tag.Create(PkiObjectKind.TimestampToken);
+
+    /// <summary>Tag for a DER-encoded OCSP request per RFC 6960.</summary>
+    public static Tag OcspRequest { get; } = Tag.Create(PkiObjectKind.OcspRequest);
+
+    /// <summary>Tag for a DER-encoded RFC 3161 <c>TimeStampReq</c>.</summary>
+    public static Tag TimestampRequest { get; } = Tag.Create(PkiObjectKind.TimestampRequest);
+
+    /// <summary>Tag for a DER-encoded RFC 3161 <c>TimeStampResp</c>.</summary>
+    public static Tag TimestampResponse { get; } = Tag.Create(PkiObjectKind.TimestampResponse);
+
+    /// <summary>Tag for a DER-encoded ASN.1 <c>IssuerSerial</c>, carried opaque (e.g. XAdES's <c>IssuerSerialV2</c>).</summary>
+    public static Tag IssuerSerial { get; } = Tag.Create(PkiObjectKind.IssuerSerial);
+
+    /// <summary>Tag for an RFC 6960 §4.2.1 <c>KeyHash</c>, carried opaque (e.g. XAdES's <c>OCSPIdentifier/ResponderID/ByKey</c>).</summary>
+    public static Tag OcspResponderKeyHash { get; } = Tag.Create(PkiObjectKind.OcspResponderKeyHash);
 }

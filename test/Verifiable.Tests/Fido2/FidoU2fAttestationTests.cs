@@ -50,7 +50,7 @@ internal sealed class FidoU2fAttestationTests
     /// <summary>
     /// A conformant fido-u2f attestation — a single P-256 attestation certificate chaining to a trusted root,
     /// with a valid section 8.6 <c>verificationData</c> signature — verifies to <see cref="CertifiedAttestationResult"/>
-    /// of type <see cref="AttestationType.Unknown"/> (owner ruling 6: Basic/AttCA determination is optional and this
+    /// of type <see cref="AttestationType.Unknown"/> (Basic/AttCA determination is optional and this
     /// layer has no external knowledge to make it), carrying the single-element trust path.
     /// </summary>
     [TestMethod]
@@ -95,7 +95,7 @@ internal sealed class FidoU2fAttestationTests
     /// <summary>
     /// A non-zero AAGUID does not cause a spurious rejection — the mirror image of every other attestation
     /// format's AAGUID handling: section 8.6 imposes no AAGUID check at all (fido-u2f predates AAGUIDs), and the
-    /// CR's own section 16.16 test vector embeds a non-zero, HKDF-derived AAGUID. Pins owner ruling that
+    /// CR's own section 16.16 test vector embeds a non-zero, HKDF-derived AAGUID. Pins the reading that
     /// <see cref="FidoU2fAttestation"/> adds no zero-AAGUID special case.
     /// </summary>
     [TestMethod]
@@ -140,7 +140,7 @@ internal sealed class FidoU2fAttestationTests
     /// <summary>
     /// A wire <c>x5c</c> carrying the attestation certificate alone (no intermediate) still verifies when a
     /// <see cref="CertificateChainCompleter"/> supplies the missing intermediate and a <see cref="CrlRevocationChecker"/>
-    /// reports both the leaf and the completed intermediate clean — the wave-2 revocation and chain-completion
+    /// reports both the leaf and the completed intermediate clean — the revocation and chain-completion
     /// seams composing with <see cref="FidoU2fAttestation"/> exactly as they do with <see cref="PackedAttestation"/>.
     /// </summary>
     [TestMethod]

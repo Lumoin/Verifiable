@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -26,7 +25,6 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet;
 /// <c>transaction_data_hashes_alg</c> set on the descriptor.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("TransactionDataHasher")]
 public static class TransactionDataHasher
 {
     private const int Sha256DigestLength = 32;
@@ -51,7 +49,7 @@ public static class TransactionDataHasher
     public static async ValueTask<IReadOnlyList<string>> ComputeSha256Async(
         IReadOnlyList<string> transactionData,
         EncodeDelegate encoder,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(transactionData);

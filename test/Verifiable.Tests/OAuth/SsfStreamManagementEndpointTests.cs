@@ -40,6 +40,18 @@ internal sealed class SsfStreamManagementEndpointTests
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
 
+    /// <summary>
+    /// Drives Create, Read, Update (PATCH), Replace (PUT) and Delete for one stream over the real
+    /// HTTP wire (SSF §8.1.1.1-§8.1.1.5), starting from a CREATE with an empty body so every
+    /// Receiver-supplied member is exercised as absent: delivery defaults to poll with a
+    /// Transmitter-supplied endpoint_url, and every response strict-parses with the RECEIVER's own
+    /// parser. The discovery document is read first and asserted to advertise configuration_endpoint.
+    /// </summary>
+    /// <remarks>
+    /// Proves <see href="https://openid.net/specs/openid-caep-interoperability-profile-1_0-01.html">
+    /// OpenID CAEP Interoperability Profile 1.0, draft 01</see> 2.3.4-configuration-endpoint,
+    /// 2.3.8-stream-management-api, 2.4.5.1-receiver-create-delivery.
+    /// </remarks>
     [TestMethod]
     public async Task StreamLifecycleOverHttpWire()
     {
@@ -135,6 +147,17 @@ internal sealed class SsfStreamManagementEndpointTests
     }
 
 
+    /// <summary>
+    /// CREATE (SSF §8.1.1.1) with an explicit push delivery.method and endpoint_url: the response
+    /// echoes the requested push configuration verbatim, and events_delivered narrows to the
+    /// supported ∩ requested intersection, silently dropping the one unsupported event type
+    /// requested alongside it.
+    /// </summary>
+    /// <remarks>
+    /// Proves <see href="https://openid.net/specs/openid-caep-interoperability-profile-1_0-01.html">
+    /// OpenID CAEP Interoperability Profile 1.0, draft 01</see> 2.3.8.1-create-delivery-method,
+    /// 2.4.5.1-receiver-create-delivery.
+    /// </remarks>
     [TestMethod]
     public async Task CreateWithPushDeliveryEchoesRequestedConfiguration()
     {
@@ -208,6 +231,18 @@ internal sealed class SsfStreamManagementEndpointTests
     }
 
 
+    /// <summary>
+    /// Drives Read Status, Update Status, Add Subject, Remove Subject and Trigger Verification
+    /// (SSF §8.1.2-§8.1.4) over the real HTTP wire against a created stream, including the error
+    /// responses each REQUIRED parameter and each closed-set value produces, and asserts the
+    /// discovery document advertises status_endpoint, add/remove-subject and verification_endpoint
+    /// once every control seam is wired.
+    /// </summary>
+    /// <remarks>
+    /// Proves <see href="https://openid.net/specs/openid-caep-interoperability-profile-1_0-01.html">
+    /// OpenID CAEP Interoperability Profile 1.0, draft 01</see> 2.3.5-status-endpoint,
+    /// 2.3.6-verification-endpoint, 2.4.5.2-receiver-invocations.
+    /// </remarks>
     [TestMethod]
     public async Task StreamControlEndpointsOverHttpWire()
     {
@@ -320,6 +355,18 @@ internal sealed class SsfStreamManagementEndpointTests
     }
 
 
+    /// <summary>
+    /// Gates every Stream Management API request behind a bearer-token OAuth 2.0 authorizer over
+    /// the real HTTP wire: an absent or unrecognised token is rejected (401), a token granted only
+    /// ssf.read cannot perform a management operation (403) but can read status, and a token
+    /// granted ssf.manage can perform both — the §2.7.3 scope lattice enforced end to end rather
+    /// than asserted against the pure predicate alone.
+    /// </summary>
+    /// <remarks>
+    /// Proves <see href="https://openid.net/specs/openid-caep-interoperability-profile-1_0-01.html">
+    /// OpenID CAEP Interoperability Profile 1.0, draft 01</see> 2.3.8.2-authorized-operations,
+    /// 2.4.3-receiver-oauth, 2.7-oauth-roles, 2.7.2-bearer-token, 2.7.3-scope-operation-table.
+    /// </remarks>
     [TestMethod]
     public async Task ScopeEnforcementOverHttpWire()
     {
@@ -466,6 +513,16 @@ internal sealed class SsfStreamManagementEndpointTests
         HashSet<string> verificationRequested = new(StringComparer.Ordinal);
 
         app.Server.OAuth().UseDefaultSsfJsonParsing();
+
+        //A profile-conformant transmitter declares its delivery methods: CAEP
+        //Interoperability Profile 1.0 §2.3.2 makes delivery_methods_supported a
+        //MUST-include member the library cannot derive, so the discovery document
+        //is refused without it. A deployment supplies the methods it operates.
+        app.Server.OAuth().ContributeSsfTransmitterMetadataAsync = static (_, _, _) =>
+            ValueTask.FromResult(new SsfTransmitterMetadataContribution
+            {
+                DeliveryMethodsSupported = [SsfDeliveryMethods.PushHttp, SsfDeliveryMethods.PollHttp]
+            });
 
         app.Server.OAuth().CreateSsfStreamAsync = (request, registration, context, ct) =>
         {

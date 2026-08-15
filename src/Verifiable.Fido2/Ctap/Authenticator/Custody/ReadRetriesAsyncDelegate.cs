@@ -7,9 +7,9 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// Reads the persistent tier's current retry budget WITHOUT recording an attempt — the administrative,
 /// non-authorization read <see cref="Automata.CtapAuthenticatorSimulator.CreateWithCustodyAsync"/> uses
 /// to re-synchronize <see cref="Automata.CtapAuthenticatorState.PinRetries"/>'s demoted-cache mirror
-/// (contract R-4, wavepin) at construction time, OVERRIDING whatever a rehydrated whole-snapshot's own
+/// at construction time, OVERRIDING whatever a rehydrated whole-snapshot's own
 /// <c>PinRetries</c> field said — the exact move that closes the stale-snapshot rollback hole a bare
-/// whole-snapshot mirror alone cannot (contract R-2's rollback consequence).
+/// whole-snapshot mirror alone cannot close on its own.
 /// </summary>
 /// <param name="cancellationToken">A cancellation token.</param>
 /// <returns>

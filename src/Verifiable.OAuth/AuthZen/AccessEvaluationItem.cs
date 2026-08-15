@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.OAuth.AuthZen;
 
@@ -15,7 +14,6 @@ namespace Verifiable.OAuth.AuthZen;
 /// library resolves each item against the request defaults before handing the
 /// resulting <see cref="AccessEvaluationRequest"/> to the PDP seam.
 /// </remarks>
-[DebuggerDisplay("AccessEvaluationItem")]
 public sealed record AccessEvaluationItem
 {
     /// <summary>The Subject for this item, or <see langword="null"/> to inherit the default.</summary>

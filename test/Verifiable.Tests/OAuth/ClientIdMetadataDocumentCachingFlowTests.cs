@@ -16,7 +16,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
-/// CIMD §5.2 metadata-caching real-wire suite (slice E2, contract D12 second half, item (d)):
+/// CIMD §5.2 metadata-caching real-wire suite:
 /// every scenario drives two independent PAR flows against the same registered CIMD client over a
 /// real <see cref="MinimalHttpHost"/> TLS loopback socket, scripting the <c>Cache-Control</c>
 /// response header (or the response sequence) the second flow's fetch decision depends on. The
@@ -24,7 +24,7 @@ namespace Verifiable.Tests.OAuth;
 /// read — production code never consults the wall clock here.
 /// </summary>
 /// <remarks>
-/// Covers CIMD-02-clause-ledger rows 030, 036-040, 061 per
+/// Covers draft-ietf-oauth-client-id-metadata-document-02 clauses 030, 036-040, 061 per
 /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html#section-5.2">
 /// draft-ietf-oauth-client-id-metadata-document-02 §5.2</see> and §9.1. Adversarial, SSRF,
 /// discrimination, display-seam, and logo-prefetch coverage lives in the sibling

@@ -171,10 +171,17 @@ public sealed record IssuanceContext
     public IReadOnlyDictionary<string, object>? Act { get; init; }
 
     /// <summary>
-    /// An explicit audience override; when populated it is the issued token's <c>aud</c> claim
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1.1">RFC 8693 §2.1.1</see> target
-    /// binding), bypassing the scope→audience resolver. <see langword="null"/> for every
-    /// non-token-exchange issuance.
+    /// An explicit audience override; when populated it is the issued token's <c>aud</c> claim,
+    /// bypassing the <c>ClientRecord.ScopeToAudience</c> resolver (unless
+    /// <see cref="Server.AccessTokenAudPolicy.Suppressed"/> is active, which wins over any
+    /// populated value). Populated from three sources: the RFC 8693 §2.1.1 Token Exchange target
+    /// binding (the authorization seam's resolved audience); for the <c>authorization_code</c> and
+    /// <c>refresh_token</c> grants, the RFC 8707 §2.2 effective resource set (the grant's resource,
+    /// optionally narrowed by a token/refresh-request subset); and for <c>client_credentials</c> —
+    /// which has no prior authorization to narrow against — the validated token-request
+    /// <c>resource</c> set itself, taken as the grant. Precedence over <c>ScopeToAudience</c>
+    /// follows §2's SHOULD to audience-restrict to the indicated resource(s).
+    /// <see langword="null"/> for every issuance that resolved none of the three.
     /// </summary>
     public IReadOnlyList<string>? Audience { get; init; }
 

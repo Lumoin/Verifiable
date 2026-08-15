@@ -115,9 +115,13 @@ internal sealed class TokenIntrospectionServerTests
         Assert.AreEqual(issuedAt.ToUnixTimeSeconds(), root.GetProperty("iat").GetInt64());
         Assert.AreEqual(expiresAt.ToUnixTimeSeconds(), root.GetProperty("exp").GetInt64());
 
-        //A single audience is written as a JSON string (RFC 7662 §2.2 / RFC 7519 aud).
-        Assert.AreEqual(JsonValueKind.String, root.GetProperty("aud").ValueKind);
-        Assert.AreEqual("https://protected.example.net/resource", root.GetProperty("aud").GetString());
+        //RFC 7662 §2.2 permits aud as a string OR a list; this projection always emits the array
+        //form, including a single audience — the SAME shape the RFC 9068 JWT access-token producer
+        //uses, so one server emits one aud wire shape regardless of endpoint.
+        JsonElement aud = root.GetProperty("aud");
+        Assert.AreEqual(JsonValueKind.Array, aud.ValueKind);
+        Assert.HasCount(1, aud.EnumerateArray().ToList());
+        Assert.AreEqual("https://protected.example.net/resource", aud[0].GetString());
 
         //RFC 7662 §2.2 extension members appear as top-level members.
         Assert.AreEqual("urn:mace:incommon:iap:silver", root.GetProperty("acr").GetString());

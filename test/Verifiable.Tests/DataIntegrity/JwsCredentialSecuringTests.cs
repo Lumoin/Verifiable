@@ -19,7 +19,7 @@ namespace Verifiable.Tests.DataIntegrity;
 /// <item><description>Credential serialization to JWS payload.</description></item>
 /// <item><description>Protected header construction with algorithm, type, key ID, and content type parameters.</description></item>
 /// <item><description>Signing via <see cref="CredentialJwsExtensions.SignJwsAsync"/>.</description></item>
-/// <item><description>Verification via <see cref="CredentialJwsExtensions.VerifyJwsAsync(string, PublicKeyMemory, DecodeDelegate, JwtHeaderDeserializer, CredentialFromJsonBytesDelegate, System.Buffers.MemoryPool{byte}, System.Threading.CancellationToken)"/>.</description></item>
+/// <item><description>Verification via <see cref="CredentialJwsExtensions.VerifyJwsAsync(string, PublicKeyMemory, DecodeDelegate, JwtHeaderDeserializer, CredentialFromJsonBytesDelegate, System.Buffers.BaseMemoryPool, System.Threading.CancellationToken)"/>.</description></item>
 /// <item><description>Compact serialization round-trip via <see cref="JwsSerialization"/>.</description></item>
 /// </list>
 /// </remarks>

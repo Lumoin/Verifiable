@@ -48,7 +48,7 @@ public static class MicrosoftX509Functions
     /// <returns>Certificate chain in order, leaf first. Caller must dispose all.</returns>
     public static IReadOnlyList<PkiCertificateMemory> ParseX5c(
         IReadOnlyList<string> x5cValues,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(x5cValues);
         ArgumentNullException.ThrowIfNull(pool);
@@ -127,7 +127,7 @@ public static class MicrosoftX509Functions
         IReadOnlyList<PkiCertificateMemory> chain,
         IReadOnlyList<PkiCertificateMemory> trustAnchors,
         DateTimeOffset validationTime,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CheckCertificateRevocationStatusAsyncDelegate? checkRevocation = null,
         CancellationToken cancellationToken = default)
     {
@@ -490,7 +490,7 @@ public static class MicrosoftX509Functions
 
     private static PublicKeyMemory ExtractPublicKey(
         X509Certificate2 certificate,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ECDsa? ecdsa = certificate.PublicKey.GetECDsaPublicKey();
         if(ecdsa is not null)
@@ -526,7 +526,7 @@ public static class MicrosoftX509Functions
     }
 
 
-    private static PublicKeyMemory ExtractEcPublicKey(ECDsa ecdsa, MemoryPool<byte> pool)
+    private static PublicKeyMemory ExtractEcPublicKey(ECDsa ecdsa, BaseMemoryPool pool)
     {
         ECParameters parameters = ecdsa.ExportParameters(includePrivateParameters: false);
 

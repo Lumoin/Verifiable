@@ -8,7 +8,7 @@ namespace Verifiable.Json;
 /// payload's UTF-8 JSON bytes (per
 /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-3">RFC 7515 §3</see> and
 /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-3">RFC 7519 §3</see>) into its claim
-/// dictionary for <see cref="Jws.VerifyAndDecodeAsync(string, DecodeDelegate, JwtPartDecoder, System.Buffers.MemoryPool{byte}, Cryptography.PublicKeyMemory, System.Threading.CancellationToken)"/>
+/// dictionary for <see cref="Jws.VerifyAndDecodeAsync(string, DecodeDelegate, JwtPartDecoder, System.Buffers.BaseMemoryPool, Cryptography.PublicKeyMemory, System.Threading.CancellationToken)"/>
 /// and its sibling overloads.
 /// </summary>
 /// <remarks>

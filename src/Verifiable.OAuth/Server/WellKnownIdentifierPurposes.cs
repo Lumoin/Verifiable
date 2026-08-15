@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.OAuth.Server;
 
@@ -23,7 +22,6 @@ namespace Verifiable.OAuth.Server;
 /// their consuming code.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("WellKnownIdentifierPurposes")]
 public static class WellKnownIdentifierPurposes
 {
     //OAuth-side wire identifiers.

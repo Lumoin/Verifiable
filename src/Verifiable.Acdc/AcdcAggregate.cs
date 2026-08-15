@@ -1,3 +1,4 @@
+using Lumoin.Base;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
@@ -57,7 +58,7 @@ public static class AcdcAggregate
     /// <param name="cancellationToken">Cancels an in-flight digest on a hardware-async backend (TPM2_Hash, KMS).</param>
     /// <returns>The derived AGID.</returns>
     /// <exception cref="CesrFormatException">The digest code is not a supported SAID digest code.</exception>
-    public static ValueTask<string> DeriveAgidAsync(IReadOnlyList<string> blockSaids, string digestCode, AcdcAggregateListSerializer serializeList, ComputeDigestDelegate computeDigest, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static ValueTask<string> DeriveAgidAsync(IReadOnlyList<string> blockSaids, string digestCode, AcdcAggregateListSerializer serializeList, ComputeDigestDelegate computeDigest, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(blockSaids);
         ArgumentNullException.ThrowIfNull(digestCode);
@@ -84,7 +85,7 @@ public static class AcdcAggregate
     /// <param name="cancellationToken">Cancels an in-flight digest on a hardware-async backend (TPM2_Hash, KMS).</param>
     /// <returns><see langword="true"/> when the recomputed AGID equals the claimed AGID.</returns>
     /// <exception cref="CesrFormatException">The claimed AGID's leading code is not a supported SAID digest code.</exception>
-    public static ValueTask<bool> VerifyAgidAsync(string agid, IReadOnlyList<string> blockSaids, AcdcAggregateListSerializer serializeList, ComputeDigestDelegate computeDigest, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static ValueTask<bool> VerifyAgidAsync(string agid, IReadOnlyList<string> blockSaids, AcdcAggregateListSerializer serializeList, ComputeDigestDelegate computeDigest, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(agid);
         ArgumentNullException.ThrowIfNull(blockSaids);
@@ -115,7 +116,7 @@ public static class AcdcAggregate
     /// <returns><see langword="true"/> when every revealed block's SAID is authentic and the AGID matches; otherwise <see langword="false"/>.</returns>
     /// <exception cref="AcdcException">A revealed block has no SAID <c>d</c> field.</exception>
     /// <exception cref="CesrFormatException">A block SAID or the AGID does not begin with a supported digest code.</exception>
-    public static async ValueTask<bool> VerifyDisclosureAsync(AcdcAggregateSection section, AcdcSerializer serializeBlock, AcdcAggregateListSerializer serializeList, ComputeDigestDelegate computeDigest, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static async ValueTask<bool> VerifyDisclosureAsync(AcdcAggregateSection section, AcdcSerializer serializeBlock, AcdcAggregateListSerializer serializeList, ComputeDigestDelegate computeDigest, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(section);
         ArgumentNullException.ThrowIfNull(serializeBlock);
@@ -145,7 +146,7 @@ public static class AcdcAggregate
 
         return await VerifyAgidAsync(section.Agid, blockSaids, serializeList, computeDigest, pool, cancellationToken).ConfigureAwait(false);
 
-        static async ValueTask<(bool Authentic, string Said)> VerifyRevealedBlockAsync(MessageFieldMap detail, AcdcSerializer serializeBlock, ComputeDigestDelegate computeDigest, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        static async ValueTask<(bool Authentic, string Said)> VerifyRevealedBlockAsync(MessageFieldMap detail, AcdcSerializer serializeBlock, ComputeDigestDelegate computeDigest, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             if(!detail.TryGetString(AcdcMessageFields.Said, out string? claimed))
             {

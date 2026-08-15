@@ -16,13 +16,13 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Fido2;
 
 /// <summary>
-/// The wave-5a capstone firewalled flow test: the RP-side <see cref="CtapAuthenticatorClientPinClient"/>
+/// The capstone firewalled flow test: the RP-side <see cref="CtapAuthenticatorClientPinClient"/>
 /// drives a <see cref="CtapAuthenticatorSimulator"/>'s <c>getKeyAgreement</c> subcommand over the real,
 /// unmodified <c>Verifiable.Apdu.ApduExecutor</c>/<c>Verifiable.Apdu.ApduDevice</c> stack via
 /// <c>Verifiable.Apdu.Ctap.CtapNfcTransport</c> and <c>Verifiable.Apdu.Ctap.CtapNfcResponder</c>, then
 /// the platform independently runs its own ECDH against the returned public key to derive a shared
-/// secret — proving key agreement works end to end on the wire, mirroring the wave-2/3 capstone
-/// composition (<see cref="CtapWave2TransportHarness"/>).
+/// secret — proving key agreement works end to end on the wire, mirroring the shared capstone
+/// composition (<see cref="CtapNfcTransportHarness"/>).
 /// </summary>
 [TestClass]
 internal sealed class CtapAuthenticatorClientPinFlowTests
@@ -41,10 +41,10 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
     [TestMethod]
     public async Task RpClientDrivesSimulatorOverRealApduTransportAndDerivesSharedSecret()
     {
-        using CtapAuthenticatorSimulator simulator = CtapWave5AuthenticatorFixtures.CreateSimulator("clientpin-flow-authenticator");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-flow-authenticator");
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, TestContext.CancellationToken);
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, TestContext.CancellationToken);
 
         var request = new CtapClientPinRequest(
             SubCommand: WellKnownCtapClientPinSubCommands.GetKeyAgreement, PinUvAuthProtocol: (int)CtapPinUvAuthProtocolId.Two);
@@ -73,19 +73,19 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
 
 
     /// <summary>
-    /// The wave-5b capstone firewalled flow test: a full platform journey — <c>getKeyAgreement</c> →
+    /// The capstone firewalled flow test: a full platform journey — <c>getKeyAgreement</c> →
     /// <c>setPIN</c> → <c>authenticatorGetInfo</c> shows <c>clientPin: true</c> →
     /// <c>getPinUvAuthTokenUsingPinWithPermissions</c> (<c>mc|ga</c>, bound to an <c>rpId</c>) →
     /// the client decrypts a 32-byte token; then a wrong-PIN <c>changePIN</c> leg (observes
     /// <c>PIN_INVALID</c> and a decremented <c>getPINRetries</c> count) followed by the right-PIN leg
     /// (succeeds) — all driven over the real, unmodified APDU transport stack, with every platform-side
-    /// cryptographic step built from wire bytes only via <see cref="CtapWave5bPinCryptoFixtures"/>, never
+    /// cryptographic step built from wire bytes only via <see cref="CtapPinCryptoFixtures"/>, never
     /// a back-channel read of the simulator's state. The first token is issued on PIN/UV auth protocol
     /// ONE and the <c>changePIN</c> runs entirely on protocol TWO; a subsequent protocol-ONE
     /// <c>getPinToken</c> decrypting to a different value is wire-level evidence consistent with
     /// <c>changePIN</c>'s cross-protocol <c>resetPinUvAuthToken()</c> (line 5714, "for all
     /// pinUvAuthProtocols"), though — because this test is firewalled to wire bytes only, with no
-    /// internal-state access and no wave-c command yet wired to actually consume a <c>pinUvAuthToken</c>
+    /// internal-state access and no command yet wired to actually consume a <c>pinUvAuthToken</c>
     /// — it cannot by itself distinguish that reset from <c>getPinToken</c>'s own unconditional
     /// self-reminting on every call; the authoritative, non-tautological proof of <c>changePIN</c>'s
     /// system-wide invalidation is <see cref="CtapAuthenticatorChangePinTests.ChangePinSuccessInvalidatesTokensOnAllProtocols"/>,
@@ -95,12 +95,12 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
     [TestMethod]
     public async Task RpClientDrivesFullPinEstablishmentAndTokenIssuanceJourneyOverRealApduTransport()
     {
-        using CtapAuthenticatorSimulator simulator = CtapWave5AuthenticatorFixtures.CreateSimulator("clientpin-flow-capstone");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, TestContext.CancellationToken);
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-flow-capstone");
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, TestContext.CancellationToken);
 
         //getKeyAgreement + setPIN.
-        using CtapWave5bPlatformPinSession establishSession = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
+        using CtapPlatformPinSession establishSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.Two, pool, TestContext.CancellationToken);
         (byte[] newPinEnc, byte[] setPinUvAuthParam) = await establishSession.BuildSetPinMessagesAsync("1234", TestContext.CancellationToken);
         CtapClientPinResponse setPinResponse = await SendClientPinAsync(harness.Transceive, new CtapClientPinRequest(
@@ -116,7 +116,7 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
         //token — deliberately the protocol the upcoming changePIN leg does NOT run on, so the later
         //re-fetch on this same protocol probes changePIN's cross-protocol reset rather than the
         //same-protocol churn a same-protocol re-fetch would also show on its own.
-        using CtapWave5bPlatformPinSession tokenSession = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
+        using CtapPlatformPinSession tokenSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.One, pool, TestContext.CancellationToken);
         byte[] tokenPinHashEnc = await tokenSession.BuildPinHashEncAsync("1234", TestContext.CancellationToken);
         int mcGa = WellKnownCtapPinUvAuthTokenPermissions.Mc | WellKnownCtapPinUvAuthTokenPermissions.Ga;
@@ -128,7 +128,7 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
         Assert.HasCount(32, firstToken);
 
         //changePIN with the WRONG current PIN: PIN_INVALID, and getPINRetries observes the decrement.
-        using CtapWave5bPlatformPinSession wrongChangeSession = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
+        using CtapPlatformPinSession wrongChangeSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.Two, pool, TestContext.CancellationToken);
         (byte[] wrongNewPinEnc, byte[] wrongPinHashEnc, byte[] wrongPinUvAuthParam) =
             await wrongChangeSession.BuildChangePinMessagesAsync("5678", "0000", TestContext.CancellationToken);
@@ -146,7 +146,7 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
         Assert.AreEqual(7, retriesAfterWrongPin.PinRetries);
 
         //changePIN with the RIGHT current PIN: succeeds.
-        using CtapWave5bPlatformPinSession rightChangeSession = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
+        using CtapPlatformPinSession rightChangeSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.Two, pool, TestContext.CancellationToken);
         (byte[] rightNewPinEnc, byte[] rightPinHashEnc, byte[] rightPinUvAuthParam) =
             await rightChangeSession.BuildChangePinMessagesAsync("5678", "1234", TestContext.CancellationToken);
@@ -162,7 +162,7 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
         //firewalled journey cannot, on its own, rule out the value merely changing because getPinToken
         //always mints a fresh token on every call regardless of the intervening changePIN — see this
         //method's remarks for where the dispositive proof lives.
-        using CtapWave5bPlatformPinSession freshTokenSession = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
+        using CtapPlatformPinSession freshTokenSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.One, pool, TestContext.CancellationToken);
         byte[] freshPinHashEnc = await freshTokenSession.BuildPinHashEncAsync("5678", TestContext.CancellationToken);
         CtapClientPinResponse freshTokenResponse = await SendClientPinAsync(harness.Transceive, new CtapClientPinRequest(
@@ -176,7 +176,7 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
 
 
     /// <summary>
-    /// The wave-5c APDU flow capstone: a full journey mixing <c>authenticatorClientPIN</c> with the
+    /// The APDU flow capstone: a full journey mixing <c>authenticatorClientPIN</c> with the
     /// PIN/UV-protected <c>authenticatorMakeCredential</c>/<c>authenticatorGetAssertion</c> surface —
     /// <c>getKeyAgreement</c> → <c>setPIN</c> → <c>getPinUvAuthTokenUsingPinWithPermissions</c>
     /// (<c>mc|ga</c>, bound to an <c>rpId</c>) → the client decrypts the token and computes a
@@ -192,16 +192,16 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
     [TestMethod]
     public async Task RpClientDrivesMakeCredentialAndGetAssertionWithPinUvAuthTokenOverRealApduTransport()
     {
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("pinuv-mcga-capstone");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, TestContext.CancellationToken);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("pinuv-mcga-capstone");
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, TestContext.CancellationToken);
 
         const string boundRpId = "pinuv-mcga-capstone.example";
         const string otherRpId = "other-pinuv-mcga-capstone.example";
-        byte[] mcMessage = CtapWave2AuthenticatorFixtures.BuildFixedBytes(32, 0x10);
-        byte[] gaMessage = CtapWave2AuthenticatorFixtures.BuildFixedBytes(32, 0x20);
+        byte[] mcMessage = CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(32, 0x10);
+        byte[] gaMessage = CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(32, 0x20);
 
-        using CtapWave5bPlatformPinSession establishSession = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
+        using CtapPlatformPinSession establishSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.Two, pool, TestContext.CancellationToken);
         (byte[] newPinEnc, byte[] setPinUvAuthParam) = await establishSession.BuildSetPinMessagesAsync("1234", TestContext.CancellationToken);
         await SendClientPinAsync(harness.Transceive, new CtapClientPinRequest(
@@ -211,12 +211,12 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
         byte[] mcToken = await IssueTokenBoundToRpIdAsync(harness, pool, boundRpId, TestContext.CancellationToken);
         byte[] mcParam = await SignWithTokenAsync(mcToken, mcMessage, pool, TestContext.CancellationToken);
 
-        CtapMakeCredentialRequest mcRequest = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(
-            pool, rpId: boundRpId, userId: CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0x60),
+        CtapMakeCredentialRequest mcRequest = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(
+            pool, rpId: boundRpId, userId: CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x60),
             pinUvAuthParam: mcParam, pinUvAuthProtocol: (int)CtapPinUvAuthProtocolId.Two);
         CtapMakeCredentialResponse mcResponse = await CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
             harness.Transceive, CtapMakeCredentialRequestCborWriter.Write, mcRequest, CtapMakeCredentialResponseCborReader.Read, pool, TestContext.CancellationToken);
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(mcRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(mcRequest);
 
         byte[] mintedCredentialIdBytes;
         using(AuthenticatorData mcAuthenticatorData = AuthenticatorDataReader.Read(mcResponse.AuthData, CredentialPublicKeyCborReader.Read, pool))
@@ -227,28 +227,28 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
         }
 
         //Token reuse: the successful mc call above stripped every permission but lbw from mcToken
-        //(R6/line 5828), so a second authenticatorMakeCredential over the SAME token — even with a
+        //(line 5828), so a second authenticatorMakeCredential over the SAME token — even with a
         //freshly computed, otherwise-valid signature — must fail.
         byte[] reuseParam = await SignWithTokenAsync(mcToken, mcMessage, pool, TestContext.CancellationToken);
-        CtapMakeCredentialRequest reuseRequest = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(
-            pool, rpId: boundRpId, userId: CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0x61),
+        CtapMakeCredentialRequest reuseRequest = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(
+            pool, rpId: boundRpId, userId: CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x61),
             pinUvAuthParam: reuseParam, pinUvAuthProtocol: (int)CtapPinUvAuthProtocolId.Two);
         CtapCommandException reuseException = await Assert.ThrowsExactlyAsync<CtapCommandException>(() =>
             CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
                 harness.Transceive, CtapMakeCredentialRequestCborWriter.Write, reuseRequest, CtapMakeCredentialResponseCborReader.Read, pool, TestContext.CancellationToken).AsTask());
         Assert.AreEqual(WellKnownCtapStatusCodes.PinAuthInvalid, reuseException.StatusCode, "a reused, permission-stripped token must fail with PinAuthInvalid.");
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(reuseRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(reuseRequest);
 
         //A fresh token bound to the SAME rpId drives a successful authenticatorGetAssertion.
         byte[] gaToken = await IssueTokenBoundToRpIdAsync(harness, pool, boundRpId, TestContext.CancellationToken);
         byte[] gaParam = await SignWithTokenAsync(gaToken, gaMessage, pool, TestContext.CancellationToken);
-        CtapGetAssertionRequest gaRequest = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(
+        CtapGetAssertionRequest gaRequest = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionRequest(
             pool, rpId: boundRpId,
             allowList: [new PublicKeyCredentialDescriptor { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Id = CredentialId.Create(mintedCredentialIdBytes, pool) }],
             pinUvAuthParam: gaParam, pinUvAuthProtocol: (int)CtapPinUvAuthProtocolId.Two);
         CtapGetAssertionResponse gaResponse = await CtapAuthenticatorGetAssertionClient.GetAssertionAsync(
             harness.Transceive, CtapGetAssertionRequestCborWriter.Write, gaRequest, CtapGetAssertionResponseCborReader.Read, pool, TestContext.CancellationToken);
-        CtapWave2AuthenticatorFixtures.DisposeGetAssertionRequest(gaRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(gaRequest);
         try
         {
             using AuthenticatorData gaAuthenticatorData = AuthenticatorDataReader.Read(gaResponse.AuthData, CredentialPublicKeyCborReader.Read, pool);
@@ -264,14 +264,14 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
         //original boundRpId — the permissions-RP-ID binding CTAP2.3 line 5830-5834 describes.
         byte[] otherRpToken = await IssueTokenBoundToRpIdAsync(harness, pool, otherRpId, TestContext.CancellationToken);
         byte[] crossRpParam = await SignWithTokenAsync(otherRpToken, mcMessage, pool, TestContext.CancellationToken);
-        CtapMakeCredentialRequest crossRpRequest = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(
-            pool, rpId: boundRpId, userId: CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0x62),
+        CtapMakeCredentialRequest crossRpRequest = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(
+            pool, rpId: boundRpId, userId: CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x62),
             pinUvAuthParam: crossRpParam, pinUvAuthProtocol: (int)CtapPinUvAuthProtocolId.Two);
         CtapCommandException crossRpException = await Assert.ThrowsExactlyAsync<CtapCommandException>(() =>
             CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
                 harness.Transceive, CtapMakeCredentialRequestCborWriter.Write, crossRpRequest, CtapMakeCredentialResponseCborReader.Read, pool, TestContext.CancellationToken).AsTask());
         Assert.AreEqual(WellKnownCtapStatusCodes.PinAuthInvalid, crossRpException.StatusCode, "a token bound to a different rpId must fail authenticatorMakeCredential at the original rpId.");
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(crossRpRequest);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(crossRpRequest);
     }
 
 
@@ -282,9 +282,9 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
     /// wire bytes only.
     /// </summary>
     private static async Task<byte[]> IssueTokenBoundToRpIdAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, string rpId, CancellationToken cancellationToken)
+        CtapNfcTransportHarness harness, BaseMemoryPool pool, string rpId, CancellationToken cancellationToken)
     {
-        using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(
+        using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.Two, pool, cancellationToken).ConfigureAwait(false);
         byte[] pinHashEnc = await session.BuildPinHashEncAsync("1234", cancellationToken).ConfigureAwait(false);
 
@@ -299,7 +299,7 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
 
 
     /// <summary>Computes <c>authenticate(token, message)</c> under PIN/UV auth protocol TWO's own truncation rule — the platform-side computation <c>verify</c> checks a presented <c>pinUvAuthParam</c> against.</summary>
-    private static async Task<byte[]> SignWithTokenAsync(byte[] token, byte[] message, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<byte[]> SignWithTokenAsync(byte[] token, byte[] message, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         CtapPinUvAuthProtocol protocol = CtapPinUvAuthProtocol.CreateDefault(CtapPinUvAuthProtocolId.Two);
         using IMemoryOwner<byte> signature = await protocol.AuthenticateAsync(token, message, pool, cancellationToken).ConfigureAwait(false);
@@ -309,13 +309,13 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
 
 
     /// <summary>Sends an <c>authenticatorClientPIN</c> request over <paramref name="transceive"/> and decodes the response.</summary>
-    private static Task<CtapClientPinResponse> SendClientPinAsync(Ctap2TransceiveDelegate transceive, CtapClientPinRequest request, MemoryPool<byte> pool) =>
+    private static Task<CtapClientPinResponse> SendClientPinAsync(Ctap2TransceiveDelegate transceive, CtapClientPinRequest request, BaseMemoryPool pool) =>
         CtapAuthenticatorClientPinClient.ClientPinAsync(
             transceive, CtapClientPinRequestCborWriter.Write, request, CtapClientPinResponseCborReader.Read, pool, CancellationToken.None).AsTask();
 
 
     /// <summary>Sends an <c>authenticatorGetInfo</c> request over <paramref name="transceive"/> and decodes the response.</summary>
-    private static async Task<CtapGetInfoResponse> GetInfoAsync(Ctap2TransceiveDelegate transceive, MemoryPool<byte> pool)
+    private static async Task<CtapGetInfoResponse> GetInfoAsync(Ctap2TransceiveDelegate transceive, BaseMemoryPool pool)
     {
         byte[] request = [WellKnownCtapCommands.GetInfo];
         using PooledMemory response = await transceive(request, pool, CancellationToken.None).ConfigureAwait(false);

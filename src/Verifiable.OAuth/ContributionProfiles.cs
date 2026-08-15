@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core.Assessment;
 
 namespace Verifiable.OAuth;
@@ -29,7 +28,6 @@ namespace Verifiable.OAuth;
 ///     WellKnownAssessorIds.ClaimContributors, rules, timeProvider);
 /// </code>
 /// </remarks>
-[DebuggerDisplay("ContributionProfiles")]
 public static class ContributionProfiles
 {
     /// <summary>

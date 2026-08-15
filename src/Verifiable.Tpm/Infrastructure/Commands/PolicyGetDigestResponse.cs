@@ -37,7 +37,7 @@ public sealed class PolicyGetDigestResponse: IDisposable, ITpmWireType
     /// <param name="reader">The reader positioned at the response parameters.</param>
     /// <param name="pool">The memory pool for buffer allocation.</param>
     /// <returns>The parsed response.</returns>
-    public static PolicyGetDigestResponse Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static PolicyGetDigestResponse Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         Tpm2bDigest policyDigest = Tpm2bDigest.Parse(ref reader, pool);

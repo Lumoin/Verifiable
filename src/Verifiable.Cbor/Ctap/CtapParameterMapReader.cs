@@ -25,10 +25,10 @@ namespace Verifiable.Cbor.Ctap;
 /// <para>
 /// <c>authenticatorGetInfo</c> itself takes no input parameters
 /// (<see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorGetInfo">
-/// section 6.4</see>: "This method takes no inputs"), so wave 1 has no command whose request this
-/// reader decodes in production; it is proven here against a synthetic vector and is the seam a
-/// later wave's <c>authenticatorMakeCredential</c>/<c>authenticatorGetAssertion</c> request reader
-/// builds on.
+/// section 6.4</see>: "This method takes no inputs"), so no command decodes its request through this
+/// reader in production; it is proven here against a synthetic vector and is the seam
+/// <c>authenticatorMakeCredential</c>/<c>authenticatorGetAssertion</c> request readers
+/// build on.
 /// </para>
 /// </remarks>
 public static class CtapParameterMapReader

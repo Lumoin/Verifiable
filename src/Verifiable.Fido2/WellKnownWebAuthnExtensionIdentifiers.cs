@@ -74,7 +74,7 @@ public static class WellKnownWebAuthnExtensionIdentifiers
     /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#sctn-large-blob-key-extension">
     /// CTAP 2.3, section 12.3: Large Blob Key (largeBlobKey)</see>. Distinct from <see cref="LargeBlob"/>
     /// (the UNRELATED §10.1.5 WebAuthn client extension) and from <c>authenticatorLargeBlobs</c> (the
-    /// <c>0x0C</c> command byte itself) — three separate identifiers sharing a name family, trap 11.
+    /// <c>0x0C</c> command byte itself) — three separate identifiers sharing a name family.
     /// This CTAP-registered authenticator extension's feature detection requires BOTH this identifier's
     /// presence in <c>authenticatorGetInfo</c>'s <c>extensions</c> array AND <c>largeBlobs</c> mapped to
     /// <see langword="true"/> in <c>options</c> (lines 12832-12834) — the two ship together.

@@ -71,7 +71,7 @@ public static class BouncyCastleRecoverableSignatureFunctions
     public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaIso9796d2Async(
         ReadOnlyMemory<byte> privateKeyBytes,
         ReadOnlyMemory<byte> nonRecoverableMessage,
-        MemoryPool<byte> signaturePool,
+        BaseMemoryPool signaturePool,
         FrozenDictionary<string, object>? context = null,
         CancellationToken cancellationToken = default)
     {
@@ -249,7 +249,7 @@ public static class BouncyCastleRecoverableSignatureFunctions
     /// longer than any capacity forces partial recovery, and recovering it yields exactly the capacity-many
     /// leading bytes. Returns an <see cref="int"/>, not a buffer — no signature material crosses this boundary.
     /// </remarks>
-    private static int MeasureRecoverableCapacity(RsaPrivateCrtKeyParameters privateKey, RsaKeyParameters publicKey, MemoryPool<byte> pool)
+    private static int MeasureRecoverableCapacity(RsaPrivateCrtKeyParameters privateKey, RsaKeyParameters publicKey, BaseMemoryPool pool)
     {
         var probeSigner = new Iso9796d2Signer(new RsaEngine(), new Sha256Digest(), isImplicit: false);
         probeSigner.Init(forSigning: true, privateKey);

@@ -115,7 +115,7 @@ internal sealed class TpmEoComparatorTests
 
     /// <summary>
     /// Verifies a zero-length operandB is rejected with TPM_RC_SIZE before any comparison runs, for every
-    /// operation alike (the coordinator's defined-behavior ruling, rather than the vacuous-true/false convention
+    /// operation alike (this library's defined-behavior choice, rather than the vacuous-true/false convention
     /// an unsigned zero-length compare would otherwise produce).
     /// </summary>
     [TestMethod]

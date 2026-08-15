@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Oid4Vp;
@@ -7,7 +6,6 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// Authorization Response parameter name constants for OID4VP, as defined in
 /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-8.1">OID4VP 1.0 §8.1</see>.
 /// </summary>
-[DebuggerDisplay("AuthorizationResponseParameters")]
 public static class AuthorizationResponseParameters
 {
     /// <summary>The UTF-8 source literal of <see cref="VpToken"/>.</summary>

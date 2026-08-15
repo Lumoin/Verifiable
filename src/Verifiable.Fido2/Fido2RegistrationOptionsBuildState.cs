@@ -43,7 +43,7 @@ public readonly struct Fido2RegistrationOptionsBuildState: IEquatable<Fido2Regis
     public string? UserDisplayName { get; init; }
 
     /// <summary>The memory pool the default challenge transformation rents entropy from.</summary>
-    public required MemoryPool<byte> Pool { get; init; }
+    public required BaseMemoryPool Pool { get; init; }
 
     /// <summary>
     /// Existing credentials mapped to this user account, projected into <c>excludeCredentials</c>

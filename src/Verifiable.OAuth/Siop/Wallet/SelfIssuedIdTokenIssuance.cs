@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -33,7 +32,6 @@ namespace Verifiable.OAuth.Siop.Wallet;
 /// RFC 7638 helpers; nothing about them is DPoP-specific.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("SelfIssuedIdTokenIssuance")]
 public static class SelfIssuedIdTokenIssuance
 {
     /// <summary>
@@ -63,7 +61,7 @@ public static class SelfIssuedIdTokenIssuance
         EncodeDelegate base64UrlEncoder,
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(subjectPrivateKey);
@@ -131,7 +129,7 @@ public static class SelfIssuedIdTokenIssuance
         EncodeDelegate base64UrlEncoder,
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(subjectPrivateKey);
@@ -173,7 +171,7 @@ public static class SelfIssuedIdTokenIssuance
         EncodeDelegate base64UrlEncoder,
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(audience);

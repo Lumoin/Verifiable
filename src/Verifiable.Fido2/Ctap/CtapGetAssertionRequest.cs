@@ -7,7 +7,7 @@ namespace Verifiable.Fido2.Ctap;
 
 /// <summary>
 /// The <c>authenticatorGetAssertion</c> request structure: every parameter this library models,
-/// including the ClientPIN parameters this wave's authenticator always rejects, so the
+/// including the ClientPIN parameters this authenticator always rejects, so the
 /// authenticator-side handler can see them and produce the spec-mandated error.
 /// </summary>
 /// <remarks>
@@ -17,8 +17,8 @@ namespace Verifiable.Fido2.Ctap;
 /// see <see cref="CtapCommandOptions"/>'s own remarks on why this codec layer does not silently drop
 /// that distinction. <see cref="Extensions"/> carries TWO pre-decoded known-key convenience members:
 /// <see cref="LargeBlobKey"/> (scalar, the <see cref="CtapMakeCredentialRequest.CredProtect"/>/
-/// <see cref="CtapMakeCredentialRequest.MinPinLength"/> precedent applied to this request type first,
-/// wavelb R8) and <see cref="HmacSecret"/> (compound, this request type's first non-scalar extension
+/// <see cref="CtapMakeCredentialRequest.MinPinLength"/> precedent applied to this request type first)
+/// and <see cref="HmacSecret"/> (compound, this request type's first non-scalar extension
 /// value, CTAP 2.3 §12.7).
 /// </remarks>
 /// <param name="RpId">Required (<c>0x01</c>). The relying party identifier.</param>

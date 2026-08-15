@@ -24,7 +24,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// <list type="bullet">
 /// <item><description>For tests that have hand-coded salt bytes (deterministic test
 /// vectors, RFC 9901 examples, and so on),
-/// <see cref="FromBytes(ReadOnlySpan{byte}, MemoryPool{byte}?)"/> wraps the bytes in
+/// <see cref="FromBytes(ReadOnlySpan{byte}, BaseMemoryPool?)"/> wraps the bytes in
 /// a <see cref="Salt"/> with a test-only tag.</description></item>
 /// <item><description>For tests that need a fresh salt on every disclosure
 /// (issuance pipelines), <see cref="DefaultGenerator"/> returns a
@@ -80,9 +80,9 @@ internal static class TestSalts
     /// <see cref="BaseMemoryPool.Shared"/> when omitted.
     /// </param>
     /// <returns>A new <see cref="Salt"/> owning a copy of <paramref name="bytes"/>.</returns>
-    public static Salt FromBytes(ReadOnlySpan<byte> bytes, MemoryPool<byte>? pool = null)
+    public static Salt FromBytes(ReadOnlySpan<byte> bytes, BaseMemoryPool? pool = null)
     {
-        MemoryPool<byte> resolvedPool = pool ?? BaseMemoryPool.Shared;
+        BaseMemoryPool resolvedPool = pool ?? BaseMemoryPool.Shared;
         IMemoryOwner<byte> owner = resolvedPool.Rent(bytes.Length);
 
         try
@@ -101,7 +101,7 @@ internal static class TestSalts
     /// <summary>
     /// Convenience overload for tests holding salt as a <see cref="byte"/> array.
     /// </summary>
-    public static Salt FromBytes(byte[] bytes, MemoryPool<byte>? pool = null) =>
+    public static Salt FromBytes(byte[] bytes, BaseMemoryPool? pool = null) =>
         FromBytes(bytes.AsSpan(), pool);
 
 
@@ -119,9 +119,9 @@ internal static class TestSalts
     /// </param>
     public static GenerateDisclosureSaltDelegate DefaultGenerator(
         int byteLength = 16,
-        MemoryPool<byte>? pool = null)
+        BaseMemoryPool? pool = null)
     {
-        MemoryPool<byte> resolvedPool = pool ?? BaseMemoryPool.Shared;
+        BaseMemoryPool resolvedPool = pool ?? BaseMemoryPool.Shared;
         return () => Generate(byteLength, TestSaltTag, resolvedPool);
     }
 
@@ -138,9 +138,9 @@ internal static class TestSalts
     /// <param name="tag">The purpose/provenance tag; the provider stamps its own entries onto it.</param>
     /// <param name="pool">The memory pool to allocate from. Defaults to <see cref="BaseMemoryPool.Shared"/>.</param>
     /// <returns>A fresh <see cref="Salt"/>; the caller owns and disposes it (or transfers ownership).</returns>
-    public static Salt Generate(int byteLength, Tag tag, MemoryPool<byte>? pool = null)
+    public static Salt Generate(int byteLength, Tag tag, BaseMemoryPool? pool = null)
     {
-        MemoryPool<byte> resolvedPool = pool ?? BaseMemoryPool.Shared;
+        BaseMemoryPool resolvedPool = pool ?? BaseMemoryPool.Shared;
 
         return MicrosoftEntropyFunctions.GenerateSalt(byteLength, tag, resolvedPool).Result;
     }
@@ -148,12 +148,12 @@ internal static class TestSalts
 
     /// <summary>
     /// Produces a single fresh salt of <see cref="Salt.RecommendedByteLength"/> through the entropy
-    /// provider. See <see cref="Generate(int, Tag, MemoryPool{byte})"/>.
+    /// provider. See <see cref="Generate(int, Tag, BaseMemoryPool)"/>.
     /// </summary>
     /// <param name="tag">The purpose/provenance tag; the provider stamps its own entries onto it.</param>
     /// <param name="pool">The memory pool to allocate from. Defaults to <see cref="BaseMemoryPool.Shared"/>.</param>
     /// <returns>A fresh <see cref="Salt"/>; the caller owns and disposes it (or transfers ownership).</returns>
-    public static Salt Generate(Tag tag, MemoryPool<byte>? pool = null) =>
+    public static Salt Generate(Tag tag, BaseMemoryPool? pool = null) =>
         Generate(Salt.RecommendedByteLength, tag, pool);
 
 
@@ -170,7 +170,7 @@ internal static class TestSalts
     /// </param>
     public static GenerateDisclosureSaltDelegate FromQueue(
         IEnumerable<byte[]> bytesSequence,
-        MemoryPool<byte>? pool = null)
+        BaseMemoryPool? pool = null)
     {
         ArgumentNullException.ThrowIfNull(bytesSequence);
         Queue<byte[]> queue = new(bytesSequence);

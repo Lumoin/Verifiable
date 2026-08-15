@@ -225,6 +225,41 @@ namespace Verifiable.Tests.Cryptography
 
 
         /// <summary>
+        /// The optional modulus ceiling bounds the modular-exponentiation work an untrusted, self-declared key
+        /// can demand: a synthetic modulus above the stated ceiling is rejected, the same modulus passes with
+        /// no ceiling stated (so the rejection is the ceiling's own), and a modulus exactly at the ceiling is
+        /// inside the band. Synthetic spans stand in for keys because no real key of these sizes needs minting
+        /// to exercise arithmetic on lengths.
+        /// </summary>
+        [TestMethod]
+        public void IsValidPublicKeyEnforcesTheModulusBitLengthCeiling()
+        {
+            //2049 bytes with the top bit set is 16 385 or more bits — just past the 16 384-bit ceiling the
+            //verification surfaces bound untrusted keys at; the last byte is odd so nothing else rejects it.
+            byte[] oversizedModulus = new byte[2049];
+            oversizedModulus[0] = 0xFF;
+            oversizedModulus[^1] = 0x03;
+            byte[] exponent = [0x01, 0x00, 0x01];
+
+            Assert.IsFalse(
+                RsaUtilities.IsValidPublicKey(oversizedModulus, exponent, minimumModulusBitLength: 2048, maximumModulusBitLength: 16384),
+                "A modulus above the stated ceiling must be rejected before any signature mathematics run.");
+
+            Assert.IsTrue(
+                RsaUtilities.IsValidPublicKey(oversizedModulus, exponent, minimumModulusBitLength: 2048),
+                "With no ceiling stated the same oversized modulus is a valid (if impractical) RSA public key, so the band rejection above is attributable to the ceiling alone.");
+
+            //2048 bytes with the top bit set is exactly 16 384 bits: the ceiling is inclusive.
+            byte[] atCeiling = new byte[2048];
+            atCeiling[0] = 0xFF;
+            atCeiling[^1] = 0x03;
+            Assert.IsTrue(
+                RsaUtilities.IsValidPublicKey(atCeiling, exponent, minimumModulusBitLength: 2048, maximumModulusBitLength: 16384),
+                "A modulus exactly at the ceiling is inside the band.");
+        }
+
+
+        /// <summary>
         /// Returns key material of the size <paramref name="keySizeInBits"/> selects, matching the
         /// <see cref="RsaKeySizesInBits"/> shapes the DynamicData-driven tests exercise.
         /// </summary>

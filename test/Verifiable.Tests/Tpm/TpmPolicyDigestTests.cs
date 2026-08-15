@@ -210,7 +210,7 @@ internal sealed class TpmPolicyDigestTests
         AssertAuthValueFold(zeroCurrent, destination);
 
         Span<byte> nonZeroCurrent = stackalloc byte[32];
-        _ = SHA256.HashData("wave6-authvalue-prior-stage"u8, nonZeroCurrent);
+        _ = SHA256.HashData("authvalue-prior-stage"u8, nonZeroCurrent);
         AssertAuthValueFold(nonZeroCurrent, destination);
 
         static void AssertAuthValueFold(ReadOnlySpan<byte> current, Span<byte> destination)
@@ -246,14 +246,14 @@ internal sealed class TpmPolicyDigestTests
         //Variant one: a single SHA-256 bank, sizeofSelect 3, PCRs 0-2 selected (pcrSelect 0x07 0x00 0x00).
         ReadOnlySpan<byte> pcrsVariantOne = [0x00, 0x00, 0x00, 0x01, 0x00, 0x0B, 0x03, 0x07, 0x00, 0x00];
         Span<byte> digestVariantOne = stackalloc byte[32];
-        _ = SHA256.HashData("wave6-pcr-variant-one"u8, digestVariantOne);
+        _ = SHA256.HashData("pcr-variant-one"u8, digestVariantOne);
         AssertPcrFold(current, pcrsVariantOne, digestVariantOne, destination);
 
         //Variant two: two banks (SHA-256 then SHA-1) with different selection masks and a different pcrDigest.
         ReadOnlySpan<byte> pcrsVariantTwo =
             [0x00, 0x00, 0x00, 0x02, 0x00, 0x0B, 0x03, 0x00, 0x00, 0x01, 0x00, 0x04, 0x03, 0x00, 0x01, 0x00];
         Span<byte> digestVariantTwo = stackalloc byte[32];
-        _ = SHA256.HashData("wave6-pcr-variant-two"u8, digestVariantTwo);
+        _ = SHA256.HashData("pcr-variant-two"u8, digestVariantTwo);
         AssertPcrFold(current, pcrsVariantTwo, digestVariantTwo, destination);
 
         static void AssertPcrFold(
@@ -294,7 +294,7 @@ internal sealed class TpmPolicyDigestTests
         Span<byte> destination = stackalloc byte[TpmPolicyDigest.Size(TpmAlgIdConstants.TPM_ALG_SHA256)];
         Span<byte> nvName = stackalloc byte[sizeof(ushort) + 32];
         BinaryPrimitives.WriteUInt16BigEndian(nvName, (ushort)TpmAlgIdConstants.TPM_ALG_SHA256);
-        _ = SHA256.HashData("wave6-nv-index-name"u8, nvName[sizeof(ushort)..]);
+        _ = SHA256.HashData("nv-index-name"u8, nvName[sizeof(ushort)..]);
 
         ReadOnlySpan<byte> operandOne = [0x00, 0x00, 0x00, 0x2A];
         AssertNvFold(current, operandOne, offset: 0, operation: (ushort)TpmEoConstants.TPM_EO_EQ, nvName, destination);
@@ -405,7 +405,7 @@ internal sealed class TpmPolicyDigestTests
 
         AssertSignedFold(current, authName, ReadOnlySpan<byte>.Empty, destination);
 
-        ReadOnlySpan<byte> policyRef = "wave-w2-policysigned-ref"u8;
+        ReadOnlySpan<byte> policyRef = "policysigned-ref"u8;
         AssertSignedFold(current, authName, policyRef, destination);
 
         static void AssertSignedFold(ReadOnlySpan<byte> current, ReadOnlySpan<byte> authName, ReadOnlySpan<byte> policyRef, Span<byte> destination)
@@ -451,7 +451,7 @@ internal sealed class TpmPolicyDigestTests
 
         AssertAuthorizeFold(keySignName, ReadOnlySpan<byte>.Empty, destination);
 
-        ReadOnlySpan<byte> policyRef = "wave-w2-policyauthorize-ref"u8;
+        ReadOnlySpan<byte> policyRef = "policyauthorize-ref"u8;
         AssertAuthorizeFold(keySignName, policyRef, destination);
 
         static void AssertAuthorizeFold(ReadOnlySpan<byte> keySignName, ReadOnlySpan<byte> policyRef, Span<byte> destination)

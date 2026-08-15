@@ -54,7 +54,7 @@ public sealed class EcdhZGenInput: ITpmCommandInput, IDisposable
         TpmiDhObject keyHandle,
         ReadOnlySpan<byte> xCoord,
         ReadOnlySpan<byte> yCoord,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -72,7 +72,7 @@ public sealed class EcdhZGenInput: ITpmCommandInput, IDisposable
     public static EcdhZGenInput FromUncompressedPoint(
         TpmiDhObject keyHandle,
         ReadOnlySpan<byte> uncompressedPoint,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

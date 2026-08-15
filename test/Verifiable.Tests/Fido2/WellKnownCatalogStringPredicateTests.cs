@@ -6,8 +6,8 @@ namespace Verifiable.Tests.Fido2;
 /// <summary>
 /// Table-driven coverage for the string-valued well-known catalog family's predicates (the
 /// WellKnownJwaValues shape: UTF-8 span plus interned string plus per-member Is* predicates),
-/// added or converted across the WebAuthn/CTAP wire-string catalogs during the
-/// style-conformance wave. Each catalog's own value set is checked so every predicate accepts
+/// added or converted across the WebAuthn/CTAP wire-string catalogs. Each catalog's own value
+/// set is checked so every predicate accepts
 /// its own value and rejects every sibling value.
 /// </summary>
 [TestClass]

@@ -123,7 +123,7 @@ internal sealed class CtapGetAssertionRequestCborReaderTests
 
     /// <summary>
     /// A <c>largeBlobKey:true</c> extensions map decodes <see cref="CtapGetAssertionRequest.LargeBlobKey"/>
-    /// — one of this request type's two pre-decoded known-key convenience members (wavelb R8's scalar
+    /// — one of this request type's two pre-decoded known-key convenience members (the scalar
     /// precedent; <see cref="CtapGetAssertionRequest.HmacSecret"/> is the compound sibling).
     /// </summary>
     [TestMethod]

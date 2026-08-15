@@ -69,7 +69,7 @@ internal sealed class TpmSessionTests
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the nonce transfers to the bound session on success and CreateBoundAsync disposes it on a derivation failure; the session is disposed by the using statement.")]
     public async Task CreateBoundAsyncProducesUsableSession(TpmAlgIdConstants sessionAlg, int digestSize)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var sessionHandle = new TpmHandle(0x02000000u);
 
         byte[] bindAuth = [0x01, 0x02, 0x03, 0x04];
@@ -94,7 +94,7 @@ internal sealed class TpmSessionTests
     {
         //Binding to an empty-auth entity still derives a non-empty session key (KDFa over an empty key), so
         //the bound path is exercised without an authValue. The factory must not reject the empty bind auth.
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var sessionHandle = new TpmHandle(0x02000000u);
         Tpm2bNonce nonceTpm = Tpm2bNonce.CreateRandom(32, pool);
 
@@ -107,7 +107,7 @@ internal sealed class TpmSessionTests
     [TestMethod]
     public async Task CreateBoundAsyncRejectsNullNonceTpm()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
             await TpmSession.CreateBoundAsync(

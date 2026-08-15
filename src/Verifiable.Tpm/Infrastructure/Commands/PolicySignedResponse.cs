@@ -15,7 +15,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// <list type="bullet">
 ///   <item><description>timeout (TPM2B_TIMEOUT): the expiration relative to the session, or empty when no ticket is produced.</description></item>
-///   <item><description>policyTicket (TPMT_TK_AUTH): an authorization ticket, or a NULL ticket when no ticket is produced (the deferred-mint form this wave ships, TPM 2.0 Library Part 3, Section 23.2.5).</description></item>
+///   <item><description>policyTicket (TPMT_TK_AUTH): an authorization ticket, or a NULL ticket when no ticket is produced (the deferred-mint form this library ships, TPM 2.0 Library Part 3, Section 23.2.5).</description></item>
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -28,12 +28,12 @@ public sealed class PolicySignedResponse: IDisposable, ITpmWireType
     private int TicketDigestLength { get; }
 
     /// <summary>
-    /// Gets the timeout value (empty in this wave's deferred-ticket form).
+    /// Gets the timeout value (empty in the deferred-ticket form).
     /// </summary>
     public ReadOnlySpan<byte> Timeout => TimeoutOwner.Memory.Span[..TimeoutLength];
 
     /// <summary>
-    /// Gets the authorization ticket (a NULL ticket in this wave's deferred-ticket form).
+    /// Gets the authorization ticket (a NULL ticket in the deferred-ticket form).
     /// </summary>
     public TpmtTkAuth PolicyTicket { get; }
 
@@ -55,7 +55,7 @@ public sealed class PolicySignedResponse: IDisposable, ITpmWireType
     /// <returns>The parsed response.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The rented buffers are owned by the returned PolicySignedResponse and disposed by the caller.")]
-    public static PolicySignedResponse Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static PolicySignedResponse Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

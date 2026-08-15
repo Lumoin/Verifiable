@@ -11,8 +11,8 @@ namespace Verifiable.DidComm.ProblemReports;
 /// so individual protocols define more granular descriptors (DIDComm v2.1 §Descriptors), and these are not
 /// exhaustive. A descriptor may be used by itself or as a prefix to a more specific one; the values here
 /// are the descriptor tokens (and dotted sub-descriptor paths), not whole codes, except
-/// <see cref="MaxErrorsExceeded"/>, which is the complete abort code the spec mandates for the
-/// max-error-count circuit breaker.
+/// <see cref="MaxErrorsExceeded"/> and <see cref="MessageTooBig"/>, which are complete codes the spec names
+/// verbatim.
 /// </remarks>
 public static class WellKnownProblemCodes
 {
@@ -66,4 +66,22 @@ public static class WellKnownProblemCodes
     /// protocol once its max-error-count circuit breaker trips (DIDComm v2.1 §Cascading Problems).
     /// </summary>
     public static string MaxErrorsExceeded => "e.p.req.max-errors-exceeded";
+
+    /// <summary>
+    /// The complete code <c>me.res.storage.message_too_big</c> associated with the <c>max_receive_bytes</c>
+    /// constraint: "the agent imposing the constraint" SHOULD send this citing the constraint as the cause
+    /// of a reception error when a received message exceeds the size the agent is willing to receive, per
+    /// <see href="https://identity.foundation/didcomm-messaging/spec/v2.1/#agent-constraint-disclosure">DIDComm Messaging v2.1 §Agent Constraint Disclosure</see>.
+    /// </summary>
+    /// <remarks>
+    /// Kept verbatim even though this exact literal violates the SAME spec's own
+    /// <see href="https://identity.foundation/didcomm-messaging/spec/v2.1/#problem-codes">§Problem Codes</see>
+    /// lower-kebab-case grammar (an underscore where that grammar requires a hyphen) — a genuine spec-internal
+    /// inconsistency, annotated here rather than silently "corrected" into a string the wire text does not
+    /// contain. Consequently this literal does not parse through <see cref="ProblemCode.Parse"/> today.
+    /// §Agent Constraint Disclosure itself sanctions the route actually reachable when a reply carrying this
+    /// code cannot be composed: "it is also appropriate to emit an error at the transport level, such as HTTP
+    /// 413 <c>Request Too Large</c>."
+    /// </remarks>
+    public static string MessageTooBig => "me.res.storage.message_too_big";
 }

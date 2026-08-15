@@ -5,6 +5,11 @@ using System.Threading;
 
 namespace Verifiable.Core.Assessment
 {
+    /// <summary>
+    /// Reserved for <c>did:web</c>-specific claim identifiers that do not belong on <see cref="ClaimId"/> itself.
+    /// Currently holds a single commented-out historical allocation, kept for provenance rather than deleted; the
+    /// identifier it once declared now lives on <see cref="ClaimId.WebDidIdEncoding"/>.
+    /// </summary>
     public static class WebDidClaims
     {
         /// <summary>
@@ -13,6 +18,7 @@ namespace Verifiable.Core.Assessment
         //public static ClaimId WebDidIdEncoding { get; } = ClaimId.Create(600, "WebDidIdEncoding");
     }
 
+#pragma warning disable CA1815 // Override equals and operator equals on value types
     /// <summary>
     /// Represents a unique identifier for a claim generated from a specific check that either succeeds or fails.
     /// <see cref="ClaimId"/> acts as a bridge between code and operational aspects like Security Development Operations (SecDevOps)
@@ -28,7 +34,7 @@ namespace Verifiable.Core.Assessment
     /// <description>Binding claim checks to code via <see cref="ClaimIssuer{TInput}"/>, which holds delegates to issue claims in <see cref="ClaimIssueResult"/>. Claims are then assessed by <see cref="ClaimAssessor{TInput}"/> to determine the overall case success or failure.</description>
     /// </item>
     /// <item>
-    /// <description>Mapping claim identifiers to monitoring and SecDevOps tools, aligning with Forrester-recommended practices for a comprehensive view of system security and reliability.</description>
+    /// <description>Mapping claim identifiers to monitoring and SecDevOps tools, giving a comprehensive view of system security and reliability.</description>
     /// </item>
     /// </list>
     /// This struct is lightweight and optimized for performance, minimizing overhead in collections or other data structures.
@@ -37,11 +43,10 @@ namespace Verifiable.Core.Assessment
     /// <example>
     /// Creating a new <see cref="ClaimId"/>:
     /// <code>
-    /// var newClaimId = ClaimId2.Create(509);
+    /// ClaimId newClaimId = ClaimId.Create(509, "MyNewClaim");
     /// </code>
     /// </example>
     [DebuggerDisplay("{DebuggerDisplay,nq}")]
-#pragma warning disable CA1815 // Override equals and operator equals on value types
     public readonly struct ClaimId
 #pragma warning restore CA1815 // Override equals and operator equals on value types
     {
@@ -248,6 +253,19 @@ namespace Verifiable.Core.Assessment
         /// <param name="code">The code representing the claim identifier.</param>
         /// <param name="description">The description of the claim. Defaults to an empty string.</param>
         /// <returns>A new instance of <see cref="ClaimId"/>.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">When <paramref name="code"/> is not greater than zero.</exception>
+        /// <exception cref="ArgumentException">
+        /// When <paramref name="description"/> is <see langword="null"/> or empty, or when the registry already
+        /// holds <paramref name="code"/>.
+        /// </exception>
+        /// <remarks>
+        /// <strong>The duplicate refusal is decided inside the registry's own lock.</strong> Reading the registry
+        /// here to answer it first would be a check-then-act window: two threads allocating one code could both
+        /// find it absent, and the loser would be refused by the underlying collection rather than by this
+        /// method — with a different message, and after an unsynchronised read of a collection that is not
+        /// thread-safe. Every allocation site of this type is a static property initialiser, so an exception
+        /// escaping here escapes a type initialiser and poisons the registry class for the process.
+        /// </remarks>
         public static ClaimId Create(int code, string description)
         {
             //At the moment only FailedClaimId is allowed to have code 0.
@@ -258,11 +276,6 @@ namespace Verifiable.Core.Assessment
             }
 
             ArgumentException.ThrowIfNullOrEmpty(description, nameof(description));
-
-            if(CodeDescriptions.Descriptions.ContainsKey(code))
-            {
-                throw new ArgumentException($"A {nameof(ClaimId)} with code {code} already exists.");
-            }
 
             return new ClaimId(code, description);
         }
@@ -288,6 +301,13 @@ namespace Verifiable.Core.Assessment
         }
 
 
+        /// <summary>
+        /// Initializes a new claim identifier carrying <paramref name="code"/>, and registers
+        /// <paramref name="description"/> for it in <see cref="CodeDescriptions"/>. Only reachable through
+        /// <see cref="Create"/>, which validates both arguments before calling this constructor.
+        /// </summary>
+        /// <param name="code">The code representing the claim identifier.</param>
+        /// <param name="description">The description of the claim.</param>
         private ClaimId(int code, string description)
         {
             Code = code;
@@ -306,6 +326,11 @@ namespace Verifiable.Core.Assessment
         /// </summary>
         private static class CodeDescriptions
         {
+            /// <summary>
+            /// Guards <see cref="Descriptions"/> so the duplicate check and the insertion it guards in
+            /// <see cref="AddDescription"/> happen as one atomic step, and so <see cref="GetDescription"/> never
+            /// reads the dictionary while another thread is writing it.
+            /// </summary>
             private static readonly Lock descriptionsLock = new();
 
             /// <summary>
@@ -315,14 +340,25 @@ namespace Verifiable.Core.Assessment
 
 
             /// <summary>
-            /// Adds a description for a claim identifier.
+            /// Adds a description for a claim identifier, refusing a code the registry already holds.
             /// </summary>
             /// <param name="code">The identifier code.</param>
             /// <param name="description">The description of the claim identifier, or a default message for unknown identifiers.</param>
+            /// <exception cref="ArgumentException">When the registry already holds <paramref name="code"/>.</exception>
+            /// <remarks>
+            /// The check and the insertion are one lock scope, so a code is refused for exactly one reason
+            /// whatever else is allocating at the same moment, and no thread reads the dictionary while another
+            /// is writing it. Answering the question before taking the lock would leave both halves open.
+            /// </remarks>
             public static void AddDescription(int code, string description)
             {
                 lock(descriptionsLock)
                 {
+                    if(Descriptions.ContainsKey(code))
+                    {
+                        throw new ArgumentException($"A {nameof(ClaimId)} with code {code} already exists.");
+                    }
+
                     Descriptions.Add(code, description);
                 }
             }

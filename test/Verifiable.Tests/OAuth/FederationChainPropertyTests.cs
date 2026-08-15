@@ -2,7 +2,9 @@ using CsCheck;
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Immutable;
+using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
+using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
@@ -53,7 +55,7 @@ internal sealed class FederationChainPropertyTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     //Class-level fixture. Set up once, shared across all samples in all
     //tests. ClassCleanup tears it down.
@@ -188,6 +190,72 @@ internal sealed class FederationChainPropertyTests
                 "must reject — none of these are the chain's terminal anchor.");
         }, iter: 30);
     }
+
+
+    /// <summary>
+    /// A trust mark the anchor signs and authorizes is admitted by <see cref="FederationTrustMarkResolver"/>
+    /// running over the chain fetched across the three live hosts. The chain travels over HTTP and validates
+    /// through the production validator; the resolver then resolves the anchor's key FROM THAT VERIFIED CHAIN and
+    /// verifies the mark's real ES256 signature against that resolved key via the production
+    /// <c>Jws.VerifyAsync</c> — the same key-from-verified-source path a deployment runs, with no test-side
+    /// signature shortcut — before admitting it on the §6.2 issuer-authorization pathway. The end-to-end
+    /// multi-server proof for the §7 trust-mark verifier.
+    /// </summary>
+    [TestMethod]
+    public async Task TrustMarkIsAdmittedOverChainFetchedFromMultipleServers()
+    {
+        //Fetch + validate the five-element chain over HTTP; the validated outcome carries the parsed TrustChain.
+        string[] chain = await Fixture.FetchChainAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        TrustChainValidationOutcome outcome = await Fixture.ValidateChainAsync(
+            chain, [Fixture.AnchorNode.Identifier], TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(outcome.IsValid, outcome.FailureReason);
+        Assert.IsNotNull(outcome.Chain);
+
+        //The anchor issues a mark about the verifier, signed with its real federation key. Federation §7 makes
+        //the kid header a MUST on Trust Mark JWTs and the in-chain resolver key-pins on it (no first-key
+        //fallback), so the mark references the kid the anchor actually published in its Entity Configuration —
+        //read here from the wire-fetched, verified chain, exactly as a deployment's resolver would match it.
+        DateTimeOffset now = TestClock.CanonicalEpoch;
+        string anchorPublishedKid = ReadFirstPublishedKid(outcome.Chain!.Statements[^1]);
+        MintedTrustMark minted = await FederationTestRing.MintTrustMarkAsync(
+            Fixture.AnchorNode, Fixture.VerifierNode, FederationTopologyFixture.TrustMarkId, now, now.AddHours(1),
+            kidOverride: anchorPublishedKid, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        TrustMarkCandidate candidate = new() { Mark = minted.Mark, Header = minted.Header, CompactJws = minted.CompactJws };
+
+        //Production verification: the resolver hands the key it resolved FROM THE VERIFIED CHAIN to this delegate,
+        //which runs the library's real Jws.VerifyAsync against it (the same overload the chain validator uses).
+        VerifyCompactJwsDelegate verify = (compactJws, key, cancellationToken) =>
+            Jws.VerifyAsync(compactJws, TestSetup.Base64UrlDecoder, Pool, key, cancellationToken);
+
+        IReadOnlyList<TrustMarkVerdict> verdicts = await FederationTrustMarkResolver.ResolveVerifiedAsync(
+            outcome.Chain!, [candidate], verify, TestSetup.Base64UrlDecoder, Pool,
+            timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch), TimeSpan.FromMinutes(5), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(verdicts[0].SignatureVerified,
+            "The mark signature must verify against the anchor key resolved from the wire-fetched, verified chain.");
+        Assert.AreEqual(ClaimOutcome.Success, verdicts[0].IssuerAuthorization.Outcome);
+        Assert.IsTrue(verdicts[0].Admitted,
+            "A mark the anchor signs and authorizes must be admitted over the multi-server fetched chain.");
+    }
+
+
+    /// <summary>
+    /// Reads the <c>kid</c> of the first key an entity statement publishes in its <c>jwks</c> claim — the id a
+    /// deployment's in-chain resolver key-pins on when matching a statement or mark header.
+    /// </summary>
+    /// <param name="statement">The entity statement whose published jwks is read.</param>
+    /// <returns>The first published key's <c>kid</c>.</returns>
+    private static string ReadFirstPublishedKid(EntityStatement statement)
+    {
+        Assert.IsTrue(statement.Payload.TryGetValue(WellKnownFederationClaimNames.Jwks, out object? jwksObj),
+            "The anchor's Entity Configuration must publish a jwks.");
+        IReadOnlyDictionary<string, object> jwks = (IReadOnlyDictionary<string, object>)jwksObj!;
+        IEnumerable<object> keys = (IEnumerable<object>)jwks[WellKnownJwkMemberNames.Keys];
+        IReadOnlyDictionary<string, object> firstKey = (IReadOnlyDictionary<string, object>)keys.First();
+        return (string)firstKey[WellKnownJwkMemberNames.Kid];
+    }
 }
 
 
@@ -226,7 +294,14 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
             bytes, TestSetup.DefaultSerializationOptions)
         ?? throw new FormatException("Payload JSON parsed to null.");
 
+    /// <summary>The trust-mark type the anchor authorizes itself to issue (declared in its EC's trust_mark_issuers).</summary>
+    public const string TrustMarkId = "https://anchor.example.com/trust-mark/membership";
+
+    /// <summary>The anchor ring node — supplies its Entity Identifier for the trust-anchor allow-list and signs trust marks.</summary>
     public FederationTestRingNode AnchorNode { get; }
+
+    /// <summary>The verifier (leaf) ring node, keyed by the same federation key its EC publishes — the trust-mark subject.</summary>
+    public FederationTestRingNode VerifierNode { get; }
 
 
     private FederationTopologyFixture(
@@ -237,7 +312,8 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> intermediateFederationKeys,
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> anchorFederationKeys,
         VerifierKeyMaterial verifierKeys, VerifierKeyMaterial intermediateKeys, VerifierKeyMaterial anchorKeys,
-        FederationTestRingNode anchorNode)
+        FederationTestRingNode anchorNode,
+        FederationTestRingNode verifierNode)
     {
         this.host = host;
         this.verifierEntityId = verifierEntityId;
@@ -253,6 +329,7 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
         this.intermediateKeys = intermediateKeys;
         this.anchorKeys = anchorKeys;
         AnchorNode = anchorNode;
+        VerifierNode = verifierNode;
     }
 
 
@@ -366,6 +443,15 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
                     {
                         ["federation_fetch_endpoint"] = anchorFetchUrl.ToString()
                     }
+                },
+                //The Trust Anchor authorizes itself as a trust-mark issuer for TrustMarkId (§6.2), so a mark it
+                //signs is admitted by the trust-mark resolver over the fetched chain.
+                AdditionalClaims = new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    [WellKnownFederationClaimNames.TrustMarkIssuers] = new Dictionary<string, object>(StringComparer.Ordinal)
+                    {
+                        [TrustMarkId] = new List<object> { anchorEntityId.ToString() }
+                    }
                 }
             });
 
@@ -391,13 +477,19 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
         FederationTestRingNode anchorNode = FederationTestRing.CreateNodeFromKey(
             new EntityIdentifier(anchorEntityId.ToString()), anchorFederationKeys.PrivateKey);
 
+        //The verifier ring node is keyed by the same federation private key its EC publishes, so it can stand in
+        //as the trust-mark subject; the anchor signs marks about it over the wire-fetched chain.
+        FederationTestRingNode verifierNode = FederationTestRing.CreateNodeFromKey(
+            new EntityIdentifier(verifierEntityId.ToString()), verifierFederationKeys.PrivateKey);
+
         return new FederationTopologyFixture(
             host,
             verifierEntityId, intermediateEntityId, anchorEntityId,
             verifierSegment, intermediateSegment, anchorSegment,
             verifierFederationKeys, intermediateFederationKeys, anchorFederationKeys,
             verifierKeys, intermediateKeys, anchorKeys,
-            anchorNode);
+            anchorNode,
+            verifierNode);
     }
 
 
@@ -477,6 +569,7 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         AnchorNode.Dispose();
+        VerifierNode.Dispose();
         verifierKeys.Dispose();
         intermediateKeys.Dispose();
         anchorKeys.Dispose();

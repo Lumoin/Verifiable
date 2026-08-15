@@ -18,7 +18,7 @@ internal sealed class AesKeyWrapTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     //RFC 3394 §4.1: 128-bit key data wrapped with a 128-bit KEK.
     private const string Kek128 = "000102030405060708090A0B0C0D0E0F";

@@ -139,7 +139,7 @@ public sealed class DataGroup11
     public static ElementaryFile Write(
         string? fullName, string? personalNumber, string? placeOfBirth, string? permanentAddress,
         string? telephone, string? profession, string? title, string? personalSummary,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

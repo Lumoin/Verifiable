@@ -591,7 +591,7 @@ internal sealed class Fido2CliTests
     /// <summary>
     /// Runs the real <c>verify-registration</c> CLI command for a <c>none</c>-format credential, and
     /// returns the path to the credential record JSON file it wrote — the verb-to-verb round trip
-    /// through files ruling 12 requires for the assertion flow tests.
+    /// through files the assertion flow tests require.
     /// </summary>
     private async Task<string> RegisterNoneCredentialAsync(string executablePath, CoseKey coseKey, byte[]? credentialPublicKeyCbor = null)
     {

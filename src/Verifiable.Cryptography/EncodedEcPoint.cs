@@ -30,7 +30,7 @@ public sealed class EncodedEcPoint(IMemoryOwner<byte> sensitiveMemory, Tag tag, 
     /// buffer in an <see cref="EncodedEcPoint"/> carrying <paramref name="curve"/>. The caller takes
     /// ownership of the returned carrier.
     /// </summary>
-    public static EncodedEcPoint FromBytes(ReadOnlySpan<byte> bytes, Tag curve, MemoryPool<byte> pool)
+    public static EncodedEcPoint FromBytes(ReadOnlySpan<byte> bytes, Tag curve, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(curve);
         ArgumentNullException.ThrowIfNull(pool);

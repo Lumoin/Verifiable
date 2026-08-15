@@ -69,7 +69,7 @@ internal sealed class TpmSigningContextPrecedenceTests
     [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "The PrivateKey takes ownership of the handle memory and is disposed by its using declaration.")]
     public async Task PerCallContextOverridesTheConstructorDefaultContext()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateRegistry();
 
         //The key lives only on this device.
@@ -140,12 +140,12 @@ internal sealed class TpmSigningContextPrecedenceTests
     /// Creates a simulator with the ECC signing backend wired, powers it on, and brings it through
     /// <c>TPM2_Startup(CLEAR)</c> into the operational phase — mirroring
     /// <c>TpmInHouseSimulatorSignTests.CreateOperationalAsync</c>, kept local to this file per the
-    /// wave-8 file discipline (new test files only; shared test infrastructure stays untouched).
+    /// new-test-files-only discipline (shared test infrastructure stays untouched).
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <param name="tpmId">The simulator's identifier, also its default proof seed.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalSimulatorAsync(MemoryPool<byte> pool, string tpmId)
+    private async Task<TpmSimulator> CreateOperationalSimulatorAsync(BaseMemoryPool pool, string tpmId)
     {
         var simulator = new TpmSimulator(tpmId, signingBackend: BouncyCastleTpmEccSigningBackend.Create());
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -161,7 +161,7 @@ internal sealed class TpmSigningContextPrecedenceTests
     /// </summary>
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();

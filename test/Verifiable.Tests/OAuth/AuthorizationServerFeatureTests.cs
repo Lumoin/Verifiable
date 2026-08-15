@@ -53,7 +53,7 @@ internal sealed class AuthorizationServerFeatureTests
 
     private const string IssuerId = "https://issuer.example.com";
     private const string IssuerKeyId = "did:web:issuer.example.com#key-1";
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private static ImmutableHashSet<CapabilityIdentifier> Oid4VpCapabilities { get; } =
         ImmutableHashSet.Create(
@@ -1101,7 +1101,7 @@ internal sealed class AuthorizationServerFeatureTests
 
         string segment = keys.Registration.TenantId;
 
-        //Phase 9h chunk 12 — URL shape is the application's choice (the
+        //URL shape is the application's choice (the
         //ResolveEndpointUriAsync lambda), no longer the library's baked-in
         //path template. This test now verifies the fixture's lambda produces
         //the expected /connect/{segment}/<suffix> shape for each endpoint
@@ -2054,7 +2054,7 @@ internal sealed class AuthorizationServerFeatureTests
         using VerifierKeyMaterial keys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
-        // Phase 9h chunk 8 — the per-request capability gate moved into
+        // The per-request capability gate moved into
         // EndpointChain.BuildForRequestAsync. Attenuating the capability set
         // at chain-build time drops candidates whose capability isn't in the
         // active set; the dispatcher never sees the endpoint, so the chain
@@ -2202,7 +2202,7 @@ internal sealed class AuthorizationServerFeatureTests
 
         MatchPayload? capturedAtMatchedStage = null;
 
-        // Phase 9h chunk 8 — the InspectAsync(MatchedStage) hook fires after
+        // The InspectAsync(MatchedStage) hook fires after
         // the dispatcher placed the match payload on the context and before
         // the matched endpoint's handler runs. Capturing context.MatchPayload
         // here proves the payload is visible to anything that fires
@@ -2412,8 +2412,7 @@ internal sealed class AuthorizationServerFeatureTests
     [TestMethod]
     public async Task DefaultResolverReturnsNullWhenScopeToAudienceUnset()
     {
-        //Body D — closes audit Finding 2. Registration with no ScopeToAudience
-        //map produces null audience from the default resolver.
+        //Registration with no ScopeToAudience map produces null audience from the default resolver.
         ClientRecord registration = MakeRegistrationForAud(scopeToAudience: null);
         IssuanceContext context = MakeIssuanceContext(registration, "openid profile");
 
@@ -2475,10 +2474,12 @@ internal sealed class AuthorizationServerFeatureTests
 
 
     [TestMethod]
-    public void JwtPayloadEmitsAudPerRfc7519()
+    public void JwtPayloadEmitsAudAlwaysAsArray()
     {
-        //RFC 7519 §4.1.3 — single-element list emits as JSON string;
-        //multi-element list emits as JSON array; null/empty omits the claim.
+        //RFC 7519 §4.1.3's general representation of aud is an array of StringOrURI values; the
+        //bare-string single-audience form is a MAY special case this producer deliberately does
+        //not take (JwtPayloadExtensions.ForAccessToken's audience parameter doc) — a single-element
+        //list emits as a one-element JSON array, not a bare string. null/empty omits the claim.
         DateTimeOffset now = TimeProvider.GetUtcNow();
 
         JwtPayload single = JwtPayload.ForAccessToken(
@@ -2486,8 +2487,9 @@ internal sealed class AuthorizationServerFeatureTests
             issuedAt: now, expiresAt: now.AddHours(1),
             issuer: "https://issuer", audience: SingleAudience, clientId: "c1");
         Assert.IsTrue(single.TryGetValue(WellKnownJwtClaimNames.Aud, out object? singleAud));
-        Assert.IsInstanceOfType<string>(singleAud);
-        Assert.AreEqual("https://api1", (string)singleAud!);
+        Assert.IsInstanceOfType<IReadOnlyList<string>>(singleAud);
+        Assert.HasCount(1, (IReadOnlyList<string>)singleAud!);
+        Assert.AreEqual("https://api1", ((IReadOnlyList<string>)singleAud!)[0]);
 
         JwtPayload multi = JwtPayload.ForAccessToken(
             subject: "alice", jti: "j2", scope: "read",

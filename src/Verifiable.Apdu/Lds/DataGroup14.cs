@@ -70,7 +70,7 @@ public sealed class DataGroup14: IDisposable
     /// <returns>The parsed <see cref="DataGroup14"/>. The caller disposes it.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the structure is not a well-formed DG14 or uses an unsupported curve.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the public-key carriers transfers to the returned DataGroup14; the catch disposes them on a partial parse failure.")]
-    public static DataGroup14 Parse(ReadOnlySpan<byte> dataGroup14, MemoryPool<byte> pool)
+    public static DataGroup14 Parse(ReadOnlySpan<byte> dataGroup14, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -127,7 +127,7 @@ public sealed class DataGroup14: IDisposable
     /// <returns>The EF.DG14 <see cref="ElementaryFile"/>. The caller disposes it.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the public-key tag carries no curve algorithm.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned ElementaryFile, which the caller disposes; the catch disposes it on failure.")]
-    public static ElementaryFile Write(EncodedEcPoint chipPublicKey, ChipAuthenticationCipher cipher, int version, int? keyId, MemoryPool<byte> pool)
+    public static ElementaryFile Write(EncodedEcPoint chipPublicKey, ChipAuthenticationCipher cipher, int version, int? keyId, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(chipPublicKey);
         ArgumentNullException.ThrowIfNull(pool);
@@ -233,7 +233,7 @@ public sealed class DataGroup14: IDisposable
     /// SubjectPublicKeyInfo (algorithm, domain parameters, EC point) and the optional key identifier.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the EncodedEcPoint transfers to the returned ChipAuthenticationPublicKeyInfo, which the caller disposes; the catch disposes it on a partial parse failure.")]
-    private static ChipAuthenticationPublicKeyInfo ParsePublicKeyInfo(ref ApduReader securityInfo, MemoryPool<byte> pool)
+    private static ChipAuthenticationPublicKeyInfo ParsePublicKeyInfo(ref ApduReader securityInfo, BaseMemoryPool pool)
     {
         ApduReader subjectPublicKeyInfo = ReadConstructed(ref securityInfo, SequenceTag, "SubjectPublicKeyInfo");
         ApduReader algorithm = ReadConstructed(ref subjectPublicKeyInfo, SequenceTag, "AlgorithmIdentifier");

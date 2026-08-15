@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.OAuth.AuthCode;
 
@@ -18,7 +17,6 @@ namespace Verifiable.OAuth.AuthCode;
 /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-4.4">RFC 9700 §4.4</see>.
 /// </param>
 /// <param name="ReceivedAt">The UTC instant the redirect was received.</param>
-[DebuggerDisplay("CodeReceived")]
 public sealed record CodeReceived(
     string Code,
     string State,

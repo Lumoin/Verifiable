@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.OAuth.Federation;
 
@@ -10,7 +9,6 @@ namespace Verifiable.OAuth.Federation;
 /// combination legality (§6.1.3.1.8) is a separate concern handled by the
 /// metadata-policy evaluator.
 /// </summary>
-[DebuggerDisplay("MetadataPolicyParser")]
 public static class MetadataPolicyParser
 {
     /// <summary>

@@ -20,7 +20,7 @@ internal sealed class CtapNfcTransportTests
     private static byte[] OpaquePayload => [0x04];
 
     /// <summary>Builds a bare success response (data + SW=9000) rented from <paramref name="pool"/>.</summary>
-    private static ApduResponse BuildSuccessResponse(ReadOnlySpan<byte> data, MemoryPool<byte> pool)
+    private static ApduResponse BuildSuccessResponse(ReadOnlySpan<byte> data, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(data.Length + 2);
         Span<byte> span = owner.Memory.Span;
@@ -32,7 +32,7 @@ internal sealed class CtapNfcTransportTests
     }
 
     /// <summary>Builds a bare status-word-only response rented from <paramref name="pool"/>.</summary>
-    private static ApduResponse BuildStatusOnlyResponse(byte sw1, byte sw2, MemoryPool<byte> pool)
+    private static ApduResponse BuildStatusOnlyResponse(byte sw1, byte sw2, BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(2);
         owner.Memory.Span[0] = sw1;
@@ -49,7 +49,7 @@ internal sealed class CtapNfcTransportTests
         byte[]? capturedCommand = null;
 
         ValueTask<ApduResult<ApduResponse>> Handler(
-            ReadOnlyMemory<byte> commandApdu, MemoryPool<byte> pool, CancellationToken cancellationToken)
+            ReadOnlyMemory<byte> commandApdu, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             capturedCommand = commandApdu.ToArray();
             ApduResponse response = BuildSuccessResponse(expectedResponseData, pool);
@@ -59,7 +59,7 @@ internal sealed class CtapNfcTransportTests
 
         using var device = ApduDevice.Create(Handler);
         CtapNfcTransport transport = CtapNfcTransport.OverApdu(device);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using PooledMemory result = await transport.TransceiveAsync(request, pool, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -85,7 +85,7 @@ internal sealed class CtapNfcTransportTests
         byte[]? pollCommand = null;
 
         ValueTask<ApduResult<ApduResponse>> Handler(
-            ReadOnlyMemory<byte> commandApdu, MemoryPool<byte> pool, CancellationToken cancellationToken)
+            ReadOnlyMemory<byte> commandApdu, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             callCount++;
             if(callCount == 1)
@@ -103,7 +103,7 @@ internal sealed class CtapNfcTransportTests
 
         using var device = ApduDevice.Create(Handler);
         CtapNfcTransport transport = CtapNfcTransport.OverApdu(device);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using PooledMemory result = await transport.TransceiveAsync(OpaquePayload, pool, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -125,7 +125,7 @@ internal sealed class CtapNfcTransportTests
         var commands = new List<byte[]>();
 
         ValueTask<ApduResult<ApduResponse>> Handler(
-            ReadOnlyMemory<byte> commandApdu, MemoryPool<byte> pool, CancellationToken cancellationToken)
+            ReadOnlyMemory<byte> commandApdu, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             commands.Add(commandApdu.ToArray());
             ApduResponse deferred = BuildStatusOnlyResponse(0x91, 0x00, pool);
@@ -135,7 +135,7 @@ internal sealed class CtapNfcTransportTests
 
         using var device = ApduDevice.Create(Handler);
         CtapNfcTransport transport = CtapNfcTransport.OverApdu(device);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync().ConfigureAwait(false);
@@ -157,7 +157,7 @@ internal sealed class CtapNfcTransportTests
     public async Task CardErrorThrowsWithStatusWord()
     {
         ValueTask<ApduResult<ApduResponse>> Handler(
-            ReadOnlyMemory<byte> commandApdu, MemoryPool<byte> pool, CancellationToken cancellationToken)
+            ReadOnlyMemory<byte> commandApdu, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             ApduResponse response = BuildStatusOnlyResponse(0x6A, 0x80, pool);
 
@@ -166,7 +166,7 @@ internal sealed class CtapNfcTransportTests
 
         using var device = ApduDevice.Create(Handler);
         CtapNfcTransport transport = CtapNfcTransport.OverApdu(device);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapNfcTransportException exception = await Assert.ThrowsExactlyAsync<CtapNfcTransportException>(
             () => transport.TransceiveAsync(OpaquePayload, pool, TestContext.CancellationToken).AsTask()).ConfigureAwait(false);
@@ -179,14 +179,14 @@ internal sealed class CtapNfcTransportTests
     public async Task TransportErrorThrowsWithErrorCode()
     {
         ValueTask<ApduResult<ApduResponse>> Handler(
-            ReadOnlyMemory<byte> commandApdu, MemoryPool<byte> pool, CancellationToken cancellationToken)
+            ReadOnlyMemory<byte> commandApdu, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             return ValueTask.FromResult(ApduResult<ApduResponse>.TransportError(0x1234));
         }
 
         using var device = ApduDevice.Create(Handler);
         CtapNfcTransport transport = CtapNfcTransport.OverApdu(device);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapNfcTransportException exception = await Assert.ThrowsExactlyAsync<CtapNfcTransportException>(
             () => transport.TransceiveAsync(OpaquePayload, pool, TestContext.CancellationToken).AsTask()).ConfigureAwait(false);

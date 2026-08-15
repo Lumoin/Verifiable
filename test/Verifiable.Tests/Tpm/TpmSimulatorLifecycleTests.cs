@@ -193,7 +193,7 @@ internal sealed class TpmSimulatorLifecycleTests
 
         //TPM2_MakeCredential is not modelled by this slice, so while operational it is rejected as an unknown
         //command code. (TPM2_GetRandom is modelled and would instead succeed here.)
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using IMemoryOwner<byte> owner = pool.Rent(TpmHeader.HeaderSize);
         Memory<byte> command = owner.Memory[..TpmHeader.HeaderSize];
         var writer = new TpmWriter(command.Span);
@@ -211,7 +211,7 @@ internal sealed class TpmSimulatorLifecycleTests
         var simulator = new TpmSimulator("tpm-truncated");
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using IMemoryOwner<byte> owner = pool.Rent(4);
         Memory<byte> command = owner.Memory[..4];
         BinaryPrimitives.WriteUInt16BigEndian(command.Span, (ushort)TpmStConstants.TPM_ST_NO_SESSIONS);
@@ -227,7 +227,7 @@ internal sealed class TpmSimulatorLifecycleTests
         var simulator = new TpmSimulator("tpm-size-mismatch");
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using IMemoryOwner<byte> owner = RentCommand(new GetTestResultInput(), pool, out int length);
         Memory<byte> command = owner.Memory[..length];
         BinaryPrimitives.WriteUInt32BigEndian(command.Span.Slice(sizeof(ushort)), (uint)(length + 1));
@@ -243,7 +243,7 @@ internal sealed class TpmSimulatorLifecycleTests
         var simulator = new TpmSimulator("tpm-bad-tag");
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using IMemoryOwner<byte> owner = RentCommand(new GetTestResultInput(), pool, out int length);
         Memory<byte> command = owner.Memory[..length];
         BinaryPrimitives.WriteUInt16BigEndian(command.Span, 0x1234);
@@ -308,7 +308,7 @@ internal sealed class TpmSimulatorLifecycleTests
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using IMemoryOwner<byte> owner = RentCommand(new StartupInput(TpmSuConstants.TPM_SU_CLEAR), pool, out int length);
         TpmResult<TpmResponse> result = await device.SubmitAsync(owner.Memory[..length], pool, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -327,7 +327,7 @@ internal sealed class TpmSimulatorLifecycleTests
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
 
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateRandomRegistry();
 
         TpmResult<GetRandomResponse> result = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
@@ -347,7 +347,7 @@ internal sealed class TpmSimulatorLifecycleTests
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
 
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateRandomRegistry();
 
         TpmResult<GetRandomResponse> result = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
@@ -394,7 +394,7 @@ internal sealed class TpmSimulatorLifecycleTests
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
 
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateRandomRegistry();
 
         TpmResult<GetRandomResponse> firstResult = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
@@ -421,7 +421,7 @@ internal sealed class TpmSimulatorLifecycleTests
 
         //A GetRandom command framed without its UINT16 bytesRequested parameter cannot be unmarshalled,
         //which the TPM reports as TPM_RC_INSUFFICIENT (Part 2, Table 4), not TPM_RC_SIZE.
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using IMemoryOwner<byte> owner = pool.Rent(TpmHeader.HeaderSize);
         Memory<byte> command = owner.Memory[..TpmHeader.HeaderSize];
         var writer = new TpmWriter(command.Span);
@@ -470,7 +470,7 @@ internal sealed class TpmSimulatorLifecycleTests
         //state end-to-end via TPM2_GetCapability(TPM_PROPERTIES), with no real hardware.
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         TpmResult<TpmDictionaryAttackParameters> result = await device.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -491,7 +491,7 @@ internal sealed class TpmSimulatorLifecycleTests
         Assert.AreEqual(TpmLifecyclePhase.FailureMode, simulator.CurrentPhase);
 
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateCapabilityRegistry();
 
         //Clause 10.4: Failure Mode admits TPM2_GetTestResult() and TPM2_GetCapability().
@@ -529,7 +529,7 @@ internal sealed class TpmSimulatorLifecycleTests
     {
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateCapabilityRegistry();
 
         //Requesting fewer than the available lockout properties truncates the window and sets moreData.
@@ -549,7 +549,7 @@ internal sealed class TpmSimulatorLifecycleTests
     {
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateCapabilityRegistry();
 
         //Page the full property set in windows of two, following moreData exactly as the DA carrier
@@ -593,7 +593,7 @@ internal sealed class TpmSimulatorLifecycleTests
     {
         TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateCapabilityRegistry();
 
         //TPM_PT_PERMANENT carries the IN_LOCKOUT bit; a freshly-started TPM is not in lockout, so the
@@ -631,7 +631,7 @@ internal sealed class TpmSimulatorLifecycleTests
 
     private async Task<TpmRcConstants> SubmitForCodeAsync(TpmSimulator simulator, ITpmCommandInput input)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using IMemoryOwner<byte> owner = RentCommand(input, pool, out int length);
 
         return await SubmitForCodeAsync(simulator, owner.Memory[..length]).ConfigureAwait(false);
@@ -639,7 +639,7 @@ internal sealed class TpmSimulatorLifecycleTests
 
     private async Task<TpmRcConstants> SubmitForCodeAsync(TpmSimulator simulator, ReadOnlyMemory<byte> command)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResult<TpmResponse> result = await simulator.SubmitAsync(command, pool, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess);
@@ -652,7 +652,7 @@ internal sealed class TpmSimulatorLifecycleTests
 
     private async Task<TpmResult<TpmResponse>> SubmitAsync(TpmSimulator simulator, ITpmCommandInput input)
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         using IMemoryOwner<byte> owner = RentCommand(input, pool, out int length);
 
         return await simulator.SubmitAsync(owner.Memory[..length], pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -674,7 +674,7 @@ internal sealed class TpmSimulatorLifecycleTests
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the rented command buffer transfers to the caller, which disposes it.")]
-    private static IMemoryOwner<byte> RentCommand(ITpmCommandInput input, MemoryPool<byte> pool, out int length)
+    private static IMemoryOwner<byte> RentCommand(ITpmCommandInput input, BaseMemoryPool pool, out int length)
     {
         length = TpmHeader.HeaderSize + input.GetSerializedSize();
         IMemoryOwner<byte> owner = pool.Rent(length);

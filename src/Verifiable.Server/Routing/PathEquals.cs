@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.Server.Routing;
 
@@ -23,7 +22,6 @@ namespace Verifiable.Server.Routing;
 /// compares the request path against that URI's <c>AbsolutePath</c>.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("PathEquals")]
 public static class PathEquals
 {
     /// <summary>

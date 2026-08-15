@@ -28,7 +28,7 @@
     neutral-carrier crypto projections, not the simulator/session/device-verb
     engine (Verifiable.Tpm). The three TPM-backed CTAP custody adapters that
     previously lived here (sealed-state/signature-counter/PIN-retries) moved to
-    a staged composition directory under test/ (layering-split-ledger.md).
+    a staged composition directory under test/.
   -->
   <ItemGroup>
     <ProjectReference Include="..\Verifiable.Foundation\Verifiable.Foundation.csproj" />

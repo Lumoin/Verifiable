@@ -10,8 +10,8 @@ namespace Verifiable.Tests.Fido2;
 /// <summary>
 /// Additive backend-parity tests for <see cref="ReadCertificateExtensionValueDelegate"/>: proves
 /// <see cref="BouncyCastleX509Functions.ReadCertificateExtensionValue"/> — the implementation this
-/// package adds to close the gap <c>scout-seams.md</c> found (only the Microsoft backend implemented
-/// the delegate before this wave) — agrees byte-for-byte with
+/// package adds to close the gap this library previously had (only the Microsoft backend implemented
+/// the delegate previously) — agrees byte-for-byte with
 /// <see cref="MicrosoftX509Functions.ReadCertificateExtensionValue"/> on the same minted certificate,
 /// for both the android key attestation certificate extension and its absence/criticality axes.
 /// </summary>

@@ -54,7 +54,7 @@ internal sealed class CtapMakeCredentialResponseCborWriterTests
 
 
     /// <summary>
-    /// A response carrying <c>largeBlobKey</c> (<c>0x05</c>, wavelb R8) writes it, as a byte string,
+    /// A response carrying <c>largeBlobKey</c> (<c>0x05</c>) writes it, as a byte string,
     /// after the two Required members — with both <c>attStmt</c> and <c>epAtt</c> absent (the response's
     /// <c>EpAtt</c> member is <see langword="null"/>), neither key appears at all.
     /// </summary>
@@ -76,7 +76,7 @@ internal sealed class CtapMakeCredentialResponseCborWriterTests
     /// <summary>
     /// A response carrying <c>epAtt: true</c> alone (no <c>attStmt</c>, no <c>largeBlobKey</c>) writes it
     /// as CBOR simple-value <c>true</c> (<c>0xF5</c>) right after the two Required members — the
-    /// memberCount ternary's own new term (trap 3) proven by the resulting 3-entry map.
+    /// memberCount ternary's own new term, proven by the resulting 3-entry map.
     /// </summary>
     [TestMethod]
     public void WriteEncodesEpAttTrueAfterRequiredMembersWhenAloneToExactCanonicalBytes()
@@ -94,7 +94,7 @@ internal sealed class CtapMakeCredentialResponseCborWriterTests
 
     /// <summary>
     /// An EXPLICIT <c>epAtt: false</c> is emitted as CBOR simple-value <c>false</c> (<c>0xF4</c>), never
-    /// omitted — the writer's own codec-faithfulness half of trap 18 (a foreign present-false round-trips
+    /// omitted — the writer's own codec-faithfulness half (a foreign present-false round-trips
     /// unchanged; only the authenticator's own response-build site chooses absence over false).
     /// </summary>
     [TestMethod]
@@ -114,7 +114,7 @@ internal sealed class CtapMakeCredentialResponseCborWriterTests
     /// <summary>
     /// A response carrying <c>attStmt</c>, <c>epAtt</c>, AND <c>largeBlobKey</c> together writes
     /// <c>epAtt</c> (<c>0x04</c>) BETWEEN the <c>attStmt</c> (<c>0x03</c>) and <c>largeBlobKey</c>
-    /// (<c>0x05</c>) blocks — never appended after <c>largeBlobKey</c> (trap 2/5's own byte-exact proof):
+    /// (<c>0x05</c>) blocks — never appended after <c>largeBlobKey</c> (a byte-exact proof):
     /// an enterprise-attested resident credential with a <c>largeBlobKey</c> also requested is a
     /// genuinely reachable combination whose wire key order must stay <c>1, 2, 3, 4, 5</c>.
     /// </summary>

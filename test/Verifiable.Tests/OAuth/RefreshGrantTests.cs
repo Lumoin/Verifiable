@@ -13,15 +13,15 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
-/// Phase 9c — refresh-token grant. Drives PAR → Authorize → Token to
+/// Refresh-token grant. Drives PAR → Authorize → Token to
 /// receive an initial refresh token, then exercises the refresh-grant
 /// endpoint for rotation semantics (RFC 6749 §6 + RFC 9700 §2.2.2),
 /// expiry, client-id binding, and the unknown-grant_type failure mode.
 /// </summary>
 /// <remarks>
 /// Tests dispatch directly via <see cref="TestHostShell.DispatchAtEndpointAsync"/>
-/// — the refresh endpoint is server-side. Per the phase 9b norm, AS-
-/// touching tests use <c>await using</c> with the async-disposable host.
+/// — the refresh endpoint is server-side. AS-touching tests use
+/// <c>await using</c> with the async-disposable host.
 /// </remarks>
 [TestClass]
 internal sealed class RefreshGrantTests

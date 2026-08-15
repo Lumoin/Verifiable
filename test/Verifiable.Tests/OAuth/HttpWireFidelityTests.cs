@@ -14,7 +14,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
-/// Phase 9b — three wire-fidelity tests that exercise paths the
+/// Three wire-fidelity tests that exercise paths the
 /// function-call transport can't catch. Each runs through the
 /// HTTP-backed factory so bytes actually traverse Kestrel + HttpClient
 /// over a real socket.
@@ -88,7 +88,7 @@ internal sealed class HttpWireFidelityTests
     public async Task ParResponseCacheControlHeaderEmitsOnHttpWire()
     {
         //OAuth 2.1 §3.2.3 — Cache-Control: no-store on the PAR response
-        //(added by phase 9a) must actually traverse the HTTP wire. The
+        //must actually traverse the HTTP wire. The
         //in-process server emits it on ServerHttpResponse.Headers; this
         //test verifies the same string lands on the client's parsed
         //response headers after a real socket round-trip.

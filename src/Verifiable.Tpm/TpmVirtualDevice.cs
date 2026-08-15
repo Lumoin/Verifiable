@@ -145,7 +145,7 @@ public sealed class TpmVirtualDevice
         Justification = "TpmResponse takes ownership of the rented buffer and is owned by the returned TpmResult, which the caller disposes.")]
     public ValueTask<TpmResult<TpmResponse>> SubmitAsync(
         ReadOnlyMemory<byte> command,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -170,7 +170,7 @@ public sealed class TpmVirtualDevice
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "TpmResponse takes ownership of the rented buffer and is owned by the returned TpmResult, which the caller disposes.")]
-    private static TpmResult<TpmResponse> BuildFailureResponse(MemoryPool<byte> pool)
+    private static TpmResult<TpmResponse> BuildFailureResponse(BaseMemoryPool pool)
     {
         IMemoryOwner<byte> owner = pool.Rent(TpmHeader.HeaderSize);
         var header = new TpmHeader(

@@ -16,7 +16,7 @@ internal sealed class CtapNfcResponderTests
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>A <see cref="CtapPayloadTransceiveDelegate"/> that never runs; used where the responder should reject the command before reaching the payload seam.</summary>
-    private static ValueTask<PooledMemory> UnreachablePayload(ReadOnlyMemory<byte> request, MemoryPool<byte> pool, CancellationToken cancellationToken) =>
+    private static ValueTask<PooledMemory> UnreachablePayload(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
         throw new InvalidOperationException("The payload seam must not be reached for this command.");
 
     /// <summary>A one-byte opaque CTAP2 request envelope carried in the NFCCTAP_MSG data field; opaque to the responder, which never inspects it (it only deframes and forwards to the payload seam).</summary>
@@ -26,7 +26,7 @@ internal sealed class CtapNfcResponderTests
     public async Task SelectWithFidoAidSucceedsAndReturnsVersionString()
     {
         using CtapNfcResponder responder = CtapNfcResponder.Create(UnreachablePayload);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using CommandApdu select = CommandApdu.BuildCase4(
             WellKnownCommandParameters.InterIndustryClassByte, InstructionCode.Select.Code,
@@ -45,7 +45,7 @@ internal sealed class CtapNfcResponderTests
     public async Task SelectWithWrongAidReturnsFileNotFound()
     {
         using CtapNfcResponder responder = CtapNfcResponder.Create(UnreachablePayload);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //WellKnownAid.Piv instead of WellKnownAid.Fido: deliberately the wrong application.
         using CommandApdu select = CommandApdu.BuildCase4(
@@ -64,7 +64,7 @@ internal sealed class CtapNfcResponderTests
     public async Task SelectWithWrongP1ReturnsIncorrectP1P2()
     {
         using CtapNfcResponder responder = CtapNfcResponder.Create(UnreachablePayload);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //P1=0x02 (select-by-file-identifier) instead of WellKnownCommandParameters.SelectByDfNameP1 (0x04, select-by-DF-name/AID).
         using CommandApdu select = CommandApdu.BuildCase4(
@@ -82,7 +82,7 @@ internal sealed class CtapNfcResponderTests
     public async Task NfcCtapMsgBeforeSelectReturnsConditionsNotSatisfied()
     {
         using CtapNfcResponder responder = CtapNfcResponder.Create(UnreachablePayload);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using CommandApdu msg = CommandApdu.BuildCase4(
             WellKnownCtapCommandParameters.ClassByte, WellKnownCtapInstructionCodes.NfcCtapMsg.Code,
@@ -99,7 +99,7 @@ internal sealed class CtapNfcResponderTests
     public async Task NfcCtapControlDeselectsThenSubsequentMsgIsRejected()
     {
         using CtapNfcResponder responder = CtapNfcResponder.Create(UnreachablePayload);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using CommandApdu select = CommandApdu.BuildCase4(
             WellKnownCommandParameters.InterIndustryClassByte, InstructionCode.Select.Code,
@@ -133,7 +133,7 @@ internal sealed class CtapNfcResponderTests
     public async Task NfcCtapGetResponseOutOfSequenceReturnsConditionsNotSatisfied()
     {
         using CtapNfcResponder responder = CtapNfcResponder.Create(UnreachablePayload);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using CommandApdu poll = CommandApdu.BuildCase2(
             WellKnownCtapCommandParameters.ClassByte, WellKnownCtapInstructionCodes.NfcCtapGetResponse.Code,
@@ -149,7 +149,7 @@ internal sealed class CtapNfcResponderTests
     public async Task UnknownInstructionReturnsInstructionNotSupported()
     {
         using CtapNfcResponder responder = CtapNfcResponder.Create(UnreachablePayload);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //INS=0xFE: unrecognized, unlike any of InstructionCode.Select (0xA4), InstructionCode.GetResponse
         //(0xC0), or the WellKnownCtapInstructionCodes (0x10/0x11/0x12) this responder dispatches on.
@@ -167,7 +167,7 @@ internal sealed class CtapNfcResponderTests
         byte[] scriptedResponse = BuildScriptedPayload(300);
         byte[]? capturedRequest = null;
 
-        ValueTask<PooledMemory> Payload(ReadOnlyMemory<byte> request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        ValueTask<PooledMemory> Payload(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             //Copied rather than retained: the incoming request is a view over the terminal-side
             //CommandApdu's pooled buffer, valid only for the duration of this call.
@@ -178,7 +178,7 @@ internal sealed class CtapNfcResponderTests
 
         using CtapNfcResponder responder = CtapNfcResponder.Create(Payload);
         using var device = ApduDevice.Create(responder.TransceiveAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ApduResult<SelectResponse> selectResult = await device.SelectAsync(
             WellKnownAid.Fido, pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -208,12 +208,12 @@ internal sealed class CtapNfcResponderTests
         //card-side-responder-over-real-executor round trip in one flow.
         byte[] scriptedResponse = BuildScriptedPayload(600);
 
-        ValueTask<PooledMemory> Payload(ReadOnlyMemory<byte> request, MemoryPool<byte> pool, CancellationToken cancellationToken) =>
+        ValueTask<PooledMemory> Payload(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes(scriptedResponse, pool, CtapTags.ResponseEnvelope));
 
         using CtapNfcResponder responder = CtapNfcResponder.Create(Payload);
         using var device = ApduDevice.Create(responder.TransceiveAsync);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ApduResult<SelectResponse> selectResult = await device.SelectAsync(
             WellKnownAid.Fido, pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -240,13 +240,13 @@ internal sealed class CtapNfcResponderTests
     {
         byte[] scriptedResponse = BuildScriptedPayload(600);
 
-        ValueTask<PooledMemory> Payload(ReadOnlyMemory<byte> request, MemoryPool<byte> pool, CancellationToken cancellationToken) =>
+        ValueTask<PooledMemory> Payload(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes(scriptedResponse, pool, CtapTags.ResponseEnvelope));
 
         //Disposed explicitly mid-test rather than via using: the point under test is disposal while a
         //61xx chain is still outstanding, which must release the retained pooled response buffer.
         var responder = CtapNfcResponder.Create(Payload);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using CommandApdu select = CommandApdu.BuildCase4(
             WellKnownCommandParameters.InterIndustryClassByte, InstructionCode.Select.Code,

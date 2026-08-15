@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.OAuth.Federation;
 
@@ -27,7 +26,6 @@ namespace Verifiable.OAuth.Federation;
 /// library then returns HTTP 404.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("SubordinateStatementContribution")]
 public sealed record SubordinateStatementContribution
 {
     /// <summary>

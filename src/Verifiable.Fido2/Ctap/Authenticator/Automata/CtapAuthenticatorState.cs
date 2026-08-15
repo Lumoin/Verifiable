@@ -103,12 +103,12 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// <param name="CurrentStoredPin">
 /// The authenticator's stored <c>LEFT(SHA-256(newPin), 16)</c> (CTAP 2.3 §6.5.5.5, line 5592,
 /// <c>CurrentStoredPIN</c>), or <see langword="null"/> when no PIN has been set. Never the PIN itself,
-/// and never a naked byte array. When a <c>pinRetriesCustody</c> bundle is composed (contract R-1..R-6,
-/// wavepin), this field is a DEMOTED CACHE exactly like <see cref="PinRetries"/> (contract R-4): the
+/// and never a naked byte array. When a <c>pinRetriesCustody</c> bundle is composed,
+/// this field is a DEMOTED CACHE exactly like <see cref="PinRetries"/>: the
 /// durable persistent tier's own provisioning state can disagree with it after a rehydration whose
 /// snapshot never learned of (or lost) the durable tier's own PIN, which is precisely what
 /// <see cref="IsPinProvisionedWithUnknownLocalHash"/> — reconciled at every composition, never
-/// serialized — exists to record (wavepin review fixes F-1/F-2).
+/// serialized — exists to record.
 /// </param>
 /// <param name="PinCodePointLength">
 /// The stored PIN's length in Unicode CODE POINTS (CTAP 2.3 §6.5.5.5, line 5590,
@@ -177,17 +177,17 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// Every fingerprint template this authenticator has provisioned via <c>authenticatorBioEnrollment</c>'s
 /// <c>enrollBegin</c>/<c>enrollCaptureNextSample</c> flow, keyed a lowercase-hex encoding of the
 /// template's identifier bytes — mirroring <see cref="CredentialsByCredentialId"/>'s own keying
-/// convention exactly (R6). <see cref="HasProvisionedBioEnrollments"/> derives from this collection's
+/// convention exactly. <see cref="HasProvisionedBioEnrollments"/> derives from this collection's
 /// emptiness; <c>enumerateEnrollments</c>/<c>setFriendlyName</c>/<c>removeEnrollment</c> read and mutate
 /// it through the standard <c>with</c>-copy discipline. Survives <see cref="PowerCycle"/> (a persistent
 /// store, the <see cref="CredentialsByCredentialId"/> analogy — CTAP 2.3 §6.7 names no power-cycle
 /// clearing obligation); cleared, disposing every record, by <see cref="FactoryReset"/> (a documented
-/// profile-security posture over §6.6's own silence on bio enrollment, bio scout Finding 8).
+/// profile-security posture over §6.6's own silence on bio enrollment).
 /// </param>
 /// <param name="RememberedBioEnrollment">
 /// The in-progress fingerprint enrollment <c>enrollCaptureNextSample</c> continues, or
 /// <see langword="null"/> when no enrollment is currently in progress — the FOURTH remembered-sequence
-/// slot (R7), independent of <see cref="RememberedGetAssertion"/>/<see cref="RememberedEnumerateRps"/>/
+/// slot, independent of <see cref="RememberedGetAssertion"/>/<see cref="RememberedEnumerateRps"/>/
 /// <see cref="RememberedEnumerateCredentials"/> and NOT discarded by those three's own shared
 /// "every other command discards it" convention: only <c>cancelCurrentEnrollment</c>, a fresh
 /// <c>enrollBegin</c>'s own auto-cancel step, <see cref="PowerCycle"/>, and <see cref="FactoryReset"/>
@@ -206,8 +206,8 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// <param name="RememberedLargeBlobWrite">
 /// The in-progress <c>authenticatorLargeBlobs</c> <c>set</c> sequence's volatile
 /// <c>expectedLength</c>/<c>expectedNextOffset</c> pair and not-yet-committed pending buffer, or
-/// <see langword="null"/> when no such sequence is in progress — the FIFTH remembered-sequence slot
-/// (R7), sibling to <see cref="RememberedGetAssertion"/>/<see cref="RememberedEnumerateRps"/>/
+/// <see langword="null"/> when no such sequence is in progress — the FIFTH remembered-sequence slot,
+/// sibling to <see cref="RememberedGetAssertion"/>/<see cref="RememberedEnumerateRps"/>/
 /// <see cref="RememberedEnumerateCredentials"/>/<see cref="RememberedBioEnrollment"/>, but discarded on
 /// the GLOBAL discipline those first three share (CTAP 2.3 section 6 item 2, line 2871) rather than
 /// <see cref="RememberedBioEnrollment"/>'s own narrower one: any command other than a continuing
@@ -217,14 +217,14 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// <param name="EnterpriseAttestationProvisioning">
 /// The vendor-burned-in enterprise attestation material (CTAP 2.3 §7.1, snapshot line 8251), or
 /// <see langword="null"/> when this authenticator was never provisioned with any — the SOLE source
-/// <see cref="IsEnterpriseAttestationCapable"/> derives from (R2: never a second stored capability
+/// <see cref="IsEnterpriseAttestationCapable"/> derives from (never a second stored capability
 /// flag). Seeded once, optionally, by <see cref="Initial"/>; survives <see cref="PowerCycle"/> AND
 /// <see cref="FactoryReset"/> unchanged (§7.1.3, line 8256: "burned into the authenticator by the
 /// vendor" — reset disables the FEATURE, never the capability).
 /// </param>
 /// <param name="PendingUserPresenceWait">
 /// A parked <c>authenticatorMakeCredential</c>/<c>authenticatorGetAssertion</c> user-presence wait (CTAP
-/// 2.3 :2840, R2), or <see langword="null"/> when none is in progress. Discarded, disposing its parked
+/// 2.3 :2840), or <see langword="null"/> when none is in progress. Discarded, disposing its parked
 /// request's carriers, by ANY new command input arriving while a wait is pending (a supersede), by
 /// <see cref="PowerCycle"/>, and by <see cref="FactoryReset"/> — the SIXTH remembered-sequence slot,
 /// joining the five <c>Remembered*</c> fields on the same "state SHOULD NOT be maintained across power
@@ -289,7 +289,7 @@ public sealed record CtapAuthenticatorState(
     /// <summary>
     /// Whether the persistent-tier custody's own <c>TPM_NT_PIN_FAIL</c> Index reports a genuinely
     /// provisioned PIN whose LOCAL hash this instance simply does not (yet, or any longer) know —
-    /// <see langword="true"/> exactly in the wavepin review fix F-1 split-brain: a rehydrated (or
+    /// <see langword="true"/> exactly in the split-brain case: a rehydrated (or
     /// never-populated) <see cref="CurrentStoredPin"/> is <see langword="null"/> while the durable
     /// tier's own <c>CtapPinAttemptVerdict.IsProvisioned</c> is <see langword="true"/>. Deliberately a
     /// GET-ONLY property outside the primary constructor's positional parameter list, not a fourth
@@ -312,11 +312,11 @@ public sealed record CtapAuthenticatorState(
     /// <summary>
     /// Whether a PIN is considered established for the PIN-family pure pre-checks: <c>setPIN</c>'s
     /// "already set" gate (CTAP 2.3 §6.5.5.5, line 5568) and <c>changePIN</c>/<c>getPinToken</c>/
-    /// <c>getPinUvAuthTokenUsingPinWithPermissions</c>'s "no PIN set" gate (decision 6). <see langword="true"/>
+    /// <c>getPinUvAuthTokenUsingPinWithPermissions</c>'s "no PIN set" gate. <see langword="true"/>
     /// when either <see cref="CurrentStoredPin"/> itself is known, OR
     /// <see cref="IsPinProvisionedWithUnknownLocalHash"/> reports that the composed persistent-tier
     /// custody has a genuinely provisioned PIN this instance simply never (re)learned the local hash of
-    /// (wavepin review fix F-1: closes the authentication-bypass window where <c>setPIN</c> would
+    /// (closes the authentication-bypass window where <c>setPIN</c> would
     /// otherwise treat a merely locally-unknown PIN as "no PIN at all" and overwrite it unauthenticated).
     /// </summary>
     public bool IsPinEstablished => CurrentStoredPin is not null || IsPinProvisionedWithUnknownLocalHash;
@@ -333,7 +333,7 @@ public sealed record CtapAuthenticatorState(
     /// <summary>
     /// The maximum value <see cref="UvRetries"/> is seeded to and restored to on a successful
     /// <c>performBuiltInUv</c> gesture (CTAP 2.3 §6.5.3.1 step 9) or a correct clientPIN entry (line
-    /// 5071-5072). Single-sourced (R10) — currently aliases <see cref="MaxPinRetries"/> (8), which
+    /// 5071-5072). Single-sourced — currently aliases <see cref="MaxPinRetries"/> (8), which
     /// already satisfies <c>maxUvRetries</c>' own separate 1-to-25 range (line 5087); a future change to
     /// either maximum only ever needs one literal edited.
     /// </summary>
@@ -345,7 +345,7 @@ public sealed record CtapAuthenticatorState(
     /// makes before returning an error. Legal range 1-5 inclusive here, since
     /// <see cref="PreferredPlatformUvAttempts"/> is not 1 (line 5090's second MUST). Chosen as 2 so a
     /// scripted [fail, success] sequence inside ONE <c>getPinUvAuthTokenUsingUvWithPermissions</c> or
-    /// mc/ga call is genuinely observable (R10) — the internal-retry loop consumes two decrements before
+    /// mc/ga call is genuinely observable — the internal-retry loop consumes two decrements before
     /// resetting on success, rather than collapsing to a single-attempt case.
     /// </summary>
     public static int MaxUvAttemptsForInternalRetries => 2;
@@ -383,7 +383,7 @@ public sealed record CtapAuthenticatorState(
     /// advertise together, or the advertisement misrepresents what the authenticator supports. <see cref="WellKnownWebAuthnExtensionIdentifiers.HmacSecret"/>
     /// joins because §9 item 1 (snapshot line 9074) MUST-mandates it for every <c>FIDO_2_3</c> claimant,
     /// which this authenticator unconditionally is; <see cref="WellKnownWebAuthnExtensionIdentifiers.HmacSecretMc"/>
-    /// joins alongside it (§12.8 is pure delegation over §12.7's own machinery — contract R1) even though
+    /// joins alongside it (§12.8 is pure delegation over §12.7's own machinery) even though
     /// §12.8 itself never separately MUST-mandates advertisement here (its own getInfo behaviors section
     /// names no advertisement rule of its own; this authenticator advertises it anyway, since it supports
     /// the extension). <see cref="Initial"/> resolves this value
@@ -424,7 +424,7 @@ public sealed record CtapAuthenticatorState(
     /// <summary>
     /// The fixed <c>maxCaptureSamplesRequiredForEnroll</c> value this authenticator model reports via
     /// <c>getFingerprintSensorInfo</c> (CTAP 2.3 §6.7.3, response member <c>0x03</c>): the number of
-    /// good samples one fingerprint enrollment needs. A determinism choice (D4), not a spec-mandated
+    /// good samples one fingerprint enrollment needs. A determinism choice, not a spec-mandated
     /// number — the spec only requires the authenticator to report SOME value here.
     /// </summary>
     public static int MaxCaptureSamplesRequiredForEnroll => 4;
@@ -471,8 +471,8 @@ public sealed record CtapAuthenticatorState(
 
     /// <summary>
     /// Whether the fingerprint template store holds at least one provisioned enrollment — the single
-    /// source both the <c>bioEnroll</c> and <c>uv</c> getInfo tri-state option values derive from
-    /// (wavebio R2). A derivation SEAM: <c>BuildGetInfoResponse</c> threads this getter's value as a
+    /// source both the <c>bioEnroll</c> and <c>uv</c> getInfo tri-state option values derive from.
+    /// A derivation SEAM: <c>BuildGetInfoResponse</c> threads this getter's value as a
     /// parameter (never a literal), so <see cref="BioEnrollmentTemplatesByTemplateId"/>'s own shape can
     /// change without touching any caller.
     /// </summary>
@@ -481,7 +481,7 @@ public sealed record CtapAuthenticatorState(
     /// <summary>
     /// Whether this authenticator is enterprise attestation capable (CTAP 2.3 §7.1, snapshot line
     /// 8251's "enterprise attestation capable authenticators") — derived from
-    /// <see cref="EnterpriseAttestationProvisioning"/>'s presence, and ONLY from it (R2, trap 15): no
+    /// <see cref="EnterpriseAttestationProvisioning"/>'s presence, and ONLY from it: no
     /// second stored flag exists, so this predicate is the single source every consumer (the <c>ep</c>
     /// getInfo option's presence, the conditional <c>authenticatorConfigCommands</c> array, the config
     /// step-2 support gate's third disjunct, and mc Step 9's own capability test) reads.
@@ -494,7 +494,7 @@ public sealed record CtapAuthenticatorState(
     /// own storage-space check (CTAP 2.3 §6.7.4, snapshot line 6711: "If there is no space available, the
     /// authenticator returns CTAP2_ERR_FP_DATABASE_FULL") and test math, mirroring
     /// <see cref="MaxRpIdsForSetMinPinLengthCapacity"/>'s own single-sourced-getter shape. A determinism
-    /// choice (D4), not a spec-mandated number — the spec only requires SOME finite capacity to exist.
+    /// choice, not a spec-mandated number — the spec only requires SOME finite capacity to exist.
     /// </summary>
     public static int MaxEnrolledTemplatesCapacity => 8;
 
@@ -515,7 +515,7 @@ public sealed record CtapAuthenticatorState(
     /// authenticatorGetInfo response then it defaults to 1024, leaving <c>maxFragmentLength</c> to
     /// default to 960." This authenticator never advertises <c>maxMsgSize</c> (<c>0x05</c>) in
     /// <c>authenticatorGetInfo</c> — doing so would couple NFC transport framing claims this profile
-    /// does not make (the wave-0 audit's DECLINED disposition) — so the spec's own default rule pins
+    /// does not make (a DECLINED disposition) — so the spec's own default rule pins
     /// this value to 960, documented here as a named constant rather than an inline literal.
     /// Single-sourced for BOTH the <c>get</c> length check (line 7603) and the <c>set</c> fragment
     /// length check (line 7613): 960 is legal without advertising anything.
@@ -564,7 +564,7 @@ public sealed record CtapAuthenticatorState(
     /// <see cref="BaseMemoryPool.Shared"/> when <see langword="null"/>.
     /// </param>
     /// <param name="enterpriseAttestationProvisioning">
-    /// The vendor-burned-in enterprise attestation material (R1), or <see langword="null"/> (the
+    /// The vendor-burned-in enterprise attestation material, or <see langword="null"/> (the
     /// default) for a non-capable authenticator — the default profile's <c>ep</c> stays absent,
     /// <c>authenticatorConfigCommands</c> stays <c>[2, 3]</c>, and <c>enableEnterpriseAttestation</c>
     /// stays step-2-rejected, matching CTAP 2.3 §7.1's own vendor-provisioning reality (snapshot line
@@ -578,10 +578,10 @@ public sealed record CtapAuthenticatorState(
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of both CtapPinUvAuthKeyAgreementKeyPair instances, both CtapPinUvAuthTokenState instances, and the seeded PooledMemory transfers to the returned CtapAuthenticatorState, which CtapAuthenticatorSimulator.Dispose disposes as part of its dispose walk.")]
     public static CtapAuthenticatorState Initial(
-        Guid aaguid, DateTimeOffset poweredOnAt, IReadOnlyList<string>? supportedExtensions = null, int residentCredentialCapacity = 8, MemoryPool<byte>? keyAgreementPool = null,
+        Guid aaguid, DateTimeOffset poweredOnAt, IReadOnlyList<string>? supportedExtensions = null, int residentCredentialCapacity = 8, BaseMemoryPool? keyAgreementPool = null,
         CtapEnterpriseAttestationProvisioning? enterpriseAttestationProvisioning = null, int firmwareVersion = 1)
     {
-        MemoryPool<byte> resolvedKeyAgreementPool = keyAgreementPool ?? BaseMemoryPool.Shared;
+        BaseMemoryPool resolvedKeyAgreementPool = keyAgreementPool ?? BaseMemoryPool.Shared;
 
         (CtapPinUvAuthKeyAgreementKeyPair protocolOneKeyPair, CtapPinUvAuthKeyAgreementKeyPair protocolTwoKeyPair) =
             MintKeyAgreementKeyPairs(resolvedKeyAgreementPool);
@@ -640,19 +640,19 @@ public sealed record CtapAuthenticatorState(
     /// (<see cref="RememberedGetAssertion"/>, <see cref="RememberedEnumerateRps"/>,
     /// <see cref="RememberedEnumerateCredentials"/>, <see cref="RememberedBioEnrollment"/>,
     /// <see cref="RememberedLargeBlobWrite"/>) — CTAP 2.3, section 6, item 1 (line 2869): "The state
-    /// SHOULD NOT be maintained across power cycles." R10: <see cref="RememberedGetAssertion"/> discards
+    /// SHOULD NOT be maintained across power cycles." <see cref="RememberedGetAssertion"/> discards
     /// on the same basis as the other remembered sequences, a deliberate choice rather than an
-    /// incidental one; R7 joins <see cref="RememberedBioEnrollment"/> and <see cref="RememberedLargeBlobWrite"/>
-    /// to this same discard set — a pending large-blob write DIES across a power cycle, but the
+    /// incidental one; <see cref="RememberedBioEnrollment"/> and <see cref="RememberedLargeBlobWrite"/> join
+    /// this same discard set — a pending large-blob write DIES across a power cycle, but the
     /// COMMITTED <see cref="SerializedLargeBlobArray"/> survives (the next bullet). Also discards
-    /// <see cref="PendingUserPresenceWait"/> (R2), the SIXTH slot on this same discipline: a parked
+    /// <see cref="PendingUserPresenceWait"/>, the SIXTH slot on this same discipline: a parked
     /// user-presence wait cannot survive the fresh <c>pinUvAuthToken</c>/key-agreement material this same
     /// power cycle just minted. Every other member —
     /// the PIN itself, both retry counters, the credential store,
     /// <see cref="BioEnrollmentTemplatesByTemplateId"/>, <see cref="SerializedLargeBlobArray"/>
     /// (CTAP 2.3 §6, line 7539's storage names no power-cycle-clearing obligation of its own), the
     /// AAGUID, <see cref="EnterpriseAttestationProvisioning"/>, <see cref="IsEnterpriseAttestationEnabled"/>
-    /// (R3: neither the vendor-burned-in capability nor the enabled feature is named anywhere in CTAP
+    /// (neither the vendor-burned-in capability nor the enabled feature is named anywhere in CTAP
     /// 2.3's own power-cycle text, section 6 item 1, line 2869), and <see cref="FirmwareVersion"/>
     /// (device identity, the <see cref="Aaguid"/> analogy — absent from the <c>with</c> block below, so
     /// it survives implicitly) — is unaffected, matching
@@ -661,7 +661,6 @@ public sealed record CtapAuthenticatorState(
     /// <see cref="IsPinProvisionedWithUnknownLocalHash"/> joins this same "unaffected" set — also absent
     /// from the <c>with</c> block below — since it records a fact about the composed persistent-tier
     /// custody's own durable TPM state, which a boot-scoped power cycle has no basis to change either way
-    /// (wavepin review fix F-1).
     /// </summary>
     /// <param name="now">
     /// The instant this power cycle occurs — restamps <see cref="PoweredOnAt"/>, since a power cycle IS
@@ -675,9 +674,9 @@ public sealed record CtapAuthenticatorState(
     /// <returns>The post-power-cycle state.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the four newly minted objects transfers to the returned CtapAuthenticatorState.")]
-    public CtapAuthenticatorState PowerCycle(DateTimeOffset now, MemoryPool<byte>? keyAgreementPool = null)
+    public CtapAuthenticatorState PowerCycle(DateTimeOffset now, BaseMemoryPool? keyAgreementPool = null)
     {
-        MemoryPool<byte> resolvedPool = keyAgreementPool ?? BaseMemoryPool.Shared;
+        BaseMemoryPool resolvedPool = keyAgreementPool ?? BaseMemoryPool.Shared;
 
         (CtapPinUvAuthKeyAgreementKeyPair freshProtocolOneKeyPair, CtapPinUvAuthKeyAgreementKeyPair freshProtocolTwoKeyPair) =
             MintKeyAgreementKeyPairs(resolvedPool);
@@ -720,10 +719,10 @@ public sealed record CtapAuthenticatorState(
     /// both line 6332 ("invalidates all generated credentials") and line 6334 ("erases all discoverable
     /// credentials") — zeroes <see cref="NextCredentialSequence"/>, disposes and empties
     /// <see cref="BioEnrollmentTemplatesByTemplateId"/> (a documented profile-security posture over
-    /// §6.6's own silence on bio enrollment, bio scout Finding 8 — no MUST is claimed; §6.7.1's own
+    /// §6.6's own silence on bio enrollment — no MUST is claimed; §6.7.1's own
     /// feature-detection text and the requirement that <c>uv</c> accurately report enrollment state justify the choice), discards all SIX
     /// remembered stateful-command sequences (joining <see cref="RememberedBioEnrollment"/>,
-    /// <see cref="RememberedLargeBlobWrite"/>, and <see cref="PendingUserPresenceWait"/> (R2) to the
+    /// <see cref="RememberedLargeBlobWrite"/>, and <see cref="PendingUserPresenceWait"/> to the
     /// existing three), disposes and unsets the stored PIN
     /// (<see cref="CurrentStoredPin"/>/<see cref="PinCodePointLength"/>), restores
     /// <see cref="PinRetries"/> to <see cref="MaxPinRetries"/> and <see cref="UvRetries"/> to
@@ -795,9 +794,9 @@ public sealed record CtapAuthenticatorState(
     /// </para>
     /// </remarks>
     /// <returns>The post-reset state, with every clientPIN/credential-store/config/large-blob field at its factory value.</returns>
-    public CtapAuthenticatorState FactoryReset(MemoryPool<byte>? pool = null)
+    public CtapAuthenticatorState FactoryReset(BaseMemoryPool? pool = null)
     {
-        MemoryPool<byte> resolvedPool = pool ?? BaseMemoryPool.Shared;
+        BaseMemoryPool resolvedPool = pool ?? BaseMemoryPool.Shared;
 
         foreach(CtapCredentialRecord record in CredentialsByCredentialId.Values)
         {
@@ -854,7 +853,7 @@ public sealed record CtapAuthenticatorState(
     /// </summary>
     /// <param name="pool">The memory pool both key pairs are minted from.</param>
     /// <returns>Protocol one's and protocol two's freshly minted key-agreement key pairs.</returns>
-    private static (CtapPinUvAuthKeyAgreementKeyPair ProtocolOne, CtapPinUvAuthKeyAgreementKeyPair ProtocolTwo) MintKeyAgreementKeyPairs(MemoryPool<byte> pool)
+    private static (CtapPinUvAuthKeyAgreementKeyPair ProtocolOne, CtapPinUvAuthKeyAgreementKeyPair ProtocolTwo) MintKeyAgreementKeyPairs(BaseMemoryPool pool)
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> protocolOneKeys =
             CryptographicKeyEvents.CreateKeyPair(CryptoAlgorithm.P256, Purpose.Exchange, pool);
@@ -891,7 +890,7 @@ public sealed record CtapAuthenticatorState(
     /// <param name="protocolTwoKeyPair">Protocol two's already-minted key-agreement key pair, disposed on failure.</param>
     /// <returns>Protocol one's and protocol two's freshly minted token states.</returns>
     private static (CtapPinUvAuthTokenState ProtocolOne, CtapPinUvAuthTokenState ProtocolTwo) MintTokens(
-        MemoryPool<byte> pool, CtapPinUvAuthKeyAgreementKeyPair protocolOneKeyPair, CtapPinUvAuthKeyAgreementKeyPair protocolTwoKeyPair)
+        BaseMemoryPool pool, CtapPinUvAuthKeyAgreementKeyPair protocolOneKeyPair, CtapPinUvAuthKeyAgreementKeyPair protocolTwoKeyPair)
     {
         CtapPinUvAuthTokenState protocolOneToken;
         try

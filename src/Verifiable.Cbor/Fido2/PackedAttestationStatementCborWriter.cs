@@ -21,8 +21,8 @@ namespace Verifiable.Cbor.Fido2;
 /// which then rejects an empty chain outright, so an empty-array <c>x5c</c> would not round-trip to the
 /// self attestation <see cref="Write"/> produces. <see cref="WriteCertified"/> emits the certified
 /// alternative — a 3-member map with <c>x5c</c> present, keys in ascending text-key order <c>alg</c> &lt;
-/// <c>sig</c> &lt; <c>x5c</c> (3-character tie, bytewise: <c>'a'</c> &lt; <c>'s'</c> &lt; <c>'x'</c>,
-/// waveep R7 trap 14). Both written with <see cref="CborConformanceMode.Ctap2Canonical"/> per
+/// <c>sig</c> &lt; <c>x5c</c> (3-character tie, bytewise: <c>'a'</c> &lt; <c>'s'</c> &lt; <c>'x'</c>).
+/// Both written with <see cref="CborConformanceMode.Ctap2Canonical"/> per
 /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-conforming-all-classes">section 2.4: All Conformance
 /// Classes</see>.
 /// </para>

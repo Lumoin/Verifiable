@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core;
 using Verifiable.Core.Assessment;
@@ -35,7 +34,6 @@ namespace Verifiable.OAuth;
 /// echo the presented token's <c>sub</c> verbatim per RFC 7662.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("SubjectIdentifierContributor")]
 public static class SubjectIdentifierContributor
 {
     /// <summary>

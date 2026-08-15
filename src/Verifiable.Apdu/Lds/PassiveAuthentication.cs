@@ -50,7 +50,7 @@ public static class PassiveAuthentication
         IReadOnlyList<PkiCertificateMemory> cscaTrustAnchors,
         DateTimeOffset validationTime,
         ValidateCertificateChainAsyncDelegate validateChain,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         PassiveAuthenticationPolicy? policy = null,
         CheckCertificateRevocationStatusAsyncDelegate? checkRevocation = null,
         CancellationToken cancellationToken = default)
@@ -169,7 +169,7 @@ public static class PassiveAuthentication
         DigestValue expected,
         HashAlgorithmName hashAlgorithm,
         ComputeDigestDelegate computeDigest,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         (Tag tag, int length) = DigestTag(hashAlgorithm);

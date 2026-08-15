@@ -12,7 +12,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// 37.2.6.6) entirely in-process, exactly as package C's TPM-backed <c>TpmNvPinRetriesCustody</c> would
 /// over a real NV Index — success resets <c>pinCount</c> to 0, mismatch increments it, and once
 /// <c>pinCount</c> reaches <see cref="PinLimit"/> even a subsequently CORRECT candidate is refused without
-/// ever being compared (the R-2 pre-gate a real Index's own authorization failure enforces).
+/// ever being compared (mirroring the pre-gate a real Index's own authorization failure enforces).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -108,7 +108,7 @@ internal sealed class InMemoryCtapPinRetriesCustodyStore
     {
         operationLog.Add("Verify");
 
-        //Contract R-2's pre-gate: once the tier is exhausted, even the correct candidate is refused
+        //This pre-gate: once the tier is exhausted, even the correct candidate is refused
         //without ever being compared — mirrors TPM_RC_AUTH_UNAVAILABLE's own refusal semantics.
         if(pinCount >= PinLimit)
         {

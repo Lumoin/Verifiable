@@ -21,7 +21,6 @@ namespace Verifiable.Vcalm;
 /// chains onto the prior via <c>previousProof</c>); the caller-supplied existing-proof case is handled
 /// per <see cref="VcalmCredentialIssuance.ExistingProofHandling"/>.
 /// </remarks>
-[DebuggerDisplay("VcalmCredentialIssuanceService")]
 public static class VcalmCredentialIssuanceService
 {
     /// <summary>
@@ -139,7 +138,7 @@ public static class VcalmCredentialIssuanceService
     private static async ValueTask<DataIntegritySecuredCredential> SignWithDescriptorAsync(
         VerifiableCredential credential,
         VcalmProofDescriptor descriptor,
-        System.Buffers.MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         DateTime proofCreated,
         ExchangeContext context,
         CancellationToken cancellationToken) =>

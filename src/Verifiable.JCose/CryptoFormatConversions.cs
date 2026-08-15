@@ -19,12 +19,12 @@ namespace Verifiable.JCose
     /// <summary>
     /// Delegate for converting JWK to algorithm representation.
     /// </summary>
-    public delegate (CryptoAlgorithm Algorithm, Purpose Purpose, EncodingScheme Scheme, IMemoryOwner<byte>) JwkToAlgorithmDelegate(Dictionary<string, object> jwk, MemoryPool<byte> memoryPool, DecodeDelegate base64UrlDecoder);
+    public delegate (CryptoAlgorithm Algorithm, Purpose Purpose, EncodingScheme Scheme, IMemoryOwner<byte>) JwkToAlgorithmDelegate(Dictionary<string, object> jwk, BaseMemoryPool memoryPool, DecodeDelegate base64UrlDecoder);
 
     /// <summary>
     /// Delegate for converting Base58 key to algorithm representation.
     /// </summary>
-    public delegate (CryptoAlgorithm Algorithm, Purpose Purpose, EncodingScheme Scheme, IMemoryOwner<byte> keyMaterial) Base58ToAlgorithmDelegate(string base58Key, MemoryPool<byte> memoryPool, DecodeDelegate base58Decoder);
+    public delegate (CryptoAlgorithm Algorithm, Purpose Purpose, EncodingScheme Scheme, IMemoryOwner<byte> keyMaterial) Base58ToAlgorithmDelegate(string base58Key, BaseMemoryPool memoryPool, DecodeDelegate base58Decoder);
 
     /// <summary>
     /// Delegate for converting a JWA algorithm identifier to a <see cref="Tag"/>.
@@ -871,7 +871,7 @@ namespace Verifiable.JCose
 
         //Decodes a base64url-encoded multibase payload into pooled memory, mirroring the shape the
         //base58 DecodeDelegate produces (the full multicodec-prefixed key bytes).
-        private static IMemoryOwner<byte> DecodeBase64UrlPayload(ReadOnlySpan<char> payload, MemoryPool<byte> memoryPool)
+        private static IMemoryOwner<byte> DecodeBase64UrlPayload(ReadOnlySpan<char> payload, BaseMemoryPool memoryPool)
         {
             int maxLength = System.Buffers.Text.Base64Url.GetMaxDecodedLength(payload.Length);
             IMemoryOwner<byte> buffer = memoryPool.Rent(maxLength);
@@ -899,7 +899,7 @@ namespace Verifiable.JCose
         //type (the did:key invalidPublicKeyLength check), and copies the raw key into its own pooled buffer.
         private static (CryptoAlgorithm Algorithm, Purpose Purpose, EncodingScheme Scheme, IMemoryOwner<byte> KeyMaterial) ClassifyMulticodecPublicKey(
             ReadOnlySpan<byte> prefixedBytes,
-            MemoryPool<byte> memoryPool)
+            BaseMemoryPool memoryPool)
         {
             //All registered did:key multicodec headers are two bytes. A payload shorter than that cannot
             //carry a header plus a key body, so it is malformed input rather than an unknown algorithm.

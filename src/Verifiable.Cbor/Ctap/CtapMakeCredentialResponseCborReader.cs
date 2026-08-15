@@ -18,8 +18,8 @@ namespace Verifiable.Cbor.Ctap;
 /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#message-encoding">
 /// section 8: Message Encoding</see>'s forward-compatibility rule, any member key this reader does not
 /// model (<c>unsignedExtensionOutputs</c>, or any unrecognized key) is skipped rather than rejected.
-/// <c>largeBlobKey</c> (<c>0x05</c>) IS modeled (wavelb R8); <c>epAtt</c> (<c>0x04</c>) IS modeled
-/// (waveep R9) — required for the wire capstone to observe an enterprise attestation grant.
+/// <c>largeBlobKey</c> (<c>0x05</c>) IS modeled; <c>epAtt</c> (<c>0x04</c>) IS modeled — required
+/// for the wire capstone to observe an enterprise attestation grant.
 /// </remarks>
 public static class CtapMakeCredentialResponseCborReader
 {

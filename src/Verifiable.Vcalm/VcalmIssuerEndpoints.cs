@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Model.Credentials;
@@ -31,7 +30,6 @@ namespace Verifiable.Vcalm;
 /// <see cref="VcalmProblemTypes.UnknownOptionProvided"/> type).
 /// </para>
 /// </remarks>
-[DebuggerDisplay("VcalmIssuerEndpoints")]
 public static class VcalmIssuerEndpoints
 {
     /// <summary>

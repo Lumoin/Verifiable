@@ -22,7 +22,7 @@ internal sealed class ClientAssertionSigningTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string ClientId = "https://client.example.com";
     private const string TokenEndpoint = "https://as.example.com/token";

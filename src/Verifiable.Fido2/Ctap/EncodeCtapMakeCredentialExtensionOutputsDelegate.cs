@@ -15,10 +15,10 @@ namespace Verifiable.Fido2.Ctap;
 /// <param name="hmacSecret">
 /// The <c>hmac-secret</c> annotation to emit (CTAP 2.3, section 12.7, snapshot lines 13198-13201), or
 /// <see langword="null"/> to omit the key entirely (the mc request did not carry a literal
-/// <see langword="true"/> — contract R3). This authenticator's own call site never supplies
+/// <see langword="true"/>). This authenticator's own call site never supplies
 /// <see langword="false"/> (snapshot lines 13204-13209 are antecedent-false-by-construction here, since
 /// CredRandom generation never fails) — the parameter accepts it anyway: the codec is faithful to
-/// whatever value it is given, mirroring the waveep <c>epAtt</c> R9 precedent.
+/// whatever value it is given, mirroring the <c>epAtt</c> precedent.
 /// </param>
 /// <param name="minPinLength">
 /// The <c>minPinLength</c> output value to emit (CTAP 2.3, section 12.5 — the current minimum PIN
@@ -28,7 +28,7 @@ namespace Verifiable.Fido2.Ctap;
 /// </param>
 /// <param name="hmacSecretMc">
 /// The encrypted <c>hmac-secret-mc</c> output bytes to emit (CTAP 2.3, section 12.8, snapshot line
-/// 13408: "Same as the hmac secret extension's getAssertion output" — contract R6, a value produced by
+/// 13408: "Same as the hmac secret extension's getAssertion output" — a value produced by
 /// the same routine section 12.7's <c>authenticatorGetAssertion</c> processing uses), or
 /// <see langword="null"/> to omit the key entirely (the mc request did not pair
 /// <c>hmac-secret-mc</c> with a granted <c>hmac-secret</c>). Borrowed, not owned — the caller retains

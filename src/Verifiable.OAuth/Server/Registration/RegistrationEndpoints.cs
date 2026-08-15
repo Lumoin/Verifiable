@@ -1,6 +1,5 @@
 using System.Collections.Frozen;
 using System.Collections.Immutable;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
@@ -48,7 +47,6 @@ namespace Verifiable.OAuth.Server.Registration;
 /// <see cref="ParseClientMetadataServerDelegate"/>).
 /// </para>
 /// </remarks>
-[DebuggerDisplay("RegistrationEndpoints")]
 [SuppressMessage("Reliability", "CA2007:Consider calling ConfigureAwait on the awaited task", Justification = "Library code does not pin a SynchronizationContext; this static class is consumed by application code that controls the context.")]
 public static class RegistrationEndpoints
 {

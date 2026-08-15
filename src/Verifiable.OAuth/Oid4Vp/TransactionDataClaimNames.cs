@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Oid4Vp;
@@ -22,7 +21,6 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// algorithm choice to the descriptor itself.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("TransactionDataClaimNames")]
 public static class TransactionDataClaimNames
 {
     /// <summary>The UTF-8 source literal of <see cref="Type"/>.</summary>

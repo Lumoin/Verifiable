@@ -125,7 +125,7 @@ public sealed class TpmsAuthResponse: ITpmWireType, IDisposable
     /// <param name="reader">The reader positioned at the auth response.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed authorization response.</returns>
-    public static TpmsAuthResponse Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static TpmsAuthResponse Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         Tpm2bNonce nonceTPM = Tpm2bNonce.Parse(ref reader, pool);
         TpmaSession sessionAttributes = (TpmaSession)reader.ReadByte();

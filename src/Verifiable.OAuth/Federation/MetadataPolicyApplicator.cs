@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.OAuth.Federation;
 
@@ -27,7 +26,6 @@ namespace Verifiable.OAuth.Federation;
 /// <see cref="MetadataPolicyApplyResult.Failed"/>.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("MetadataPolicyApplicator")]
 public static class MetadataPolicyApplicator
 {
     /// <summary>

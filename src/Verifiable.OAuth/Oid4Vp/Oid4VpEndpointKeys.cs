@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.Cryptography.Text;
 
@@ -28,7 +27,6 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// recognize per-flow versus static endpoints unambiguously.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("Oid4VpEndpointKeys")]
 public static class Oid4VpEndpointKeys
 {
     /// <summary>The UTF-8 source literal of <see cref="RequestUri"/>.</summary>

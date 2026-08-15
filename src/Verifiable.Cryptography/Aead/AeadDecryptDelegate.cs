@@ -42,5 +42,5 @@ public delegate ValueTask<DecryptedContent> AeadDecryptDelegate(
     Nonce iv,
     AuthenticationTag tag,
     AdditionalData aad,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     CancellationToken cancellationToken = default);

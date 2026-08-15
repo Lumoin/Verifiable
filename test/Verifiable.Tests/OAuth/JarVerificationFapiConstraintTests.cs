@@ -23,7 +23,7 @@ internal sealed class JarVerificationFapiConstraintTests
 
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private static readonly TimeSpan ClockSkew = TimeSpan.FromSeconds(5);
 

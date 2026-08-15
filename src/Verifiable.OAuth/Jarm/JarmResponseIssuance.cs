@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -31,7 +30,6 @@ namespace Verifiable.OAuth.Jarm;
 /// JAR signing.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("JarmResponseIssuance")]
 public static class JarmResponseIssuance
 {
     /// <summary>
@@ -69,7 +67,7 @@ public static class JarmResponseIssuance
         EncodeDelegate base64UrlEncoder,
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(signingKey);

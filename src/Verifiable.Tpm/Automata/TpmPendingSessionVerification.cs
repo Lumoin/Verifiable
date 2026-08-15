@@ -84,7 +84,7 @@ public sealed record TpmCommandHmacVerified(
 /// One already-verified session's material for framing a real per-session <c>TPM2_Unseal()</c> response entry
 /// (TPM 2.0 Library Part 1, clauses 18.7 and 19.6): the effect rolls a fresh nonceTPM and computes a real response
 /// HMAC for it — the general alternative to a satisfied plain policy session's zero-length-HMAC placeholder entry,
-/// and general enough to cover both an authorizing HMAC session (Part 3, clause 5.6, this wave) and a separate
+/// and general enough to cover both an authorizing HMAC session (Part 3, clause 5.6) and a separate
 /// encrypt-only session (already shipped) uniformly, since the response HMAC uses THE SAME key the command HMAC
 /// verification did (Part 1, clause 19.6.8).
 /// </summary>

@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 
@@ -10,7 +9,6 @@ namespace Verifiable.OAuth.Dpop;
 /// implementation, composing existing <see cref="Jws.SignAsync"/> with
 /// DPoP's specific payload + header shape.
 /// </summary>
-[DebuggerDisplay("DpopProofConstruction")]
 public static class DpopProofConstruction
 {
     /// <summary>
@@ -29,7 +27,7 @@ public static class DpopProofConstruction
         EncodeDelegate base64UrlEncoder,
         DpopJwsPartSerializer serializer,
         SigningDelegate signingDelegate,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(claims);

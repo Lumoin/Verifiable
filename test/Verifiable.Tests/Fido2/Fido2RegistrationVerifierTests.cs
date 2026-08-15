@@ -28,7 +28,7 @@ namespace Verifiable.Tests.Fido2;
 /// parsed via <see cref="ClientDataJsonReader"/> and a real <c>authData</c> binary layout built via
 /// <see cref="Fido2TestVectors"/> — and mints attestation statements with an independent oracle
 /// (raw <see cref="ECDsa"/>/<see cref="CertificateRequest"/>, never the library's own signing or
-/// chain-building seams), reusing the WAVE 3 <see cref="Fido2AttestationTestVectors"/> and
+/// chain-building seams), reusing the <see cref="Fido2AttestationTestVectors"/> and
 /// <see cref="Fido2TestVectors"/> infrastructure. The outer <c>attestationObject</c> CBOR
 /// (<c>fmt</c>/<c>attStmt</c>/<c>authData</c>) decode is out of scope — this library's CBOR codec
 /// is deferred — so, mirroring <c>PackedSelfAttestationTests</c>/<c>PackedCertifiedAttestationTests</c>,

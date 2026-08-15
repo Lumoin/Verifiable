@@ -7,28 +7,28 @@ namespace Verifiable.Fido2.Ctap;
 /// </summary>
 /// <remarks>
 /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#error-responses">
-/// CTAP 2.3, section 8.2: Status codes</see>. Wave 2 adds the codes
+/// CTAP 2.3, section 8.2: Status codes</see>. This authenticator returns the codes
 /// <c>authenticatorMakeCredential</c>/<c>authenticatorGetAssertion</c>'s no-PIN/no-UV processing
-/// paths can reach. Wave-5b adds the seven codes the <c>authenticatorClientPIN</c> PIN-path
+/// paths can reach, and the seven codes the <c>authenticatorClientPIN</c> PIN-path
 /// subcommands (<c>setPIN</c>/<c>changePIN</c>/<c>getPinToken</c>/
 /// <c>getPinUvAuthTokenUsingPinWithPermissions</c>) reach — <see cref="PinInvalid"/>,
 /// <see cref="PinBlocked"/>, <see cref="PinAuthInvalid"/>, <see cref="PinAuthBlocked"/>,
 /// <see cref="PinNotSet"/>, <see cref="PinPolicyViolation"/>, <see cref="UnauthorizedPermission"/>.
-/// Wave-5c adds <see cref="PuatRequired"/>, returned when a pinUvAuthToken is required for an
-/// operation the platform requested without presenting one. Wave-5d adds
+/// It also returns <see cref="PuatRequired"/>, returned when a pinUvAuthToken is required for an
+/// operation the platform requested without presenting one, and
 /// <see cref="InvalidSubcommand"/>, returned when a request names a subCommand this authenticator
 /// does not implement — both <c>authenticatorClientPIN</c>'s and <c>authenticatorConfig</c>'s own
-/// unsupported-subCommand fallthroughs return it. The wavebio program adds
+/// unsupported-subCommand fallthroughs return it. It also returns
 /// <see cref="InvalidLength"/> (<c>authenticatorBioEnrollment</c>'s <c>setFriendlyName</c> length
 /// check), <see cref="FpDatabaseFull"/> (<c>enrollBegin</c>/<c>enrollCaptureNextSample</c> storage
 /// exhaustion), <see cref="OperationDenied"/>/<see cref="UserActionTimeout"/>/<see cref="UvBlocked"/>/
 /// <see cref="UvInvalid"/> (the built-in-UV cluster's <c>getPinUvAuthTokenUsingUvWithPermissions</c>
-/// and <c>performBuiltInUv</c> error ladder). The wavelb program adds <see cref="InvalidSeq"/>
+/// and <c>performBuiltInUv</c> error ladder), and <see cref="InvalidSeq"/>
 /// (<c>authenticatorLargeBlobs</c>' fragment-sequencing check), <see cref="LargeBlobStorageFull"/>
 /// (the serialized large-blob array's capacity check), and <see cref="IntegrityFailure"/> (the
 /// commit-time trailing-hash check) — all three hex-verified directly against §8's own registry rows.
-/// The §9-close program adds <see cref="CborUnexpectedType"/>/<see cref="InvalidCbor"/>, realizing the
-/// decode-boundary precision fix (R7): every body-carrying command boundary in
+/// <see cref="CborUnexpectedType"/>/<see cref="InvalidCbor"/> realize the decode-boundary precision
+/// fix: every body-carrying command boundary in
 /// <c>CtapAuthenticatorSimulator.TransceiveAsync</c> classifies a decode failure via
 /// <see cref="Fido2FormatException.FailureKind"/> rather than either letting it escape uncaught or
 /// collapsing it onto <see cref="MissingParameter"/> regardless of cause. The remaining rows of the
@@ -50,11 +50,11 @@ public static class WellKnownCtapStatusCodes
 
     /// <summary>
     /// <c>CTAP1_ERR_INVALID_PARAMETER</c> (<c>0x02</c>): the command included an invalid
-    /// parameter — this wave's authenticator returns it when <c>pinUvAuthParam</c> is present
+    /// parameter — this authenticator returns it when <c>pinUvAuthParam</c> is present
     /// together with a <c>pinUvAuthProtocol</c> value (unsupported, since no protocol is
     /// advertised in <c>authenticatorGetInfo</c>), when <c>enterpriseAttestation</c> is present
     /// against an authenticator that is not enterprise attestation capable OR is capable but
-    /// currently disabled (mc Step 9 sub-step 1, CTAP 2.3 line 3331, waveep R5 — checked STRICTLY
+    /// currently disabled (mc Step 9 sub-step 1, CTAP 2.3 line 3331 — checked STRICTLY
     /// BEFORE the parameter's own value is validated, so this fires regardless of the value supplied),
     /// and when <c>authenticatorClientPIN</c>'s <c>pinUvAuthProtocol</c> names an unsupported PIN/UV auth
     /// protocol.
@@ -65,7 +65,7 @@ public static class WellKnownCtapStatusCodes
     /// <see href="https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html#authenticatorGetAssertion">
     /// section 6.2: authenticatorGetAssertion</see>'s shared <c>pinUvAuthProtocol</c>-value-unsupported
     /// step. <c>authenticatorClientPIN</c>'s own unsupported-<c>subCommand</c> fallthrough returns
-    /// <see cref="InvalidSubcommand"/> instead (see that member's remarks for the R1 ruling).
+    /// <see cref="InvalidSubcommand"/> instead (see that member's remarks for this library's reading).
     /// </remarks>
     public const byte InvalidParameter = 0x02;
 
@@ -100,7 +100,7 @@ public static class WellKnownCtapStatusCodes
 
     /// <summary>
     /// <c>CTAP2_ERR_CBOR_UNEXPECTED_TYPE</c> (<c>0x11</c>): "Invalid/unexpected CBOR error." The
-    /// decode-boundary classification (R7) returns this when a request's CBOR is well-formed but a
+    /// decode-boundary classification returns this when a request's CBOR is well-formed but a
     /// nested or extension-map structure is missing a required member or carries a member of the
     /// wrong CBOR type — for example, an <c>rp</c>/<c>user</c> entity without its required <c>id</c>,
     /// or a known extension key (<c>hmac-secret</c>) whose value is not a boolean.
@@ -114,7 +114,7 @@ public static class WellKnownCtapStatusCodes
 
     /// <summary>
     /// <c>CTAP2_ERR_INVALID_CBOR</c> (<c>0x12</c>): "Error when parsing CBOR." The decode-boundary
-    /// classification (R7) returns this when a request's bytes do not conform to CTAP2 canonical CBOR
+    /// classification returns this when a request's bytes do not conform to CTAP2 canonical CBOR
     /// at all — a syntax error, a truncated buffer, a tagged value, a non-canonical integer or length
     /// encoding, or a duplicate map key.
     /// </summary>
@@ -127,10 +127,10 @@ public static class WellKnownCtapStatusCodes
 
     /// <summary>
     /// <c>CTAP2_ERR_MISSING_PARAMETER</c> (<c>0x14</c>): a non-optional parameter is missing —
-    /// this wave's authenticator returns it when <c>pinUvAuthParam</c> is present but
+    /// this authenticator returns it when <c>pinUvAuthParam</c> is present but
     /// <c>pinUvAuthProtocol</c> is absent, when <c>authenticatorClientPIN</c>'s
     /// <c>getKeyAgreement</c> subcommand is requested without the <c>pinUvAuthProtocol</c>
-    /// parameter its protocol selection needs, and — via the decode-boundary classification (R7) —
+    /// parameter its protocol selection needs, and — via the decode-boundary classification —
     /// whenever a Required top-level command parameter (<c>authenticatorMakeCredential</c>'s
     /// <c>clientDataHash</c>, <c>authenticatorGetAssertion</c>'s <c>rpId</c>,
     /// <c>authenticatorClientPIN</c>/<c>authenticatorConfig</c>/<c>authenticatorCredentialManagement</c>'s
@@ -215,7 +215,7 @@ public static class WellKnownCtapStatusCodes
 
     /// <summary>
     /// <c>CTAP2_ERR_KEY_STORE_FULL</c> (<c>0x28</c>): the authenticator does not have enough
-    /// internal storage to persist the new resident credential — this wave's authenticator returns
+    /// internal storage to persist the new resident credential — this authenticator returns
     /// it when a resident <c>authenticatorMakeCredential</c> request would grow the resident-credential
     /// store past its configured capacity (a simulator-realism knob, not a spec-mandated number — the
     /// spec only requires SOME finite capacity to exist, per
@@ -233,7 +233,7 @@ public static class WellKnownCtapStatusCodes
 
     /// <summary>
     /// <c>CTAP2_ERR_UNSUPPORTED_OPTION</c> (<c>0x2B</c>): an option key the request sent is not
-    /// supported for the current operation — this wave's authenticator returns it for
+    /// supported for the current operation — this authenticator returns it for
     /// <c>options.rk</c> on <c>authenticatorMakeCredential</c> when <c>authenticatorGetInfo</c>
     /// does not advertise the <c>rk</c> option ID, and unconditionally for <c>options.rk</c> on
     /// <c>authenticatorGetAssertion</c> (the platform must never send it there at all).
@@ -249,10 +249,10 @@ public static class WellKnownCtapStatusCodes
     /// current operation — this authenticator returns it for <c>options.uv = true</c> when the built-in
     /// user verification method is not yet configured (zero fingerprint enrollments) on both mc and ga
     /// (CTAP 2.3 lines 3213/3901 — distinct from <c>getPinUvAuthTokenUsingUvWithPermissions</c>'s own
-    /// <c>CTAP2_ERR_NOT_ALLOWED</c> for the identical underlying state, uv scout trap 7), for
+    /// <c>CTAP2_ERR_NOT_ALLOWED</c> for the identical underlying state), for
     /// <c>options.up = false</c> on <c>authenticatorMakeCredential</c>, for <c>enumerateEnrollments</c>
     /// with zero enrollments/an unknown <c>templateId</c>, and for mc Step 9 sub-step 2.1 (CTAP 2.3 line
-    /// 3336, waveep R5): <c>enterpriseAttestation</c> present with a value that is neither 1 nor 2, on an
+    /// 3336): <c>enterpriseAttestation</c> present with a value that is neither 1 nor 2, on an
     /// authenticator that IS enterprise attestation capable and enabled (a capable-but-disabled or
     /// non-capable authenticator never reaches this check — see <see cref="InvalidParameter"/>).
     /// </summary>
@@ -297,7 +297,7 @@ public static class WellKnownCtapStatusCodes
 
     /// <summary>
     /// <c>CTAP2_ERR_NOT_ALLOWED</c> (<c>0x30</c>): "Continuation command, such as,
-    /// authenticatorGetNextAssertion not allowed." This wave's authenticator returns it for every
+    /// authenticatorGetNextAssertion not allowed." This authenticator returns it for every
     /// <c>authenticatorGetNextAssertion</c> error path: no remembered <c>authenticatorGetAssertion</c>
     /// sequence, the sequence already exhausted, or its 30-second timer expired. <c>authenticatorReset</c>
     /// reuses the identical byte for an unrelated, second meaning of its own: "If the request comes
@@ -446,8 +446,8 @@ public static class WellKnownCtapStatusCodes
     /// unsupported-<c>subCommand</c> fallthrough — section 6.5.5's own command definition names no
     /// subcommand-not-supported status of its own to conflict with it — and
     /// <c>authenticatorConfig</c>'s step 2 (whose own bare-pseudocode text, line 7955, names
-    /// <c>CTAP1_ERR_INVALID_PARAMETER</c> instead; the §8.1 MUST governs per the coordinator's R1
-    /// ruling, and the two-anchor citation is repeated at both rejection sites).
+    /// <c>CTAP1_ERR_INVALID_PARAMETER</c> instead; this library reads the §8.1 MUST as governing,
+    /// and the two-anchor citation is repeated at both rejection sites).
     /// </remarks>
     public const byte InvalidSubcommand = 0x3E;
 

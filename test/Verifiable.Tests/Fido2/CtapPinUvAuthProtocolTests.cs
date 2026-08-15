@@ -228,16 +228,16 @@ internal sealed class CtapPinUvAuthProtocolTests
         CtapPinUvAuthProtocol protocol = CreateProtocol(CtapPinUvAuthProtocolId.Two);
         using PrivateKeyMemory ownPrivateKey = PrivateKeyFromHex(AuthPrivateScalarHex);
         CoseKey peerKey = PeerCoseKey(PeerPublicXHex, PeerPublicYHex);
-        using var trackingPool = new ZeroOnDisposeTrackingMemoryPool(KdfIntermediateHalfLength);
+        using var trackingPool = new MeteredHousePool();
 
         IMemoryOwner<byte> sharedSecret = await protocol.DecapsulateAsync(
-            ownPrivateKey, peerKey, trackingPool, TestContext.CancellationToken).ConfigureAwait(false);
+            ownPrivateKey, peerKey, trackingPool.Pool, TestContext.CancellationToken).ConfigureAwait(false);
         try
         {
-            Assert.IsGreaterThanOrEqualTo(2, trackingPool.TrackedDisposalCount,
-                "At least the HMAC-key-half and AES-key-half intermediate buffers (one per Hkdf.DeriveAsync call) must be rented and disposed at this size.");
-            Assert.IsTrue(trackingPool.AllTrackedDisposalsWereZero,
-                "Every 32-byte intermediate buffer disposed along protocol two's kdf(Z) path - including the HMAC-key and AES-key halves - must be zeroed before it returns to the pool.");
+            Assert.IsGreaterThanOrEqualTo(2, trackingPool.RentedCountOfSize(KdfIntermediateHalfLength),
+                "At least the HMAC-key-half and AES-key-half intermediate buffers (one per Hkdf.DeriveAsync call) must be rented at this size from the injected house pool.");
+            Assert.AreEqual(1, trackingPool.OutstandingCount,
+                "Every intermediate along protocol two's kdf(Z) path was returned; only the final shared secret remains held, and zeroing on return is the house pool's own dispose-time contract.");
 
             Assert.AreEqual(ProtocolTwoHmacKeyHalfHex, Convert.ToHexStringLower(sharedSecret.Memory.Span[..32]),
                 "The final shared secret returned to the caller must still carry the correct (unaffected) HMAC-key half.");

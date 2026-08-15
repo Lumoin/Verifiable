@@ -17,7 +17,7 @@ namespace Verifiable.Cbor.Mdoc;
 /// SessionTranscript = [
 ///   null,                ; DeviceEngagementBytes — null for HTTP transports
 ///   null,                ; EReaderKeyBytes — null for HTTP transports
-///   OID4VPHandover       ; the OID4VP handover-data
+///   OID4VPHandover       ; binds the mdoc presentation to the OID4VP request
 /// ]
 ///
 /// OID4VPHandover = [
@@ -137,7 +137,7 @@ public static class Oid4VpMdocSessionTranscriptEncoder
     /// <returns>The freshly-generated nonce. Caller owns and must dispose.</returns>
     public static System.Buffers.IMemoryOwner<byte> GenerateMdocGeneratedNonce(
         Verifiable.Cryptography.FillEntropyDelegate fillEntropy,
-        System.Buffers.MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         int byteLength = MinimumMdocGeneratedNonceLength)
     {
         ArgumentNullException.ThrowIfNull(fillEntropy);

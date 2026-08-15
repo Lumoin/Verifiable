@@ -33,7 +33,7 @@ internal sealed class ClientCredentialsGrantTests
 
     //A non-identity scope, granted alongside RegisterDpopClient's fixed OIDC identity scope set
     //(RegisterMachineClient patches it in) so a happy-path request has SOMETHING left to retain
-    //once RFC 6749 §3.3 narrowing (contract wave-4 D4) removes openid/profile/email/address/phone
+    //once RFC 6749 §3.3 narrowing removes openid/profile/email/address/phone
     //from every client_credentials grant.
     private const string MachineScope = "telemetry.read";
 
@@ -41,7 +41,7 @@ internal sealed class ClientCredentialsGrantTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
     [TestMethod]
@@ -71,8 +71,8 @@ internal sealed class ClientCredentialsGrantTests
         Assert.AreEqual(WellKnownAuthenticationSchemes.Bearer, root.GetProperty("token_type").GetString());
         Assert.IsGreaterThan(0, root.GetProperty("expires_in").GetInt32(), "expires_in must reflect the token's exp-iat.");
         Assert.AreEqual(MachineScope, root.GetProperty(OAuthRequestParameterNames.Scope).GetString(),
-            "A non-identity scope survives RFC 6749 §3.3 narrowing unchanged (contract wave-4 D4 "
-            + "narrows only openid and the OIDC identity scopes).");
+            "A non-identity scope survives RFC 6749 §3.3 narrowing unchanged (only openid and the "
+            + "OIDC identity scopes are narrowed).");
 
         //RFC 9068 §3: with no end-user involved, the subject is the client itself.
         string[] segments = accessToken.Split('.');
@@ -243,8 +243,8 @@ internal sealed class ClientCredentialsGrantTests
     /// <see cref="WellKnownCapabilityIdentifiers.OAuthAuthorizationCode"/>) and wires a
     /// client_secret_post validator. Grant-only issuance works because
     /// <see cref="Rfc9068AccessTokenProducer"/>'s <c>RequiredCapability</c> is
-    /// <see langword="null"/> — an optional tenant-feature gate, not a grant-capability proxy
-    /// (contract wave-4 D2) — so every token-issuing grant's own endpoint-match capability
+    /// <see langword="null"/> — an optional tenant-feature gate, not a grant-capability proxy —
+    /// so every token-issuing grant's own endpoint-match capability
     /// (here <see cref="WellKnownCapabilityIdentifiers.OAuthClientCredentials"/>) is sufficient
     /// on its own.
     /// </summary>
@@ -288,9 +288,9 @@ internal sealed class ClientCredentialsGrantTests
 
 
     /// <summary>
-    /// Contract wave-4 D3/D4: even though this tenant is granted the
-    /// <see cref="WellKnownCapabilityIdentifiers.OidcOpenIdConnect"/> feature — ruling out D2's
-    /// capability gate as the explanation — a <c>client_credentials</c> token request carrying
+    /// Even though this tenant is granted the
+    /// <see cref="WellKnownCapabilityIdentifiers.OidcOpenIdConnect"/> feature — ruling out the
+    /// optional capability gate as the explanation — a <c>client_credentials</c> token request carrying
     /// <c>openid</c> never yields an id_token. <see cref="Oidc10IdTokenProducer"/>'s
     /// <c>IsApplicable</c> independently requires <c>GrantType ∈ {authorization_code,
     /// refresh_token}</c>, and the source-side <c>DropIdentityScopesForNonEndUserGrant</c> already
@@ -330,7 +330,7 @@ internal sealed class ClientCredentialsGrantTests
 
         using JsonDocument doc = JsonDocument.Parse(body);
         Assert.IsTrue(doc.RootElement.TryGetProperty(WellKnownTokenTypes.AccessToken, out _),
-            "An access token must still be minted (D3 leaves the access-token producer unaffected).");
+            "An access token must still be minted (the id-token narrowing leaves the access-token producer unaffected).");
         Assert.IsFalse(doc.RootElement.TryGetProperty(WellKnownTokenTypes.IdToken, out _),
             "client_credentials must never carry an id_token even when openid was requested on a "
             + "tenant with the OidcOpenIdConnect feature granted.");
@@ -338,7 +338,7 @@ internal sealed class ClientCredentialsGrantTests
 
 
     /// <summary>
-    /// Contract wave-4 D4 source layer: <c>client_credentials</c> has no authenticated End-User (the
+    /// <c>client_credentials</c> has no authenticated End-User (the
     /// token's <c>sub</c> is the client itself), so a request carrying <c>openid</c> and every OIDC
     /// Core §5.4 identity scope has them narrowed away (RFC 6749 §3.3) before the granted scope ever
     /// reaches the token — the issued access token's <c>scope</c> claim carries none of them — and

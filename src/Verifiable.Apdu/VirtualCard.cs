@@ -153,7 +153,7 @@ public sealed class VirtualCard
         Justification = "ApduResponse takes ownership of responseOwner. The caller is responsible for disposing the returned ApduResult.")]
     public ValueTask<ApduResult<ApduResponse>> TransceiveAsync(
         ReadOnlyMemory<byte> commandApdu,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pool);

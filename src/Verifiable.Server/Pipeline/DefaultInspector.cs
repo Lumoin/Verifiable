@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core;
 
 namespace Verifiable.Server.Pipeline;
@@ -9,7 +8,6 @@ namespace Verifiable.Server.Pipeline;
 /// completes synchronously. Deployments that don't need inspection wire
 /// this explicitly to satisfy <see cref="ServerIntegration.Validate"/>.
 /// </summary>
-[DebuggerDisplay("DefaultInspector")]
 public static class DefaultInspector
 {
     /// <summary>

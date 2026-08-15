@@ -103,7 +103,7 @@ internal sealed class AuthCodeFlowTests
     }
 
 
-    //R9207-013 / RFC 8414 §3.3 — the client-side metadata-consumption seam
+    //RFC 8414 §3.3 — the client-side metadata-consumption seam
     //(ResolveValidatedAuthorizationServerMetadataAsync) verifies a resolved
     //AuthorizationServerMetadata.Issuer against the pinned ClientRegistration.
     //AuthorizationServerIssuer before any flow handler uses the metadata's endpoints,

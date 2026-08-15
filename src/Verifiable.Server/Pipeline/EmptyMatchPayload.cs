@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 using Verifiable.Server.Routing;
 namespace Verifiable.Server.Pipeline;
@@ -19,5 +18,4 @@ namespace Verifiable.Server.Pipeline;
 /// <see langword="null"/> otherwise.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("EmptyMatchPayload")]
 internal sealed record EmptyMatchPayload: MatchPayload;

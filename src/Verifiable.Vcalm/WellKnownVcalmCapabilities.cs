@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Server;
 
 namespace Verifiable.Vcalm;
@@ -15,7 +14,6 @@ namespace Verifiable.Vcalm;
 /// equality, hashing, and the capability set that gates which endpoint candidates enter the
 /// per-request chain. Adding an entry here implies the library ships an implementation.
 /// </remarks>
-[DebuggerDisplay("WellKnownVcalmCapabilities")]
 public static class WellKnownVcalmCapabilities
 {
     /// <summary>

@@ -43,7 +43,6 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet;
 /// directly rather than going through this client.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("Oid4VpWalletClient")]
 public sealed class Oid4VpWalletClient
 {
 
@@ -356,7 +355,7 @@ public sealed class Oid4VpWalletClient
     private static string? PeekJarAlgHeader(
         string compactJar,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         int firstDot = compactJar.IndexOf('.', StringComparison.Ordinal);
         if(firstDot <= 0)

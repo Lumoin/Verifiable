@@ -72,8 +72,8 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// One of the credential's two fresh, independently random 32-byte <c>hmac-secret</c> keys — the one
 /// <c>authenticatorGetAssertion</c>'s CredRandom-selection step (CTAP 2.3 §12.7, snapshot lines
 /// 13313-13315) uses when that assertion's own <c>uv</c> bit is set. Pooled, owned by this record —
-/// SECRET material, never exposed as a raw array or span and never echoed in any response (contract R2c;
-/// <see cref="Verifiable.Fido2.Ctap.Authenticator.Automata.CtapAuthenticatorTransitions.BuildCredentialEnumerationResponse"/>
+/// SECRET material, never exposed as a raw array or span and never echoed in any response
+/// (<see cref="Verifiable.Fido2.Ctap.Authenticator.Automata.CtapAuthenticatorTransitions.BuildCredentialEnumerationResponse"/>
 /// deliberately omits it despite echoing <see cref="LargeBlobKey"/>). REQUIRED, not optional: unlike
 /// <see cref="LargeBlobKey"/>, this pair is minted unconditionally on every
 /// <c>authenticatorMakeCredential</c> (snapshot line 13191's declarative generation step, line 13192's
@@ -111,7 +111,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// type, <c>PrivateKey</c>, deliberately exposes no public API to read its own raw key bytes back out
 /// (<c>SensitiveMemoryKey.KeyMaterial</c> is <see langword="protected"/>, reachable only by
 /// <c>Verifiable.Cryptography</c> types themselves) — a private key, once wrapped, is meant to be used
-/// only through its bound signing delegate, never exported. A state-custody snapshot (wavect R-2) still
+/// only through its bound signing delegate, never exported. A state-custody snapshot still
 /// needs to persist and later restore a credential's signing capability across a real process boundary,
 /// which requires the raw bytes at least once. Rather than punching a hole in <c>PrivateKey</c>'s own
 /// custody discipline, the shipped <see cref="CtapCredentialSigningBackend.CreateEs256Default"/> backend

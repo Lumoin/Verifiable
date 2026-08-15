@@ -386,7 +386,7 @@ public sealed record TpmUnsealRequested(uint ItemHandle, ReadOnlyMemory<byte> Su
 /// HMAC session with the <c>encrypt</c> attribute that protects the recovered <c>outData</c> (Part 1, clauses 18.7
 /// and 19). Session 1's kind is resolved in the transition, not the parser (its handle may name either table):
 /// a policy session's accumulated policyDigest authorizes the object directly (empty-HMAC authorization, the
-/// policy itself is the authorization, Part 1, clause 19.6, unaffected by this wave); an HMAC session is verified
+/// policy itself is the authorization, Part 1, clause 19.6); an HMAC session is verified
 /// by the shared command-HMAC helper with authValue = the object's <see cref="SealedObjectState.UserAuth"/> (Part
 /// 3, clause 5.6). A present session 2 is always a bound HMAC session and is verified the same way, with no entity
 /// (it authorizes nothing).
@@ -395,7 +395,7 @@ public sealed record TpmUnsealRequested(uint ItemHandle, ReadOnlyMemory<byte> Su
 /// <param name="FirstSession">The first session's handle (a policy session or an HMAC session).</param>
 /// <param name="FirstNonceCaller">The first session's caller nonce rolled for this command, copied into durable model memory — the cpHash's per-session nonceNewer when the first session is an HMAC session.</param>
 /// <param name="PolicyAttributes">The first session's command session-attributes byte, echoed into its response session entry.</param>
-/// <param name="FirstHmac">The first session's supplied <c>hmac</c> field, copied into durable model memory. Ignored when the first session is a policy session (its own command-HMAC verification is out of this wave's scope).</param>
+/// <param name="FirstHmac">The first session's supplied <c>hmac</c> field, copied into durable model memory. Ignored when the first session is a policy session (its own command-HMAC verification is out of scope here).</param>
 /// <param name="EncryptSession">The bound HMAC session handle whose <c>encrypt</c> attribute protects the recovered <c>outData</c>, or <c>0</c> when the command carried only the first session (the recovered <c>outData</c> is then returned in the clear).</param>
 /// <param name="EncryptNonceCaller">The encrypt session's caller nonce rolled for this command, copied into durable model memory; the nonceOlder of the response-direction encryption and the response HMAC (Part 1, clause 19.2). Empty when there is no encrypt session.</param>
 /// <param name="EncryptAttributes">The encrypt session's command session-attributes byte, echoed into the response session area and folded into the response HMAC. Zero when there is no encrypt session.</param>
@@ -768,7 +768,7 @@ public sealed record TpmSignatureVerified(
 /// <see cref="TpmRsaVerifyPolicySignedAction"/>: whether the recomputed <c>aHash</c> verified against
 /// <c>authObject</c>'s signature (TPM 2.0 Library Part 3, Section 23.3). Unlike
 /// <see cref="TpmSignatureVerified"/>, no ticket is produced here at all — a NULL <c>TPMT_TK_AUTH</c> is always
-/// framed regardless of the outcome (the real ticket mint is deferred to a future wave). A failed verification
+/// framed regardless of the outcome (the real ticket mint is not yet implemented). A failed verification
 /// carries <c>TPM_RC_SIGNATURE</c>; the continuation folds the policyDigest only on success. Internal to the
 /// effect loop; never arrives from the command transport.
 /// </summary>
@@ -994,7 +994,7 @@ public sealed record TpmPolicySecretRequested(uint AuthHandle, uint PolicySessio
 /// <param name="NonceTpm">The caller-supplied nonceTPM: must equal the session's retained nonce when non-empty, or be empty for a session-unbound authorization.</param>
 /// <param name="CpHashA">The command-parameter digest being authorized, or empty if unbound.</param>
 /// <param name="PolicyRef">The opaque policy qualifier, folded into the policyDigest unconditionally (Part 3, Section 23.2.3).</param>
-/// <param name="Expiration">The signed expiration (seconds); 0 = no expiry, negative = ticket requested (the mint itself is deferred this wave).</param>
+/// <param name="Expiration">The signed expiration (seconds); 0 = no expiry, negative = ticket requested (the real ticket mint is deferred).</param>
 /// <param name="SignatureScheme">The signing scheme (<c>TPM_ALG_ECDSA</c>, <c>TPM_ALG_RSASSA</c>, or <c>TPM_ALG_RSAPSS</c>).</param>
 /// <param name="SchemeHashAlg">H_authAlg: the hash algorithm carried inside the signature — independent of the session's own policy hash algorithm.</param>
 /// <param name="Signature">The signature octets: IEEE P1363 r ‖ s for ECDSA, or the raw RSA signature for RSASSA/RSAPSS.</param>
@@ -1271,7 +1271,7 @@ public sealed record TpmCreateSealedObjectOverSessionsRequested(
 /// <param name="ResponseCode"><c>TPM_RC_SUCCESS</c> when every field decoded; otherwise the rejection.</param>
 /// <param name="SizeFailureBlamesDecryptSession">
 /// Whether <paramref name="ResponseCode"/> is <c>TPM_RC_SIZE</c> caused by <c>inSensitive</c>'s own declared size
-/// while a decrypt session was present — the ONE failure this wave session-index-encodes to that session; every
+/// while a decrypt session was present — the ONE failure session-index-encoded to that session; every
 /// other rejection (a generic parameter malformation, or the SAME size problem with no decrypt session to blame)
 /// is reported bare.
 /// </param>
@@ -1298,7 +1298,7 @@ public sealed record TpmCreateSensitiveDecrypted(
 /// (the request-decrypt counterpart of <see cref="TpmUnsealResponseSession"/>): the effect rolls a fresh
 /// nonceTPM and computes a real response HMAC for it, keyed on THE SAME <c>sessionKey ‖ authValue</c> its
 /// command-HMAC verification used (Part 1, clause 19.6.8). Response-direction parameter encryption is out of
-/// this wave's scope for <c>TPM2_Create()</c>, so every entry's own <c>outPrivate</c>/<c>outPublic</c>/creation
+/// scope for <c>TPM2_Create()</c>, so every entry's own <c>outPrivate</c>/<c>outPublic</c>/creation
 /// by-products are always returned in the clear.
 /// </summary>
 /// <param name="SessionHandle">The session handle whose nonceTPM is rolled once framed.</param>

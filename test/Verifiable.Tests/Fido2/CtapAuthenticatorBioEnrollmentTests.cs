@@ -6,20 +6,20 @@ using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
 using Verifiable.Tests.TestInfrastructure;
-using static Verifiable.Tests.TestInfrastructure.CtapWave2AuthenticatorFixtures;
-using static Verifiable.Tests.TestInfrastructure.CtapWaveBioFixtures;
+using static Verifiable.Tests.TestInfrastructure.CtapMakeCredentialGetAssertionFixtures;
+using static Verifiable.Tests.TestInfrastructure.CtapBioEnrollmentFixtures;
 
 namespace Verifiable.Tests.Fido2;
 
 /// <summary>
-/// The wavebio PKG-B unit-test matrix for <c>authenticatorBioEnrollment</c> (<c>0x09</c>): the token-free
+/// The unit-test matrix for <c>authenticatorBioEnrollment</c> (<c>0x09</c>): the token-free
 /// trio, the full preamble/verify/permission ladder for each of the five <c>be</c>-permission-gated
 /// subcommands, the live fingerprint template store (capacity, capture-quality sequences, auto-cancel,
 /// completion/persistence, rename, removal), the <c>bioEnroll</c>/<c>uv</c> getInfo tri-state flip, and
 /// row 6623's token-survival guarantee. Driven in-process through
 /// <see cref="CtapAuthenticatorSimulator.TransceiveAsync"/>, mirroring
 /// <see cref="CtapAuthenticatorCredentialManagementTests"/>'s conventions — platform-side
-/// <c>pinUvAuthParam</c> computed the same way the wavecm/waveconfig fixtures compute credMgmt/acfg's own,
+/// <c>pinUvAuthParam</c> computed the same way the shared fixtures compute credMgmt/acfg's own,
 /// through <see cref="CtapPinUvAuthProtocol.AuthenticateAsync"/> over the actual token bytes. Every
 /// assertion reads the response's own decoded wire bytes, never internal simulator state.
 /// </summary>
@@ -42,7 +42,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task GetModalityTrueReturnsFingerprintModalityTokenFree()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-getmodality");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapBioEnrollmentRequest(GetModality: true);
         using PooledMemory response = await SendBioEnrollmentAsync(simulator, request, pool, TestContext.CancellationToken);
@@ -56,14 +56,14 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
 
     /// <summary>
     /// <c>getModality: true</c> WINS over an accompanying <c>subCommand</c> — a documented posture over
-    /// the spec's own silence on the mixed-member case (bio scout trap 2/5): the modality read is still
+    /// the spec's own silence on the mixed-member case: the modality read is still
     /// served, the <c>subCommand</c> is never dispatched.
     /// </summary>
     [TestMethod]
     public async Task GetModalityTrueWinsOverAccompanyingSubCommand()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-getmodality-wins");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapBioEnrollmentRequest(
             Modality: WellKnownCtapBioEnrollmentModalities.Fingerprint,
@@ -89,7 +89,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task GetModalityFalseWithNoSubCommandReturnsMissingParameter()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-getmodality-false");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapBioEnrollmentRequest(GetModality: false);
         using PooledMemory response = await SendBioEnrollmentAsync(simulator, request, pool, TestContext.CancellationToken);
@@ -107,7 +107,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task NeitherGetModalityNorSubCommandReturnsMissingParameter()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-nothing-requested");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapBioEnrollmentRequest();
         using PooledMemory response = await SendBioEnrollmentAsync(simulator, request, pool, TestContext.CancellationToken);
@@ -117,15 +117,15 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
 
 
     /// <summary>
-    /// <c>getFingerprintSensorInfo</c> (subCommand <c>0x07</c>) is served with NO token at all (bio
-    /// scout Finding 5/trap 7), reporting the fixed sensor statics: <c>fingerprintKind</c> = touch (1),
+    /// <c>getFingerprintSensorInfo</c> (subCommand <c>0x07</c>) is served with NO token at all,
+    /// reporting the fixed sensor statics: <c>fingerprintKind</c> = touch (1),
     /// <c>maxCaptureSamplesRequiredForEnroll</c> = 4, <c>maxTemplateFriendlyName</c> = 64.
     /// </summary>
     [TestMethod]
     public async Task GetFingerprintSensorInfoReturnsFixedStaticsTokenFree()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-sensor-info");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapBioEnrollmentRequest(
             Modality: WellKnownCtapBioEnrollmentModalities.Fingerprint,
@@ -150,7 +150,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task CancelCurrentEnrollmentWithNothingInProgressReturnsOkTokenFree()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-cancel-nothing");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapBioEnrollmentRequest(
             Modality: WellKnownCtapBioEnrollmentModalities.Fingerprint,
@@ -163,7 +163,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
 
 
     /// <summary>
-    /// <c>cancelCurrentEnrollment</c> discards an in-progress enrollment (R7): a subsequent
+    /// <c>cancelCurrentEnrollment</c> discards an in-progress enrollment: a subsequent
     /// <c>enrollCaptureNextSample</c> naming the cancelled enrollment's own <c>templateId</c> finds no
     /// matching in-progress sequence and answers <see cref="WellKnownCtapStatusCodes.InvalidOption"/>.
     /// </summary>
@@ -171,7 +171,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task CancelCurrentEnrollmentDiscardsInProgressEnrollment()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-cancel-discards");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] token = await EstablishPinAndIssueBeTokenAsync(simulator, pool, CtapPinUvAuthProtocolId.Two);
 
         byte[] templateId = await SendEnrollBeginAsync(simulator, pool, token, CtapPinUvAuthProtocolId.Two);
@@ -190,7 +190,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     }
 
 
-    /// <summary>Every be-permission-gated subcommand answers <c>PuatRequired</c> with no <c>pinUvAuthParam</c> presented (CTAP 2.3 §6.7.4-§6.7.8's own shared step 1, R12).</summary>
+    /// <summary>Every be-permission-gated subcommand answers <c>PuatRequired</c> with no <c>pinUvAuthParam</c> presented (CTAP 2.3 §6.7.4-§6.7.8's own shared step 1).</summary>
     [TestMethod]
     [DataRow(WellKnownCtapBioEnrollmentSubCommandsEnrollBegin, DisplayName = "enrollBegin")]
     [DataRow(WellKnownCtapBioEnrollmentSubCommandsEnrollCaptureNextSample, DisplayName = "enrollCaptureNextSample")]
@@ -200,7 +200,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task GatedSubCommandWithoutTokenReturnsPuatRequired(int subCommand)
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator($"bio-gated-no-token-{subCommand:X2}");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapBioEnrollmentRequest(Modality: WellKnownCtapBioEnrollmentModalities.Fingerprint, SubCommand: subCommand);
         using PooledMemory response = await SendBioEnrollmentAsync(simulator, request, pool, TestContext.CancellationToken);
@@ -209,12 +209,12 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     }
 
 
-    /// <summary>An unregistered <c>subCommand</c> value answers <c>InvalidSubcommand</c> — credMgmt's allow-list precedent (R12).</summary>
+    /// <summary>An unregistered <c>subCommand</c> value answers <c>InvalidSubcommand</c> — credMgmt's allow-list precedent.</summary>
     [TestMethod]
     public async Task UnregisteredSubCommandReturnsInvalidSubcommand()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-unregistered-subcommand");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapBioEnrollmentRequest(SubCommand: 0x99);
         using PooledMemory response = await SendBioEnrollmentAsync(simulator, request, pool, TestContext.CancellationToken);
@@ -225,16 +225,16 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
 
     /// <summary>
     /// A freshly constructed authenticator's <c>authenticatorGetInfo</c> response advertises the
-    /// wavebio getInfo surface (R2): <c>bioEnroll</c>/<c>uv</c> present-false (derived from
+    /// bio-enrollment getInfo surface: <c>bioEnroll</c>/<c>uv</c> present-false (derived from
     /// <see cref="CtapAuthenticatorState.HasProvisionedBioEnrollments"/>, live-checked against the real,
     /// empty template store), <c>uvBioEnroll</c> present-true unconditionally, <c>preferredPlatformUvAttempts</c>
     /// (0x11) = 3, <c>uvModality</c> (0x12) = <c>USER_VERIFY_FINGERPRINT_INTERNAL</c> (0x00000002).
     /// </summary>
     [TestMethod]
-    public async Task GetInfoAdvertisesWavebioSurfaceOnFreshAuthenticator()
+    public async Task GetInfoAdvertisesBioEnrollmentSurfaceOnFreshAuthenticator()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-getinfo-surface");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         byte[] request = [WellKnownCtapCommands.GetInfo];
         using PooledMemory response = await simulator.TransceiveAsync(request, pool, TestContext.CancellationToken);
@@ -251,12 +251,12 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     }
 
 
-    /// <summary><c>enrollBegin</c> with no <c>modality</c> answers <c>MissingParameter</c> (R12's shared mandatory-params check) — never reaches <c>verify()</c>, so no real token is needed.</summary>
+    /// <summary><c>enrollBegin</c> with no <c>modality</c> answers <c>MissingParameter</c> (the shared mandatory-params check) — never reaches <c>verify()</c>, so no real token is needed.</summary>
     [TestMethod]
     public async Task EnrollBeginMissingModalityReturnsMissingParameter()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-enrollbegin-no-modality");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapBioEnrollmentRequest(
             SubCommand: WellKnownCtapBioEnrollmentSubCommands.EnrollBegin, PinUvAuthProtocol: (int)CtapPinUvAuthProtocolId.Two, PinUvAuthParam: new byte[32]);
@@ -266,12 +266,12 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     }
 
 
-    /// <summary><c>enrollBegin</c> with a <c>modality</c> other than <c>fingerprint</c> answers <c>CTAP1_ERR_INVALID_PARAMETER</c> — a documented posture over spec silence (R12).</summary>
+    /// <summary><c>enrollBegin</c> with a <c>modality</c> other than <c>fingerprint</c> answers <c>CTAP1_ERR_INVALID_PARAMETER</c> — a documented posture over spec silence.</summary>
     [TestMethod]
     public async Task EnrollBeginUnsupportedModalityReturnsInvalidParameter()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-enrollbegin-bad-modality");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapBioEnrollmentRequest(
             Modality: 0x02, SubCommand: WellKnownCtapBioEnrollmentSubCommands.EnrollBegin,
@@ -287,7 +287,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task EnrollBeginMissingProtocolReturnsMissingParameter()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-enrollbegin-no-protocol");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapBioEnrollmentRequest(
             Modality: WellKnownCtapBioEnrollmentModalities.Fingerprint, SubCommand: WellKnownCtapBioEnrollmentSubCommands.EnrollBegin,
@@ -303,7 +303,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task EnrollBeginUnsupportedProtocolReturnsInvalidParameter()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-enrollbegin-bad-protocol");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapBioEnrollmentRequest(
             Modality: WellKnownCtapBioEnrollmentModalities.Fingerprint, SubCommand: WellKnownCtapBioEnrollmentSubCommands.EnrollBegin,
@@ -319,7 +319,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task EnrollCaptureNextSampleMissingTemplateIdReturnsMissingParameter()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-capturenext-no-templateid");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapBioEnrollmentRequest(
             Modality: WellKnownCtapBioEnrollmentModalities.Fingerprint, SubCommand: WellKnownCtapBioEnrollmentSubCommands.EnrollCaptureNextSample,
@@ -335,7 +335,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task SetFriendlyNameMissingTemplateFriendlyNameReturnsMissingParameter()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-setfriendlyname-no-name");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapBioEnrollmentRequest(
             Modality: WellKnownCtapBioEnrollmentModalities.Fingerprint, SubCommand: WellKnownCtapBioEnrollmentSubCommands.SetFriendlyName,
@@ -351,7 +351,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task RemoveEnrollmentMissingTemplateIdReturnsMissingParameter()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-remove-no-templateid");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapBioEnrollmentRequest(
             Modality: WellKnownCtapBioEnrollmentModalities.Fingerprint, SubCommand: WellKnownCtapBioEnrollmentSubCommands.RemoveEnrollment,
@@ -363,8 +363,8 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
 
 
     /// <summary>
-    /// <c>setFriendlyName</c>'s friendly-name byte-length check runs BEFORE <c>verify()</c> (bio scout
-    /// Finding 7): an oversized name is rejected with <see cref="WellKnownCtapStatusCodes.InvalidLength"/>
+    /// <c>setFriendlyName</c>'s friendly-name byte-length check runs BEFORE <c>verify()</c>: an oversized
+    /// name is rejected with <see cref="WellKnownCtapStatusCodes.InvalidLength"/>
     /// even alongside a garbage <c>pinUvAuthParam</c> that would otherwise fail verification — no PIN or
     /// token is established at all, proving this path never reaches <c>verify()</c>.
     /// </summary>
@@ -372,7 +372,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task SetFriendlyNameTooLongReturnsInvalidLengthBeforeVerify()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-setfriendlyname-too-long");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapBioEnrollmentRequest(
             Modality: WellKnownCtapBioEnrollmentModalities.Fingerprint, SubCommand: WellKnownCtapBioEnrollmentSubCommands.SetFriendlyName,
@@ -389,7 +389,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task EnrollBeginBadSignatureReturnsPinAuthInvalid()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-enrollbegin-bad-signature");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] token = await EstablishPinAndIssueBeTokenAsync(simulator, pool, CtapPinUvAuthProtocolId.Two);
 
         byte[] validParam = await ComputeGatedSignatureAsync(token, CtapPinUvAuthProtocolId.Two, pool, WellKnownCtapBioEnrollmentSubCommands.EnrollBegin);
@@ -413,9 +413,9 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task EnrollBeginWithMcOnlyTokenReturnsPinAuthInvalid()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-enrollbegin-mc-only-token");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
-        await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, CtapPinUvAuthProtocolId.Two, DefaultPin, TestContext.CancellationToken);
-        byte[] mcOnlyToken = await CtapWaveConfigFixtures.IssueTokenAsync(
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        await CtapConfigFixtures.EstablishPinAsync(simulator, pool, CtapPinUvAuthProtocolId.Two, DefaultPin, TestContext.CancellationToken);
+        byte[] mcOnlyToken = await CtapConfigFixtures.IssueTokenAsync(
             simulator, pool, CtapPinUvAuthProtocolId.Two, DefaultPin, WellKnownCtapPinUvAuthTokenPermissions.Mc, DefaultRpId, TestContext.CancellationToken);
 
         byte[] param = await ComputeGatedSignatureAsync(mcOnlyToken, CtapPinUvAuthProtocolId.Two, pool, WellKnownCtapBioEnrollmentSubCommands.EnrollBegin);
@@ -437,7 +437,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task EnrollBeginMintsTemplateAndCapturesFirstGoodSample()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-enrollbegin-happy");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] token = await EstablishPinAndIssueBeTokenAsync(simulator, pool, CtapPinUvAuthProtocolId.Two);
 
         byte[] param = await ComputeGatedSignatureAsync(token, CtapPinUvAuthProtocolId.Two, pool, WellKnownCtapBioEnrollmentSubCommands.EnrollBegin);
@@ -465,7 +465,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task EnrollBeginAutoCancelsUnfinishedEnrollment()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-autocancel");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] token = await EstablishPinAndIssueBeTokenAsync(simulator, pool, CtapPinUvAuthProtocolId.Two);
 
         byte[] firstTemplateId = await SendEnrollBeginAsync(simulator, pool, token, CtapPinUvAuthProtocolId.Two);
@@ -478,12 +478,12 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     }
 
 
-    /// <summary><c>enrollCaptureNextSample</c> naming a <c>templateId</c> that does not match the in-progress enrollment answers <c>InvalidOption</c> — a documented posture over spec silence (bio scout trap 6).</summary>
+    /// <summary><c>enrollCaptureNextSample</c> naming a <c>templateId</c> that does not match the in-progress enrollment answers <c>InvalidOption</c> — a documented posture over spec silence.</summary>
     [TestMethod]
     public async Task EnrollCaptureNextSampleWithMismatchedTemplateIdReturnsInvalidOption()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-capturenext-mismatch");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] token = await EstablishPinAndIssueBeTokenAsync(simulator, pool, CtapPinUvAuthProtocolId.Two);
         _ = await SendEnrollBeginAsync(simulator, pool, token, CtapPinUvAuthProtocolId.Two);
 
@@ -494,12 +494,12 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     }
 
 
-    /// <summary><c>enrollCaptureNextSample</c> with no enrollment currently in progress answers <c>InvalidOption</c> (bio scout trap 6).</summary>
+    /// <summary><c>enrollCaptureNextSample</c> with no enrollment currently in progress answers <c>InvalidOption</c>.</summary>
     [TestMethod]
     public async Task EnrollCaptureNextSampleWithNoEnrollmentInProgressReturnsInvalidOption()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-capturenext-nothing-in-progress");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] token = await EstablishPinAndIssueBeTokenAsync(simulator, pool, CtapPinUvAuthProtocolId.Two);
 
         using PooledMemory response = await SendEnrollCaptureNextSampleRawAsync(simulator, pool, token, CtapPinUvAuthProtocolId.Two, new byte[16]);
@@ -519,7 +519,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task EnrollCaptureNextSampleCompletesEnrollmentAfterEnoughGoodSamples()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-capturenext-completes");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] token = await EstablishPinAndIssueBeTokenAsync(simulator, pool, CtapPinUvAuthProtocolId.Two);
 
         byte[] templateId = await SendEnrollBeginAsync(simulator, pool, token, CtapPinUvAuthProtocolId.Two);
@@ -545,8 +545,8 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
 
     /// <summary>
     /// A non-GOOD capture leaves <c>remainingSamples</c> UNCHANGED and is still reported inside a
-    /// successful <c>CTAP2_OK</c> — bio scout Finding 9: capture-quality outcomes are response FIELD
-    /// values, never protocol errors.
+    /// successful <c>CTAP2_OK</c>: capture-quality outcomes are response FIELD values, never protocol
+    /// errors.
     /// </summary>
     [TestMethod]
     public async Task EnrollCaptureNextSamplePoorQualityLeavesRemainingSamplesUnchanged()
@@ -561,7 +561,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
         int SimulateCapture() => scriptedStatuses[callIndex++];
 
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-capturenext-poor-quality", simulateFingerprintCapture: SimulateCapture);
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] token = await EstablishPinAndIssueBeTokenAsync(simulator, pool, CtapPinUvAuthProtocolId.Two);
 
         byte[] templateId = await SendEnrollBeginAsync(simulator, pool, token, CtapPinUvAuthProtocolId.Two);
@@ -589,7 +589,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task EnrollBeginReturnsFpDatabaseFullWhenStoreAtCapacity()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-capacity");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] token = await EstablishPinAndIssueBeTokenAsync(simulator, pool, CtapPinUvAuthProtocolId.Two);
 
         for(int i = 0; i < CtapAuthenticatorState.MaxEnrolledTemplatesCapacity; i++)
@@ -608,7 +608,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task EnumerateEnrollmentsWithNoTemplatesReturnsInvalidOption()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-enumerate-empty");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] token = await EstablishPinAndIssueBeTokenAsync(simulator, pool, CtapPinUvAuthProtocolId.Two);
 
         using PooledMemory response = await SendEnumerateEnrollmentsRawAsync(simulator, pool, token, CtapPinUvAuthProtocolId.Two);
@@ -622,7 +622,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task EnumerateEnrollmentsReturnsRealPersistedTemplates()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-enumerate-real");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] token = await EstablishPinAndIssueBeTokenAsync(simulator, pool, CtapPinUvAuthProtocolId.Two);
         byte[] completedTemplateId = await CompleteEnrollmentAsync(simulator, pool, token, CtapPinUvAuthProtocolId.Two);
 
@@ -642,7 +642,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task SetFriendlyNameRenamesExistingTemplate()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-setfriendlyname-happy");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] token = await EstablishPinAndIssueBeTokenAsync(simulator, pool, CtapPinUvAuthProtocolId.Two);
         byte[] templateId = await CompleteEnrollmentAsync(simulator, pool, token, CtapPinUvAuthProtocolId.Two);
 
@@ -668,7 +668,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task SetFriendlyNameWithUnknownTemplateIdReturnsInvalidOption()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-setfriendlyname-unknown");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] token = await EstablishPinAndIssueBeTokenAsync(simulator, pool, CtapPinUvAuthProtocolId.Two);
 
         byte[] unknownTemplateId = new byte[16];
@@ -687,7 +687,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task RemoveEnrollmentDeletesExistingTemplate()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-remove-happy");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] token = await EstablishPinAndIssueBeTokenAsync(simulator, pool, CtapPinUvAuthProtocolId.Two);
         byte[] templateId = await CompleteEnrollmentAsync(simulator, pool, token, CtapPinUvAuthProtocolId.Two);
 
@@ -711,7 +711,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task RemoveEnrollmentWithUnknownTemplateIdReturnsInvalidOption()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-remove-unknown");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] token = await EstablishPinAndIssueBeTokenAsync(simulator, pool, CtapPinUvAuthProtocolId.Two);
 
         byte[] unknownTemplateId = new byte[16];
@@ -726,7 +726,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
 
 
     /// <summary>
-    /// R2's tri-state flip, proven from REAL <c>authenticatorGetInfo</c> bytes: <c>bioEnroll</c>/<c>uv</c>
+    /// The tri-state flip, proven from REAL <c>authenticatorGetInfo</c> bytes: <c>bioEnroll</c>/<c>uv</c>
     /// flip present-false → present-true once the FIRST enrollment completes, and flip back to
     /// present-false once the LAST template is removed.
     /// </summary>
@@ -734,16 +734,16 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task EnrollmentTriStateFlipsBioEnrollAndUvOnRealGetInfoBytes()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-tristate-flip");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] token = await EstablishPinAndIssueBeTokenAsync(simulator, pool, CtapPinUvAuthProtocolId.Two);
 
-        CtapGetInfoResponse beforeInfo = await CtapWaveConfigFixtures.GetInfoAsync(simulator, pool, TestContext.CancellationToken);
+        CtapGetInfoResponse beforeInfo = await CtapConfigFixtures.GetInfoAsync(simulator, pool, TestContext.CancellationToken);
         Assert.IsFalse(beforeInfo.Options!.BioEnroll);
         Assert.IsFalse(beforeInfo.Options!.Uv);
 
         byte[] templateId = await CompleteEnrollmentAsync(simulator, pool, token, CtapPinUvAuthProtocolId.Two);
 
-        CtapGetInfoResponse afterEnrollInfo = await CtapWaveConfigFixtures.GetInfoAsync(simulator, pool, TestContext.CancellationToken);
+        CtapGetInfoResponse afterEnrollInfo = await CtapConfigFixtures.GetInfoAsync(simulator, pool, TestContext.CancellationToken);
         Assert.IsTrue(afterEnrollInfo.Options!.BioEnroll, "the first completed enrollment must flip bioEnroll to true.");
         Assert.IsTrue(afterEnrollInfo.Options!.Uv, "uv derives from the same single source as bioEnroll.");
 
@@ -756,7 +756,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
             Assert.AreEqual(WellKnownCtapStatusCodes.Ok, removeResponse.AsReadOnlySpan()[0]);
         }
 
-        CtapGetInfoResponse afterRemoveInfo = await CtapWaveConfigFixtures.GetInfoAsync(simulator, pool, TestContext.CancellationToken);
+        CtapGetInfoResponse afterRemoveInfo = await CtapConfigFixtures.GetInfoAsync(simulator, pool, TestContext.CancellationToken);
         Assert.IsFalse(afterRemoveInfo.Options!.BioEnroll, "removing the LAST template must flip bioEnroll back to false.");
         Assert.IsFalse(afterRemoveInfo.Options!.Uv);
     }
@@ -772,15 +772,15 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     public async Task TokenSurvivesEnrollmentCompletionAndSucceedsAtMakeCredentialAfterward()
     {
         using CtapAuthenticatorSimulator simulator = CreateSimulator("bio-6623-token-survival");
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
-        await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, CtapPinUvAuthProtocolId.Two, DefaultPin, TestContext.CancellationToken);
-        byte[] token = await CtapWaveConfigFixtures.IssueTokenAsync(
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        await CtapConfigFixtures.EstablishPinAsync(simulator, pool, CtapPinUvAuthProtocolId.Two, DefaultPin, TestContext.CancellationToken);
+        byte[] token = await CtapConfigFixtures.IssueTokenAsync(
             simulator, pool, CtapPinUvAuthProtocolId.Two, DefaultPin,
             WellKnownCtapPinUvAuthTokenPermissions.Be | WellKnownCtapPinUvAuthTokenPermissions.Mc, DefaultRpId, TestContext.CancellationToken);
 
         _ = await CompleteEnrollmentAsync(simulator, pool, token, CtapPinUvAuthProtocolId.Two);
 
-        byte[] mcParam = await CtapWaveConfigFixtures.ComputeSignatureAsync(token, CtapPinUvAuthProtocolId.Two, McClientDataHash, pool, TestContext.CancellationToken);
+        byte[] mcParam = await CtapConfigFixtures.ComputeSignatureAsync(token, CtapPinUvAuthProtocolId.Two, McClientDataHash, pool, TestContext.CancellationToken);
         CtapMakeCredentialRequest mcRequest = BuildMakeCredentialRequest(pool, pinUvAuthParam: mcParam, pinUvAuthProtocol: (int)CtapPinUvAuthProtocolId.Two);
         using PooledMemory mcResponse = await SendMakeCredentialAsync(simulator, mcRequest, pool, TestContext.CancellationToken);
 
@@ -793,30 +793,30 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
 
 
     /// <summary>Establishes <see cref="DefaultPin"/> and issues an unbound <c>be</c>-only-permissioned <c>pinUvAuthToken</c> via <c>getPinUvAuthTokenUsingPinWithPermissions</c> (0x09) — <c>be</c>'s own RP ID column is "Ignored", so no <c>rpId</c> is supplied.</summary>
-    private async Task<byte[]> EstablishPinAndIssueBeTokenAsync(CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, CtapPinUvAuthProtocolId protocolId)
+    private async Task<byte[]> EstablishPinAndIssueBeTokenAsync(CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, CtapPinUvAuthProtocolId protocolId)
     {
-        await CtapWaveConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
+        await CtapConfigFixtures.EstablishPinAsync(simulator, pool, protocolId, DefaultPin, TestContext.CancellationToken);
 
-        return await CtapWaveConfigFixtures.IssueTokenAsync(
+        return await CtapConfigFixtures.IssueTokenAsync(
             simulator, pool, protocolId, DefaultPin, WellKnownCtapPinUvAuthTokenPermissions.Be, rpId: null, TestContext.CancellationToken);
     }
 
 
-    /// <summary>Computes a gated subcommand's own <c>pinUvAuthParam</c> (bio scout Finding C: the TWO-byte <c>modality || subCommand [|| subCommandParams]</c> prefix).</summary>
+    /// <summary>Computes a gated subcommand's own <c>pinUvAuthParam</c> (the TWO-byte <c>modality || subCommand [|| subCommandParams]</c> prefix).</summary>
     private async Task<byte[]> ComputeGatedSignatureAsync(
-        byte[] token, CtapPinUvAuthProtocolId protocolId, MemoryPool<byte> pool, int subCommand, ReadOnlyMemory<byte>? templateId = null, string? templateFriendlyName = null)
+        byte[] token, CtapPinUvAuthProtocolId protocolId, BaseMemoryPool pool, int subCommand, ReadOnlyMemory<byte>? templateId = null, string? templateFriendlyName = null)
     {
         ReadOnlyMemory<byte> subCommandParams = templateId is not null || templateFriendlyName is not null
             ? BuildSubCommandParams(templateId, templateFriendlyName)
             : ReadOnlyMemory<byte>.Empty;
         byte[] message = BuildMessage(WellKnownCtapBioEnrollmentModalities.Fingerprint, subCommand, subCommandParams);
 
-        return await CtapWaveConfigFixtures.ComputeSignatureAsync(token, protocolId, message, pool, TestContext.CancellationToken);
+        return await CtapConfigFixtures.ComputeSignatureAsync(token, protocolId, message, pool, TestContext.CancellationToken);
     }
 
 
     /// <summary>Sends a fully signed <c>enrollBegin</c> and returns the raw response envelope — the caller owns it and must dispose it.</summary>
-    private async Task<PooledMemory> SendEnrollBeginRawAsync(CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, byte[] token, CtapPinUvAuthProtocolId protocolId)
+    private async Task<PooledMemory> SendEnrollBeginRawAsync(CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, byte[] token, CtapPinUvAuthProtocolId protocolId)
     {
         byte[] param = await ComputeGatedSignatureAsync(token, protocolId, pool, WellKnownCtapBioEnrollmentSubCommands.EnrollBegin);
         var request = new CtapBioEnrollmentRequest(
@@ -828,7 +828,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
 
 
     /// <summary>Sends a fully signed <c>enrollBegin</c>, asserts <c>CTAP2_OK</c>, and returns the minted <c>templateId</c> bytes.</summary>
-    private async Task<byte[]> SendEnrollBeginAsync(CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, byte[] token, CtapPinUvAuthProtocolId protocolId)
+    private async Task<byte[]> SendEnrollBeginAsync(CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, byte[] token, CtapPinUvAuthProtocolId protocolId)
     {
         using PooledMemory response = await SendEnrollBeginRawAsync(simulator, pool, token, protocolId);
         Assert.AreEqual(WellKnownCtapStatusCodes.Ok, response.AsReadOnlySpan()[0]);
@@ -839,7 +839,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
 
     /// <summary>Sends a fully signed <c>enrollCaptureNextSample</c> for <paramref name="templateId"/> and returns the raw response envelope — the caller owns it and must dispose it.</summary>
     private async Task<PooledMemory> SendEnrollCaptureNextSampleRawAsync(
-        CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, byte[] token, CtapPinUvAuthProtocolId protocolId, byte[] templateId)
+        CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, byte[] token, CtapPinUvAuthProtocolId protocolId, byte[] templateId)
     {
         byte[] param = await ComputeGatedSignatureAsync(token, protocolId, pool, WellKnownCtapBioEnrollmentSubCommands.EnrollCaptureNextSample, templateId);
         var request = new CtapBioEnrollmentRequest(
@@ -851,7 +851,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
 
 
     /// <summary>Sends a fully signed <c>enumerateEnrollments</c> and returns the raw response envelope — the caller owns it and must dispose it.</summary>
-    private async Task<PooledMemory> SendEnumerateEnrollmentsRawAsync(CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, byte[] token, CtapPinUvAuthProtocolId protocolId)
+    private async Task<PooledMemory> SendEnumerateEnrollmentsRawAsync(CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, byte[] token, CtapPinUvAuthProtocolId protocolId)
     {
         byte[] param = await ComputeGatedSignatureAsync(token, protocolId, pool, WellKnownCtapBioEnrollmentSubCommands.EnumerateEnrollments);
         var request = new CtapBioEnrollmentRequest(
@@ -867,7 +867,7 @@ internal sealed class CtapAuthenticatorBioEnrollmentTests
     /// calls (the default always-GOOD simulated sensor) to reach <c>remainingSamples</c> zero — and returns
     /// the persisted template's identifier bytes.
     /// </summary>
-    private async Task<byte[]> CompleteEnrollmentAsync(CtapAuthenticatorSimulator simulator, MemoryPool<byte> pool, byte[] token, CtapPinUvAuthProtocolId protocolId)
+    private async Task<byte[]> CompleteEnrollmentAsync(CtapAuthenticatorSimulator simulator, BaseMemoryPool pool, byte[] token, CtapPinUvAuthProtocolId protocolId)
     {
         byte[] templateId = await SendEnrollBeginAsync(simulator, pool, token, protocolId);
 

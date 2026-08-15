@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using Verifiable.Core;
@@ -69,7 +68,6 @@ namespace Verifiable.OAuth.Server.Metadata;
 /// library typed primitives.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("MetadataEndpoints")]
 public static class MetadataEndpoints
 {
 

@@ -52,7 +52,7 @@ public static class SdCwtVpTokenVerification
         SdCwtVpVerificationSeams seams,
         DecodeDelegate decoder,
         CommitmentReuseDetectionSeam? saltReuseSeam,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(vpToken);

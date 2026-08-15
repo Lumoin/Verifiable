@@ -22,7 +22,7 @@ internal sealed class EcdhEsTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private static readonly JwtHeaderSerializer JwtHeaderSerializer =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
@@ -693,7 +693,7 @@ internal sealed class EcdhEsTests
     //the expected NIST crv name — proving DefaultTagToEpkCrvConverter wired the curve, and
     //(for the cross-backend cases) that the P-521 66-byte shared secret padding agrees.
     private async Task NistRoundTripAsync(
-        Func<MemoryPool<byte>, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
+        Func<BaseMemoryPool, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
         KeyAgreementEncryptDelegate encrypt,
         AeadEncryptDelegate aeadEncrypt,
         KeyAgreementDecryptDelegate decrypt,
@@ -757,7 +757,7 @@ internal sealed class EcdhEsTests
     //decrypts. Asserts the recovered plaintext and that the emitted epk carried the
     //expected Brainpool crv name — proving DefaultTagToEpkCrvConverter wired the curve.
     private async Task BrainpoolRoundTripAsync(
-        Func<MemoryPool<byte>, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
+        Func<BaseMemoryPool, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>> createKeys,
         KeyAgreementEncryptDelegate encrypt,
         KeyAgreementDecryptDelegate decrypt,
         string expectedCrv)

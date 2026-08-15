@@ -39,7 +39,7 @@ internal sealed class SiopEncryptedResponseFlowTests
 
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private const string RelyingPartyClientId = "https://rp.example.com";
     private const string SiopNonce = "n-siop-encrypted-01";
@@ -275,7 +275,7 @@ internal sealed class SiopEncryptedResponseFlowTests
     /// <summary>
     /// The wallet-side encrypt composition: mint a plain JWK-Thumbprint Self-Issued ID Token bound to
     /// the transaction, then wrap it as a compact JWE (ECDH-ES + AES-GCM) to the RP's public encryption
-    /// key with the SAME JWE primitives <see cref="HaipProfile.EncryptResponseAsync(PublicKeyMemory, string, ReadOnlyMemory{byte}, JwtHeaderSerializer, TagToEpkCrvDelegate, KeyAgreementEncryptDelegate, KeyDerivationDelegate, AeadEncryptDelegate, EncodeDelegate, MemoryPool{byte}, string, CancellationToken)"/>
+    /// key with the SAME JWE primitives <see cref="HaipProfile.EncryptResponseAsync(PublicKeyMemory, string, ReadOnlyMemory{byte}, JwtHeaderSerializer, TagToEpkCrvDelegate, KeyAgreementEncryptDelegate, KeyDerivationDelegate, AeadEncryptDelegate, EncodeDelegate, BaseMemoryPool, string, CancellationToken)"/>
     /// uses on the OID4VP wallet side.
     /// </summary>
     private async Task<string> MintAndEncryptIdTokenAsync(

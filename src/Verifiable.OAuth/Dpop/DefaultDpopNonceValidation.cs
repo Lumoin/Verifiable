@@ -38,7 +38,7 @@ public static class DefaultDpopNonceValidation
         TimeProvider timeProvider,
         TimeSpan validityWindow,
         DecodeDelegate base64UrlDecoder,
-        MemoryPool<byte> memoryPool,
+        BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrEmpty(presentedNonce);

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using Verifiable.Cryptography.Text;
 
@@ -30,7 +29,6 @@ namespace Verifiable.OAuth;
 ///   <item><description><see href="https://www.rfc-editor.org/rfc/rfc9700">RFC 9700</see> — OAuth 2.0 Security Best Current Practice.</description></item>
 /// </list>
 /// </remarks>
-[DebuggerDisplay("OAuthRequestParameterNames")]
 public static class OAuthRequestParameterNames
 {
     //Authorization request parameters — RFC 6749 §4.1.1.

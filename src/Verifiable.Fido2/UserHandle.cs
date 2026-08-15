@@ -97,7 +97,7 @@ public sealed class UserHandle: SensitiveMemory, IEquatable<UserHandle>
     /// <see cref="Fido2AssertionChecks.CheckAssertionUserHandle"/> to reject, not an allocator
     /// concern — a wire-level empty user handle must construct so the rule can fail it closed.
     /// </remarks>
-    public static UserHandle Create(ReadOnlySpan<byte> value, MemoryPool<byte> pool)
+    public static UserHandle Create(ReadOnlySpan<byte> value, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

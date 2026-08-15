@@ -221,10 +221,13 @@ public static class JwtPayloadExtensions
         /// </param>
         /// <param name="audience">
         /// The <c>aud</c> claim identifying the intended resource server(s). Required
-        /// by RFC 9068. The wire shape follows
-        /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3">RFC 7519 §4.1.3</see>:
-        /// <see langword="null"/> or empty omits the claim entirely; a single-element
-        /// list is emitted as a JSON string; a multi-element list as a JSON array.
+        /// by RFC 9068. <see langword="null"/> or empty omits the claim entirely; otherwise it is
+        /// always emitted as a JSON array, including a single value —
+        /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3">RFC 7519 §4.1.3</see>'s
+        /// general representation is an array of <c>StringOrURI</c> values, and the bare-string
+        /// single-audience form is only a MAY special case this producer deliberately does not
+        /// take, so one canonical shape means a validating consumer never branches on two wire
+        /// forms.
         /// </param>
         /// <param name="clientId">
         /// The <c>client_id</c> claim identifying the OAuth client that requested the token.
@@ -263,15 +266,18 @@ public static class JwtPayloadExtensions
                 payload[WellKnownJwtClaimNames.Iss] = issuer;
             }
 
-            //RFC 7519 §4.1.3 permits aud as either a single string or an array of
-            //strings. Emit single-element lists as a string for compatibility with
-            //RPs that only handle the string form; multi-element lists go on the
-            //wire as an array.
+            //RFC 7519 §4.1.3's general representation of aud is an array of StringOrURI values;
+            //the bare-string single-audience form is a MAY special case this producer does not
+            //take, so every audience — one or many — goes on the wire as a JSON array. Materialized
+            //to a concrete string[] rather than stored as the caller's IReadOnlyList<string> verbatim:
+            //the payload's JSON writer (DictionaryStringObjectJsonConverter) only special-cases a
+            //handful of concrete collection shapes and falls back to a JsonSerializerContext lookup
+            //for anything else, so an arbitrary IReadOnlyList<string> implementation (for example the
+            //compiler's single-element collection-expression type) would throw NotSupportedException
+            //at serialization time; string[] is the one list shape every caller can rely on.
             if(audience is not null && audience.Count > 0)
             {
-                payload[WellKnownJwtClaimNames.Aud] = audience.Count == 1
-                    ? audience[0]
-                    : audience;
+                payload[WellKnownJwtClaimNames.Aud] = audience as string[] ?? [.. audience];
             }
 
             if(clientId is not null)

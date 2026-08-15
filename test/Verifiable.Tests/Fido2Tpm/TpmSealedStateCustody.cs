@@ -13,7 +13,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 
 /// <summary>
 /// Composes a <see cref="CtapStateCustody"/> bundle whose snapshot bytes are sealed to, and recovered
-/// from, an in-house simulated TPM (contract R-7) — a thin adapter over the
+/// from, an in-house simulated TPM — a thin adapter over the
 /// <see cref="TpmDeviceExtensions"/> business-capability verbs package B shipped (<c>SealAsync</c>/
 /// <c>UnsealAsync</c>), and their first production consumer.
 /// </summary>
@@ -32,7 +32,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// <see cref="TpmDeviceExtensions.SealAsync"/>, serializes the resulting <see cref="TpmSealedBlob"/>
 /// (<see cref="TpmSealedBlob.GetSerializedSize"/>/<see cref="TpmSealedBlob.WriteTo"/>), and hands the
 /// opaque bytes to the caller's store delegate. <b>Load</b>: fetches the opaque bytes via the caller's
-/// fetch delegate (absent ⇒ <see langword="null"/>, contract R-1's "no snapshot" case), reparses them with
+/// fetch delegate (absent ⇒ <see langword="null"/>, the "no snapshot" case), reparses them with
 /// <see cref="TpmSealedBlob.Parse"/>, and recovers the plaintext snapshot via
 /// <see cref="TpmDeviceExtensions.UnsealAsync"/>. <b>Wipe</b>: drives the caller's delete delegate only —
 /// nothing this adapter seals is ever loaded into the TPM's own persistent object store, so there is
@@ -44,7 +44,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// snapshot (fail closed).
 /// </para>
 /// </remarks>
-[SuppressMessage("Design", "CA1515:Consider making public types internal", Justification = "Staged composition-edge code (layering-split-ledger.md): public by design so the boundary is already the future package's API boundary, per the promotability rules.")]
+[SuppressMessage("Design", "CA1515:Consider making public types internal", Justification = "Staged composition-edge code: public by design so the boundary is already the future package's API boundary, per the promotability rules.")]
 public static class TpmSealedStateCustody
 {
     /// <summary>
@@ -81,7 +81,7 @@ public static class TpmSealedStateCustody
         TryFetchSealedSnapshotBlobAsyncDelegate fetchSealedBlobAsync,
         StoreSealedSnapshotBlobAsyncDelegate storeSealedBlobAsync,
         DeleteSealedSnapshotBlobAsyncDelegate deleteSealedBlobAsync,
-        MemoryPool<byte>? pool = null)
+        BaseMemoryPool? pool = null)
     {
         ArgumentNullException.ThrowIfNull(tpm);
         ArgumentNullException.ThrowIfNull(fetchSealedBlobAsync);
@@ -128,7 +128,7 @@ internal sealed class TpmSealedStateCustodyBinding
     private DeleteSealedSnapshotBlobAsyncDelegate DeleteSealedBlobAsync { get; }
 
     /// <summary>The memory pool this binding's own TPM-facing scratch work rents from.</summary>
-    private MemoryPool<byte> Pool { get; }
+    private BaseMemoryPool Pool { get; }
 
 
     /// <summary>
@@ -150,7 +150,7 @@ internal sealed class TpmSealedStateCustodyBinding
         TryFetchSealedSnapshotBlobAsyncDelegate fetchSealedBlobAsync,
         StoreSealedSnapshotBlobAsyncDelegate storeSealedBlobAsync,
         DeleteSealedSnapshotBlobAsyncDelegate deleteSealedBlobAsync,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         Tpm = tpm;
         StorageParentHandle = storageParentHandle;
@@ -175,7 +175,7 @@ internal sealed class TpmSealedStateCustodyBinding
     /// The stored bytes did not parse as a well-formed <see cref="TpmSealedBlob"/>, or the TPM rejected the
     /// unseal (for example a wrong <c>sealAuth</c>) — fails closed, never a partial or empty snapshot.
     /// </exception>
-    internal async ValueTask<PooledMemory?> TryLoadSnapshotAsync(string runId, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    internal async ValueTask<PooledMemory?> TryLoadSnapshotAsync(string runId, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         PooledMemory? sealedBlobBytes = await FetchSealedBlobAsync(runId, Pool, cancellationToken).ConfigureAwait(false);
         if(sealedBlobBytes is null)

@@ -6,8 +6,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// The decoded-request context a parked user-presence wait needs to resume the
 /// <c>authenticatorMakeCredential</c>/<c>authenticatorGetAssertion</c> it interrupted, once a decision
 /// arrives. One subclass per command, mirroring <see cref="CtapPerformBuiltInUvContinuation"/>'s own
-/// per-command shape. Owns whatever pooled carriers the parked request holds (CTAP 2.3 R2's custody
-/// rule): the carrier that would otherwise be released by <see cref="CtapAuthenticatorSimulator.TransceiveAsync"/>'s
+/// per-command shape. Owns whatever pooled carriers the parked request holds: the carrier that would otherwise be released by <see cref="CtapAuthenticatorSimulator.TransceiveAsync"/>'s
 /// own <c>DisposeRequestCarriers</c> at the end of a synchronous call is, on a parked command, released
 /// here instead — whenever <see cref="CtapPendingUserPresenceState"/> is discarded.
 /// </summary>
@@ -104,7 +103,7 @@ public sealed record CtapGetAssertionUserPresenceContinuation(
 
 /// <summary>
 /// A parked <c>authenticatorMakeCredential</c>/<c>authenticatorGetAssertion</c> user-presence wait (CTAP
-/// 2.3 :2840, R2), persisted as a data field on <see cref="CtapAuthenticatorState.PendingUserPresenceWait"/>
+/// 2.3 :2840), persisted as a data field on <see cref="CtapAuthenticatorState.PendingUserPresenceWait"/>
 /// — never a <see cref="CtapAuthenticatorStackSymbol"/>, mirroring how the five <c>Remembered*</c> slots
 /// carry their own cross-call statefulness.
 /// </summary>

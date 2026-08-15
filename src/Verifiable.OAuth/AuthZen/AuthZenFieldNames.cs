@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.AuthZen;
@@ -16,7 +15,6 @@ namespace Verifiable.OAuth.AuthZen;
 /// are deployment data (subject ids, resource ids, action names, policy
 /// context).
 /// </remarks>
-[DebuggerDisplay("AuthZenFieldNames")]
 public static class AuthZenFieldNames
 {
     /// <summary>The UTF-8 source literal of <see cref="Subject"/>.</summary>

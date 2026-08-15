@@ -50,5 +50,5 @@ public sealed record Oid4VciProofX509Verification
     public required ValidateCertificateChainAsyncDelegate ValidateChain { get; init; }
 
     /// <summary>The memory pool backing the transient certificate / key buffers.</summary>
-    public required MemoryPool<byte> MemoryPool { get; init; }
+    public required BaseMemoryPool MemoryPool { get; init; }
 }

@@ -98,7 +98,7 @@ internal static class CardVerifiableCertificateMinter
         DateOnly effective,
         DateOnly expiration,
         Tag? inheritedCurve,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TerminalType terminalType = TerminalType.AuthenticationTerminal) =>
         MintCore(new IssuerKey(issuerKey), new SubjectPublicKey(subjectKey, includeDomainParameters), certificationAuthorityReference, certificateHolderReference, authorizationOctet, effective, expiration, inheritedCurve, pool, terminalType, tamperSignature: false);
 
@@ -130,7 +130,7 @@ internal static class CardVerifiableCertificateMinter
         DateOnly effective,
         DateOnly expiration,
         Tag? inheritedCurve,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TerminalType terminalType = TerminalType.AuthenticationTerminal) =>
         MintCore(new IssuerKey(issuerKey), new SubjectPublicKey(subjectPublicPoint), certificationAuthorityReference, certificateHolderReference, authorizationOctet, effective, expiration, inheritedCurve, pool, terminalType, tamperSignature: false);
 
@@ -159,7 +159,7 @@ internal static class CardVerifiableCertificateMinter
         byte authorizationOctet,
         DateOnly effective,
         DateOnly expiration,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TerminalType terminalType = TerminalType.AuthenticationTerminal) =>
         MintCore(new IssuerKey(issuerKey), new SubjectPublicKey(subjectKey), certificationAuthorityReference, certificateHolderReference, authorizationOctet, effective, expiration, inheritedCurve: null, pool, terminalType, tamperSignature: false);
 
@@ -188,7 +188,7 @@ internal static class CardVerifiableCertificateMinter
         byte authorizationOctet,
         DateOnly effective,
         DateOnly expiration,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TerminalType terminalType = TerminalType.AuthenticationTerminal) =>
         MintCore(new IssuerKey(issuerKey), new SubjectPublicKey(subjectKey), certificationAuthorityReference, certificateHolderReference, authorizationOctet, effective, expiration, inheritedCurve: null, pool, terminalType, tamperSignature: false);
 
@@ -207,7 +207,7 @@ internal static class CardVerifiableCertificateMinter
         DateOnly effective,
         DateOnly expiration,
         Tag? inheritedCurve,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TerminalType terminalType = TerminalType.AuthenticationTerminal) =>
         MintCore(new IssuerKey(issuerKey), new SubjectPublicKey(subjectKey, includeDomainParameters), certificationAuthorityReference, certificateHolderReference, authorizationOctet, effective, expiration, inheritedCurve, pool, terminalType, tamperSignature: true);
 
@@ -225,7 +225,7 @@ internal static class CardVerifiableCertificateMinter
         byte authorizationOctet,
         DateOnly effective,
         DateOnly expiration,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TerminalType terminalType = TerminalType.AuthenticationTerminal) =>
         MintCore(new IssuerKey(issuerKey), new SubjectPublicKey(subjectKey), certificationAuthorityReference, certificateHolderReference, authorizationOctet, effective, expiration, inheritedCurve: null, pool, terminalType, tamperSignature: true);
 
@@ -240,7 +240,7 @@ internal static class CardVerifiableCertificateMinter
         DateOnly effective,
         DateOnly expiration,
         Tag? inheritedCurve,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         TerminalType terminalType,
         bool tamperSignature)
     {
@@ -283,7 +283,7 @@ internal static class CardVerifiableCertificateMinter
     /// wiring under test.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the caller, which disposes it via a using declaration.")]
-    private static IMemoryOwner<byte> SignBody(IssuerKey issuerKey, ReadOnlySpan<byte> body, MemoryPool<byte> pool, out int length)
+    private static IMemoryOwner<byte> SignBody(IssuerKey issuerKey, ReadOnlySpan<byte> body, BaseMemoryPool pool, out int length)
     {
         if(issuerKey.Rsa is RSA rsa)
         {

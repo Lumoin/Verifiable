@@ -24,12 +24,12 @@ internal static class MdocTestFixtures
     /// Produces a per-item random salt for mdoc <c>IssuerSignedItem</c>s — the ISO/IEC 18013-5
     /// §9.1.2.5 minimum length (<see cref="MdocWellKnownKeys.IssuerSignedItemRandomMinimumLength"/>)
     /// tagged with <see cref="CryptoTags.MdocIssuerSignedItemRandom"/>, generated through the entropy
-    /// provider via <see cref="TestSalts.Generate(int, Tag, MemoryPool{byte})"/>. Bakes the named length
+    /// provider via <see cref="TestSalts.Generate(int, Tag, BaseMemoryPool)"/>. Bakes the named length
     /// constant and tag so call sites carry no magic <c>16</c> and no repeated tag.
     /// </summary>
     /// <param name="pool">The memory pool to allocate from. Defaults to <see cref="BaseMemoryPool.Shared"/>.</param>
     /// <returns>A fresh mdoc item-random <see cref="Salt"/>; the caller owns and disposes it (or transfers ownership).</returns>
-    public static Salt ItemRandomSalt(MemoryPool<byte>? pool = null) =>
+    public static Salt ItemRandomSalt(BaseMemoryPool? pool = null) =>
         TestSalts.Generate(
             MdocWellKnownKeys.IssuerSignedItemRandomMinimumLength,
             CryptoTags.MdocIssuerSignedItemRandom,

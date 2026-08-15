@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using Verifiable.OAuth;
 
 namespace Verifiable.OAuth.Oid4Vp;
@@ -13,7 +12,6 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.1">RFC 9126 §2.1</see>.
 /// </param>
 /// <param name="ComposedAt">The UTC instant at which the body was composed.</param>
-[DebuggerDisplay("ParBodyComposed")]
 public sealed record ParBodyComposed(
     string EncodedBody,
     DateTimeOffset ComposedAt): FlowInput;

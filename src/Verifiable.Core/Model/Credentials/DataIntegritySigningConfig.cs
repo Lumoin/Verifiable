@@ -124,5 +124,5 @@ public sealed record DataIntegritySigningConfig
     /// deployments typically pass <c>BaseMemoryPool.Shared</c>;
     /// tests may inject a different pool for instrumentation.
     /// </summary>
-    public required MemoryPool<byte> MemoryPool { get; init; }
+    public required BaseMemoryPool MemoryPool { get; init; }
 }

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.OAuth.Server;
 
@@ -22,7 +21,6 @@ namespace Verifiable.OAuth.Server;
 /// <c>FlowKind.JtiReplay</c>.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("JtiReplayFlowKind")]
 public sealed class JtiReplayFlowKind: FlowKind
 {
     /// <summary>The singleton instance.</summary>

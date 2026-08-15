@@ -50,7 +50,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// The vendor's non-updateable pre-configured RP ID list (snapshot line 8256) — the set an
 /// <c>enterpriseAttestation</c> value of <c>1</c> checks a request's <c>rp.id</c> against (CTAP 2.3
 /// line 3341-3345). Constructor-fixed, immutable for the simulator's whole lifetime; no CTAP
-/// subcommand in this feature ever replaces or extends it (trap 8).
+/// subcommand in this feature ever replaces or extends it.
 /// </param>
 public sealed record CtapEnterpriseAttestationProvisioning(
     PrivateKey AttestationKey,

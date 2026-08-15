@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Foundation.Automata;
 using Verifiable.Server;
 
@@ -9,7 +8,6 @@ namespace Verifiable.Vcalm.Exchange;
 /// exchange lifecycle (§3.6.6 <c>pending → active → (complete | invalid)</c>): one
 /// <c>StepAsync</c> per §3.6.5 vcapi message that advances the exchange.
 /// </summary>
-[DebuggerDisplay("VcalmExchangeFlowAutomaton")]
 public static class VcalmExchangeFlowAutomaton
 {
     /// <summary>Creates a new exchange flow PDA ready to accept its first <see cref="VcalmExchangeCreated"/> input.</summary>

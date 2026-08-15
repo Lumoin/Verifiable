@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Oid4Vp;
@@ -24,7 +23,6 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// <c>case</c> labels.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("Oid4VpClientMetadataParameterNames")]
 public static class Oid4VpClientMetadataParameterNames
 {
     /// <summary>The UTF-8 source literal of <see cref="ClientId"/>.</summary>

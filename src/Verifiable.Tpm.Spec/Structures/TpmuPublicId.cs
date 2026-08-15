@@ -141,7 +141,7 @@ public sealed class TpmuPublicId: IDisposable
     /// <param name="modulus">The RSA public modulus (big-endian); copied into pooled storage the returned union owns.</param>
     /// <param name="pool">The memory pool for the modulus storage.</param>
     /// <returns>An RSA unique carrying <paramref name="modulus"/>.</returns>
-    public static TpmuPublicId FromRsaModulus(ReadOnlySpan<byte> modulus, MemoryPool<byte> pool)
+    public static TpmuPublicId FromRsaModulus(ReadOnlySpan<byte> modulus, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -249,7 +249,7 @@ public sealed class TpmuPublicId: IDisposable
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed public ID.</returns>
-    public static TpmuPublicId Parse(TpmAlgIdConstants type, ref TpmReader reader, MemoryPool<byte> pool)
+    public static TpmuPublicId Parse(TpmAlgIdConstants type, ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -261,7 +261,7 @@ public sealed class TpmuPublicId: IDisposable
             _ => throw new NotSupportedException($"Algorithm type '{type}' is not supported for parsing.")
         };
 
-        static TpmuPublicId ParseRsa(ref TpmReader reader, MemoryPool<byte> pool)
+        static TpmuPublicId ParseRsa(ref TpmReader reader, BaseMemoryPool pool)
         {
             ushort size = reader.ReadUInt16();
             if(size == 0)
@@ -275,7 +275,7 @@ public sealed class TpmuPublicId: IDisposable
             return new TpmuPublicId(TpmAlgIdConstants.TPM_ALG_RSA, storage, size);
         }
 
-        static TpmuPublicId ParseKeyedHash(ref TpmReader reader, MemoryPool<byte> pool)
+        static TpmuPublicId ParseKeyedHash(ref TpmReader reader, BaseMemoryPool pool)
         {
             ushort size = reader.ReadUInt16();
             if(size == 0)

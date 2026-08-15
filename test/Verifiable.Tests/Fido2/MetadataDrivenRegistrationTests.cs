@@ -17,7 +17,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Fido2;
 
 /// <summary>
-/// The capstone flow the frontier scout flagged as untested by every studied library: a full,
+/// The capstone flow left untested by every studied library: a full,
 /// firewalled registration ceremony whose packed attestation trust anchors come exclusively from a
 /// JWS-authenticated Metadata BLOB entry — never from an unauthenticated side channel.
 /// </summary>

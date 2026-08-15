@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.Cryptography;
 
 namespace Verifiable.OAuth.Oid4Vci;
 
@@ -51,6 +52,24 @@ public enum DiVpProofValidationFailureReason
 
     /// <summary>The presentation's Data Integrity signature does not verify with the holder key.</summary>
     SignatureInvalid,
+
+    /// <summary>
+    /// The resolved verification method's <c>controller</c> does not equal the presentation's
+    /// <c>holder</c> (controller-RESOLUTION semantics) — a deliberate rejection of controller
+    /// indirection / DID-aliasing, even though the signature, proof purpose, and relationship
+    /// scoping all otherwise hold.
+    /// </summary>
+    HolderControllerMismatch,
+
+    /// <summary>
+    /// The presentation's Data Integrity proof verified cryptographically but did not mint an
+    /// identity-bound <see cref="Verifiable.Cryptography.Verified{T}"/> — a defensive refusal that
+    /// should be unreachable once the presentation verify path (controller-resolution semantics) always
+    /// mints <see cref="Verifiable.Cryptography.BoundProvenance"/> on success. Kept fail-closed rather
+    /// than treating an <see cref="Verifiable.Cryptography.AssertedProvenance"/> principal as
+    /// authenticated.
+    /// </summary>
+    HolderNotBound,
 }
 
 
@@ -69,7 +88,7 @@ public sealed record DiVpProofValidationResult
     /// The DID URL of the holder verification method the presentation authenticated, when validation
     /// succeeded. The issued Credential is bound to this key. <see langword="null"/> on failure.
     /// </summary>
-    public string? AuthenticatedVerificationMethodId { get; init; }
+    public string? AuthenticatedVerificationMethodId { get; private init; }
 
     /// <summary>The failure reason if the proof was rejected. <see langword="null"/> on success.</summary>
     public DiVpProofValidationFailureReason? FailureReason { get; init; }
@@ -77,9 +96,21 @@ public sealed record DiVpProofValidationResult
     /// <summary><see langword="true"/> when the presentation proof is valid.</summary>
     public bool IsValid => FailureReason is null;
 
-    /// <summary>Builds a success result carrying the authenticated holder verification method id.</summary>
-    public static DiVpProofValidationResult Success(string authenticatedVerificationMethodId) =>
-        new() { AuthenticatedVerificationMethodId = authenticatedVerificationMethodId };
+    /// <summary>
+    /// Builds a success result from the CONTROLLER-verified holder binding the presentation verify
+    /// path minted. Taking a <see cref="BoundProvenance"/> rather than a raw string makes
+    /// constructing a success result from an unbound principal a COMPILE ERROR: this assembly
+    /// carries no <c>InternalsVisibleTo</c> grant to produce a <see cref="BoundProvenance"/> itself,
+    /// so the only way to reach this overload is a caller's pattern-matched read of a
+    /// <see cref="Verified{T}.Provenance"/> the library's own Data Integrity verify path minted.
+    /// </summary>
+    /// <param name="provenance">The bound holder identity the presentation's Data Integrity proof verified under.</param>
+    public static DiVpProofValidationResult Success(BoundProvenance provenance)
+    {
+        ArgumentNullException.ThrowIfNull(provenance);
+
+        return new() { AuthenticatedVerificationMethodId = provenance.Identity?.Value ?? string.Empty };
+    }
 
     /// <summary>Builds a failure result.</summary>
     public static DiVpProofValidationResult Failure(DiVpProofValidationFailureReason reason) =>

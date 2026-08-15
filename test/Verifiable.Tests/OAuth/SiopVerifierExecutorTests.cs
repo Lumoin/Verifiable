@@ -29,7 +29,7 @@ internal sealed class SiopVerifierExecutorTests
     private const string ClientId = "https://verifier.example.com";
     private const string Nonce = "n-presentation-01";
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
     private static readonly string[] AllowedAlgorithms = [WellKnownJwaValues.Es256];
 
     private static readonly JwtHeaderSerializer HeaderSerializer =

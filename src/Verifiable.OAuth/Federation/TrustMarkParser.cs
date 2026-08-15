@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Federation;
@@ -23,7 +22,6 @@ namespace Verifiable.OAuth.Federation;
 /// the <see cref="TrustMarkValidator"/>'s responsibilities.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("TrustMarkParser")]
 public static class TrustMarkParser
 {
     /// <summary>

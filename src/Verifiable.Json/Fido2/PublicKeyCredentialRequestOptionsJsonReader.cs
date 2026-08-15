@@ -55,7 +55,7 @@ public static class PublicKeyCredentialRequestOptionsJsonReader
     /// repeats, a binary member is not valid base64url, an enum-backed member's wire value is not
     /// registered, or nesting exceeds the depth bound.
     /// </exception>
-    public static PublicKeyCredentialRequestOptions Read(ReadOnlyMemory<byte> document, MemoryPool<byte> pool)
+    public static PublicKeyCredentialRequestOptions Read(ReadOnlyMemory<byte> document, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -70,7 +70,7 @@ public static class PublicKeyCredentialRequestOptionsJsonReader
     }
 
 
-    private static PublicKeyCredentialRequestOptions ReadObject(ReadOnlySpan<byte> document, MemoryPool<byte> pool)
+    private static PublicKeyCredentialRequestOptions ReadObject(ReadOnlySpan<byte> document, BaseMemoryPool pool)
     {
         Utf8JsonReader reader = new(document, ReaderOptions);
         if(!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
@@ -174,7 +174,7 @@ public static class PublicKeyCredentialRequestOptionsJsonReader
     }
 
 
-    private static List<PublicKeyCredentialDescriptor> ReadDescriptors(ref Utf8JsonReader reader, string memberName, MemoryPool<byte> pool)
+    private static List<PublicKeyCredentialDescriptor> ReadDescriptors(ref Utf8JsonReader reader, string memberName, BaseMemoryPool pool)
     {
         if(reader.TokenType != JsonTokenType.StartArray)
         {

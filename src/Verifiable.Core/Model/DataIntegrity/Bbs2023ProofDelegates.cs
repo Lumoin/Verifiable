@@ -71,7 +71,7 @@ public delegate string SerializeBbsDerivedProofDelegate(
 public delegate Bbs2023BaseProofValue ParseBbsBaseProofDelegate(
     string proofValue,
     DecodeDelegate decoder,
-    MemoryPool<byte> memoryPool);
+    BaseMemoryPool memoryPool);
 
 
 /// <summary>
@@ -90,7 +90,7 @@ public delegate Bbs2023BaseProofValue ParseBbsBaseProofDelegate(
 public delegate Bbs2023DerivedProofValue ParseBbsDerivedProofDelegate(
     string proofValue,
     DecodeDelegate decoder,
-    MemoryPool<byte> memoryPool);
+    BaseMemoryPool memoryPool);
 
 
 /// <summary>
@@ -114,7 +114,7 @@ public delegate Bbs2023DerivedProofValue ParseBbsDerivedProofDelegate(
 public delegate byte[] BbsSignDelegate(
     ReadOnlyMemory<byte> bbsHeader,
     IReadOnlyList<byte[]> messages,
-    MemoryPool<byte> memoryPool);
+    BaseMemoryPool memoryPool);
 
 
 /// <summary>
@@ -139,7 +139,23 @@ public delegate bool BbsVerifySignatureDelegate(
     ReadOnlyMemory<byte> bbsSignature,
     ReadOnlyMemory<byte> bbsHeader,
     IReadOnlyList<byte[]> messages,
-    MemoryPool<byte> memoryPool);
+    BaseMemoryPool memoryPool);
+
+
+/// <summary>
+/// Delegate that builds a <see cref="BbsVerifySignatureDelegate"/> closed over a specific issuer
+/// public key. <see cref="BbsVerifySignatureDelegate"/> itself carries no key parameter — the
+/// caller's own BLS12-381 library binds the key into the delegate by closure — so the RESOLVING
+/// verify overload (<see cref="CredentialBbs2023Extensions"/>), which resolves the key from the
+/// issuer's DID document rather than accepting it as a parameter, needs a factory to close a fresh
+/// delegate over the RESOLVED key rather than a pre-bound one.
+/// </summary>
+/// <param name="issuerPublicKey">
+/// The issuer's BLS12-381 G2 public key, its raw 96-byte CFRG encoding, extracted from the resolved
+/// verification method.
+/// </param>
+/// <returns>A <see cref="BbsVerifySignatureDelegate"/> closed over <paramref name="issuerPublicKey"/>.</returns>
+public delegate BbsVerifySignatureDelegate BbsVerifySignatureFactoryDelegate(ReadOnlyMemory<byte> issuerPublicKey);
 
 
 /// <summary>
@@ -169,7 +185,7 @@ public delegate byte[] BbsProofGenDelegate(
     ReadOnlyMemory<byte> presentationHeader,
     IReadOnlyList<byte[]> messages,
     IReadOnlyList<int> disclosedIndexes,
-    MemoryPool<byte> memoryPool);
+    BaseMemoryPool memoryPool);
 
 
 /// <summary>
@@ -198,4 +214,17 @@ public delegate bool BbsProofVerifyDelegate(
     ReadOnlyMemory<byte> presentationHeader,
     IReadOnlyList<byte[]> disclosedMessages,
     IReadOnlyList<int> disclosedIndexes,
-    MemoryPool<byte> memoryPool);
+    BaseMemoryPool memoryPool);
+
+
+/// <summary>
+/// Delegate that builds a <see cref="BbsProofVerifyDelegate"/> closed over a specific issuer public
+/// key, the derived-proof counterpart of <see cref="BbsVerifySignatureFactoryDelegate"/> — see its
+/// remarks for why the RESOLVING verify overload needs a factory rather than a pre-bound delegate.
+/// </summary>
+/// <param name="issuerPublicKey">
+/// The issuer's BLS12-381 G2 public key, its raw 96-byte CFRG encoding, extracted from the resolved
+/// verification method.
+/// </param>
+/// <returns>A <see cref="BbsProofVerifyDelegate"/> closed over <paramref name="issuerPublicKey"/>.</returns>
+public delegate BbsProofVerifyDelegate BbsProofVerifyFactoryDelegate(ReadOnlyMemory<byte> issuerPublicKey);

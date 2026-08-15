@@ -50,7 +50,7 @@ public static class SdKbtIssuance
     public static EncodedCoseProtectedHeader BuildProtectedHeader(
         int coseAlgorithm,
         SdToken<ReadOnlyMemory<byte>> presentationToken,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(presentationToken);
         ArgumentNullException.ThrowIfNull(pool);
@@ -103,7 +103,7 @@ public static class SdKbtIssuance
         string aud,
         long iat,
         string? cnonce,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(aud);
         ArgumentNullException.ThrowIfNull(pool);
@@ -150,7 +150,7 @@ public static class SdKbtIssuance
     //are discarded — they are disposed here, not embedded.
     private static byte[] BuildPresentationSdCwt(
         SdToken<ReadOnlyMemory<byte>> presentationToken,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         //Parse recovers payload/protected/signature plus the issuer's original full
         //disclosure set. SdCwtMessage is not itself IDisposable, but it owns those

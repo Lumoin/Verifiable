@@ -49,7 +49,7 @@ public static class CtapAuthenticatorGetAssertionClient
         EncodeCtapGetAssertionRequestDelegate encodeRequest,
         CtapGetAssertionRequest request,
         DecodeCtapGetAssertionResponseDelegate decodeResponse,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(transceive);

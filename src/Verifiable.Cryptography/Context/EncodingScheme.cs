@@ -222,7 +222,22 @@ public readonly struct EncodingScheme: IEquatable<EncodingScheme>
     public static EncodingScheme Cose { get; } = new EncodingScheme(8);
 
 
-    private static List<EncodingScheme> schemes { get; } = new([Der, Pem, EcCompressed, EcUncompressed, Pkcs1, Pkcs8, Raw, Cbor, Cose]);
+    /// <summary>
+    /// JOSE (JSON Object Signing and Encryption) wire encoding per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7515">RFC 7515</see>.
+    /// </summary>
+    /// <remarks>
+    /// A specific shape of JSON (or its base64url-joined Compact Serialization form)
+    /// carrying signed/encrypted message envelopes (JWS Compact/JSON Serialization,
+    /// JWE Compact/JSON Serialization). Distinguished from arbitrary JSON text in
+    /// CBOM/OTel signals because JOSE bytes have stronger semantic meaning — they are
+    /// crypto-bearing envelopes, not arbitrary JSON — mirroring how <see cref="Cose"/>
+    /// is distinguished from plain <see cref="Cbor"/>.
+    /// </remarks>
+    public static EncodingScheme Jose { get; } = new EncodingScheme(9);
+
+
+    private static List<EncodingScheme> schemes { get; } = new([Der, Pem, EcCompressed, EcUncompressed, Pkcs1, Pkcs8, Raw, Cbor, Cose, Jose]);
 
 
     /// <summary>
@@ -367,6 +382,7 @@ public static class EncodingSchemeNames
         var c when c == EncodingScheme.Raw.Scheme => nameof(EncodingScheme.Raw),
         var c when c == EncodingScheme.Cbor.Scheme => nameof(EncodingScheme.Cbor),
         var c when c == EncodingScheme.Cose.Scheme => nameof(EncodingScheme.Cose),
+        var c when c == EncodingScheme.Jose.Scheme => nameof(EncodingScheme.Jose),
         _ => $"Custom: ('{code}')."
     };
 }

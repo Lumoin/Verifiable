@@ -58,6 +58,7 @@
     <Project Path="src/Verifiable.Server/Verifiable.Server.csproj" />
     <Project Path="src/Verifiable.Vcalm/Verifiable.Vcalm.csproj" />
     <Project Path="src/Verifiable.WebFinger/Verifiable.WebFinger.csproj" />
+    <Project Path="src/Verifiable.Xml/Verifiable.Xml.csproj" />
     <Project Path="src/Verifiable.Tpm/Verifiable.Tpm.csproj" />
     <Project Path="src/Verifiable.Tpm.Spec/Verifiable.Tpm.Spec.csproj" />
     <Project Path="src/Verifiable/Verifiable.csproj" />

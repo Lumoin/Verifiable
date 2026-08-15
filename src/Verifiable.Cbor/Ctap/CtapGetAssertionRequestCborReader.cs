@@ -25,7 +25,7 @@ namespace Verifiable.Cbor.Ctap;
 /// their parse block and disposed if a later member fails to decode, so a rejected request never leaks
 /// pooled memory — mirrors <see cref="CtapMakeCredentialRequestCborReader"/>'s own convention. When
 /// present, <c>Extensions</c> is additionally scanned for its <c>largeBlobKey</c> key (CTAP 2.3 §12.3),
-/// decoded into <see cref="CtapGetAssertionRequest.LargeBlobKey"/> (wavelb R8), and its <c>hmac-secret</c>
+/// decoded into <see cref="CtapGetAssertionRequest.LargeBlobKey"/>, and its <c>hmac-secret</c>
 /// key (CTAP 2.3 §12.7, snapshot lines 13228-13248), decoded into
 /// <see cref="CtapGetAssertionRequest.HmacSecret"/> — this request type's first COMPOUND (nested-map)
 /// extension value; <c>keyAgreement</c>'s nested COSE_Key reuses <see cref="CredentialPublicKeyCborReader"/>,
@@ -54,7 +54,7 @@ public static class CtapGetAssertionRequestCborReader
     /// </exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "clientDataHash's ownership transfers to the returned CtapGetAssertionRequest on success and is explicitly disposed in the surrounding catch block on failure — the CA2000 flag is a false positive; the analyzer cannot see across the local ReadDigest function boundary.")]
-    public static CtapGetAssertionRequest Read(ReadOnlyMemory<byte> parametersCbor, MemoryPool<byte> pool)
+    public static CtapGetAssertionRequest Read(ReadOnlyMemory<byte> parametersCbor, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -147,7 +147,7 @@ public static class CtapGetAssertionRequestCborReader
         }
 
         //Looks up a Required top-level member's still-encoded bytes, failing closed with the member's
-        //wire name if absent — classified MissingRequiredParameter (R7's third bucket), distinct from
+        //wire name if absent — classified MissingRequiredParameter, distinct from
         //a nested structure's own missing member (UnexpectedStructure).
         static ReadOnlyMemory<byte> RequireMember(IReadOnlyDictionary<int, ReadOnlyMemory<byte>> parameters, int key, string memberName)
         {
@@ -160,7 +160,7 @@ public static class CtapGetAssertionRequestCborReader
         }
 
         //Decodes the required clientDataHash byte string into a pooled, SHA-256-tagged carrier.
-        static DigestValue ReadDigest(ReadOnlyMemory<byte> encodedValue, MemoryPool<byte> pool)
+        static DigestValue ReadDigest(ReadOnlyMemory<byte> encodedValue, BaseMemoryPool pool)
         {
             var nestedReader = new CborReader(encodedValue, CborConformanceMode.Ctap2Canonical);
             byte[] bytes = nestedReader.ReadByteString();

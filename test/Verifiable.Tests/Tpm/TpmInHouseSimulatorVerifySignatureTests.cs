@@ -62,7 +62,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
     [TestMethod]
     public async Task EcdsaVerifySignatureProducesAVerifiableTicket()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //A fixed seed stands in for the hierarchy's persistent random proof secret; injecting it makes the
         //verified ticket reproducible and lets this test recompute it.
@@ -120,7 +120,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
     [TestMethod]
     public async Task RsaVerifySignatureAcceptsRsaSsaAndRsaPssSignatures()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -148,7 +148,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
     [TestMethod]
     public async Task VerifySignatureWithCorruptedSignatureReturnsSignature()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -182,7 +182,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
     [TestMethod]
     public async Task VerifySignatureWithSchemeIncompatibleWithKeyTypeReturnsScheme()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -207,7 +207,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
     [TestMethod]
     public async Task VerifySignatureWithUnknownKeyHandleReturnsHandle()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
@@ -234,7 +234,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
     /// <param name="keyHandle">The handle of the loaded RSA signing key.</param>
     /// <param name="digest">The pre-computed SHA-256 digest to sign and verify.</param>
     /// <param name="usePss">When <see langword="true"/>, signs and verifies RSAPSS; otherwise RSASSA (PKCS#1 v1.5).</param>
-    private async Task SignAndVerifyRsaAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmiDhObject keyHandle, byte[] digest, bool usePss)
+    private async Task SignAndVerifyRsaAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmiDhObject keyHandle, byte[] digest, bool usePss)
     {
         using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
         using SignInput signInput = usePss
@@ -274,7 +274,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="hierarchy">The hierarchy under which to create the key.</param>
     /// <returns>The CreatePrimary response.</returns>
-    private async Task<CreatePrimaryResponse> CreateEccSigningPrimaryAsync(TpmDevice tpm, TpmResponseRegistry registry, MemoryPool<byte> pool, TpmRh hierarchy)
+    private async Task<CreatePrimaryResponse> CreateEccSigningPrimaryAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmRh hierarchy)
     {
         using CreatePrimaryInput input = CreatePrimaryInput.ForEccSigningKey(
             hierarchy, password: null, TpmEccCurveConstants.TPM_ECC_NIST_P256, TpmtEccScheme.Ecdsa(TpmAlgIdConstants.TPM_ALG_SHA256), pool, noDa: true);
@@ -309,7 +309,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
     /// </summary>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalAsync(MemoryPool<byte> pool)
+    private async Task<TpmSimulator> CreateOperationalAsync(BaseMemoryPool pool)
     {
         var simulator = new TpmSimulator(
             "tpm-in-house-verify-signature",
@@ -327,7 +327,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
     /// </summary>
     /// <param name="simulator">The simulator to bring operational.</param>
     /// <param name="pool">The memory pool.</param>
-    private async Task BringOperationalAsync(TpmSimulator simulator, MemoryPool<byte> pool)
+    private async Task BringOperationalAsync(TpmSimulator simulator, BaseMemoryPool pool)
     {
         var input = new StartupInput(TpmSuConstants.TPM_SU_CLEAR);
         int length = TpmHeader.HeaderSize + input.GetSerializedSize();
@@ -367,7 +367,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The 32-byte digest.</returns>
-    private static async Task<byte[]> ComputeSha256Async(ReadOnlyMemory<byte> message, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<byte[]> ComputeSha256Async(ReadOnlyMemory<byte> message, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         Tag tag = Tag.Create(HashAlgorithmName.SHA256)
             .With(Purpose.Digest)
@@ -390,7 +390,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
     /// <param name="pool">The memory pool.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The 32-byte HMAC.</returns>
-    private static async Task<byte[]> ComputeHmacSha256Async(ReadOnlyMemory<byte> message, ReadOnlyMemory<byte> key, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<byte[]> ComputeHmacSha256Async(ReadOnlyMemory<byte> message, ReadOnlyMemory<byte> key, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using HmacValue hmac = await CryptographicKeyEvents.ComputeHmacAsync(
             message, key, P256ComponentSize, CryptoTags.HmacSha256Value, pool, cancellationToken: cancellationToken).ConfigureAwait(false);

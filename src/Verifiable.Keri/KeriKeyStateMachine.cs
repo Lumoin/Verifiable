@@ -1,3 +1,4 @@
+using Lumoin.Base;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Text;
@@ -125,7 +126,7 @@ public static class KeriKeyStateMachine
     /// The event is for a different identifier, does not advance the sequence by one, reveals no keys, or reveals a
     /// subset of the prior next keys too small to satisfy the prior next (rotation) threshold.
     /// </exception>
-    public static async ValueTask<KeriKeyState> RotateAsync(KeriKeyState state, KeriRotationEvent rotation, ComputeDigestDelegate computeDigest, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static async ValueTask<KeriKeyState> RotateAsync(KeriKeyState state, KeriRotationEvent rotation, ComputeDigestDelegate computeDigest, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(rotation);
@@ -186,7 +187,7 @@ public static class KeriKeyStateMachine
     /// <exception cref="KeriException">
     /// The rotation's exposed pre-rotated keys do not satisfy the prior next (rotation) threshold.
     /// </exception>
-    public static async ValueTask<IReadOnlyList<string?>> VerifyPreRotationAsync(KeriKeyState state, KeriRotationEvent rotation, ComputeDigestDelegate computeDigest, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static async ValueTask<IReadOnlyList<string?>> VerifyPreRotationAsync(KeriKeyState state, KeriRotationEvent rotation, ComputeDigestDelegate computeDigest, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(rotation);

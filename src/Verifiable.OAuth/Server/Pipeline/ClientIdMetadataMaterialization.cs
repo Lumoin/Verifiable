@@ -15,7 +15,6 @@ namespace Verifiable.OAuth.Server.Pipeline;
 /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html#section-4">
 /// Section 4</see>.
 /// </summary>
-[DebuggerDisplay("ClientIdMetadataMaterialization")]
 public static class ClientIdMetadataMaterialization
 {
     /// <summary>The span event name for a resolver-side policy denial.</summary>

@@ -9,7 +9,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Contract R-3: a plain seam-bundle record of delegates, never a behavioral interface — any store (a
+/// A plain seam-bundle record of delegates, never a behavioral interface — any store (a
 /// file, a database row, an in-memory dictionary, or package C's TPM-backed adapter sealing the snapshot
 /// to the in-house simulated TPM) implements this shape by supplying three delegates, with no interface
 /// to implement and no base type to derive from.
@@ -17,8 +17,8 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// <para>
 /// Supplying an instance of this record to <see cref="Automata.CtapAuthenticatorSimulator.CreateWithCustodyAsync"/>
 /// is the ONLY way a simulator gains custody behavior; the simulator's ordinary constructor never accepts
-/// one, so every existing composition root is unaffected (contract R-3: "Custody absent (null bundle) ⇒
-/// today's behavior, byte-identical").
+/// one, so every existing composition root is unaffected: custody absent (null bundle) ⇒
+/// today's behavior, byte-identical.
 /// </para>
 /// </remarks>
 /// <param name="TryLoadSnapshotAsync">Attempts to load a previously persisted snapshot.</param>

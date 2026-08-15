@@ -122,14 +122,31 @@ public readonly struct BufferKind: IEquatable<BufferKind>
     /// </summary>
     public static BufferKind Cbor { get; } = new BufferKind(3);
 
+    /// <summary>
+    /// Canonical XML octets produced by a canonicalization algorithm.
+    /// </summary>
+    public static BufferKind XmlCanonical { get; } = new BufferKind(4);
 
-    //Foundation is domain-neutral: it knows raw serialization encodings (Json, Cbor) but NOT
+    /// <summary>
+    /// XML Signature reference-processing output octets: the final octet stream a <c>ds:Reference</c>'s
+    /// dereference-then-transform-chain produces, which <c>DigestMethod</c> digests.
+    /// </summary>
+    public static BufferKind XmlDigestInput { get; } = new BufferKind(5);
+
+    /// <summary>
+    /// Octets decoded from XSD <c>base64Binary</c> element content, such as <c>DigestValue</c>,
+    /// <c>SignatureValue</c> and <c>X509Certificate</c>.
+    /// </summary>
+    public static BufferKind XmlDecodedContent { get; } = new BufferKind(6);
+
+
+    //Foundation is domain-neutral: it knows raw serialization encodings (Json, Cbor, canonical XML) but NOT
     //security-envelope or credential roles. Domain-specific kinds (JWT/CWT headers and payloads,
     //Verifiable Credential / Presentation, ...) are added by the layer that owns those formats through
     //the Create(>=1000) seam — that extensibility is the whole point of the discriminator pattern.
     private static List<BufferKind> s_kinds { get; } =
     [
-        Unknown, Json, Cbor
+        Unknown, Json, Cbor, XmlCanonical, XmlDigestInput, XmlDecodedContent
     ];
 
 
@@ -221,6 +238,9 @@ public static class BufferKindNames
         -1 => nameof(BufferKind.Unknown),
         2 => nameof(BufferKind.Json),
         3 => nameof(BufferKind.Cbor),
+        4 => nameof(BufferKind.XmlCanonical),
+        5 => nameof(BufferKind.XmlDigestInput),
+        6 => nameof(BufferKind.XmlDecodedContent),
         _ => $"Custom({kind})"
     };
 }

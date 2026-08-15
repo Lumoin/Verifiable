@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 namespace Verifiable.OAuth.Client;
 
@@ -51,7 +50,6 @@ namespace Verifiable.OAuth.Client;
 ///     registration, OAuthFormEncodedFields.Empty, ct);
 /// </code>
 /// </remarks>
-[DebuggerDisplay("OAuthClient")]
 public sealed class OAuthClient
 {
     /// <summary>

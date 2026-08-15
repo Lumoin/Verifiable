@@ -335,7 +335,7 @@ internal sealed class Fido2RegistrationRulesTests
     /// <summary>
     /// <see cref="RegistrationCeremonyInput.NarrowAcceptedAlgorithmsTo"/> can only ever shrink the
     /// accepted set: naming an algorithm the relying party never actually offered throws rather than
-    /// silently widening acceptance back out — the one place R-1's by-construction guarantee could
+    /// silently widening acceptance back out — the one place the by-construction guarantee could
     /// otherwise be defeated.
     /// </summary>
     [TestMethod]

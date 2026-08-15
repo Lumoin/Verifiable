@@ -86,7 +86,7 @@ public sealed class TpmuSignature: IDisposable
     /// <param name="pool">The memory pool for parameter buffer allocation.</param>
     /// <returns>The parsed signature union.</returns>
     /// <exception cref="NotSupportedException">Thrown when <paramref name="sigAlg"/> is not a supported signing algorithm.</exception>
-    public static TpmuSignature Parse(TpmAlgIdConstants sigAlg, ref TpmReader reader, MemoryPool<byte> pool)
+    public static TpmuSignature Parse(TpmAlgIdConstants sigAlg, ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         var hashAlg = (TpmAlgIdConstants)reader.ReadUInt16();
@@ -98,7 +98,7 @@ public sealed class TpmuSignature: IDisposable
             _ => throw new NotSupportedException($"Signing algorithm '{sigAlg}' is not supported for parsing.")
         };
 
-        static TpmuSignature ParseEcdsa(TpmAlgIdConstants sigAlg, TpmAlgIdConstants hashAlg, ref TpmReader reader, MemoryPool<byte> pool)
+        static TpmuSignature ParseEcdsa(TpmAlgIdConstants sigAlg, TpmAlgIdConstants hashAlg, ref TpmReader reader, BaseMemoryPool pool)
         {
             Tpm2bEccParameter r = Tpm2bEccParameter.Parse(ref reader, pool);
             Tpm2bEccParameter s = Tpm2bEccParameter.Parse(ref reader, pool);
@@ -106,7 +106,7 @@ public sealed class TpmuSignature: IDisposable
             return new TpmuSignature(sigAlg, hashAlg, r, s);
         }
 
-        static TpmuSignature ParseRsa(TpmAlgIdConstants sigAlg, TpmAlgIdConstants hashAlg, ref TpmReader reader, MemoryPool<byte> pool)
+        static TpmuSignature ParseRsa(TpmAlgIdConstants sigAlg, TpmAlgIdConstants hashAlg, ref TpmReader reader, BaseMemoryPool pool)
         {
             Tpm2bPublicKeyRsa rsa = Tpm2bPublicKeyRsa.Parse(ref reader, pool);
 

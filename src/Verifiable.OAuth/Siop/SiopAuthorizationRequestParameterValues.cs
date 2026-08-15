@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.OAuth.Siop;
@@ -8,7 +7,6 @@ namespace Verifiable.OAuth.Siop;
 /// <see cref="SiopAuthorizationRequestParameterNames"/> which holds the NAMES of
 /// SIOPv2-native parameters.
 /// </summary>
-[DebuggerDisplay("SiopAuthorizationRequestParameterValues")]
 public static class SiopAuthorizationRequestParameterValues
 {
     //response_type values — SIOPv2 §9 / §10.

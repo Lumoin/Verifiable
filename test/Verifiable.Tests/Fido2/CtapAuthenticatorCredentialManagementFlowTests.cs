@@ -16,8 +16,8 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.Fido2;
 
 /// <summary>
-/// The wavecm real-wire capstones for <c>authenticatorCredentialManagement</c> (<c>0x0A</c>): the same
-/// real, unmodified APDU transport stack (<see cref="CtapWave2TransportHarness"/>) the waveconfig
+/// The real-wire capstones for <c>authenticatorCredentialManagement</c> (<c>0x0A</c>): the same
+/// real, unmodified APDU transport stack (<see cref="CtapNfcTransportHarness"/>) the
 /// capstones in <see cref="CtapAuthenticatorConfigFlowTests"/> use, driving the full seven-subcommand
 /// management lifecycle (Capstone A) and the permission/RP-ID/statefulness semantics (Capstone B) end to
 /// end. Every assertion reads a wire-visible fact only -- a raw response status byte,
@@ -25,7 +25,7 @@ namespace Verifiable.Tests.Fido2;
 /// <c>authenticatorGetInfo</c> response, or an independently recomputed SHA-256 digest -- never internal
 /// simulator state. Every <c>pinUvAuthParam</c> is computed with the real
 /// <see cref="CtapPinUvAuthProtocol.AuthenticateAsync"/> over wire-received bytes, via
-/// <see cref="CtapWaveCmFixtures"/>'s R4 message-assembly helpers.
+/// <see cref="CtapCredentialManagementFixtures"/>'s own message-assembly helpers.
 /// </summary>
 [TestClass]
 internal sealed class CtapAuthenticatorCredentialManagementFlowTests
@@ -51,24 +51,24 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
     [TestMethod]
     public async Task FullManagementLifecycleOverRealApduTransport()
     {
-        const string RpA = "wavecm-capstone-a-rpa.example";
-        const string RpB = "wavecm-capstone-a-rpb.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        const string RpA = "cm-capstone-a-rpa.example";
+        const string RpB = "cm-capstone-a-rpb.example";
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("wavecm-capstone-a");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("cm-capstone-a");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await EstablishPinAsync(harness, pool, cancellationToken).ConfigureAwait(false);
 
         CtapGetInfoResponse infoBeforeRegistration = await GetInfoAsync(harness, pool, cancellationToken).ConfigureAwait(false);
         int remainingBeforeRegistration = infoBeforeRegistration.RemainingDiscoverableCredentials!.Value;
 
-        CtapWaveCmRegisteredCredential rpaUser1 = await RegisterResidentCredentialAsync(
-            harness, pool, RpA, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xA0), cancellationToken).ConfigureAwait(false);
-        CtapWaveCmRegisteredCredential rpaUser2 = await RegisterResidentCredentialAsync(
-            harness, pool, RpA, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xA1), cancellationToken).ConfigureAwait(false);
-        _ = await RegisterResidentCredentialAsync(harness, pool, RpB, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xB0), cancellationToken)
+        CtapCredentialManagementRegisteredCredential rpaUser1 = await RegisterResidentCredentialAsync(
+            harness, pool, RpA, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xA0), cancellationToken).ConfigureAwait(false);
+        CtapCredentialManagementRegisteredCredential rpaUser2 = await RegisterResidentCredentialAsync(
+            harness, pool, RpA, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xA1), cancellationToken).ConfigureAwait(false);
+        _ = await RegisterResidentCredentialAsync(harness, pool, RpB, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xB0), cancellationToken)
             .ConfigureAwait(false);
 
         CtapGetInfoResponse infoAfterRegistration = await GetInfoAsync(harness, pool, cancellationToken).ConfigureAwait(false);
@@ -134,10 +134,10 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
 
         using(CredentialId allowListId = CredentialId.Create(rpaUser1.CredentialIdBytes, pool))
         {
-            CtapGetAssertionRequest gaRequest = CtapWave2AuthenticatorFixtures.BuildGetAssertionRequest(
+            CtapGetAssertionRequest gaRequest = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionRequest(
                 pool, rpId: RpA, allowList: [new PublicKeyCredentialDescriptor { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Id = allowListId }]);
-            byte[] gaEnvelope = CtapWave2RequestEnvelopes.BuildGetAssertionEnvelope(gaRequest);
-            CtapWave2AuthenticatorFixtures.DisposeGetAssertionRequest(gaRequest);
+            byte[] gaEnvelope = CtapMakeCredentialGetAssertionRequestEnvelopes.BuildGetAssertionEnvelope(gaRequest);
+            CtapMakeCredentialGetAssertionFixtures.DisposeGetAssertionRequest(gaRequest);
             using PooledMemory gaResponse = await harness.Transceive(gaEnvelope, pool, cancellationToken).ConfigureAwait(false);
             Assert.AreEqual(
                 WellKnownCtapStatusCodes.NoCredentials, gaResponse.AsReadOnlySpan()[0],
@@ -150,8 +150,8 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
         Assert.AreEqual(2, metadataAfterDelete.ExistingResidentCredentialsCount);
         Assert.AreEqual(remainingBeforeRegistration - 2, metadataAfterDelete.MaxPossibleRemainingResidentCredentialsCount);
 
-        const string RenamedName = "wavecm-renamed-user";
-        const string RenamedDisplayName = "Wavecm Renamed User";
+        const string RenamedName = "cm-renamed-user";
+        const string RenamedDisplayName = "Cm Renamed User";
         using(CredentialId renameCredentialCarrier = CredentialId.Create(rpaUser2.CredentialIdBytes, pool))
         using(UserHandle renameUserId = UserHandle.Create(rpaUser2.UserId, pool))
         {
@@ -185,14 +185,14 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
     [TestMethod]
     public async Task PermissionRpIdAndStatefulnessSemanticsOverRealApduTransport()
     {
-        const string RpA = "wavecm-capstone-b-rpa.example";
-        const string RpB = "wavecm-capstone-b-rpb.example";
-        const string RpC = "wavecm-capstone-b-rpc.example";
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        const string RpA = "cm-capstone-b-rpa.example";
+        const string RpB = "cm-capstone-b-rpb.example";
+        const string RpC = "cm-capstone-b-rpc.example";
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapWave2AuthenticatorFixtures.CreateSimulator("wavecm-capstone-b");
-        using CtapWave2TransportHarness harness = await CtapWave2TransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("cm-capstone-b");
+        using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         var coldGetNextRequest = new CtapCredentialManagementRequest(SubCommand: WellKnownCtapCredentialManagementSubCommands.EnumerateRpsGetNextRp);
         (byte coldStatus, _) = await SendCredentialManagementAsync(harness.Transceive, coldGetNextRequest, pool, cancellationToken).ConfigureAwait(false);
@@ -201,13 +201,13 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
 
         await EstablishPinAsync(harness, pool, cancellationToken).ConfigureAwait(false);
 
-        CtapWaveCmRegisteredCredential credentialA = await RegisterResidentCredentialAsync(
-            harness, pool, RpA, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xD0), cancellationToken).ConfigureAwait(false);
-        CtapWaveCmRegisteredCredential credentialB = await RegisterResidentCredentialAsync(
-            harness, pool, RpB, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xD1), cancellationToken).ConfigureAwait(false);
-        _ = await RegisterResidentCredentialAsync(harness, pool, RpC, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xD2), cancellationToken).ConfigureAwait(false);
-        _ = await RegisterResidentCredentialAsync(harness, pool, RpC, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xD3), cancellationToken).ConfigureAwait(false);
-        _ = await RegisterResidentCredentialAsync(harness, pool, RpC, CtapWave2AuthenticatorFixtures.BuildFixedBytes(16, 0xD4), cancellationToken).ConfigureAwait(false);
+        CtapCredentialManagementRegisteredCredential credentialA = await RegisterResidentCredentialAsync(
+            harness, pool, RpA, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xD0), cancellationToken).ConfigureAwait(false);
+        CtapCredentialManagementRegisteredCredential credentialB = await RegisterResidentCredentialAsync(
+            harness, pool, RpB, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xD1), cancellationToken).ConfigureAwait(false);
+        _ = await RegisterResidentCredentialAsync(harness, pool, RpC, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xD2), cancellationToken).ConfigureAwait(false);
+        _ = await RegisterResidentCredentialAsync(harness, pool, RpC, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xD3), cancellationToken).ConfigureAwait(false);
+        _ = await RegisterResidentCredentialAsync(harness, pool, RpC, CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xD4), cancellationToken).ConfigureAwait(false);
 
         byte[] rpaHash = ComputeRpIdHash(RpA);
         byte[] boundToken = await IssueCmTokenAsync(harness, pool, RpA, cancellationToken).ConfigureAwait(false);
@@ -297,7 +297,7 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
 
 
     /// <summary>Sends an <c>authenticatorGetInfo</c> request over <paramref name="harness"/>'s real transport and decodes the response.</summary>
-    private static async Task<CtapGetInfoResponse> GetInfoAsync(CtapWave2TransportHarness harness, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task<CtapGetInfoResponse> GetInfoAsync(CtapNfcTransportHarness harness, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] request = [WellKnownCtapCommands.GetInfo];
         using PooledMemory response = await harness.Transceive(request, pool, cancellationToken).ConfigureAwait(false);
@@ -307,9 +307,9 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
 
 
     /// <summary>Establishes <see cref="Pin"/> as the authenticator's PIN over <paramref name="harness"/>'s real transport.</summary>
-    private static async Task EstablishPinAsync(CtapWave2TransportHarness harness, MemoryPool<byte> pool, CancellationToken cancellationToken)
+    private static async Task EstablishPinAsync(CtapNfcTransportHarness harness, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
-        using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
+        using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
             .ConfigureAwait(false);
         (byte[] newPinEnc, byte[] pinUvAuthParam) = await session.BuildSetPinMessagesAsync(Pin, cancellationToken).ConfigureAwait(false);
 
@@ -329,9 +329,9 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
     /// it from wire bytes only, over <paramref name="harness"/>'s real transport.
     /// </summary>
     private static async Task<byte[]> IssueTokenAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, int permissions, string? rpId, CancellationToken cancellationToken)
+        CtapNfcTransportHarness harness, BaseMemoryPool pool, int permissions, string? rpId, CancellationToken cancellationToken)
     {
-        using CtapWave5bPlatformPinSession session = await CtapWave5bPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
+        using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(harness.Transceive, ProtocolId, pool, cancellationToken)
             .ConfigureAwait(false);
         byte[] pinHashEnc = await session.BuildPinHashEncAsync(Pin, cancellationToken).ConfigureAwait(false);
 
@@ -354,12 +354,12 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
     /// registration's worth per issuance, since a successful <c>mc</c> strips the token's other
     /// permissions.
     /// </summary>
-    private static Task<byte[]> IssueMcGaTokenAsync(CtapWave2TransportHarness harness, MemoryPool<byte> pool, string rpId, CancellationToken cancellationToken) =>
+    private static Task<byte[]> IssueMcGaTokenAsync(CtapNfcTransportHarness harness, BaseMemoryPool pool, string rpId, CancellationToken cancellationToken) =>
         IssueTokenAsync(harness, pool, WellKnownCtapPinUvAuthTokenPermissions.Mc | WellKnownCtapPinUvAuthTokenPermissions.Ga, rpId, cancellationToken);
 
 
     /// <summary>Issues a <c>cm</c>-permissioned token via <see cref="IssueTokenAsync"/>, bound to <paramref name="rpId"/> or unbound when <see langword="null"/>.</summary>
-    private static Task<byte[]> IssueCmTokenAsync(CtapWave2TransportHarness harness, MemoryPool<byte> pool, string? rpId, CancellationToken cancellationToken) =>
+    private static Task<byte[]> IssueCmTokenAsync(CtapNfcTransportHarness harness, BaseMemoryPool pool, string? rpId, CancellationToken cancellationToken) =>
         IssueTokenAsync(harness, pool, WellKnownCtapPinUvAuthTokenPermissions.Cm, rpId, cancellationToken);
 
 
@@ -369,44 +369,44 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
     /// <c>mc|ga</c> token (a successful <c>mc</c> strips a token's other permissions, so a token is
     /// never reused across registrations).
     /// </summary>
-    private static async Task<CtapWaveCmRegisteredCredential> RegisterResidentCredentialAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, string rpId, byte[] userId, CancellationToken cancellationToken)
+    private static async Task<CtapCredentialManagementRegisteredCredential> RegisterResidentCredentialAsync(
+        CtapNfcTransportHarness harness, BaseMemoryPool pool, string rpId, byte[] userId, CancellationToken cancellationToken)
     {
         byte[] token = await IssueMcGaTokenAsync(harness, pool, rpId, cancellationToken).ConfigureAwait(false);
-        byte[] message = CtapWave2AuthenticatorFixtures.BuildFixedBytes(32, 0x10);
-        byte[] param = await CtapWaveConfigFixtures.ComputeSignatureAsync(token, ProtocolId, message, pool, cancellationToken).ConfigureAwait(false);
+        byte[] message = CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(32, 0x10);
+        byte[] param = await CtapConfigFixtures.ComputeSignatureAsync(token, ProtocolId, message, pool, cancellationToken).ConfigureAwait(false);
 
-        CtapMakeCredentialRequest request = CtapWave2AuthenticatorFixtures.BuildMakeCredentialRequest(
+        CtapMakeCredentialRequest request = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(
             pool, rpId: rpId, userId: userId, options: new CtapCommandOptions(ResidentKey: true),
             pinUvAuthParam: param, pinUvAuthProtocol: (int)ProtocolId);
         CtapMakeCredentialResponse response = await CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
             harness.Transceive, CtapMakeCredentialRequestCborWriter.Write, request, CtapMakeCredentialResponseCborReader.Read, pool, cancellationToken)
             .ConfigureAwait(false);
-        CtapWave2AuthenticatorFixtures.DisposeMakeCredentialRequest(request);
+        CtapMakeCredentialGetAssertionFixtures.DisposeMakeCredentialRequest(request);
 
         using AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(response.AuthData, CredentialPublicKeyCborReader.Read, pool);
         byte[] credentialIdBytes = authenticatorData.AttestedCredentialData!.CredentialId.AsReadOnlySpan().ToArray();
 
-        return new CtapWaveCmRegisteredCredential(rpId, userId, credentialIdBytes, authenticatorData.AttestedCredentialData.CredentialPublicKey);
+        return new CtapCredentialManagementRegisteredCredential(rpId, userId, credentialIdBytes, authenticatorData.AttestedCredentialData.CredentialPublicKey);
     }
 
 
     /// <summary>
     /// Builds and sends one gated <c>authenticatorCredentialManagement</c> subcommand over
     /// <paramref name="harness"/>'s real transport, computing <c>pinUvAuthParam</c> platform-side over
-    /// the R4 message shape, and asserts the returned status equals <paramref name="expectedStatus"/>.
+    /// the verify-message shape, and asserts the returned status equals <paramref name="expectedStatus"/>.
     /// </summary>
     /// <returns>The decoded response, or <see langword="null"/> when <paramref name="expectedStatus"/> is not <see cref="WellKnownCtapStatusCodes.Ok"/>.</returns>
     private static async Task<CtapCredentialManagementResponse?> AssertGatedCmStatusAsync(
-        CtapWave2TransportHarness harness, MemoryPool<byte> pool, byte[] token, int subCommand,
+        CtapNfcTransportHarness harness, BaseMemoryPool pool, byte[] token, int subCommand,
         ReadOnlyMemory<byte>? rpIdHash, PublicKeyCredentialDescriptor? credentialId, CtapPublicKeyCredentialUserEntity? user,
         byte expectedStatus, CancellationToken cancellationToken)
     {
         ReadOnlyMemory<byte> subCommandParams = (rpIdHash is null && credentialId is null && user is null)
             ? ReadOnlyMemory<byte>.Empty
-            : CtapWaveCmFixtures.BuildSubCommandParams(rpIdHash, credentialId, user);
-        byte[] message = CtapWaveCmFixtures.BuildMessage(subCommand, subCommandParams);
-        byte[] param = await CtapWaveConfigFixtures.ComputeSignatureAsync(token, ProtocolId, message, pool, cancellationToken).ConfigureAwait(false);
+            : CtapCredentialManagementFixtures.BuildSubCommandParams(rpIdHash, credentialId, user);
+        byte[] message = CtapCredentialManagementFixtures.BuildMessage(subCommand, subCommandParams);
+        byte[] param = await CtapConfigFixtures.ComputeSignatureAsync(token, ProtocolId, message, pool, cancellationToken).ConfigureAwait(false);
 
         var request = new CtapCredentialManagementRequest(
             SubCommand: subCommand, RpIdHash: rpIdHash, CredentialId: credentialId, User: user,
@@ -426,9 +426,9 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
     /// <see cref="WellKnownCtapStatusCodes.Ok"/> and the response carries a body) the decoded response.
     /// </summary>
     private static async Task<(byte StatusCode, CtapCredentialManagementResponse? Response)> SendCredentialManagementAsync(
-        Ctap2TransceiveDelegate transceive, CtapCredentialManagementRequest request, MemoryPool<byte> pool, CancellationToken cancellationToken)
+        Ctap2TransceiveDelegate transceive, CtapCredentialManagementRequest request, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
-        byte[] envelope = CtapWaveCmFixtures.BuildCredentialManagementEnvelope(request);
+        byte[] envelope = CtapCredentialManagementFixtures.BuildCredentialManagementEnvelope(request);
         using PooledMemory response = await transceive(envelope, pool, cancellationToken).ConfigureAwait(false);
         byte statusCode = response.AsReadOnlySpan()[0];
         if(!WellKnownCtapStatusCodes.IsOk(statusCode))
@@ -455,7 +455,7 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
 
 
     /// <summary>Asserts that <paramref name="actual"/>'s user id bytes match <paramref name="expected"/>'s registration-time user handle.</summary>
-    private static void AssertUserIdMatches(CtapWaveCmRegisteredCredential expected, CtapPublicKeyCredentialUserEntity actual)
+    private static void AssertUserIdMatches(CtapCredentialManagementRegisteredCredential expected, CtapPublicKeyCredentialUserEntity actual)
     {
         Assert.IsTrue(
             expected.UserId.AsSpan().SequenceEqual(actual.Id.AsReadOnlySpan()),
@@ -472,5 +472,5 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
     /// <param name="UserId">The plaintext user handle bytes the credential was registered with.</param>
     /// <param name="CredentialIdBytes">The minted credential identifier's raw bytes.</param>
     /// <param name="PublicKey">The minted credential's public key, parsed from the registration response's <c>attestedCredentialData</c>.</param>
-    private sealed record CtapWaveCmRegisteredCredential(string RpId, byte[] UserId, byte[] CredentialIdBytes, CoseKey PublicKey);
+    private sealed record CtapCredentialManagementRegisteredCredential(string RpId, byte[] UserId, byte[] CredentialIdBytes, CoseKey PublicKey);
 }

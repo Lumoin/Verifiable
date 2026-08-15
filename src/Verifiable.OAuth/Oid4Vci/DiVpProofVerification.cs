@@ -98,5 +98,5 @@ public sealed record DiVpProofVerification
     public required ComputeDigestDelegate ComputeDigest { get; init; }
 
     /// <summary>The memory pool backing the transient verify buffers.</summary>
-    public required MemoryPool<byte> MemoryPool { get; init; }
+    public required BaseMemoryPool MemoryPool { get; init; }
 }

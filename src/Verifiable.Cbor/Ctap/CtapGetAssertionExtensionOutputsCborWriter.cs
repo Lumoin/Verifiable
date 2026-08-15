@@ -16,7 +16,7 @@ namespace Verifiable.Cbor.Ctap;
 /// <see cref="TaggedMemory{T}.Empty"/> — never an encoded empty CBOR map (<c>0xA0</c>) — when
 /// <c>hmacSecret</c> is absent, keeping the caller's <c>ED</c> flag at zero: every pre-existing
 /// <c>authenticatorGetAssertion</c> test's authData bytes are BYTE-IDENTICAL to before this writer
-/// existed (trap 16).
+/// existed.
 /// </remarks>
 public static class CtapGetAssertionExtensionOutputsCborWriter
 {

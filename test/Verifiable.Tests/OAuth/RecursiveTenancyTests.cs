@@ -14,7 +14,7 @@ namespace Verifiable.Tests.OAuth;
 /// dispatches in isolation.
 /// </summary>
 /// <remarks>
-/// The Phase 9h pipeline doesn't introduce a recursive-tenancy
+/// The dispatch pipeline doesn't introduce a recursive-tenancy
 /// <em>protocol</em> (PIC-Protocol attenuation chain cryptography is
 /// out of scope; that's an agentic-identity track item). What it does
 /// guarantee is that the per-request capability gate is genuinely

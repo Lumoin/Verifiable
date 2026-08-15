@@ -61,7 +61,7 @@ public sealed class TpmlDigest: IDisposable
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The parsed digest list.</returns>
-    public static TpmlDigest Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static TpmlDigest Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         uint count = reader.ReadUInt32();

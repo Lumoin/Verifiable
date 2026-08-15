@@ -32,4 +32,4 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 public delegate EncodedCoseProtectedHeader BuildKbtProtectedHeaderDelegate(
     int coseAlgorithm,
     SdToken<ReadOnlyMemory<byte>> presentationToken,
-    MemoryPool<byte> pool);
+    BaseMemoryPool pool);

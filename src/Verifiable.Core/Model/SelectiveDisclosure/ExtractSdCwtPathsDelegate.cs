@@ -31,5 +31,5 @@ public delegate IReadOnlyDictionary<SdDisclosure, CredentialPath> ExtractSdCwtPa
     ReadOnlyMemory<byte> payload,
     IReadOnlyList<SdDisclosure> disclosures,
     EncodeDelegate encoder,
-    MemoryPool<byte> pool,
+    BaseMemoryPool pool,
     string hashAlgorithm);

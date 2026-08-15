@@ -8,14 +8,14 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 
 /// <summary>
 /// A parsed CTAP authenticator state-custody snapshot: exactly the PERSISTENT subset of
-/// <see cref="CtapAuthenticatorState"/> contract ruling R-2 names, plus the personalization fingerprint
-/// R-2b requires rehydration to verify before restoring it into a freshly composed authenticator.
+/// <see cref="CtapAuthenticatorState"/> this library treats as persisted, plus the personalization fingerprint
+/// rehydration requires to verify before restoring it into a freshly composed authenticator.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Produced only by a <see cref="DecodeCtapAuthenticatorSnapshotDelegate"/> implementation. Every
 /// reference-typed member owns freshly rented/copied memory independent of whatever
-/// <see cref="CtapAuthenticatorState"/> the snapshot was originally encoded from (R-3: the custody seam
+/// <see cref="CtapAuthenticatorState"/> the snapshot was originally encoded from (the custody seam
 /// copies at the boundary, never handing a live <c>IMemoryOwner&lt;byte&gt;</c> reference across a real
 /// process boundary) — so a caller either transfers that ownership into a rehydrated
 /// <see cref="CtapAuthenticatorState"/> via a <c>with</c> overlay, or disposes this instance directly if
@@ -25,23 +25,23 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// Deliberately excludes every volatile field CTAP 2.3 section 6 items 1-3 name (the six
 /// <c>Remembered*</c>/<c>PendingUserPresenceWait</c> slots, both <c>CtapPinUvAuthTokenState</c>s, both
 /// key-agreement pairs, <c>ConsecutivePinMismatches</c>, <c>IsPowerCycleRequired</c>,
-/// <c>PoweredOnAt</c>) — R-1 restores those by composing <see cref="CtapAuthenticatorState.Initial"/>
+/// <c>PoweredOnAt</c>) — rehydration restores those by composing <see cref="CtapAuthenticatorState.Initial"/>
 /// with the SAME personalization the snapshot's fingerprint was checked against, exactly the state
 /// <c>PowerCycle</c>'s own volatile-refresh semantics would produce, rather than serializing them here.
 /// </para>
 /// </remarks>
 /// <param name="FormatVersion">
 /// The snapshot wire-format version this instance was parsed under. A rehydrating caller compares this
-/// against the codec's own current version and fails closed on any mismatch (R-5) before ever reading
+/// against the codec's own current version and fails closed on any mismatch before ever reading
 /// the fields below.
 /// </param>
 /// <param name="Aaguid">
-/// The AAGUID of the authenticator this snapshot was captured from — half of R-2b's personalization
+/// The AAGUID of the authenticator this snapshot was captured from — half of the personalization
 /// fingerprint. Rehydration fails closed unless this equals the freshly composed authenticator's own
 /// <see cref="CtapAuthenticatorState.Aaguid"/>.
 /// </param>
 /// <param name="FirmwareVersion">
-/// The firmware version of the authenticator this snapshot was captured from — the other half of R-2b's
+/// The firmware version of the authenticator this snapshot was captured from — the other half of the
 /// personalization fingerprint.
 /// </param>
 /// <param name="NextCredentialSequence">The persisted <see cref="CtapAuthenticatorState.NextCredentialSequence"/> value.</param>

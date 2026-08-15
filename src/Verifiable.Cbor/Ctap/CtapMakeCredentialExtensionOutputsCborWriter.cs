@@ -22,8 +22,8 @@ namespace Verifiable.Cbor.Ctap;
 /// exactly this fixed order whenever each is present is sufficient to satisfy the canonical sort rule —
 /// no run-time sort is needed, mirroring <see cref="CtapGetInfoResponseCborWriter"/>'s own fixed-order
 /// convention. When only <paramref name="credProtect"/>/<paramref name="minPinLength"/> are non-null, the
-/// emitted bytes are BYTE-IDENTICAL to a plain two-slot encoding of just those two values (trap 17's
-/// byte-fence) — <paramref name="hmacSecret"/>/<paramref name="hmacSecretMc"/> contribute no map entry
+/// emitted bytes are BYTE-IDENTICAL to a plain two-slot encoding of just those two values —
+/// <paramref name="hmacSecret"/>/<paramref name="hmacSecretMc"/> contribute no map entry
 /// when absent, so their presence in this four-slot signature never perturbs the two-slot case's bytes.
 /// </para>
 /// <para>
@@ -31,7 +31,7 @@ namespace Verifiable.Cbor.Ctap;
 /// every parameter is absent: CTAP 2.3, section 12.1 line 12648's MUST NOT (no unsolicited
 /// <c>credProtect</c> output), section 12.5's own "ignores the extension and does not return any
 /// authenticator extension output" (an unauthorized <c>minPinLength</c> request), and this
-/// authenticator's own hmac-secret/hmac-secret-mc call sites (contract R3/R6) all resolve to the KEY
+/// authenticator's own hmac-secret/hmac-secret-mc call sites all resolve to the KEY
 /// being absent, and when every requested key is absent the whole map is absent, keeping the caller's
 /// <c>ED</c> flag at zero rather than emitting a present-but-empty map <see cref="AuthenticatorDataReader"/>
 /// would still have to parse.

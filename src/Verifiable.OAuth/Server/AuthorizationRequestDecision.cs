@@ -24,7 +24,23 @@ public enum AuthorizationDenialReason
     /// End-User declined consent. Mapped to <see cref="OAuthErrors.AccessDenied"/> per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>.
     /// </summary>
-    AccessDenied
+    AccessDenied,
+
+    /// <summary>
+    /// The application does not consider the request's
+    /// <see cref="AuthorizationRequestEvaluation.RequestedResource"/> acceptable — for example an
+    /// unknown resource, or a resource/scope combination it refuses to authorize. Mapped to
+    /// <see cref="OAuthErrors.InvalidTarget"/> per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see> ("It can also
+    /// be used to inform the client that it has requested an invalid combination of resource and
+    /// scope") and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">§2.1</see> ("If the
+    /// authorization server ... does not consider the resource(s) acceptable, it should reject the
+    /// request with ... invalid_target"). The library itself rejects a syntactically malformed
+    /// <c>resource</c> value before this seam ever runs; this reason is for the application's own
+    /// acceptability policy over an otherwise well-formed value.
+    /// </summary>
+    InvalidTarget
 }
 
 

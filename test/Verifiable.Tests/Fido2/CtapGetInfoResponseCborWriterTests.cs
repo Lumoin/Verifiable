@@ -89,7 +89,7 @@ internal sealed class CtapGetInfoResponseCborWriterTests
 
 
     /// <summary>
-    /// <c>"ep"</c> (CTAP 2.3 §7.1.1, R10) sorts FIRST of the whole <c>options</c> map — ahead of even
+    /// <c>"ep"</c> (CTAP 2.3 §7.1.1) sorts FIRST of the whole <c>options</c> map — ahead of even
     /// the other length-2 keys <c>"rk"</c>/<c>"uv"</c> — because the length-2 bytewise tie-break is
     /// <c>'e'</c> (0x65) &lt; <c>'r'</c> (0x72) &lt; <c>'u'</c> (0x75); mirrors
     /// <see cref="WriteOrdersOptionsKeysRkBeforePlat"/>'s shape one option earlier in the canonical
@@ -123,7 +123,7 @@ internal sealed class CtapGetInfoResponseCborWriterTests
     /// <summary>
     /// A capable-but-disabled authenticator emits <c>"ep"</c> present and <see langword="false"/>
     /// (CTAP 2.3 lines 4741-4743: "present and set to false" -&gt; "the authenticator is enterprise
-    /// attestation capable, and enterprise attestation is disabled") — the byte-exact proof of R11(b)'s
+    /// attestation capable, and enterprise attestation is disabled") — the byte-exact proof of the
     /// <c>62 65 70 F4</c> emission.
     /// </summary>
     [TestMethod]
@@ -240,11 +240,11 @@ internal sealed class CtapGetInfoResponseCborWriterTests
 
     /// <summary>
     /// <see cref="CtapAuthenticatorState.DefaultSupportedExtensions"/> — the real, unconditionally
-    /// advertised list a default-constructed authenticator reports (contract R1; waveclose adds
+    /// advertised list a default-constructed authenticator reports (including
     /// <c>hmac-secret</c>/<c>hmac-secret-mc</c>) — encodes to <c>["credProtect", "hmac-secret",
     /// "hmac-secret-mc", "largeBlobKey", "minPinLength"]</c>, correctly cased, in that array-element
     /// order (a CBOR array carries no key-sort rule of its own; the LIST order here is this codebase's
-    /// alphabetical convention — trap 1's first ordering).
+    /// alphabetical convention).
     /// </summary>
     [TestMethod]
     public void WriteEncodesDefaultAdvertisedExtensionsToExactCanonicalBytes()
@@ -277,8 +277,8 @@ internal sealed class CtapGetInfoResponseCborWriterTests
     /// <summary>
     /// This subset of the <c>options</c> map — <c>"rk"</c> (2), <c>"plat"</c> (4), <c>"clientPin"</c>
     /// (9), <c>"pinUvAuthToken"</c> (14), <c>"makeCredUvNotRqd"</c> (16) — happens to have five
-    /// distinct lengths, so length alone fixes their relative order (CTAP wave-a's getInfo flips,
-    /// decision 5; <c>makeCredUvNotRqd</c> added at the tail per wave-5c decision 8). The FULL modeled
+    /// distinct lengths, so length alone fixes their relative order (<c>makeCredUvNotRqd</c> added at
+    /// the tail). The FULL modeled
     /// option set is no longer all-distinct-length once <c>authnrCfg</c> (9) is also present — see
     /// <see cref="WriteOrdersAuthnrCfgBeforeClientPinOnLengthNineTie"/> for the length-9 tie-break.
     /// </summary>
@@ -314,7 +314,7 @@ internal sealed class CtapGetInfoResponseCborWriterTests
 
 
     /// <summary>
-    /// <c>clientPin: true</c> (CTAP 2.3 §9 item 2, wave-5b decision 8: state-dependent once a PIN has
+    /// <c>clientPin: true</c> (CTAP 2.3 §9 item 2: state-dependent once a PIN has
     /// been set) writes the identical byte-exact shape as the <see langword="false"/> variant, with
     /// only the boolean's simple-value byte differing — proving the flip is a value change, not a
     /// structural one.
@@ -514,7 +514,7 @@ internal sealed class CtapGetInfoResponseCborWriterTests
 
 
     /// <summary>
-    /// <c>largeBlobs</c> (10 characters, R2) slots between <c>clientPin</c> (9) and <c>uvBioEnroll</c>
+    /// <c>largeBlobs</c> (10 characters) slots between <c>clientPin</c> (9) and <c>uvBioEnroll</c>
     /// (11) — a NEW length-10 class with NO tie, its own canonical position computed fresh from its byte
     /// length.
     /// </summary>
@@ -548,7 +548,7 @@ internal sealed class CtapGetInfoResponseCborWriterTests
 
 
     /// <summary>
-    /// The outer response map's two new members this wave adds — <c>preferredPlatformUvAttempts</c>
+    /// Two of the outer response map's members — <c>preferredPlatformUvAttempts</c>
     /// (0x11) and <c>uvModality</c> (0x12) — write in ascending integer-key order between
     /// <c>maxRPIDsForSetMinPINLength</c> (0x10) and <c>remainingDiscoverableCredentials</c> (0x14).
     /// </summary>
@@ -582,7 +582,7 @@ internal sealed class CtapGetInfoResponseCborWriterTests
 
 
     /// <summary>
-    /// The four new top-level members this wave adds — <c>forcePINChange</c> (0x0C),
+    /// Four of the top-level members — <c>forcePINChange</c> (0x0C),
     /// <c>minPINLength</c> (0x0D), <c>maxRPIDsForSetMinPINLength</c> (0x10), and
     /// <c>authenticatorConfigCommands</c> (0x1F) — write in ascending integer-key order after
     /// <c>pinUvAuthProtocols</c>; <c>0x1F</c> (31) is the only key in this response map that is
@@ -619,9 +619,9 @@ internal sealed class CtapGetInfoResponseCborWriterTests
 
 
     /// <summary>
-    /// The two R5/R6 members this wave adds — <c>maxCredentialCountInList</c> (0x07) and
+    /// Two members — <c>maxCredentialCountInList</c> (0x07) and
     /// <c>algorithms</c> (0x0A) — write in ascending integer-key order, inserted between
-    /// <c>pinUvAuthProtocols</c> (0x06) and <c>maxSerializedLargeBlobArray</c> (0x0B): trap 7's
+    /// <c>pinUvAuthProtocols</c> (0x06) and <c>maxSerializedLargeBlobArray</c> (0x0B): the
     /// ascending-key insertion, <c>0x07</c> strictly before <c>0x0A</c>. The <c>algorithms</c> array's
     /// own element map is text-keyed canonical (<c>"alg"</c> before <c>"type"</c>, length-first) — see
     /// <see cref="Es256AlgorithmsBytes"/>'s own derivation.
@@ -659,7 +659,7 @@ internal sealed class CtapGetInfoResponseCborWriterTests
     /// A response carrying <c>maxCredentialCountInList</c> alone (<c>algorithms</c> left
     /// <see langword="null"/>) writes 0x07 with NO following 0x0A entry — the writer omits the
     /// <c>algorithms</c> member entirely rather than emitting an empty array, since
-    /// <see cref="CtapGetInfoResponse.Algorithms"/> is itself the omission signal (R6: "MUST NOT... be
+    /// <see cref="CtapGetInfoResponse.Algorithms"/> is itself the omission signal ("MUST NOT... be
     /// empty if present" is satisfied by never presenting an empty array at all).
     /// </summary>
     [TestMethod]
@@ -686,9 +686,9 @@ internal sealed class CtapGetInfoResponseCborWriterTests
 
 
     /// <summary>
-    /// The R7 member <c>firmwareVersion</c> (0x0E) writes in ascending integer-key order, inserted
-    /// between <c>minPINLength</c> (0x0D) and <c>maxRPIDsForSetMinPINLength</c> (0x10) — trap 7's second
-    /// insertion point.
+    /// The member <c>firmwareVersion</c> (0x0E) writes in ascending integer-key order, inserted
+    /// between <c>minPINLength</c> (0x0D) and <c>maxRPIDsForSetMinPINLength</c> (0x10) — the second
+    /// ascending-key insertion point.
     /// </summary>
     [TestMethod]
     public void WriteOrdersFirmwareVersionBetweenMinPinLengthAndMaxRpIdsForSetMinPinLength()
@@ -718,27 +718,27 @@ internal sealed class CtapGetInfoResponseCborWriterTests
 
 
     /// <summary>
-    /// The full <c>authenticatorConfig</c>+<c>authenticatorCredentialManagement</c>+wavebio getInfo
+    /// The full <c>authenticatorConfig</c>+<c>authenticatorCredentialManagement</c>+bio-enrollment getInfo
     /// surface in the <c>alwaysUv</c>-disabled state: the default <c>extensions:["credProtect",
-    /// "hmac-secret", "hmac-secret-mc", "largeBlobKey", "minPinLength"]</c> (contract R1), <c>alwaysUv:false</c>,
+    /// "hmac-secret", "hmac-secret-mc", "largeBlobKey", "minPinLength"]</c>, <c>alwaysUv:false</c>,
     /// <c>authnrCfg:true</c>, <c>credMgmt:true</c>, <c>largeBlobs:true</c>, and
     /// <c>setMinPINLength:true</c> unconditionally, <c>makeCredUvNotRqd:true</c> (the derived negation of
-    /// <c>alwaysUv</c>), <c>uv:false</c>/<c>bioEnroll:false</c> (R2's shared
+    /// <c>alwaysUv</c>), <c>uv:false</c>/<c>bioEnroll:false</c> (the shared
     /// <c>HasProvisionedBioEnrollments</c> placeholder, zero enrollments), <c>uvBioEnroll:true</c>
     /// unconditionally, the pre-configured default <c>minPINLength:4</c>, <c>forcePINChange:false</c>,
     /// <c>maxSerializedLargeBlobArray:4096</c>/<c>maxRPIDsForSetMinPINLength:8</c> (both single-sourced
     /// fixed capacity constants), <c>preferredPlatformUvAttempts:3</c>/<c>uvModality:2</c>
     /// (single-sourced statics), <c>remainingDiscoverableCredentials:8</c> (the default resident
     /// credential capacity, empty store), <c>authenticatorConfigCommands:[2, 3]</c>,
-    /// <c>maxCredentialCountInList:8</c> (R5), a one-element <c>algorithms:[{alg: ES256, type:
-    /// "public-key"}]</c> (R6, the ES256-only default credential-signing backend), and
-    /// <c>firmwareVersion:1</c> (R7, <see cref="CtapAuthenticatorState.Initial"/>'s own seed default) —
+    /// <c>maxCredentialCountInList:8</c>, a one-element <c>algorithms:[{alg: ES256, type:
+    /// "public-key"}]</c> (the ES256-only default credential-signing backend), and
+    /// <c>firmwareVersion:1</c> (<see cref="CtapAuthenticatorState.Initial"/>'s own seed default) —
     /// this is the exact shape
     /// <see cref="Verifiable.Fido2.Ctap.Authenticator.Automata.CtapAuthenticatorTransitions"/>'s
     /// <c>BuildGetInfoResponse</c> produces for a freshly constructed authenticator with the ES256
-    /// default backend injected. R11 regression fence: this authenticator is NON-CAPABLE (no
+    /// default backend injected. Regression fence: this authenticator is NON-CAPABLE (no
     /// <c>EnterpriseAttestationProvisioning</c> seeded), so <c>ep</c> stays absent and this vector's
-    /// <c>options</c> bytes are UNCHANGED by the waveep contract —
+    /// <c>options</c> bytes are UNCHANGED —
     /// <see cref="WriteEncodesEnterpriseAttestationCapableEnabledFullSurfaceToExactCanonicalBytes"/> is
     /// the capable+enabled sibling proving the two profiles diverge only where <c>ep</c> itself differs.
     /// </summary>
@@ -838,15 +838,15 @@ internal sealed class CtapGetInfoResponseCborWriterTests
     /// <c>makeCredUvNotRqd:false</c> (line 4951's MUST), and a raised <c>minPINLength</c> with
     /// <c>forcePINChange:true</c> writes byte-identically in shape to the disabled variant above,
     /// including the default <c>extensions:["credProtect", "hmac-secret", "hmac-secret-mc",
-    /// "largeBlobKey", "minPinLength"]</c> (contract R1), <c>largeBlobs:true</c>/<c>maxSerializedLargeBlobArray:4096</c>,
-    /// <c>maxRPIDsForSetMinPINLength:8</c> (R8), and the wavebio <c>uv:false</c>/<c>bioEnroll:false</c>/
+    /// "largeBlobKey", "minPinLength"]</c>, <c>largeBlobs:true</c>/<c>maxSerializedLargeBlobArray:4096</c>,
+    /// <c>maxRPIDsForSetMinPINLength:8</c>, and the bio-enrollment <c>uv:false</c>/<c>bioEnroll:false</c>/
     /// <c>uvBioEnroll:true</c>/<c>preferredPlatformUvAttempts:3</c>/<c>uvModality:2</c> surface — bio
     /// enrollment state is independent of <c>alwaysUv</c> — with only the changed booleans/integer
     /// differing, proving the config-state flips are value changes, never structural ones.
     /// <c>maxCredentialCountInList:8</c>/<c>algorithms:[{alg: ES256, type: "public-key"}]</c>/
-    /// <c>firmwareVersion:1</c> (R5/R6/R7) are orthogonal to <c>alwaysUv</c> and stay byte-identical to
-    /// the disabled variant. R11 regression fence: this authenticator is also NON-CAPABLE, so <c>ep</c>
-    /// stays absent here too — this vector's <c>options</c> bytes are UNCHANGED by the waveep contract.
+    /// <c>firmwareVersion:1</c> are orthogonal to <c>alwaysUv</c> and stay byte-identical to
+    /// the disabled variant. Regression fence: this authenticator is also NON-CAPABLE, so <c>ep</c>
+    /// stays absent here too — this vector's <c>options</c> bytes are UNCHANGED.
     /// </summary>
     [TestMethod]
     public void WriteEncodesFullAuthenticatorConfigSurfaceWithAlwaysUvEnabledToExactCanonicalBytes()
@@ -940,14 +940,14 @@ internal sealed class CtapGetInfoResponseCborWriterTests
 
 
     /// <summary>
-    /// The full getInfo surface for an enterprise-attestation CAPABLE, ENABLED authenticator (R11(a)):
+    /// The full getInfo surface for an enterprise-attestation CAPABLE, ENABLED authenticator:
     /// identical in shape to <see cref="WriteEncodesFullAuthenticatorConfigSurfaceWithAlwaysUvDisabledToExactCanonicalBytes"/>
     /// except for exactly two hand-derived deltas — <c>options</c> gains a 14th entry, <c>"ep" -> true</c>
-    /// (<c>62 65 70 F5</c>), written FIRST (before <c>"rk"</c>, R10's own length-2 tie-break), bumping
+    /// (<c>62 65 70 F5</c>), written FIRST (before <c>"rk"</c>, its own length-2 tie-break), bumping
     /// the options map header from map(13) to map(14); and <c>authenticatorConfigCommands</c> becomes
-    /// the ascending 3-element array <c>[1, 2, 3]</c> (<c>83 01 02 03</c>, trap 6) rather than <c>[2, 3]</c>.
+    /// the ascending 3-element array <c>[1, 2, 3]</c> (<c>83 01 02 03</c>) rather than <c>[2, 3]</c>.
     /// <c>maxCredentialCountInList:8</c>/<c>algorithms:[{alg: ES256, type: "public-key"}]</c>/
-    /// <c>firmwareVersion:1</c> (R5/R6/R7) are orthogonal to enterprise attestation and stay
+    /// <c>firmwareVersion:1</c> are orthogonal to enterprise attestation and stay
     /// byte-identical to the disabled variant. Every other byte is identical to the non-capable
     /// regression-fence vector, proving the capability flip is additive, never structural elsewhere.
     /// </summary>
@@ -1037,7 +1037,7 @@ internal sealed class CtapGetInfoResponseCborWriterTests
             0x11, 0x03, //key 0x11 (preferredPlatformUvAttempts) -> 3
             0x12, 0x02, //key 0x12 (uvModality) -> 2
             0x14, 0x08, //key 0x14 (remainingDiscoverableCredentials) -> 8
-            0x18, 0x1F, 0x83, 0x01, 0x02, 0x03 //key 0x1F (authenticatorConfigCommands, 2-byte key form) -> [1, 2, 3], ascending (trap 6)
+            0x18, 0x1F, 0x83, 0x01, 0x02, 0x03 //key 0x1F (authenticatorConfigCommands, 2-byte key form) -> [1, 2, 3], ascending
         ];
 
         Assert.IsTrue(result.Span.SequenceEqual(expected));

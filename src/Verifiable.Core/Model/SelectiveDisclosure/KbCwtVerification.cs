@@ -101,7 +101,7 @@ public static class KbCwtVerification
         VerifySdCwtCredentialDelegate verifyCredential,
         BuildSigStructureDelegate buildSigStructure,
         CommitmentReuseDetectionSeam? saltReuseSeam,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(parseCoseSign1);

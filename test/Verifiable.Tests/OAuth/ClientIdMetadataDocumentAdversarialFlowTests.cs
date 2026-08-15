@@ -26,15 +26,15 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
-/// Adversarial, SSRF, discrimination, display-seam, and logo-prefetch real-wire suite for CIMD
-/// (slice E2, contract D12 second half): every scenario crosses a real
+/// Adversarial, SSRF, discrimination, display-seam, and logo-prefetch real-wire suite for CIMD:
+/// every scenario crosses a real
 /// <see cref="MinimalHttpHost"/> or <see cref="StaticContentHost"/> TLS loopback socket, mirroring
 /// <see cref="ClientIdMetadataDocumentCrossWireFlowTests"/>'s topology. Caching behavior lives in
 /// the sibling <see cref="ClientIdMetadataDocumentCachingFlowTests"/>.
 /// </summary>
 /// <remarks>
-/// Covers CIMD-02-clause-ledger rows 001-011 (wire), 008, 013-016, 019-023, 028, 030, 033-040,
-/// 043-044, 051-061 per
+/// Covers draft-ietf-oauth-client-id-metadata-document-02 clauses 001-011 (wire), 008, 013-016,
+/// 019-023, 028, 030, 033-040, 043-044, 051-061 per
 /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html">
 /// draft-ietf-oauth-client-id-metadata-document-02</see>. Every host uses the single explicit
 /// HTTPS <c>Listen</c> convention — no plaintext listener anywhere in this file — and every test

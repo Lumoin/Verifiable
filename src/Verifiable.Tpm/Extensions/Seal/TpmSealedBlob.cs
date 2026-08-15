@@ -81,7 +81,7 @@ public sealed class TpmSealedBlob: IDisposable
     /// <param name="reader">The reader positioned at a previously written sealed blob.</param>
     /// <param name="pool">The memory pool backing the parsed carriers.</param>
     /// <returns>The parsed sealed blob.</returns>
-    public static TpmSealedBlob Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static TpmSealedBlob Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -99,7 +99,7 @@ public sealed class TpmSealedBlob: IDisposable
     /// <param name="response">The Create response for a sealed KEYEDHASH object.</param>
     /// <param name="pool">The memory pool backing the copied carriers.</param>
     /// <returns>The sealed blob.</returns>
-    internal static TpmSealedBlob FromCreateResponse(CreateResponse response, MemoryPool<byte> pool)
+    internal static TpmSealedBlob FromCreateResponse(CreateResponse response, BaseMemoryPool pool)
     {
         Tpm2bPrivate outPrivate = Tpm2bPrivate.Create(response.OutPrivate.Span, pool);
         Tpm2bPublic outPublic = ClonePublicArea(response.OutPublic, pool);
@@ -114,7 +114,7 @@ public sealed class TpmSealedBlob: IDisposable
     /// </summary>
     /// <param name="pool">The memory pool backing the copies.</param>
     /// <returns>A private/public pair independent of this instance's storage.</returns>
-    internal (Tpm2bPrivate InPrivate, Tpm2bPublic InPublic) CloneForLoad(MemoryPool<byte> pool)
+    internal (Tpm2bPrivate InPrivate, Tpm2bPublic InPublic) CloneForLoad(BaseMemoryPool pool)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
@@ -145,7 +145,7 @@ public sealed class TpmSealedBlob: IDisposable
     /// <param name="source">The public area to clone.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>An independent copy of the public area.</returns>
-    private static Tpm2bPublic ClonePublicArea(Tpm2bPublic source, MemoryPool<byte> pool)
+    private static Tpm2bPublic ClonePublicArea(Tpm2bPublic source, BaseMemoryPool pool)
     {
         int size = source.GetSerializedSize();
         using IMemoryOwner<byte> owner = pool.Rent(size);

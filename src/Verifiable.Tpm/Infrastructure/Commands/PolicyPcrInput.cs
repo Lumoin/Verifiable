@@ -67,7 +67,7 @@ public sealed class PolicyPcrInput: ITpmCommandInput, IDisposable
     /// <param name="pcrs">The PCR selection (ownership transfers to the returned input).</param>
     /// <param name="pool">The memory pool for the digest copy.</param>
     /// <returns>A new <see cref="PolicyPcrInput"/>.</returns>
-    public static PolicyPcrInput Create(uint policySession, ReadOnlySpan<byte> pcrDigest, TpmlPcrSelection pcrs, MemoryPool<byte> pool)
+    public static PolicyPcrInput Create(uint policySession, ReadOnlySpan<byte> pcrDigest, TpmlPcrSelection pcrs, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pcrs);
         ArgumentNullException.ThrowIfNull(pool);

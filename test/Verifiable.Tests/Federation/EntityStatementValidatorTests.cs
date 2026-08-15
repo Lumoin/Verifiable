@@ -47,8 +47,8 @@ internal sealed class EntityStatementValidatorTests
 
         Assert.IsTrue(signatureVerified, "Fixture signature should verify against the signing node's public key.");
         Assert.AreEqual(ClaimIssueCompletionStatus.Complete, result.CompletionStatus, "All rules should run to completion.");
-        Assert.HasCount(20, result.Claims,
-            "Profile emits 20 claims (codes 1100-1119: incl. ExpAfterIat (1110), the three JWKS checks (1111-1113), ClaimPlacementValid (1114), CritClaimsUnderstood (1115), NoChainHeaderInStatement (1116), FederationEntityEndpointsWellFormed (1117), FederationEntityEndpointAuthAlgsNotNone (1118), and FederationEntityHasNoJwkSetParams (1119)).");
+        Assert.HasCount(21, result.Claims,
+            "Profile emits 21 claims (codes 1100-1119: incl. ExpAfterIat (1110), the three JWKS checks (1111-1113), ClaimPlacementValid (1114), CritClaimsUnderstood (1115), NoChainHeaderInStatement (1116), FederationEntityEndpointsWellFormed (1117), FederationEntityEndpointAuthAlgsNotNone (1118), and FederationEntityHasNoJwkSetParams (1119)) plus KidPresent (1128).");
         foreach(Claim claim in result.Claims)
         {
             Assert.IsTrue(
@@ -600,14 +600,14 @@ internal sealed class EntityStatementValidatorTests
 
 
     [TestMethod]
-    public async Task EmptyJwksFailsJwksPresentWhenSelfSigned()
+    public async Task EmptyJwksFailsJwksPresentPerStatementShape()
     {
         DateTimeOffset now = TestClock.CanonicalEpoch;
         using FederationTestRingNode node = FederationTestRing.CreateNode(
             new EntityIdentifier("https://example.test/empty-jwks"));
 
         //A self-issued Entity Configuration whose published jwks carries an empty key
-        //array advertises no verification key — Federation §3.1 requires at least one.
+        //array advertises no verification key — Federation §3.1.1 requires at least one.
         Dictionary<string, object> emptyJwks = new()
         {
             [WellKnownJwkMemberNames.Keys] = new List<object>()
@@ -634,9 +634,195 @@ internal sealed class EntityStatementValidatorTests
             context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
 
         Claim jwksPresent = result.Claims.Single(
-            c => c.Id.Code == WellKnownFederationClaimIds.JwksPresentWhenSelfSigned.Code);
+            c => c.Id.Code == WellKnownFederationClaimIds.JwksPresentPerStatementShape.Code);
         Assert.AreEqual(ClaimOutcome.Failure, jwksPresent.Outcome,
-            "An empty jwks key array must fail JwksPresentWhenSelfSigned.");
+            "An empty jwks key array must fail JwksPresentPerStatementShape.");
+    }
+
+
+    [TestMethod]
+    public async Task SubordinateStatementWithoutJwksFailsJwksPresentPerStatementShape()
+    {
+        //F1/W4: Federation §3.1.1 makes jwks REQUIRED for all Subordinate Statements. The earlier self-signed-
+        //only check exempted this shape (NotApplicable), so a superior could publish a Subordinate Statement
+        //that binds no key for the subject and validation would not flag it. The shape-aware check fails it.
+        DateTimeOffset now = TestClock.CanonicalEpoch;
+
+        UnverifiedJwtHeader header = new(new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [WellKnownJwkMemberNames.Alg] = "ES256",
+            [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.EntityStatementJwt,
+            [WellKnownJwkMemberNames.Kid] = "superior-kid"
+        });
+
+        //A Subordinate Statement (iss != sub) carrying no jwks at all.
+        SubordinateStatement statement = new()
+        {
+            Issuer = new EntityIdentifier("https://superior.example.test"),
+            Subject = new EntityIdentifier("https://subordinate.example.test"),
+            IssuedAt = now,
+            ExpiresAt = now.AddHours(1),
+            Payload = new UnverifiedJwtPayload(new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownJwtClaimNames.Iss] = "https://superior.example.test",
+                [WellKnownJwtClaimNames.Sub] = "https://subordinate.example.test",
+                [WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds(),
+                [WellKnownJwtClaimNames.Exp] = now.AddHours(1).ToUnixTimeSeconds(),
+            })
+        };
+
+        EntityStatementValidationContext context = new()
+        {
+            Header = header,
+            Statement = statement,
+            SignatureVerified = true,
+            Now = now,
+            ClockSkew = TimeSpan.FromMinutes(5),
+        };
+
+        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+            context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim jwksPresent = result.Claims.Single(
+            c => c.Id.Code == WellKnownFederationClaimIds.JwksPresentPerStatementShape.Code);
+        Assert.AreEqual(ClaimOutcome.Failure, jwksPresent.Outcome,
+            "A Subordinate Statement without jwks must fail JwksPresentPerStatementShape per §3.1.1.");
+    }
+
+
+    [TestMethod]
+    public async Task TrustAnchorEntityConfigurationWithoutJwksFailsJwksPresentPerStatementShape()
+    {
+        //F1/W4: §3.1.1 makes jwks REQUIRED for every Trust Anchor / Intermediate Entity Configuration too. An
+        //Entity Configuration (iss == sub) with no jwks binds no signing key and must fail.
+        DateTimeOffset now = TestClock.CanonicalEpoch;
+
+        UnverifiedJwtHeader header = new(new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [WellKnownJwkMemberNames.Alg] = "ES256",
+            [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.EntityStatementJwt,
+            [WellKnownJwkMemberNames.Kid] = "anchor-kid"
+        });
+
+        EntityConfiguration statement = new()
+        {
+            Issuer = new EntityIdentifier("https://anchor.example.test"),
+            Subject = new EntityIdentifier("https://anchor.example.test"),
+            IssuedAt = now,
+            ExpiresAt = now.AddHours(1),
+            Payload = new UnverifiedJwtPayload(new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownJwtClaimNames.Iss] = "https://anchor.example.test",
+                [WellKnownJwtClaimNames.Sub] = "https://anchor.example.test",
+                [WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds(),
+                [WellKnownJwtClaimNames.Exp] = now.AddHours(1).ToUnixTimeSeconds(),
+            })
+        };
+
+        EntityStatementValidationContext context = new()
+        {
+            Header = header,
+            Statement = statement,
+            SignatureVerified = true,
+            Now = now,
+            ClockSkew = TimeSpan.FromMinutes(5),
+        };
+
+        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+            context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim jwksPresent = result.Claims.Single(
+            c => c.Id.Code == WellKnownFederationClaimIds.JwksPresentPerStatementShape.Code);
+        Assert.AreEqual(ClaimOutcome.Failure, jwksPresent.Outcome,
+            "A Trust Anchor / Intermediate Entity Configuration without jwks must fail per §3.1.1.");
+    }
+
+
+    [TestMethod]
+    public async Task ExplicitRegistrationResponseWithoutJwksIsNotApplicableForJwksPresentPerStatementShape()
+    {
+        //F1/W4 carve-out: connect-1.1 §3.1.2 makes jwks OPTIONAL for the Explicit Registration Response entity
+        //statement (identified by its explicit-registration-response+jwt typ). Absent jwks is NotApplicable
+        //there — NOT a failure — so the OP's registration response is not wrongly rejected.
+        DateTimeOffset now = TestClock.CanonicalEpoch;
+
+        UnverifiedJwtHeader header = new(new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [WellKnownJwkMemberNames.Alg] = "ES256",
+            [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.ExplicitRegistrationResponseJwt,
+            [WellKnownJwkMemberNames.Kid] = "op-kid"
+        });
+
+        //The response is issued by the OP about the RP (iss != sub) and legitimately omits jwks.
+        SubordinateStatement statement = new()
+        {
+            Issuer = new EntityIdentifier("https://op.example.test"),
+            Subject = new EntityIdentifier("https://rp.example.test"),
+            IssuedAt = now,
+            ExpiresAt = now.AddHours(1),
+            Payload = new UnverifiedJwtPayload(new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownJwtClaimNames.Iss] = "https://op.example.test",
+                [WellKnownJwtClaimNames.Sub] = "https://rp.example.test",
+                [WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds(),
+                [WellKnownJwtClaimNames.Exp] = now.AddHours(1).ToUnixTimeSeconds(),
+            })
+        };
+
+        EntityStatementValidationContext context = new()
+        {
+            Header = header,
+            Statement = statement,
+            SignatureVerified = true,
+            Now = now,
+            ClockSkew = TimeSpan.FromMinutes(5),
+        };
+
+        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+            context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim jwksPresent = result.Claims.Single(
+            c => c.Id.Code == WellKnownFederationClaimIds.JwksPresentPerStatementShape.Code);
+        Assert.AreEqual(ClaimOutcome.NotApplicable, jwksPresent.Outcome,
+            "An Explicit Registration Response without jwks is NotApplicable (connect-1.1 §3.1.2), not a failure.");
+    }
+
+
+    [TestMethod]
+    public async Task KidAbsentFailsKidPresent()
+    {
+        //F2: Federation §3.1 makes the kid header a MUST on Entity Statement JWTs. A header without a kid must
+        //fail KidPresent — the malformed input the in-chain key resolver refuses to answer with a first-key guess.
+        DateTimeOffset now = TestClock.CanonicalEpoch;
+        using FederationTestRingNode node = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/kid-absent"));
+
+        MintedStatement minted = await FederationTestRing.MintEntityConfigurationAsync(
+            node, issuedAt: now, expiresAt: now.AddHours(1),
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        //A header that carries alg and typ but omits kid entirely.
+        UnverifiedJwtHeader noKidHeader = new(new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [WellKnownJwkMemberNames.Alg] = "ES256",
+            [WellKnownJoseHeaderNames.Typ] = WellKnownFederationMediaTypes.EntityStatementJwt
+        });
+
+        EntityStatementValidationContext context = new()
+        {
+            Header = noKidHeader,
+            Statement = minted.Statement,
+            SignatureVerified = true,
+            Now = now,
+            ClockSkew = TimeSpan.FromMinutes(5),
+        };
+
+        ClaimIssueResult result = await EntityStatementValidator.Default().ValidateAsync(
+            context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim kid = result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.KidPresent.Code);
+        Assert.AreEqual(ClaimOutcome.Failure, kid.Outcome,
+            "A header without a kid must fail KidPresent — Entity Statement JWTs MUST carry a kid per §3.1.");
     }
 
 

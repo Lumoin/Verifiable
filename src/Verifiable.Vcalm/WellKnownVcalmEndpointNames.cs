@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.Vcalm;
@@ -13,7 +12,6 @@ namespace Verifiable.Vcalm;
 /// UTF-8-first per the library convention: each <c>XUtf8</c> span sits beside an interned string
 /// <c>X</c> whose value is the span's UTF-8 decoding, swept by the well-known-constant guard.
 /// </remarks>
-[DebuggerDisplay("WellKnownVcalmEndpointNames")]
 public static class WellKnownVcalmEndpointNames
 {
     //VCALM 1.0 §3.3 verifier family

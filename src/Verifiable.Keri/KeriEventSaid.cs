@@ -1,3 +1,4 @@
+using Lumoin.Base;
 using System;
 using System.Buffers;
 using Verifiable.Cesr;
@@ -48,7 +49,7 @@ public static class KeriEventSaid
     /// <param name="cancellationToken">Cancels an in-flight digest on a hardware-async backend (TPM2_Hash, KMS).</param>
     /// <returns>The CESR-encoded SAID recomputed over the serialization.</returns>
     /// <exception cref="CesrFormatException">The claimed SAID's leading code is not a supported digest code.</exception>
-    public static ValueTask<string> RecomputeAsync(ReadOnlyMemory<byte> serialization, string said, ComputeDigestDelegate computeDigest, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static ValueTask<string> RecomputeAsync(ReadOnlyMemory<byte> serialization, string said, ComputeDigestDelegate computeDigest, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         return CesrSaid.RecomputeEmbeddedAsync(serialization, said, computeDigest, pool, cancellationToken);
     }
@@ -65,7 +66,7 @@ public static class KeriEventSaid
     /// <param name="cancellationToken">Cancels an in-flight digest on a hardware-async backend (TPM2_Hash, KMS).</param>
     /// <returns><see langword="true"/> when the recomputed SAID equals the claimed SAID.</returns>
     /// <exception cref="CesrFormatException">The claimed SAID's leading code is not a supported digest code.</exception>
-    public static ValueTask<bool> VerifyAsync(ReadOnlyMemory<byte> serialization, string said, ComputeDigestDelegate computeDigest, MemoryPool<byte> pool, CancellationToken cancellationToken = default)
+    public static ValueTask<bool> VerifyAsync(ReadOnlyMemory<byte> serialization, string said, ComputeDigestDelegate computeDigest, BaseMemoryPool pool, CancellationToken cancellationToken = default)
     {
         return CesrSaid.VerifyEmbeddedAsync(serialization, said, computeDigest, pool, cancellationToken);
     }

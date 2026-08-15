@@ -61,7 +61,7 @@ internal class HwTpmCreateLoadTests
     [TestMethod]
     public async Task CreateChildThenLoadRoundTrips()
     {
-        MemoryPool<byte> pool = BaseMemoryPool.Shared;
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);
         _ = registry.Register(TpmCcConstants.TPM_CC_Create, TpmResponseCodec.CreateObject);
@@ -116,7 +116,7 @@ internal class HwTpmCreateLoadTests
     //Loads a freshly-wrapped child from its CreateResponse and returns the loaded object Name, then flushes
     //the transient handle. The private blob is copied and the public area is reserialized, mirroring the
     //persist-then-reload disk round-trip the deployment model performs.
-    private async Task<byte[]> LoadAndFlushAsync(CreateResponse created, uint parentHandle, MemoryPool<byte> pool, TpmResponseRegistry registry)
+    private async Task<byte[]> LoadAndFlushAsync(CreateResponse created, uint parentHandle, BaseMemoryPool pool, TpmResponseRegistry registry)
     {
         using Tpm2bPrivate inPrivate = Tpm2bPrivate.Create(created.OutPrivate.Span, pool);
         using Tpm2bPublic inPublic = ClonePublic(created.OutPublic, pool);
@@ -139,7 +139,7 @@ internal class HwTpmCreateLoadTests
         return name;
     }
 
-    private async Task FlushAsync(uint handle, MemoryPool<byte> pool, TpmResponseRegistry registry)
+    private async Task FlushAsync(uint handle, BaseMemoryPool pool, TpmResponseRegistry registry)
     {
         var flushInput = FlushContextInput.ForHandle(handle);
         TpmResult<FlushContextResponse> flushResult = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
@@ -149,7 +149,7 @@ internal class HwTpmCreateLoadTests
     }
 
     //Reserializes a public area into a fresh Tpm2bPublic, the round-trip a disk-persisted public blob makes.
-    private static Tpm2bPublic ClonePublic(Tpm2bPublic source, MemoryPool<byte> pool)
+    private static Tpm2bPublic ClonePublic(Tpm2bPublic source, BaseMemoryPool pool)
     {
         int size = source.GetSerializedSize();
         using IMemoryOwner<byte> owner = pool.Rent(size);

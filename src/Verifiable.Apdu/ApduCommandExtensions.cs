@@ -44,7 +44,7 @@ public static class ApduCommandExtensions
         /// <returns>The parsed SELECT response, a card error, or a transport error.</returns>
         public ValueTask<ApduResult<SelectResponse>> SelectAsync(
             ReadOnlySpan<byte> aid,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(device);
@@ -70,7 +70,7 @@ public static class ApduCommandExtensions
         public ValueTask<ApduResult<ReadBinaryResponse>> ReadBinaryAsync(
             int offset,
             int length,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(device);
@@ -98,7 +98,7 @@ public static class ApduCommandExtensions
         /// <returns>The parsed GET CHALLENGE response, a card error, or a transport error.</returns>
         public ValueTask<ApduResult<GetChallengeResponse>> GetChallengeAsync(
             int length,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(device);
@@ -124,7 +124,7 @@ public static class ApduCommandExtensions
         public ValueTask<ApduResult<ExternalAuthenticateResponse>> ExternalAuthenticateAsync(
             ReadOnlySpan<byte> data,
             int expectedResponseLength,
-            MemoryPool<byte> pool,
+            BaseMemoryPool pool,
             CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(device);
@@ -147,7 +147,7 @@ public static class ApduCommandExtensions
         ApduDevice device,
         CommandApdu command,
         ApduResponseParser<TResponse> parser,
-        MemoryPool<byte> pool,
+        BaseMemoryPool pool,
         CancellationToken cancellationToken) where TResponse: IApduWireType
     {
         using(command)

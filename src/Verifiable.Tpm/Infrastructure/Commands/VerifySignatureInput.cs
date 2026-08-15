@@ -75,7 +75,7 @@ public sealed class VerifySignatureInput: ITpmCommandInput, IDisposable
         ReadOnlySpan<byte> digest,
         ReadOnlySpan<byte> signature,
         TpmAlgIdConstants schemeHashAlg,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return Create(keyHandle, digest, signature, TpmAlgIdConstants.TPM_ALG_ECDSA, schemeHashAlg, pool);
     }
@@ -94,7 +94,7 @@ public sealed class VerifySignatureInput: ITpmCommandInput, IDisposable
         ReadOnlySpan<byte> digest,
         ReadOnlySpan<byte> signature,
         TpmAlgIdConstants schemeHashAlg,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return Create(keyHandle, digest, signature, TpmAlgIdConstants.TPM_ALG_RSASSA, schemeHashAlg, pool);
     }
@@ -113,7 +113,7 @@ public sealed class VerifySignatureInput: ITpmCommandInput, IDisposable
         ReadOnlySpan<byte> digest,
         ReadOnlySpan<byte> signature,
         TpmAlgIdConstants schemeHashAlg,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         return Create(keyHandle, digest, signature, TpmAlgIdConstants.TPM_ALG_RSAPSS, schemeHashAlg, pool);
     }
@@ -134,7 +134,7 @@ public sealed class VerifySignatureInput: ITpmCommandInput, IDisposable
         ReadOnlySpan<byte> signature,
         TpmAlgIdConstants signatureScheme,
         TpmAlgIdConstants schemeHashAlg,
-        MemoryPool<byte> pool)
+        BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
 

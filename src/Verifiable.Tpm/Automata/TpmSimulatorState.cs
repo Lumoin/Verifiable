@@ -13,7 +13,7 @@ namespace Verifiable.Tpm.Automata;
 /// <remarks>
 /// <para>
 /// This is the single "fat" operational record carried by one <c>PushdownAutomaton</c> per simulated
-/// TPM (design decision D2: one automaton, one run identifier, one trace stream). The lifecycle
+/// TPM (one automaton, one run identifier, one trace stream). The lifecycle
 /// skeleton keeps persistent and volatile data flat; the persistent/volatile partition (NV blobs,
 /// sessions, transient objects) is introduced when those features are modelled.
 /// </para>

@@ -37,7 +37,6 @@ namespace Verifiable.Vcalm;
 /// validator uses.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("VcalmVerificationService")]
 public static class VcalmVerificationService
 {
     /// <summary>
@@ -475,7 +474,7 @@ public static class VcalmVerificationService
     //conversion. Returns null when the verificationMethod is missing, unresolvable, or carries a key
     //format the converter cannot read — none of which can anchor the issuer signature.
     private static PublicKeyMemory? TryExtractIssuerPublicKey(
-        DidDocument document, DataIntegrityProof? proof, MemoryPool<byte> memoryPool)
+        DidDocument document, DataIntegrityProof? proof, BaseMemoryPool memoryPool)
     {
         string? verificationMethodId = proof?.VerificationMethod?.Id;
         if(string.IsNullOrEmpty(verificationMethodId))

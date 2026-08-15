@@ -130,7 +130,7 @@ internal sealed class BrainpoolSignVerifyTests
 
     private static async Task AssertBcRoundTrip(
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial,
-        Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, System.Buffers.MemoryPool<byte>, System.Collections.Frozen.FrozenDictionary<string, object>?, CancellationToken, ValueTask<(Signature Signature, CryptoEvent? Event)>> signAsync,
+        Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, BaseMemoryPool, System.Collections.Frozen.FrozenDictionary<string, object>?, CancellationToken, ValueTask<(Signature Signature, CryptoEvent? Event)>> signAsync,
         Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, System.Collections.Frozen.FrozenDictionary<string, object>?, CancellationToken, ValueTask<(bool IsVerified, CryptoEvent? Event)>> verifyAsync,
         int expectedSignatureLength,
         CancellationToken cancellationToken)

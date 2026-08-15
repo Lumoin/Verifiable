@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using Verifiable.Cryptography.Text;
 
@@ -34,7 +33,6 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// direct (non-JAR) authorization request as form or query parameters.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("Oid4VpAuthorizationRequestParameterNames")]
 public static class Oid4VpAuthorizationRequestParameterNames
 {
     //The draft-era standalone client_id_scheme request parameter was REMOVED in

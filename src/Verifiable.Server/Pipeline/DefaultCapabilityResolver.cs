@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core;
 
 namespace Verifiable.Server.Pipeline;
@@ -9,7 +8,6 @@ namespace Verifiable.Server.Pipeline;
 /// registration capability is active for every request unless the application
 /// supplies a custom delegate that attenuates them.
 /// </summary>
-[DebuggerDisplay("DefaultCapabilityResolver")]
 public static class DefaultCapabilityResolver
 {
     /// <summary>

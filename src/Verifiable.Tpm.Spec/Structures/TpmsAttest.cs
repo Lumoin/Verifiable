@@ -165,7 +165,7 @@ public sealed class TpmsAttest: ITpmWireType, IDisposable
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed attestation structure.</returns>
-    public static TpmsAttest Parse(ref TpmReader reader, MemoryPool<byte> pool)
+    public static TpmsAttest Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         uint magic = reader.ReadUInt32();

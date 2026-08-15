@@ -100,7 +100,7 @@ internal sealed class AgenticFlowCapstoneTests
     private static readonly string Step3ScopeRequest =
         $"{WellKnownScopes.OpenId} {Rs1RequiredScope} {Rs2RequiredScope}";
 
-    private static MemoryPool<byte> Pool => BaseMemoryPool.Shared;
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     /// <summary>Serialises a JWT protected header to UTF-8 JSON bytes for client-side signing.</summary>
     private static readonly JwtHeaderSerializer CapstoneHeaderSerializer =
@@ -119,7 +119,7 @@ internal sealed class AgenticFlowCapstoneTests
     /// assertions → CIMD auth-code + PKCE with the RFC 9207 <c>iss</c> byte-exact and a REAL OIDC
     /// <c>id_token</c> → RS1 200 → <c>OAuthClient.IdJag.MintAsync</c> with that id_token as the
     /// subject token → cross-trust-domain <c>RedeemAsync</c> at AS2 (CIMD-materialized,
-    /// <c>private_key_jwt</c>-authenticated) → RS2 200 — finishing with the D7 span-tree
+    /// <c>private_key_jwt</c>-authenticated) → RS2 200 — finishing with the span-tree
     /// assertions over the six hosts.
     /// </summary>
     [TestMethod]
@@ -479,7 +479,7 @@ internal sealed class AgenticFlowCapstoneTests
 
 
     /// <summary>
-    /// D2 on the redeem leg: the client's CIMD document declares
+    /// On the redeem leg: the client's CIMD document declares
     /// <c>token_endpoint_auth_method: private_key_jwt</c>, so a redeem carrying NO client
     /// credentials at all is refused 401 <c>invalid_client</c> — CIMD-049's "any communication
     /// with the authorization server MUST include client authentication of the registered type",
@@ -1105,7 +1105,7 @@ internal sealed class AgenticFlowCapstoneTests
             As1Client = as1Client;
             //The CIMD document declares private_key_jwt (see documentJson above); carrying the
             //matching AuthenticationMethod + AuthenticationKeyMaterial on the client-side
-            //registration lets the real AuthCodeFlowHandlers.HandleTokenAsync (D6) attach the
+            //registration lets the real AuthCodeFlowHandlers.HandleTokenAsync attach the
             //client_assertion itself, rather than DriveStep3Async hand-signing one.
             As1Registration = as1Registration with
             {
@@ -1200,7 +1200,7 @@ internal sealed class AgenticFlowCapstoneTests
         /// Drives scenario step 3 entirely through the real client surface: PAR → authorize →
         /// callback → token exchange via the shared <see cref="AuthCodeFlowDriver"/>, whose token
         /// leg runs the production <see cref="AuthCodeFlowHandlers.HandleTokenAsync(IReadOnlyDictionary{string, string}, OAuthClientInfrastructure, ClientRegistration, ExchangeContext, ClientAssertionOptions?, System.Threading.CancellationToken)"/>
-        /// path (D6) — the CIMD document declares <c>private_key_jwt</c>, so
+        /// path — the CIMD document declares <c>private_key_jwt</c>, so
         /// <see cref="As1Registration"/> carries a matching <see cref="ClientAssertionOptions"/>
         /// and the library itself signs and attaches the <c>client_assertion</c>; AS1's
         /// fail-closed declared-client-auth invariant refuses an unauthenticated token request.

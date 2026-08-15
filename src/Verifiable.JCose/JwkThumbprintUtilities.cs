@@ -15,7 +15,7 @@ public static class JwkThumbprintUtilities
     /// <summary>
     /// Default memory pool for exact length (and potentially sensitive) memory operations.
     /// </summary>
-    private static MemoryPool<byte> DefaultPool { get; } = BaseMemoryPool.Shared;
+    private static BaseMemoryPool DefaultPool { get; } = BaseMemoryPool.Shared;
 
     /// <summary>
     /// SHA-256 hash size in bytes as defined by <see href="https://tools.ietf.org/html/rfc6234">RFC 6234</see>
@@ -143,7 +143,7 @@ public static class JwkThumbprintUtilities
     /// <returns>An IMemoryOwner containing the SHA-256 hash of the canonical JWK representation.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any parameter is null.</exception>
     /// <exception cref="InvalidOperationException">Thrown when hash computation fails.</exception>
-    public static IMemoryOwner<byte> ComputeECThumbprint(MemoryPool<byte> pool, string crv, string kty, string x, string y)
+    public static IMemoryOwner<byte> ComputeECThumbprint(BaseMemoryPool pool, string crv, string kty, string x, string y)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(crv);
@@ -189,7 +189,7 @@ public static class JwkThumbprintUtilities
     /// <returns>An IMemoryOwner containing the SHA-256 hash of the canonical JWK representation.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any parameter is null.</exception>
     /// <exception cref="InvalidOperationException">Thrown when hash computation fails.</exception>
-    public static IMemoryOwner<byte> ComputeEcdhThumbprint(MemoryPool<byte> pool, string crv, string kty, string x)
+    public static IMemoryOwner<byte> ComputeEcdhThumbprint(BaseMemoryPool pool, string crv, string kty, string x)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(crv);
@@ -231,7 +231,7 @@ public static class JwkThumbprintUtilities
     /// <returns>An IMemoryOwner containing the SHA-256 hash of the canonical JWK representation.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any parameter is null.</exception>
     /// <exception cref="InvalidOperationException">Thrown when hash computation fails.</exception>
-    public static IMemoryOwner<byte> ComputeEdDsaThumbprint(MemoryPool<byte> pool, string crv, string kty, string x)
+    public static IMemoryOwner<byte> ComputeEdDsaThumbprint(BaseMemoryPool pool, string crv, string kty, string x)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(crv);
@@ -273,7 +273,7 @@ public static class JwkThumbprintUtilities
     /// <returns>An IMemoryOwner containing the SHA-256 hash of the canonical JWK representation.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any parameter is null.</exception>
     /// <exception cref="InvalidOperationException">Thrown when hash computation fails.</exception>
-    public static IMemoryOwner<byte> ComputeRsaThumbprint(MemoryPool<byte> pool, string e, string kty, string n)
+    public static IMemoryOwner<byte> ComputeRsaThumbprint(BaseMemoryPool pool, string e, string kty, string n)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(e);
@@ -314,7 +314,7 @@ public static class JwkThumbprintUtilities
     /// <returns>An IMemoryOwner containing the SHA-256 hash of the canonical JWK representation.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any parameter is null.</exception>
     /// <exception cref="InvalidOperationException">Thrown when hash computation fails.</exception>
-    public static IMemoryOwner<byte> ComputeOctThumbprint(MemoryPool<byte> pool, string k, string kty)
+    public static IMemoryOwner<byte> ComputeOctThumbprint(BaseMemoryPool pool, string k, string kty)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(k);
@@ -351,7 +351,7 @@ public static class JwkThumbprintUtilities
     /// <returns>An IMemoryOwner containing the SHA-256 hash of the canonical JWK representation.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any parameter is null.</exception>
     /// <exception cref="InvalidOperationException">Thrown when hash computation fails.</exception>
-    public static IMemoryOwner<byte> ComputeMlDsaThumbprint(MemoryPool<byte> pool, string alg, string kty, string x)
+    public static IMemoryOwner<byte> ComputeMlDsaThumbprint(BaseMemoryPool pool, string alg, string kty, string x)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(alg);
@@ -392,7 +392,7 @@ public static class JwkThumbprintUtilities
     /// <returns>An IMemoryOwner containing the SHA-256 hash of the canonical JWK representation.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any parameter is null.</exception>
     /// <exception cref="InvalidOperationException">Thrown when hash computation fails.</exception>
-    public static IMemoryOwner<byte> ComputeMlKemThumbprint(MemoryPool<byte> pool, string alg, string kty, string x)
+    public static IMemoryOwner<byte> ComputeMlKemThumbprint(BaseMemoryPool pool, string alg, string kty, string x)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(alg);
@@ -433,7 +433,7 @@ public static class JwkThumbprintUtilities
     /// <returns>An IMemoryOwner containing the SHA-256 hash of the canonical JWK representation.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any parameter is null.</exception>
     /// <exception cref="InvalidOperationException">Thrown when hash computation fails.</exception>
-    public static IMemoryOwner<byte> ComputeSlhDsaThumbprint(MemoryPool<byte> pool, string alg, string kty, string x)
+    public static IMemoryOwner<byte> ComputeSlhDsaThumbprint(BaseMemoryPool pool, string alg, string kty, string x)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(alg);
@@ -473,7 +473,7 @@ public static class JwkThumbprintUtilities
     /// <exception cref="ArgumentNullException">Thrown when pool or jwkParameters is null.</exception>
     /// <exception cref="ArgumentException">Thrown when jwkParameters is empty.</exception>
     /// <exception cref="InvalidOperationException">Thrown when hash computation fails.</exception>
-    public static IMemoryOwner<byte> ComputeGenericThumbprint(MemoryPool<byte> pool, IDictionary<string, string> jwkParameters)
+    public static IMemoryOwner<byte> ComputeGenericThumbprint(BaseMemoryPool pool, IDictionary<string, string> jwkParameters)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(jwkParameters);
@@ -522,7 +522,7 @@ public static class JwkThumbprintUtilities
     /// <see cref="DigestValue"/> is disposed before returning; the 32-byte copy is
     /// negligible.
     /// </remarks>
-    private static IMemoryOwner<byte> ComputeSha256Hash(MemoryPool<byte> pool, ReadOnlySpan<byte> input)
+    private static IMemoryOwner<byte> ComputeSha256Hash(BaseMemoryPool pool, ReadOnlySpan<byte> input)
     {
         //A JWK thumbprint (RFC 7638) is a SHA-256 over the canonical JSON of PUBLIC key members — sync by nature,
         //with no hardware-async backend. It hashes through the registered synchronous HashFunctionDelegate seam

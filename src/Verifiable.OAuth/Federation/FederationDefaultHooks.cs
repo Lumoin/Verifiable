@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Verifiable.Core.Assessment;
 
 namespace Verifiable.OAuth.Federation;
@@ -32,7 +31,6 @@ namespace Verifiable.OAuth.Federation;
 /// defaults implement the spec's algorithms in full.
 /// </para>
 /// </remarks>
-[DebuggerDisplay("FederationDefaultHooks")]
 public static class FederationDefaultHooks
 {
     /// <summary>
