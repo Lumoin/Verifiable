@@ -191,11 +191,11 @@
       },
       "ModelContextProtocol": {
         "type": "Direct",
-        "requested": "[2.1.0, )",
-        "resolved": "2.1.0",
-        "contentHash": "Oa4rU7EL9C2qyFjQj1dx+ysGMzfWDRpM8RRaUMmLGs5vPvfJ9xyz4ZtyF4ychY+Nx1b/auGCqIQLqSz/IpPkKA==",
+        "requested": "[2.2.0, )",
+        "resolved": "2.2.0",
+        "contentHash": "4Pb9u02Nwsp0poueDsqNdyGRojFxOYpljB7zDBsq+aHL+Afou3OgxlBc3GWFVnsRMRJrUtWqDh3s6k2JgPzmrQ==",
         "dependencies": {
-          "ModelContextProtocol.Core": "[2.1.0]"
+          "ModelContextProtocol.Core": "[2.2.0]"
         }
       },
       "MSTest.TestAdapter": {
@@ -529,8 +529,8 @@
       },
       "ModelContextProtocol.Core": {
         "type": "Transitive",
-        "resolved": "2.1.0",
-        "contentHash": "cU/urrhRxE4/iSyBIJI7QOaFqSP1FOEnwEHsct9n6t6/XluCAFD9iqnrPkBAsEYr+f/G4tVQ21U+6wN/6fQvOg==",
+        "resolved": "2.2.0",
+        "contentHash": "FeBfXU6T8k+jw4afg4sfxdEX2rL/e5oKOk9ROOGztu9k47+7Bz08sdaToYt2XvMY1opNbwxYQOFMj6wH9TInhA==",
         "dependencies": {
           "Microsoft.Extensions.AI.Abstractions": "10.8.3"
         }
@@ -599,7 +599,7 @@
       "verifiable": {
         "type": "Project",
         "dependencies": {
-          "ModelContextProtocol": "[2.1.0, )",
+          "ModelContextProtocol": "[2.2.0, )",
           "SimpleBase": "[5.6.4, )",
           "System.CommandLine": "[2.0.11, )",
           "Verifiable.Cbor": "[0.0.0, )",
