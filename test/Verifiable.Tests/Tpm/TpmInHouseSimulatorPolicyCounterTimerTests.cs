@@ -60,7 +60,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
     public async Task PolicyCounterTimerFlowSealsAndUnsealsGatedOnResetCount()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -156,7 +156,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
     public async Task PolicyCounterTimerRejectsAFalseTimeComparison()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
         //An 8-octet Time value of all-0xFF octets (~584 million years in milliseconds) can never equal the live
@@ -194,7 +194,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
     public async Task PolicyCounterTimerAcceptsAStraddlingOffsetWithNoAlignmentRule()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
         //offset 19, size 6 spans: resetCount's last octet (19), all four octets of restartCount (20-23), and Safe
@@ -248,7 +248,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
     public async Task PolicyCounterTimerTrialSessionPredictsTheSameDigestRegardlessOfTheOperand()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
         //An operand that can never satisfy a real comparison against the live Time field, fed to a trial session
@@ -301,7 +301,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
     public async Task PolicyCounterTimerRejectsAnOffsetBeyondTheStructureEvenOnATrialSession()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         byte[] operandB = [0x00];
 
@@ -335,7 +335,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
     public async Task PolicyCounterTimerRejectsAWindowOverflowingTheStructureEvenOnATrialSession()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
         //offset 24 (Safe, the last legal octet) plus a 4-octet operand overflows the 25-octet structure by 3.
@@ -373,7 +373,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
     public async Task PolicyCounterTimerWithAnUndefinedOperationReturnsValueOnARealSession()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         byte[] operandB = [0x00, 0x00, 0x00, 0x00];
         const TpmEoConstants UndefinedOperation = (TpmEoConstants)0x0100;
@@ -409,7 +409,7 @@ internal sealed class TpmInHouseSimulatorPolicyCounterTimerTests
     public async Task PolicyCounterTimerWithAnUndefinedOperationReturnsValueOnATrialSessionToo()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         byte[] operandB = [0x00, 0x00, 0x00, 0x00];
         const TpmEoConstants UndefinedOperation = (TpmEoConstants)0x0100;

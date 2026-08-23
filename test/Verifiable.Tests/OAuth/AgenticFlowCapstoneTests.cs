@@ -343,6 +343,69 @@ internal sealed class AgenticFlowCapstoneTests
 
 
     /// <summary>
+    /// Evidence attribution across the whole agentic chain. The client is a principal distinct from
+    /// the user the chain runs for, so redeeming the ID-JAG at AS2 is a delegation step: the issued
+    /// access token records it in the
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see> <c>act</c>
+    /// claim, whose <c>sub</c> is the client's Client Identifier URL, while the token's own
+    /// <c>sub</c> stays the user — <see href="https://www.rfc-editor.org/rfc/rfc8693#section-1.1">
+    /// §1.1</see> delegation ("principal A still has its own identity separate from B ... any
+    /// actions taken are being taken by A representing B"), never impersonation. RS2 then sees both
+    /// parties on the wire, so the resource can attribute the request to the acting client while
+    /// authorizing the subject.
+    /// </summary>
+    [TestMethod]
+    public async Task DelegationIsRecordedOnTheRedeemedTokenAndVisibleAtTheResource()
+    {
+        await using CapstoneTopology topology = await CapstoneTopology.BuildAsync(TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        CapstoneStep3Result step3 = await topology.DriveStep3Async(Step3ScopeRequest, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        string jag = await topology.MintJagAsync(step3.IdToken, Rs2RequiredScope, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        //The JAG itself records no actor: nothing had acted for the user when AS1 minted it.
+        using(JsonDocument jagClaims = DecodePayload(jag))
+        {
+            Assert.IsFalse(jagClaims.RootElement.TryGetProperty(WellKnownJwtClaimNames.Act, out _),
+                "The minted grant carries no act claim — the delegation happens at the redemption boundary.");
+        }
+
+        var redeemResult = await topology.As2Client.IdJag.RedeemAsync(
+            topology.As2Registration, topology.BuildRedeemOptions(jag), TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        Assert.IsTrue(redeemResult.IsSuccess, redeemResult.Error?.Support.Summary);
+
+        string as2AccessToken = redeemResult.Value.AccessToken;
+        using(JsonDocument as2Claims = DecodePayload(as2AccessToken))
+        {
+            JsonElement claims = as2Claims.RootElement;
+            Assert.AreEqual(SubjectId, claims.GetProperty(WellKnownJwtClaimNames.Sub).GetString(),
+                "RFC 8693 §1.1: the delegated token's subject is still the user, not the acting client.");
+
+            JsonElement act = claims.GetProperty(WellKnownJwtClaimNames.Act);
+            Assert.AreEqual(JsonValueKind.Object, act.ValueKind, "RFC 8693 §4.1: act is a JSON object.");
+            Assert.AreEqual(topology.ClientIdentifierUrl.OriginalString,
+                act.GetProperty(WellKnownJwtClaimNames.Sub).GetString(),
+                "The acting party is the client that redeemed the grant at AS2.");
+            Assert.IsFalse(act.TryGetProperty(WellKnownJwtClaimNames.Act, out _),
+                "Exactly one delegation step occurred, so the chain has exactly one link.");
+        }
+
+        //RS2 validates the token through JwsAccessTokenValidator and echoes what it read: both the
+        //subject it authorizes and the actor it attributes the call to.
+        using JsonDocument rs2Claims = await GetProtectedResourceAsync(
+            topology.Rs2Http, topology.Rs2.HttpBaseAddress!, as2AccessToken, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        Assert.AreEqual(SubjectId, rs2Claims.RootElement.GetProperty(WellKnownJwtClaimNames.Sub).GetString());
+        Assert.AreEqual(topology.ClientIdentifierUrl.OriginalString,
+            rs2Claims.RootElement.GetProperty(WellKnownJwtClaimNames.Act)
+                .GetProperty(WellKnownJwtClaimNames.Sub).GetString(),
+            "RFC 8693 §4.1: the resource sees the current actor — the only party an access control decision may consider.");
+    }
+
+
+    /// <summary>
     /// Cross-domain confusion, first direction: the AS1 access token presented at RS2 is refused
     /// 401 with an RFC 6750 §3 <c>invalid_token</c> challenge — RS2 trusts only AS2's issuer.
     /// </summary>
@@ -1601,6 +1664,9 @@ internal sealed class AgenticFlowCapstoneTests
                 return null;
             }
 
+            //RFC 8693 §4.1/§4.4: the grant's delegation chain and its authorized-actor statement
+            //cross this seam with the rest of the grant, so AS2 composes the issued token's own act
+            //from what AS1 recorded rather than from nothing.
             return new JwtBearerGrant
             {
                 Subject = result.Subject!,
@@ -1610,7 +1676,9 @@ internal sealed class AgenticFlowCapstoneTests
                 RequiredKeyThumbprint = result.ConfirmationKeyThumbprint,
                 Issuer = result.Issuer,
                 Jti = result.Jti,
-                Expiration = result.Expiration
+                Expiration = result.Expiration,
+                Act = result.Act,
+                MayAct = result.MayAct
             };
         }
 

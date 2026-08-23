@@ -19,10 +19,10 @@ namespace Verifiable.Tpm.Infrastructure.Sessions;
 /// This represents the common case: an unbound, unsalted policy session whose accumulated policyDigest matches
 /// the authorized object's authPolicy (for example after <c>TPM2_PolicyPCR</c>), with neither
 /// <c>TPM2_PolicyAuthValue</c> nor <c>TPM2_PolicyPassword</c> invoked. Such a session has an empty HMAC key
-/// (no session key, and the entity authValue is not folded in), so per TPM 2.0 Library Part 1, Section 19.6 the
+/// (no session key, and the entity authValue is not folded in), so per TPM 2.0 Library Part 1, Section 17.6.15 the
 /// authorization HMAC is an <b>empty buffer</b>: when both the HMAC key and the supplied auth value are
 /// zero-length the TPM accepts the authorization without an HMAC, and the satisfied policy is what authorizes
-/// the entity (confirmed against ms-tpm-20-ref <c>ComputeCommandHMAC</c>, which returns a zero-length HMAC in
+/// the entity (confirmed against TPM 2.0 Library Part 4's <c>ComputeCommandHMAC</c>, which returns a zero-length HMAC in
 /// that case and does not consult the session nonces).
 /// </para>
 /// <para>
@@ -80,6 +80,16 @@ public sealed class TpmPolicySession: TpmSessionBase, IDisposable
 
     /// <inheritdoc/>
     public override TpmAlgIdConstants HashAlgorithm => SessionAlg;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// This session has no key, so the TPM returns an empty response HMAC for it and
+    /// <see cref="VerifyAndUpdateAsync"/> has nothing to check (TPM 2.0 Library Part 1, Section 17.6.15: "if hmac
+    /// was an Empty Buffer in the command, it will be an Empty Buffer in the response"). Response
+    /// integrity for a confidential parameter comes from the paired encrypt (HMAC) session, which carries the
+    /// requirement itself.
+    /// </remarks>
+    public override bool VerifiesResponseAuthorization => false;
 
     /// <inheritdoc/>
     public override void RollNonceCaller(BaseMemoryPool pool)

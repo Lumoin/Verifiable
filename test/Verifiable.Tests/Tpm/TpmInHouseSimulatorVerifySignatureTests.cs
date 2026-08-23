@@ -68,7 +68,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
         //verified ticket reproducible and lets this test recompute it.
         byte[] seed = Convert.FromHexString("00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF");
 
-        var simulator = new TpmSimulator("tpm-in-house-verify-signature-seed", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), seed: seed);
+        using var simulator = new TpmSimulator("tpm-in-house-verify-signature-seed", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), seed: seed);
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
@@ -95,7 +95,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
 
         using VerifySignatureResponse verified = verifyResult.Value;
         Assert.AreEqual(TpmStConstants.TPM_ST_VERIFIED, verified.Validation.Tag, "The ticket tag must be TPM_ST_VERIFIED.");
-        Assert.AreEqual(TpmRh.TPM_RH_OWNER, verified.Validation.Hierarchy, "The ticket hierarchy must be the signing key's own hierarchy.");
+        Assert.AreEqual(TpmiRhHierarchy.Owner, verified.Validation.Hierarchy, "The ticket hierarchy must be the signing key's own hierarchy.");
         Assert.IsFalse(verified.Validation.IsNull, "A successful verification must return a real ticket, not a NULL ticket.");
         Assert.HasCount(P256ComponentSize, verified.Validation.Digest, "The verified ticket digest is a SHA-256 HMAC.");
 
@@ -121,7 +121,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
     public async Task RsaVerifySignatureAcceptsRsaSsaAndRsaPssSignatures()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -149,7 +149,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
     public async Task VerifySignatureWithCorruptedSignatureReturnsSignature()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -183,7 +183,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
     public async Task VerifySignatureWithSchemeIncompatibleWithKeyTypeReturnsScheme()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -208,7 +208,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
     public async Task VerifySignatureWithUnknownKeyHandleReturnsHandle()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -260,7 +260,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
 
         using VerifySignatureResponse verified = verifyResult.Value;
         Assert.AreEqual(TpmStConstants.TPM_ST_VERIFIED, verified.Validation.Tag, "The ticket tag must be TPM_ST_VERIFIED.");
-        Assert.AreEqual(TpmRh.TPM_RH_OWNER, verified.Validation.Hierarchy, "The ticket hierarchy must be the signing key's own hierarchy.");
+        Assert.AreEqual(TpmiRhHierarchy.Owner, verified.Validation.Hierarchy, "The ticket hierarchy must be the signing key's own hierarchy.");
         Assert.IsFalse(verified.Validation.IsNull, "A successful verification must return a real ticket, not a NULL ticket.");
         Assert.HasCount(P256ComponentSize, verified.Validation.Digest, "The verified ticket digest is a SHA-256 HMAC.");
     }

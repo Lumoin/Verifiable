@@ -264,8 +264,8 @@ public static class TpmDeviceExtensions
             UnsealInput unsealInput = UnsealInput.ForItem(loaded.ObjectHandle);
 
             //The policy session's HashAlgorithm is not TPM_ALG_NULL, so the executor computes a cpHash for it
-            //regardless of the session carrying no HMAC key of its own (Part 1, clause 19.6) — the loaded item's
-            //Name must therefore be supplied (Part 1, equation 15), exactly as the PCR-seal flow tests do.
+            //regardless of the session carrying no HMAC key of its own (Part 1, clause 17.6) — the loaded item's
+            //Name must therefore be supplied (Part 1, clause 16.7, equation 15), exactly as the PCR-seal flow tests do.
             ReadOnlyMemory<byte>[] handleNames = [loaded.Name.Span.ToArray()];
 
             return await TpmCommandExecutor.ExecuteAsync<UnsealResponse>(

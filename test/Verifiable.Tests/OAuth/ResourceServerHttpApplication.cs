@@ -518,6 +518,43 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
             };
         }
 
+        //RFC 8693 §4.1: the resource echoes the delegation it was shown — the current actor, which is
+        //the only party §4.1 lets an access control decision consider, plus the prior actors as the
+        //informational history trail this resource attributes the request through.
+        if(claims.Act is { } actor)
+        {
+            Dictionary<string, object> actorBody = new(StringComparer.Ordinal)
+            {
+                ["sub"] = actor.Subject
+            };
+            if(actor.Issuer is { } actorIssuer)
+            {
+                actorBody["iss"] = actorIssuer;
+            }
+
+            if(actor.DelegationHistory.Count > 0)
+            {
+                List<object> priorActors = [];
+                foreach(PriorActor prior in actor.DelegationHistory)
+                {
+                    Dictionary<string, object> priorBody = new(StringComparer.Ordinal)
+                    {
+                        ["sub"] = prior.Subject
+                    };
+                    if(prior.Issuer is { } priorIssuer)
+                    {
+                        priorBody["iss"] = priorIssuer;
+                    }
+
+                    priorActors.Add(priorBody);
+                }
+
+                actorBody["prior"] = priorActors;
+            }
+
+            body["act"] = actorBody;
+        }
+
         byte[] json = JsonSerializer.SerializeToUtf8Bytes(body);
         context.Response.StatusCode = StatusCodes.Status200OK;
         context.Response.ContentType = "application/json";

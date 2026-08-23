@@ -324,7 +324,10 @@ internal sealed class TpmNvPinRetriesCustodyBinding
             return new CtapPinAttemptVerdict(IsMatch: false, RetriesRemaining: (int)PinLimit, IsBlocked: false, IsProvisioned: false);
         }
 
-        if(verifyResult.IsTpmError && verifyResult.ResponseCode == TpmRcConstants.TPM_RC_BAD_AUTH)
+        //VerifyPinAsync authorizes over an HMAC session by default, so a mismatch's TPM_RC_BAD_AUTH arrives
+        //session-index-encoded (TPM 2.0 Library Part 2, clause 6.6.2) rather than as the bare constant;
+        //BaseError strips that modifier back to the comparable base code.
+        if(verifyResult.IsTpmError && verifyResult.BaseError == TpmRcConstants.TPM_RC_BAD_AUTH)
         {
             TpmResult<TpmPinCounterParameters> readResult = await Tpm.ReadPinCountersAsync(OwnerAuth, PinIndexHandle, cancellationToken).ConfigureAwait(false);
             if(!readResult.IsSuccess)

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.DictionaryAttack;
+using Verifiable.Tpm.Extensions.Hierarchy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
@@ -63,7 +64,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
     public async Task NvReadBruteForceIncrementsFailedTriesAndLocksOutAtMaxTries()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -105,7 +106,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
     public async Task NvReadOnNoDaExemptIndexDoesNotIncrementFailedTries()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -147,7 +148,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
         const uint RecoveryTimeSeconds = 3u;
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(QuantumMs).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(QuantumMs).ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
         TpmResponseRegistry readClockRegistry = CreateReadClockRegistry();
@@ -190,7 +191,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
         const uint LockoutRecoverySeconds = 2u;
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(QuantumMs).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(QuantumMs).ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry readClockRegistry = CreateReadClockRegistry();
 
@@ -226,7 +227,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
     public async Task DictionaryAttackLockResetClearsFailedTriesAndReArmsAfterLockout()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -272,7 +273,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
         const uint NewLockoutRecoverySeconds = 200u;
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -307,7 +308,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
     public async Task DictionaryAttackParametersLoweringMaxTriesAtOrBelowCurrentCountLocksOutImmediately()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -347,7 +348,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
     public async Task DictionaryAttackParametersSettingMaxTriesToZeroLocksOutPermanentlyUntilMaxTriesIsRaisedAgain()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -400,7 +401,7 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
     public async Task GetCapabilityReflectsLiveFailedTriesMaxTriesAndLockoutState()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
         TpmResponseRegistry capabilityRegistry = CreateCapabilityRegistry();
@@ -440,6 +441,82 @@ internal sealed class TpmInHouseSimulatorDictionaryAttackTests
         Assert.HasCount(1, permanentList);
         var permanent = (TpmaPermanent)permanentList[0].Value;
         Assert.IsTrue(permanent.HasFlag(TpmaPermanent.IN_LOCKOUT), "TPM_PT_PERMANENT must report IN_LOCKOUT once failedTries reaches maxTries.");
+    }
+
+    /// <summary>
+    /// <c>TPM2_Clear()</c> is one of the two documented owner changes that reset the dictionary-attack failure
+    /// counter: "TPM2_Clear() will reset this counter to zero" (TPM 2.0 Library Part 1, clause 17.8.2), and it
+    /// empties <c>lockoutAuth</c> along with the other two hierarchy authorization values (Part 3, Section
+    /// 24.6.1). The counter reset is all clause 24.6.1's effect list and clause 17.8.2's sentence between them
+    /// state, so the administrator's CONFIGURED thresholds - <c>maxTries</c>, <c>recoveryTime</c>,
+    /// <c>lockoutRecovery</c> - are deliberately retained here rather than restored to manufacturer defaults; a
+    /// clear that reset them would silently widen or narrow the attack window an operator had chosen. The
+    /// emptied <c>lockoutAuth</c> must also be USABLE: a cleared TPM that arrived unable to administer its own
+    /// dictionary-attack state would need an owner it no longer has, which the closing legs pin in both
+    /// directions.
+    /// </summary>
+    [TestMethod]
+    public async Task ClearResetsFailedTriesAndLeavesAUsableEmptyLockoutAuthWhileTheConfiguredParametersSurvive()
+    {
+        const uint ConfiguredMaxTries = 5;
+        const uint ConfiguredRecoveryTimeSeconds = 111;
+        const uint ConfiguredLockoutRecoverySeconds = 222;
+
+        byte[] rotatedLockoutAuth = [0x5A, 0x6B, 0x7C, 0x8D];
+
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateNvRegistry();
+
+        TpmResult<DictionaryAttackParametersResponse> configureResult = await device.DictionaryAttackParametersAsync(
+            ReadOnlyMemory<byte>.Empty, ConfiguredMaxTries, ConfiguredRecoveryTimeSeconds, ConfiguredLockoutRecoverySeconds,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(configureResult.IsSuccess, $"Configuring the dictionary-attack parameters failed: '{configureResult.ResponseCode}'.");
+
+        TpmResult<HierarchyChangeAuthResponse> rotationResult = await device.ChangeHierarchyAuthWithPasswordAsync(
+            TpmRh.TPM_RH_LOCKOUT, ReadOnlyMemory<byte>.Empty, rotatedLockoutAuth, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(rotationResult.IsSuccess, $"Rotating lockoutAuth failed: '{rotationResult.ResponseCode}'.");
+
+        await DefineDaIndexAsync(device, pool, registry).ConfigureAwait(false);
+        _ = await ReadIndexAsync(device, pool, registry, WrongAuth).ConfigureAwait(false);
+        _ = await ReadIndexAsync(device, pool, registry, WrongAuth).ConfigureAwait(false);
+
+        TpmResult<TpmDictionaryAttackParameters> beforeClear = await device.GetDictionaryAttackParametersAsync(
+            pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(beforeClear.IsSuccess, $"GetDictionaryAttackParameters failed: '{beforeClear.ResponseCode}'.");
+        Assert.AreEqual(2u, beforeClear.Value.LockoutCounter, "Two counted failures must stand before the clear, or zeroing the counter would be unobservable.");
+
+        TpmResult<ClearResponse> clearResult = await device.ClearAsync(rotatedLockoutAuth, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(clearResult.IsSuccess, $"TPM2_Clear under the rotated lockoutAuth failed: '{clearResult.ResponseCode}'.");
+
+        TpmResult<TpmDictionaryAttackParameters> afterClear = await device.GetDictionaryAttackParametersAsync(
+            pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(afterClear.IsSuccess, $"GetDictionaryAttackParameters failed: '{afterClear.ResponseCode}'.");
+        Assert.AreEqual(0u, afterClear.Value.LockoutCounter, "A clear must reset failedTries to zero.");
+        Assert.IsFalse(afterClear.Value.IsLockedOut, "A cleared TPM must not arrive in Lockout mode.");
+        Assert.AreEqual(ConfiguredMaxTries, afterClear.Value.MaxAuthFail, "The configured maxTries must survive the owner change.");
+        Assert.AreEqual(
+            TimeSpan.FromSeconds(ConfiguredRecoveryTimeSeconds), afterClear.Value.LockoutInterval,
+            "The configured recoveryTime must survive the owner change.");
+        Assert.AreEqual(
+            TimeSpan.FromSeconds(ConfiguredLockoutRecoverySeconds), afterClear.Value.LockoutRecovery,
+            "The configured lockoutRecovery must survive the owner change.");
+
+        //lockoutAuth is the Empty Buffer AND enabled: the one lockoutAuth-authorized command that is carved out
+        //of Lockout mode entirely (clause 25.2) is the cleanest probe of both at once.
+        TpmResult<DictionaryAttackLockResetResponse> emptyValueWorks = await device.DictionaryAttackLockResetAsync(
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(
+            emptyValueWorks.IsSuccess,
+            $"After a clear the Empty Buffer must authorize as lockoutAuth and its use must be enabled: '{emptyValueWorks.ResponseCode}'.");
+
+        TpmResult<DictionaryAttackLockResetResponse> preClearValueFails = await device.DictionaryAttackLockResetAsync(
+            rotatedLockoutAuth, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsFalse(preClearValueFails.IsSuccess, "The value installed before the clear must no longer authorize.");
+        Assert.AreEqual(
+            TpmRcConstants.TPM_RC_AUTH_FAIL, preClearValueFails.BaseError,
+            "A lockoutAuth mismatch is TPM_RC_AUTH_FAIL, which is what makes the previous leg's success a statement about the stored value rather than about the gate being off.");
     }
 
     /// <summary>

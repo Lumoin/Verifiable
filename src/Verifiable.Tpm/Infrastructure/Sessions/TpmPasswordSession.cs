@@ -31,7 +31,7 @@ namespace Verifiable.Tpm.Infrastructure.Sessions;
 /// For higher security, use HMAC sessions.
 /// </para>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 1, Section 19.6.
+/// Specification reference: TPM 2.0 Library Part 1, Section 17.6.
 /// </para>
 /// </remarks>
 public sealed class TpmPasswordSession: TpmSessionBase, IDisposable
@@ -57,6 +57,14 @@ public sealed class TpmPasswordSession: TpmSessionBase, IDisposable
     /// Returns TPM_ALG_NULL.
     /// </remarks>
     public override TpmAlgIdConstants HashAlgorithm => TpmAlgIdConstants.TPM_ALG_NULL;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// A password session has no key and computes no HMAC in either direction, so the TPM's response carries
+    /// nothing this session could verify (TPM 2.0 Library Part 1, Section 17.6). A response that drops the
+    /// authorization area is therefore admissible here, unlike one answering an HMAC session.
+    /// </remarks>
+    public override bool VerifiesResponseAuthorization => false;
 
     /// <summary>
     /// Creates a password session with no password (empty authValue).

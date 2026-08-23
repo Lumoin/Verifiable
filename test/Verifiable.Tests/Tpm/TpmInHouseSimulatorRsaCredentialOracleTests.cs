@@ -126,7 +126,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     public async Task ChallengerBuiltRsaCredentialActivatesThroughTheProductionExecutor()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -178,7 +178,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     public async Task ChallengerBuiltRsaCredentialWithATamperedOuterHmacIsRejectedWithIntegrityError()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -233,7 +233,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     public async Task ChallengerBuiltRsaCredentialWithATamperedOaepCiphertextIsRejectedWithIntegrityError()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -298,7 +298,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     public async Task ForgedCredentialUnderTheZeroSubstituteSeedIsRejectedWithIntegrityError()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -666,7 +666,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialOracleTests
     /// <summary>
     /// Copies the OAEP ciphertext into a pooled buffer as the encrypted-secret transport. The RSA arm's
     /// <c>TPM2B_ENCRYPTED_SECRET</c> content has no sub-structure (TPM 2.0 Library Part 2, clauses 11.4.2 and
-    /// 11.4.3, Table 190/191) — unlike the ECC arm's marshaled <c>TPMS_ECC_POINT</c>, the ciphertext IS the
+    /// 11.4.3, Table 209/210) — unlike the ECC arm's marshaled <c>TPMS_ECC_POINT</c>, the ciphertext IS the
     /// content verbatim; <see cref="ActivateCredentialInput.Create"/> supplies the one
     /// <c>TPM2B_ENCRYPTED_SECRET</c> size prefix the wire command carries, so no additional framing belongs here.
     /// </summary>

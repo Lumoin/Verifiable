@@ -133,6 +133,19 @@ public static partial class TpmCcConstantsExtensions
         TpmCcConstants.TPM_CC_NV_Increment
             => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 2),
 
+        //Section 31.15 - TPM2_NV_ChangeAuth.
+        //Handle area: @nvIndex (1 handle; Auth Index: 1, Auth Role: ADMIN - a policy session only, no
+        //authValue fallback; unlike every other sessioned NV command there is no separate @authHandle).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_NV_ChangeAuth
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
+
+        //Section 31.6 - TPM2_NV_ReadPublic.
+        //Handle area: nvIndex (1 handle; Auth Index: None - no authorization is checked or accepted).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_NV_ReadPublic
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
+
         //Section 28.5 - TPM2_EvictControl.
         //Handle area: @auth, objectHandle (2 handles; auth requires auth).
         //Response: no handles.
@@ -278,6 +291,12 @@ public static partial class TpmCcConstantsExtensions
         TpmCcConstants.TPM_CC_PolicySigned
             => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 2),
 
+        //Section 23.5 - TPM2_PolicyTicket.
+        //Handle area: policySession (1 handle, no auth required).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_PolicyTicket
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
+
         //Section 23.16 - TPM2_PolicyAuthorize.
         //Handle area: policySession (no auth required) - 1 handle.
         //Response: no handles.
@@ -300,6 +319,36 @@ public static partial class TpmCcConstantsExtensions
         //Handle area: lockHandle (1 handle, requires auth).
         //Response: no handles.
         TpmCcConstants.TPM_CC_DictionaryAttackParameters
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
+
+        //Section 24.8 - TPM2_HierarchyChangeAuth.
+        //Handle area: @authHandle (1 handle, requires auth).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_HierarchyChangeAuth
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
+
+        //Section 24.6 - TPM2_Clear.
+        //Handle area: @authHandle (1 handle, requires auth).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_Clear
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
+
+        //Section 24.7 - TPM2_ClearControl.
+        //Handle area: @auth (1 handle, requires auth).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_ClearControl
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
+
+        //Section 24.2 - TPM2_HierarchyControl.
+        //Handle area: @authHandle (1 handle, requires auth).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_HierarchyControl
+            => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
+
+        //Section 24.3 - TPM2_SetPrimaryPolicy.
+        //Handle area: @authHandle (1 handle, requires auth).
+        //Response: no handles.
+        TpmCcConstants.TPM_CC_SetPrimaryPolicy
             => TpmaCc.FromCommandCode((uint)commandCode, cHandles: 1),
 
         _ => throw new System.NotSupportedException($"TPMA_CC mapping missing for '{commandCode}'.")

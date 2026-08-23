@@ -110,6 +110,39 @@ public sealed class Tpm2bAttest: ITpmWireType, IDisposable
     }
 
     /// <summary>
+    /// Wraps an already-marshaled <c>TPMS_ATTEST</c> held in pooled memory — the form an attestation builder
+    /// produces before signing it — taking ownership of the storage and exposing the structure view parsed from
+    /// those same octets.
+    /// </summary>
+    /// <param name="attestationData">The pooled storage holding the marshaled <c>TPMS_ATTEST</c>; ownership transfers to the returned instance, or is released here when the length is refused or the octets do not parse — the caller never holds it again once it is handed in.</param>
+    /// <param name="length">The number of valid octets in <paramref name="attestationData"/>.</param>
+    /// <param name="pool">The memory pool for the structure view's buffers.</param>
+    /// <returns>The sized attestation buffer over the supplied storage.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is zero, negative, larger than the storage, or larger than a <c>UINT16</c> size field can carry; the storage has been released.</exception>
+    public static Tpm2bAttest FromMarshaled(IMemoryOwner<byte> attestationData, int length, BaseMemoryPool pool)
+    {
+        ArgumentNullException.ThrowIfNull(attestationData);
+
+        try
+        {
+            ArgumentNullException.ThrowIfNull(pool);
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(length);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(length, attestationData.Memory.Length);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(length, ushort.MaxValue);
+
+            var innerReader = new TpmReader(attestationData.Memory.Span.Slice(0, length));
+            TpmsAttest attestationView = TpmsAttest.Parse(ref innerReader, pool);
+
+            return new Tpm2bAttest(attestationView, attestationData, length);
+        }
+        catch
+        {
+            attestationData.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Parses a sized attestation buffer from a TPM reader.
     /// </summary>
     /// <param name="reader">The reader.</param>

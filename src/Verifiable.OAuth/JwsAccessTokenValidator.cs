@@ -25,8 +25,21 @@ namespace Verifiable.OAuth;
 ///   <item><description><c>kid</c> resolution via the supplied resolver.</description></item>
 ///   <item><description>Signature verification via <see cref="Jws.VerifyAsync"/>.</description></item>
 ///   <item><description>Standard claim checks: <c>iss</c>, <c>aud</c>, <c>exp</c>, <c>nbf</c>, <c>iat</c>, <c>sub</c>.</description></item>
-///   <item><description>Optional claim read: <c>client_id</c>, <c>scope</c>, <c>jti</c>, <c>cnf</c>.</description></item>
+///   <item><description>Optional claim read: <c>client_id</c>, <c>scope</c>, <c>jti</c>, <c>cnf</c>, <c>act</c>, <c>may_act</c>.</description></item>
 /// </list>
+/// <para>
+/// The nested-object claims <c>act</c> (RFC 8693 §4.1) and <c>may_act</c> (RFC 8693 §4.4) fail
+/// closed: a claim that is present but not a well-formed actor object rejects the whole token with
+/// <see cref="JwsAccessTokenValidationFailureReason.Malformed"/> rather than being surfaced
+/// partially parsed or silently dropped. Dropping a malformed <c>act</c> would present a delegated
+/// token to the resource server as though its subject were acting directly, and dropping a
+/// malformed <c>may_act</c> would erase a constraint the subject placed on who may act for it —
+/// both are the permissive reading of a token the issuer did not write. As with <c>cnf</c>, the
+/// nested object is read through the dictionary shapes a JSON object materialises as, so the
+/// supplied <see cref="JwsAccessTokenJsonParser"/> must map JSON objects to
+/// <see cref="IReadOnlyDictionary{TKey, TValue}"/> or <see cref="IDictionary{TKey, TValue}"/>
+/// values.
+/// </para>
 /// <para>
 /// DPoP binding (RFC 9449 §6.1) is NOT validated here. When the validated
 /// token carries <see cref="ConfirmationMethod.JwkThumbprint"/>, the
@@ -110,6 +123,24 @@ public static class JwsAccessTokenValidator
         TryReadString(outcome.Payload!, WellKnownJwtClaimNames.Jti, out string? jti);
         ConfirmationMethod? confirmation = TryReadConfirmation(outcome.Payload!);
 
+        //RFC 8693 §4.1/§4.4: act and may_act are nested JSON objects whose members identify a party.
+        //A present-but-unparseable claim is a rejection, not an omission — the token asserts a
+        //delegation (or a constraint on delegation) the resource server cannot read, and the
+        //permissive reading of an unreadable assertion is exactly the one an attacker would want.
+        if(!TryReadActor(outcome.Payload!, out CurrentActor? act))
+        {
+            return JwsAccessTokenValidationResult.Failure(
+                JwsAccessTokenValidationFailureReason.Malformed,
+                "Access token act claim is not a well-formed RFC 8693 §4.1 actor object.");
+        }
+
+        if(!TryReadAuthorizedActor(outcome.Payload!, out string? mayActSubject, out string? mayActIssuer))
+        {
+            return JwsAccessTokenValidationResult.Failure(
+                JwsAccessTokenValidationFailureReason.Malformed,
+                "Access token may_act claim is not a well-formed RFC 8693 §4.4 authorized-actor object.");
+        }
+
         JwsAccessTokenClaims claims = new()
         {
             Subject = outcome.Subject!,
@@ -122,7 +153,10 @@ public static class JwsAccessTokenValidator
             AuthorizedParty = outcome.AuthorizedParty,
             Scope = scope,
             JwtId = jti,
-            Confirmation = confirmation
+            Confirmation = confirmation,
+            Act = act,
+            MayActSubject = mayActSubject,
+            MayActIssuer = mayActIssuer
         };
 
         return JwsAccessTokenValidationResult.Success(claims);
@@ -141,7 +175,8 @@ public static class JwsAccessTokenValidator
     /// by both profiles). Returns a neutral <see cref="SignedJwtValidationOutcome"/> exposing the
     /// verified payload rather than either profile's public result type, so neither caller
     /// duplicates this parse: <see cref="ValidateAsync"/> maps the outcome to
-    /// <see cref="JwsAccessTokenClaims"/> (reading <c>client_id</c>/<c>scope</c>/<c>jti</c>/<c>cnf</c>),
+    /// <see cref="JwsAccessTokenClaims"/> (reading <c>client_id</c>/<c>scope</c>/<c>jti</c>/<c>cnf</c>/
+    /// <c>act</c>/<c>may_act</c>),
     /// while <see cref="Oidc10IdTokenValidator.ValidateAsync"/> maps it to
     /// <see cref="Oidc10IdTokenClaims"/> (reading <c>nonce</c>/<c>auth_time</c>/<c>acr</c>/<c>amr</c>/
     /// <c>sid</c>/<c>cnf</c>, plus its own nonce and trusted-audience checks).
@@ -570,5 +605,176 @@ public static class JwsAccessTokenValidator
         }
 
         return jkt is null ? null : new ConfirmationMethod { JwkThumbprint = jkt };
+    }
+
+
+    /// <summary>
+    /// Reads the <c>act</c> (actor) claim of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see> into a
+    /// <see cref="CurrentActor"/>, flattening the nested prior-actor chain into
+    /// <see cref="CurrentActor.DelegationHistory"/> in nesting order: §4.1 states "The outermost 'act'
+    /// claim represents the current actor while nested 'act' claims represent prior actors. The least
+    /// recent actor is the most deeply nested", so the first history element is the actor nested
+    /// immediately within the current one and the last is the least recent. Structural sibling of
+    /// <see cref="TryReadConfirmation"/>: the nested claim object is read through either dictionary
+    /// shape a JSON parser materialises a JSON object as.
+    /// </summary>
+    /// <param name="payload">The signature-verified access token payload.</param>
+    /// <param name="actor">
+    /// The current actor when the claim is present and well formed; <see langword="null"/> when the
+    /// token carries no <c>act</c> claim, and also <see langword="null"/> when the claim is malformed
+    /// so no partially parsed actor can escape the failure path.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the claim is absent or fully parsed; <see langword="false"/> when it
+    /// is present but malformed — a value that is not a JSON object, a nesting level that is not a JSON
+    /// object, an actor naming no <c>sub</c>, or a <c>sub</c>/<c>iss</c> member that is not a non-empty
+    /// string. The caller rejects the token on <see langword="false"/>: a delegation the resource server
+    /// cannot read whole must not be reported as a token with no delegation at all.
+    /// </returns>
+    private static bool TryReadActor(JwtPayload payload, out CurrentActor? actor)
+    {
+        actor = null;
+        if(!payload.TryGetValue(WellKnownJwtClaimNames.Act, out object? raw))
+        {
+            return true;
+        }
+
+        if(!TryReadActorIdentity(raw, out string? subject, out string? issuer) || subject is null)
+        {
+            return false;
+        }
+
+        //§4.1: "A chain of delegation can be expressed by nesting one 'act' claim within another."
+        //The walk follows that nesting one level per iteration instead of recursing, so a long chain
+        //costs no stack; its length is bounded by the object depth the JSON parser already accepted.
+        List<PriorActor> history = [];
+        object? current = raw;
+        while(TryReadClaimMember(current, WellKnownJwtClaimNames.Act, out object? nested))
+        {
+            if(!TryReadActorIdentity(nested, out string? priorSubject, out string? priorIssuer) || priorSubject is null)
+            {
+                return false;
+            }
+
+            history.Add(new PriorActor { Subject = priorSubject, Issuer = priorIssuer });
+            current = nested;
+        }
+
+        actor = new CurrentActor { Subject = subject, Issuer = issuer, DelegationHistory = history };
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// Reads the <c>may_act</c> (authorized actor) claim of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.4">RFC 8693 §4.4</see> — "a
+    /// statement that one party is authorized to become the actor and act on behalf of another party"
+    /// — into the <c>sub</c>/<c>iss</c> pair §4.4 describes as "sometimes necessary to uniquely
+    /// identify an authorized actor". Unlike <c>act</c> the claim has no nesting: it names a single
+    /// eligible party.
+    /// </summary>
+    /// <param name="payload">The signature-verified access token payload.</param>
+    /// <param name="subject">The <c>sub</c> member, or <see langword="null"/> when the claim is absent or names no subject.</param>
+    /// <param name="issuer">The <c>iss</c> member, or <see langword="null"/> when the claim is absent or names no issuer.</param>
+    /// <returns>
+    /// <see langword="true"/> when the claim is absent or fully parsed; <see langword="false"/> when it
+    /// is present but malformed — a value that is not a JSON object, a <c>sub</c>/<c>iss</c> member that
+    /// is not a non-empty string, or an object naming neither. The last case is a rejection rather than
+    /// an empty result because reducing an unreadable authorized-actor statement to "no constraint"
+    /// erases the very restriction the subject placed on who may act for it.
+    /// </returns>
+    private static bool TryReadAuthorizedActor(JwtPayload payload, out string? subject, out string? issuer)
+    {
+        subject = null;
+        issuer = null;
+        if(!payload.TryGetValue(WellKnownJwtClaimNames.MayAct, out object? raw))
+        {
+            return true;
+        }
+
+        return TryReadActorIdentity(raw, out subject, out issuer) && (subject is not null || issuer is not null);
+    }
+
+
+    /// <summary>
+    /// Reads the identity members of one <c>act</c>/<c>may_act</c> object. Per RFC 8693 §4.1/§4.4 the
+    /// members of such an object "pertain only to the identity" of the party, so only <c>sub</c> and
+    /// <c>iss</c> are mapped; any other member — including the non-identity <c>exp</c>/<c>nbf</c>/
+    /// <c>aud</c> those sections declare "not meaningful" inside an actor object — is ignored and never
+    /// treated as a validity input for the containing token.
+    /// </summary>
+    /// <param name="claimObject">The claim value, expected to be a JSON object.</param>
+    /// <param name="subject">The <c>sub</c> member when present, otherwise <see langword="null"/>.</param>
+    /// <param name="issuer">The <c>iss</c> member when present, otherwise <see langword="null"/>.</param>
+    /// <returns>
+    /// <see langword="false"/> when the value is not a JSON object, or when a <c>sub</c>/<c>iss</c>
+    /// member is present as anything other than a non-empty string; <see langword="true"/> otherwise,
+    /// with absent members left <see langword="null"/> for the caller to require as its claim demands.
+    /// </returns>
+    private static bool TryReadActorIdentity(object? claimObject, out string? subject, out string? issuer)
+    {
+        subject = null;
+        issuer = null;
+        if(claimObject is not (IReadOnlyDictionary<string, object> or IDictionary<string, object>))
+        {
+            return false;
+        }
+
+        if(TryReadClaimMember(claimObject, WellKnownJwtClaimNames.Sub, out object? subValue))
+        {
+            if(subValue is not string sub || string.IsNullOrEmpty(sub))
+            {
+                return false;
+            }
+
+            subject = sub;
+        }
+
+        if(TryReadClaimMember(claimObject, WellKnownJwtClaimNames.Iss, out object? issValue))
+        {
+            if(issValue is not string iss || string.IsNullOrEmpty(iss))
+            {
+                return false;
+            }
+
+            issuer = iss;
+        }
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// Reads one member of a nested claim object, accepting either dictionary shape a JSON parser may
+    /// materialise a JSON object as — the same dual read <see cref="TryReadConfirmation"/> performs for
+    /// <c>cnf</c>, factored out here because an actor chain looks up several members per level.
+    /// </summary>
+    /// <param name="claimObject">The claim value to read a member from.</param>
+    /// <param name="memberName">The member name.</param>
+    /// <param name="value">The member value when present, otherwise <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the value is a dictionary carrying the member.</returns>
+    private static bool TryReadClaimMember(object? claimObject, string memberName, out object? value)
+    {
+        if(claimObject is IReadOnlyDictionary<string, object> readOnly)
+        {
+            bool isPresent = readOnly.TryGetValue(memberName, out object? readOnlyValue);
+            value = readOnlyValue;
+
+            return isPresent;
+        }
+
+        if(claimObject is IDictionary<string, object> writable)
+        {
+            bool isPresent = writable.TryGetValue(memberName, out object? writableValue);
+            value = writableValue;
+
+            return isPresent;
+        }
+
+        value = null;
+
+        return false;
     }
 }

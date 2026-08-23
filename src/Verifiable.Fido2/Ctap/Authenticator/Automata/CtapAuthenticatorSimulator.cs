@@ -3927,9 +3927,10 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// credential-ID-keyed store is the complete set (every resident credential also appears there), so
     /// no credential is disposed twice — walks the fingerprint template store and disposes every
     /// provisioned template's own <see cref="BioEnrollmentTemplateId"/>, disposes an in-progress
-    /// remembered <c>authenticatorGetAssertion</c> sequence's independently pooled client data hash copy
-    /// and an in-progress remembered <c>authenticatorBioEnrollment</c> capture's own not-yet-persisted
-    /// template identifier, if either exists, disposes both PIN/UV auth protocols' key-agreement key
+    /// remembered <c>authenticatorGetAssertion</c> sequence's independently pooled client data hash copy,
+    /// an in-progress remembered <c>authenticatorBioEnrollment</c> capture's own not-yet-persisted
+    /// template identifier, and an in-progress remembered <c>authenticatorLargeBlobs</c> write's
+    /// accumulated fragment buffer, if any exist, disposes both PIN/UV auth protocols' key-agreement key
     /// pairs and <c>pinUvAuthToken</c>s, disposes the stored PIN hash, if a PIN has been set, and
     /// disposes the persistent <see cref="CtapAuthenticatorState.SerializedLargeBlobArray"/> buffer
     /// (always present — seeded by <see cref="CtapAuthenticatorState.Initial"/>, never
@@ -3960,6 +3961,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
         Automaton.CurrentState.RememberedGetAssertion?.Dispose();
         Automaton.CurrentState.RememberedBioEnrollment?.Dispose();
+        Automaton.CurrentState.RememberedLargeBlobWrite?.Dispose();
         Automaton.CurrentState.PendingUserPresenceWait?.Dispose();
         Automaton.CurrentState.ProtocolOneKeyAgreementKeyPair.Dispose();
         Automaton.CurrentState.ProtocolTwoKeyAgreementKeyPair.Dispose();

@@ -47,7 +47,7 @@ public static class SdDisclosureSelection
             ? new HashSet<CredentialPath>(mandatoryPaths)
             : [];
 
-        return new SetDisclosureLattice<CredentialPath>(allPaths, mandatory);
+        return new SetDisclosureLattice<CredentialPath>(allPaths, mandatory, ancestors: CredentialPath.Ancestry);
     }
 
 
@@ -73,7 +73,7 @@ public static class SdDisclosureSelection
             ? new HashSet<CredentialPath>(mandatoryPaths)
             : [];
 
-        return new SetDisclosureLattice<CredentialPath>(allPaths, mandatory);
+        return new SetDisclosureLattice<CredentialPath>(allPaths, mandatory, ancestors: CredentialPath.Ancestry);
     }
 
 

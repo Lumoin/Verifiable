@@ -103,6 +103,35 @@ internal sealed class IdJagGrantTests
         SpNameQualifier = SamlSpNameQualifier
     };
 
+    /// <summary>
+    /// A party that acted before the client redeeming the grant — the prior actor a nested
+    /// <c>act</c> claim records per RFC 8693 §4.1 ("nested 'act' claims represent prior actors").
+    /// </summary>
+    private const string PriorActorIdentity = "https://svc.example/first-hop";
+
+    /// <summary>
+    /// A party that is neither the redeeming client nor the subject, used as the <c>may_act</c>
+    /// authorized actor the redeeming client is NOT (RFC 8693 §4.4).
+    /// </summary>
+    private const string UnauthorizedActorIdentity = "https://svc.example/other-agent";
+
+    /// <summary>
+    /// The subject of RFC 8693 §4.1 Figure 6, transcribed verbatim for the nesting known-answer test.
+    /// </summary>
+    private const string Figure6Subject = "user@example.com";
+
+    /// <summary>
+    /// The current (outermost) actor of RFC 8693 §4.1 Figure 6 — in the figure's own narrative, the
+    /// service that received a token from another service and exchanged it onward.
+    /// </summary>
+    private const string Figure6CurrentActor = "https://service16.example.com";
+
+    /// <summary>
+    /// The prior (most deeply nested) actor of RFC 8693 §4.1 Figure 6 — "The least recent actor is
+    /// the most deeply nested."
+    /// </summary>
+    private const string Figure6PriorActor = "https://service77.example.com";
+
     public TestContext TestContext { get; set; } = null!;
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
@@ -3234,6 +3263,601 @@ internal sealed class IdJagGrantTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see> at the
+    /// redemption boundary, first composition case: the minted ID-JAG already carries an <c>act</c>
+    /// chain whose current actor IS the client that redeems it, so the issued access token carries
+    /// that chain unchanged. §4.1 fixes the meaning of the shape — "The outermost 'act' claim
+    /// represents the current actor while nested 'act' claims represent prior actors" — and the
+    /// current actor did not change at this boundary, so nesting the chain under a copy of itself
+    /// would record a delegation hop that never happened.
+    /// </summary>
+    [TestMethod]
+    public async Task RedeemingClientAlreadyTheCurrentActorCopiesTheChainUnchanged()
+    {
+        //The mint's chain: the redeeming client acting, with a prior actor already beneath it.
+        Dictionary<string, object> mintedChain = new(StringComparer.Ordinal)
+        {
+            [WellKnownJwtClaimNames.Sub] = ClientId,
+            [WellKnownJwtClaimNames.Act] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownJwtClaimNames.Sub] = PriorActorIdentity
+            }
+        };
+
+        ActorFlowOutcome outcome = await RunActorFlowAsync(
+            SubjectIdentity, mintedChain, authorizedActor: null).ConfigureAwait(false);
+
+        //The JAG carries the chain the mint threaded (ID-JAG §3.1 act, RFC 8693 §4.1 shape).
+        using JsonDocument jagPayload = DecodePayload(outcome.Jag);
+        JsonElement jagAct = jagPayload.RootElement.GetProperty("act");
+        Assert.AreEqual(JsonValueKind.Object, jagAct.ValueKind, "RFC 8693 §4.1: the act claim value is a JSON object.");
+        Assert.AreEqual(ClientId, jagAct.GetProperty("sub").GetString());
+        Assert.AreEqual(PriorActorIdentity, jagAct.GetProperty("act").GetProperty("sub").GetString());
+
+        Assert.AreEqual(200, outcome.RedeemStatusCode, outcome.RedeemBody);
+        using JsonDocument tokenPayload = DecodePayload(outcome.AccessToken!);
+        Assert.AreEqual(SubjectIdentity, tokenPayload.RootElement.GetProperty("sub").GetString(),
+            "RFC 8693 §1.1 delegation: the token's subject stays the principal, never the acting client.");
+
+        JsonElement tokenAct = tokenPayload.RootElement.GetProperty("act");
+        Assert.AreEqual(ClientId, tokenAct.GetProperty("sub").GetString(),
+            "The current actor is unchanged at this boundary, so it stays the outermost act.");
+        JsonElement nested = tokenAct.GetProperty("act");
+        Assert.AreEqual(PriorActorIdentity, nested.GetProperty("sub").GetString(),
+            "The prior actor stays exactly one level deeper — the chain crossed verbatim.");
+        Assert.IsFalse(nested.TryGetProperty("act", out _),
+            "No self-nesting: a boundary that changes no actor must add no nesting level.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see> at the
+    /// redemption boundary, second composition case: the grant's chain names someone else as the
+    /// current actor, so the redeeming client becomes the new outermost actor and the grant's chain
+    /// nests beneath it — "A chain of delegation can be expressed by nesting one 'act' claim within
+    /// another ... The least recent actor is the most deeply nested."
+    /// </summary>
+    [TestMethod]
+    public async Task RedeemingClientDifferingFromTheCurrentActorNestsTheGrantsChain()
+    {
+        Dictionary<string, object> mintedChain = new(StringComparer.Ordinal)
+        {
+            [WellKnownJwtClaimNames.Sub] = PriorActorIdentity
+        };
+
+        ActorFlowOutcome outcome = await RunActorFlowAsync(
+            SubjectIdentity, mintedChain, authorizedActor: null).ConfigureAwait(false);
+
+        using JsonDocument jagPayload = DecodePayload(outcome.Jag);
+        JsonElement jagAct = jagPayload.RootElement.GetProperty("act");
+        Assert.AreEqual(PriorActorIdentity, jagAct.GetProperty("sub").GetString());
+        Assert.IsFalse(jagAct.TryGetProperty("act", out _), "The minted chain is a single link.");
+
+        Assert.AreEqual(200, outcome.RedeemStatusCode, outcome.RedeemBody);
+        using JsonDocument tokenPayload = DecodePayload(outcome.AccessToken!);
+        JsonElement tokenAct = tokenPayload.RootElement.GetProperty("act");
+        Assert.AreEqual(ClientId, tokenAct.GetProperty("sub").GetString(),
+            "The redeeming client is the new current actor and is therefore the outermost act.");
+        Assert.AreEqual(PriorActorIdentity, tokenAct.GetProperty("act").GetProperty("sub").GetString(),
+            "The grant's chain becomes the prior actors nested beneath the new current actor.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see> at the
+    /// redemption boundary, third composition case: the grant records no actor and the redeeming
+    /// client is not the grant's subject, so the single delegation step that just occurred is
+    /// recorded — <c>act</c> = <c>{ "sub": &lt;redeeming client&gt; }</c>, the shape §4.1 Figure 5
+    /// shows. The token's <c>sub</c> stays the subject, which is what
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-1.1">§1.1</see> calls delegation
+    /// ("principal A still has its own identity separate from B") rather than impersonation.
+    /// </summary>
+    [TestMethod]
+    public async Task RedeemingClientActingForAnotherSubjectIsRecordedAsTheActor()
+    {
+        ActorFlowOutcome outcome = await RunActorFlowAsync(
+            SubjectIdentity, actor: null, authorizedActor: null).ConfigureAwait(false);
+
+        //The grant itself records no delegation — nothing had happened yet when it was minted.
+        using JsonDocument jagPayload = DecodePayload(outcome.Jag);
+        Assert.IsFalse(jagPayload.RootElement.TryGetProperty("act", out _),
+            "A grant minted with no acting party carries no act claim.");
+
+        Assert.AreEqual(200, outcome.RedeemStatusCode, outcome.RedeemBody);
+        using JsonDocument tokenPayload = DecodePayload(outcome.AccessToken!);
+        Assert.AreEqual(SubjectIdentity, tokenPayload.RootElement.GetProperty("sub").GetString(),
+            "RFC 8693 §1.1: delegation keeps sub the subject; overwriting it with the client would be impersonation.");
+
+        JsonElement tokenAct = tokenPayload.RootElement.GetProperty("act");
+        Assert.AreEqual(JsonValueKind.Object, tokenAct.ValueKind);
+        Assert.AreEqual(ClientId, tokenAct.GetProperty("sub").GetString(),
+            "RFC 8693 §4.1: act identifies the acting party to whom authority has been delegated.");
+        Assert.IsFalse(tokenAct.TryGetProperty("act", out _),
+            "One hop happened, so the chain has exactly one link.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see> at the
+    /// redemption boundary, fourth composition case — and the declined half of the §1.1 capability:
+    /// the grant records no actor and the redeeming client IS the grant's subject, so no party acts
+    /// for another and neither the grant nor the redeemed token carries an <c>act</c> byte on the
+    /// wire. <see href="https://www.rfc-editor.org/rfc/rfc8693#section-1.1">§1.1</see>: "When a
+    /// principal is acting directly on its own behalf, for example, neither delegation nor
+    /// impersonation are in play" — a self-referential actor would assert a delegation that never
+    /// occurred.
+    /// </summary>
+    [TestMethod]
+    public async Task ClientActingOnItsOwnBehalfCarriesNoActClaimAnywhere()
+    {
+        //The grant's subject is the redeeming client itself — a client_credentials-shaped identity.
+        ActorFlowOutcome outcome = await RunActorFlowAsync(
+            ClientId, actor: null, authorizedActor: null).ConfigureAwait(false);
+
+        using JsonDocument jagPayload = DecodePayload(outcome.Jag);
+        Assert.IsFalse(jagPayload.RootElement.TryGetProperty("act", out _),
+            "No actor was supplied, so the minted grant carries no act claim byte.");
+        Assert.IsFalse(jagPayload.RootElement.TryGetProperty("may_act", out _),
+            "No authorized actor was supplied, so the minted grant carries no may_act claim byte.");
+
+        Assert.AreEqual(200, outcome.RedeemStatusCode, outcome.RedeemBody);
+        using JsonDocument tokenPayload = DecodePayload(outcome.AccessToken!);
+        Assert.AreEqual(ClientId, tokenPayload.RootElement.GetProperty("sub").GetString());
+        Assert.IsFalse(tokenPayload.RootElement.TryGetProperty("act", out _),
+            "RFC 8693 §1.1: acting directly on one's own behalf is neither delegation nor impersonation, so no act is emitted.");
+
+        //The resource server reads the same absence through the typed surface.
+        JwsAccessTokenValidationResult resourceValidation = outcome.ResourceValidation!;
+        Assert.IsTrue(resourceValidation.IsSuccess, resourceValidation.FailureDescription);
+        Assert.IsNull(resourceValidation.Claims!.Act,
+            "A token recording no delegation surfaces no current actor.");
+    }
+
+
+    /// <summary>
+    /// The <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see>
+    /// Figure 6 nesting known-answer test, composed by the real mint and redeem endpoints and read
+    /// back through the resource-server validator. Figure 6's own narrative is this exact flow —
+    /// "service16 receiving a token in a call from service77 and exchanging it for a token suitable
+    /// to call service26 while the authorization server notes the situation in the newly issued
+    /// token" — so a grant carrying <c>act = { "sub": service77 }</c>, redeemed by service16, must
+    /// yield Figure 6's structure byte for byte: <c>act.sub</c> = service16 and
+    /// <c>act.act.sub</c> = service77, "The least recent actor is the most deeply nested."
+    /// </summary>
+    /// <remarks>
+    /// Only the <c>act</c> object is the transcribed vector: Figure 6's <c>iss</c>/<c>aud</c>/
+    /// <c>exp</c>/<c>nbf</c> belong to that document's own example authorization server, while this
+    /// token is minted by the test host and must verify against the test host's trust anchor.
+    /// </remarks>
+    [TestMethod]
+    public async Task NestedActorChainMatchesTheSection41FigureSixStructure()
+    {
+        Dictionary<string, object> priorActorChain = new(StringComparer.Ordinal)
+        {
+            [WellKnownJwtClaimNames.Sub] = Figure6PriorActor
+        };
+
+        ActorFlowOutcome outcome = await RunActorFlowAsync(
+            Figure6Subject, priorActorChain, authorizedActor: null, clientId: Figure6CurrentActor)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, outcome.RedeemStatusCode, outcome.RedeemBody);
+        using JsonDocument tokenPayload = DecodePayload(outcome.AccessToken!);
+        JsonElement root = tokenPayload.RootElement;
+        Assert.AreEqual(Figure6Subject, root.GetProperty("sub").GetString());
+
+        JsonElement act = root.GetProperty("act");
+        Assert.AreEqual(JsonValueKind.Object, act.ValueKind);
+        Assert.AreEqual(Figure6CurrentActor, act.GetProperty("sub").GetString(),
+            "Figure 6: the outermost act names service16, the current actor.");
+        JsonElement nested = act.GetProperty("act");
+        Assert.AreEqual(JsonValueKind.Object, nested.ValueKind);
+        Assert.AreEqual(Figure6PriorActor, nested.GetProperty("sub").GetString(),
+            "Figure 6: the nested act names service77, the least recent actor and therefore the most deeply nested.");
+        Assert.IsFalse(nested.TryGetProperty("act", out _), "Figure 6 nests exactly two levels.");
+
+        //The resource server reads the same structure as a current actor plus its history.
+        JwsAccessTokenValidationResult resourceValidation = outcome.ResourceValidation!;
+        Assert.IsTrue(resourceValidation.IsSuccess, resourceValidation.FailureDescription);
+        CurrentActor currentActor = resourceValidation.Claims!.Act!;
+        Assert.AreEqual(Figure6CurrentActor, currentActor.Subject);
+        Assert.HasCount(1, currentActor.DelegationHistory);
+        Assert.AreEqual(Figure6PriorActor, currentActor.DelegationHistory[0].Subject);
+    }
+
+
+    /// <summary>
+    /// The exercised half of the <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.4">RFC
+    /// 8693 §4.4</see> capability: the authorization seam names an authorized actor, the mint emits
+    /// it as the grant's <c>may_act</c> claim on the wire, and the client that claim names redeems
+    /// the grant successfully — §4.4's own purpose, the claim "can be used by the authorization
+    /// server to determine whether the client ... is authorized to engage in the requested
+    /// delegation or impersonation."
+    /// </summary>
+    [TestMethod]
+    public async Task MintedMayActPermitsTheAuthorizedActorToRedeem()
+    {
+        Dictionary<string, object> authorizedActor = new(StringComparer.Ordinal)
+        {
+            [WellKnownJwtClaimNames.Sub] = ClientId
+        };
+
+        ActorFlowOutcome outcome = await RunActorFlowAsync(
+            SubjectIdentity, actor: null, authorizedActor).ConfigureAwait(false);
+
+        //Capability exercised: the claim is on the grant's wire bytes as a JSON object.
+        using JsonDocument jagPayload = DecodePayload(outcome.Jag);
+        JsonElement mayAct = jagPayload.RootElement.GetProperty("may_act");
+        Assert.AreEqual(JsonValueKind.Object, mayAct.ValueKind,
+            "RFC 8693 §4.4: the may_act claim value is a JSON object.");
+        Assert.AreEqual(ClientId, mayAct.GetProperty("sub").GetString());
+
+        Assert.AreEqual(200, outcome.RedeemStatusCode, outcome.RedeemBody);
+        using JsonDocument tokenPayload = DecodePayload(outcome.AccessToken!);
+        Assert.AreEqual(ClientId, tokenPayload.RootElement.GetProperty("act").GetProperty("sub").GetString(),
+            "The authorized party became the actor, which is exactly what may_act pre-authorized.");
+    }
+
+
+    /// <summary>
+    /// The enforced half of <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.4">RFC 8693
+    /// §4.4</see>: a grant whose <c>may_act</c> names a different party is refused when another
+    /// client redeems it. §4.4's members "identify the party that is asserted as being eligible to
+    /// act for the party identified by the JWT containing the claim", so a client that is not that
+    /// party may not become the actor; the redemption answers the jwt-bearer grant's
+    /// <c>invalid_grant</c> with the <c>Cache-Control: no-store</c> the token endpoint's refusal
+    /// ladder carries, and no token is issued.
+    /// </summary>
+    [TestMethod]
+    public async Task MintedMayActRefusesAnUnauthorizedActor()
+    {
+        Dictionary<string, object> authorizedActor = new(StringComparer.Ordinal)
+        {
+            [WellKnownJwtClaimNames.Sub] = UnauthorizedActorIdentity
+        };
+
+        ActorFlowOutcome outcome = await RunActorFlowAsync(
+            SubjectIdentity, actor: null, authorizedActor).ConfigureAwait(false);
+
+        using JsonDocument jagPayload = DecodePayload(outcome.Jag);
+        Assert.AreEqual(UnauthorizedActorIdentity,
+            jagPayload.RootElement.GetProperty("may_act").GetProperty("sub").GetString(),
+            "The grant authorizes a party that is not the client redeeming it.");
+
+        Assert.AreEqual(400, outcome.RedeemStatusCode, outcome.RedeemBody);
+        Assert.Contains(OAuthErrors.InvalidGrant, outcome.RedeemBody);
+        Assert.IsTrue(outcome.IsRedeemNoStore, "A refused redemption keeps the endpoint's no-store response discipline.");
+        Assert.IsNull(outcome.AccessToken, "No token may be issued to a party the grant never authorized to act.");
+    }
+
+
+    /// <summary>
+    /// The declined half of the <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.4">RFC
+    /// 8693 §4.4</see> capability: the authorization seam names no authorized actor, so the minted
+    /// grant carries no <c>may_act</c> byte and the redemption is unconstrained by an
+    /// authorized-actor statement — §4.4 states who MAY act only when the claim is present, and an
+    /// absent claim asserts nothing about who may not.
+    /// </summary>
+    [TestMethod]
+    public async Task AbsentMayActLeavesTheRedeemingClientUnconstrained()
+    {
+        ActorFlowOutcome outcome = await RunActorFlowAsync(
+            SubjectIdentity, actor: null, authorizedActor: null).ConfigureAwait(false);
+
+        using JsonDocument jagPayload = DecodePayload(outcome.Jag);
+        Assert.IsFalse(jagPayload.RootElement.TryGetProperty("may_act", out _),
+            "With no authorized actor decided, the grant carries no may_act claim byte.");
+
+        Assert.AreEqual(200, outcome.RedeemStatusCode, outcome.RedeemBody);
+        Assert.IsNotNull(outcome.AccessToken);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.4">RFC 8693 §4.4</see>: "the
+    /// combination of the two claims 'iss' and 'sub' are sometimes necessary to uniquely identify an
+    /// authorized actor." A <c>may_act</c> naming both is satisfied only by a client that is that
+    /// subject within that issuer's namespace — the Resource Authorization Server's own issuer, the
+    /// namespace a redeeming <c>client_id</c> lives in. The matching combination redeems; the same
+    /// subject asserted under a different issuer is a different, unauthorized party and is refused.
+    /// </summary>
+    [TestMethod]
+    public async Task MayActIssuerAndSubjectCombinationIsEnforcedTogether()
+    {
+        ActorFlowOutcome matching = await RunActorFlowAsync(
+            SubjectIdentity,
+            actor: null,
+            authorizedActor: null,
+            authorizedActorFactory: issuer => new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownJwtClaimNames.Sub] = ClientId,
+                [WellKnownJwtClaimNames.Iss] = issuer
+            }).ConfigureAwait(false);
+
+        Assert.AreEqual(200, matching.RedeemStatusCode, matching.RedeemBody);
+
+        ActorFlowOutcome wrongIssuer = await RunActorFlowAsync(
+            SubjectIdentity,
+            actor: null,
+            authorizedActor: new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownJwtClaimNames.Sub] = ClientId,
+                [WellKnownJwtClaimNames.Iss] = "https://issuer.example/elsewhere"
+            }).ConfigureAwait(false);
+
+        Assert.AreEqual(400, wrongIssuer.RedeemStatusCode, wrongIssuer.RedeemBody);
+        Assert.Contains(OAuthErrors.InvalidGrant, wrongIssuer.RedeemBody);
+    }
+
+
+    /// <summary>
+    /// A malformed <c>act</c> claim on the grant fails the redemption closed. The claim value is not
+    /// the JSON object <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693
+    /// §4.1</see> defines ("The 'act' claim value is a JSON object, and members in the JSON object
+    /// are claims that identify the actor"), so no current actor can be identified — and admitting
+    /// the grant with the unreadable chain dropped would present a delegated grant as an
+    /// undelegated one.
+    /// </summary>
+    [TestMethod]
+    public async Task GrantWithAMalformedActClaimIsRefused()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = RegisterIdJagClient(app);
+        WireClientAuthentication(app);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        HttpClient http = host.SharedHttpClient!;
+        string segment = material.Registration.TenantId.Value;
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/token");
+
+        ServerVerificationKeyResolverDelegate jwksResolver =
+            await BuildJwksKeyResolverAsync(http, host.HttpBaseAddress!, segment).ConfigureAwait(false);
+        app.Server.OAuth().ValidateJwtBearerAssertionAsync =
+            async (assertion, requestedScope, registration, context, ct) =>
+                await ValidateIdJagAsync(assertion, registration, jwksResolver, ResourceAsIssuer).ConfigureAwait(false);
+
+        //A grant built outside the mint so its act claim can be a value RFC 8693 §4.1 does not allow.
+        //It is signed with the host's own published key so the redeem path fails on the claim shape
+        //rather than on key resolution.
+        string idpIssuer = material.Registration.IssuerUri!.OriginalString;
+        string malformedJag = await BuildIdJagWithActorClaimsAsync(
+            material.SigningPrivateKey,
+            material.SigningKeyId.Value,
+            idpIssuer,
+            actor: "not-an-actor-object",
+            authorizedActor: null).ConfigureAwait(false);
+
+        using HttpResponseMessage redeem = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, BuildRedeemForm(malformedJag), TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await redeem.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)redeem.StatusCode, body);
+        Assert.Contains(OAuthErrors.InvalidGrant, body);
+    }
+
+
+    /// <summary>
+    /// The minted ID-JAG's <c>act</c> and <c>may_act</c> claims and the compact-JWS artefacts a test
+    /// asserts against: the grant, the redemption's HTTP outcome, and — when the redemption
+    /// succeeded — the issued access token plus the resource server's validation of it.
+    /// </summary>
+    private sealed record ActorFlowOutcome
+    {
+        /// <summary>The minted ID-JAG as a compact JWS.</summary>
+        public required string Jag { get; init; }
+
+        /// <summary>The redemption response's HTTP status code.</summary>
+        public required int RedeemStatusCode { get; init; }
+
+        /// <summary>The redemption response body, carried for assertion messages and error-code checks.</summary>
+        public required string RedeemBody { get; init; }
+
+        /// <summary>Whether the redemption response carried <c>Cache-Control: no-store</c>.</summary>
+        public required bool IsRedeemNoStore { get; init; }
+
+        /// <summary>The redeemed access token, or <see langword="null"/> when the redemption was refused.</summary>
+        public string? AccessToken { get; init; }
+
+        /// <summary>
+        /// The resource-server validation of <see cref="AccessToken"/> through the project's own
+        /// <see cref="JwsAccessTokenValidator"/>, or <see langword="null"/> when no token was issued.
+        /// </summary>
+        public JwsAccessTokenValidationResult? ResourceValidation { get; init; }
+    }
+
+
+    /// <summary>
+    /// Mints an ID-JAG whose <c>act</c>/<c>may_act</c> claims the authorization seam decides, redeems
+    /// it as an RFC 7523 JWT Bearer assertion at the same host, and — on success — validates the
+    /// issued access token the way a resource server does.
+    /// </summary>
+    /// <param name="subject">The subject the mint's validation seam surfaces for the subject token.</param>
+    /// <param name="actor">The <c>act</c> chain the authorization seam shapes onto the grant, or <see langword="null"/>.</param>
+    /// <param name="authorizedActor">The <c>may_act</c> claim the authorization seam shapes onto the grant, or <see langword="null"/>.</param>
+    /// <param name="clientId">The client that both mints and redeems, defaulting to the fixture's client.</param>
+    /// <param name="authorizedActorFactory">
+    /// Builds the <c>may_act</c> claim from the authorization server's own issuer identifier, for the
+    /// §4.4 cases whose authorized actor is identified by an <c>iss</c> that is only known once the
+    /// host is running. Takes precedence over <paramref name="authorizedActor"/> when supplied.
+    /// </param>
+    /// <returns>The flow's artefacts.</returns>
+    private async Task<ActorFlowOutcome> RunActorFlowAsync(
+        string subject,
+        IReadOnlyDictionary<string, object>? actor,
+        IReadOnlyDictionary<string, object>? authorizedActor,
+        string clientId = ClientId,
+        Func<string, IReadOnlyDictionary<string, object>>? authorizedActorFactory = null)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = app.RegisterDpopClient(
+            clientId, new Uri(clientId), profile: PolicyProfile.Rfc6749WithPkce, capabilities: IdJagClientCapabilities);
+
+        //The issuer identifier is the namespace a may_act iss member names, and it is only settled
+        //once the host is listening — so the claim is shaped lazily, when the mint request runs.
+        WireActorMintSeams(
+            app,
+            subject,
+            actor,
+            () => authorizedActorFactory?.Invoke(material.Registration.IssuerUri!.OriginalString) ?? authorizedActor);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        HttpClient http = host.SharedHttpClient!;
+        string segment = material.Registration.TenantId.Value;
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/token");
+        string idpIssuer = material.Registration.IssuerUri!.OriginalString;
+
+        ServerVerificationKeyResolverDelegate jwksResolver =
+            await BuildJwksKeyResolverAsync(http, host.HttpBaseAddress!, segment).ConfigureAwait(false);
+        app.Server.OAuth().ValidateJwtBearerAssertionAsync =
+            async (assertion, requestedScope, registration, context, ct) =>
+                await ValidateIdJagAsync(assertion, registration, jwksResolver, ResourceAsIssuer).ConfigureAwait(false);
+
+        Dictionary<string, string> mintForm = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
+            [OAuthRequestParameterNames.ClientId] = clientId,
+            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
+            [OAuthRequestParameterNames.RequestedTokenType] = TokenTypeNames.GetName(TokenType.IdJag),
+            [OAuthRequestParameterNames.Audience] = ResourceAsIssuer,
+            [OAuthRequestParameterNames.SubjectToken] = SubjectTokenValue,
+            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.IdToken)
+        };
+        using HttpResponseMessage mintResponse = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, mintForm, TestContext.CancellationToken).ConfigureAwait(false);
+        string mintBody = await mintResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)mintResponse.StatusCode, mintBody);
+        using JsonDocument mintDoc = JsonDocument.Parse(mintBody);
+        string jag = mintDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+
+        Dictionary<string, string> redeemForm = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.JwtBearer,
+            [OAuthRequestParameterNames.ClientId] = clientId,
+            [OAuthRequestParameterNames.ClientSecret] = ClientSecret,
+            [OAuthRequestParameterNames.Assertion] = jag
+        };
+        using HttpResponseMessage redeemResponse = await OAuthTestTransport.PostFormAsync(
+            http, tokenUrl, redeemForm, TestContext.CancellationToken).ConfigureAwait(false);
+        string redeemBody = await redeemResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        string? accessToken = null;
+        JwsAccessTokenValidationResult? resourceValidation = null;
+        if(redeemResponse.StatusCode == System.Net.HttpStatusCode.OK)
+        {
+            using JsonDocument redeemDoc = JsonDocument.Parse(redeemBody);
+            accessToken = redeemDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+            resourceValidation = await VerifyAgainstAsAsync(accessToken, idpIssuer, jwksResolver).ConfigureAwait(false);
+        }
+
+        return new ActorFlowOutcome
+        {
+            Jag = jag,
+            RedeemStatusCode = (int)redeemResponse.StatusCode,
+            RedeemBody = redeemBody,
+            IsRedeemNoStore = redeemResponse.Headers.CacheControl?.NoStore ?? false,
+            AccessToken = accessToken,
+            ResourceValidation = resourceValidation
+        };
+    }
+
+
+    /// <summary>
+    /// Wires the mint seams for an actor-bearing exchange: client authentication, a subject-token
+    /// validation surfacing <paramref name="subject"/>, and an authorization seam that selects the
+    /// id-jag issued type and shapes the grant's <c>act</c> and <c>may_act</c> claims.
+    /// </summary>
+    /// <param name="app">The host shell.</param>
+    /// <param name="subject">The subject the validation seam surfaces.</param>
+    /// <param name="actor">The <c>act</c> chain to mint onto the grant, or <see langword="null"/>.</param>
+    /// <param name="authorizedActor">
+    /// Supplies the <c>may_act</c> claim when the exchange runs — evaluated then rather than at
+    /// wiring time because an authorized actor may be identified by the authorization server's own
+    /// issuer, which is settled only once the host is listening.
+    /// </param>
+    private static void WireActorMintSeams(
+        TestHostShell app,
+        string subject,
+        IReadOnlyDictionary<string, object>? actor,
+        Func<IReadOnlyDictionary<string, object>?> authorizedActor)
+    {
+        WireClientAuthentication(app);
+
+        app.Server.OAuth().ValidateTokenExchangeTokenAsync =
+            (token, tokenType, registration, context, ct) =>
+                ValueTask.FromResult<ValidatedSecurityToken?>(new ValidatedSecurityToken { Subject = subject });
+
+        app.Server.OAuth().AuthorizeTokenExchangeAsync =
+            (validatedSubject, validatedActor, request, registration, context, ct) =>
+                ValueTask.FromResult<TokenExchangeAuthorization?>(
+                    new TokenExchangeAuthorization
+                    {
+                        Subject = validatedSubject.Subject,
+                        Scope = WellKnownScopes.OpenId,
+                        IssuedTokenType = TokenType.IdJag,
+                        Actor = actor,
+                        AuthorizedActor = authorizedActor()
+                    });
+    }
+
+
+    /// <summary>
+    /// Signs an ID-JAG whose <c>act</c>/<c>may_act</c> claim values are set directly, bypassing the
+    /// mint so a value RFC 8693 §4.1/§4.4 does not define can reach the redeem path as wire bytes.
+    /// </summary>
+    /// <param name="signingKey">The IdP signing key.</param>
+    /// <param name="keyId">The <c>kid</c> the Resource Authorization Server resolves the key by.</param>
+    /// <param name="issuer">The IdP issuer identifier.</param>
+    /// <param name="actor">The raw <c>act</c> claim value, or <see langword="null"/> to omit it.</param>
+    /// <param name="authorizedActor">The raw <c>may_act</c> claim value, or <see langword="null"/> to omit it.</param>
+    /// <returns>The compact JWS.</returns>
+    private async Task<string> BuildIdJagWithActorClaimsAsync(
+        PrivateKeyMemory signingKey,
+        string keyId,
+        string issuer,
+        object? actor,
+        object? authorizedActor)
+    {
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
+        JwtHeader header = JwtHeader.ForSigning(algorithm, "oauth-id-jag+jwt", keyId);
+        JwtPayload payload = new(capacity: 10)
+        {
+            [WellKnownJwtClaimNames.Iss] = issuer,
+            [WellKnownJwtClaimNames.Sub] = SubjectIdentity,
+            [WellKnownJwtClaimNames.Aud] = ResourceAsIssuer,
+            [WellKnownJwtClaimNames.ClientId] = ClientId,
+            [WellKnownJwtClaimNames.Jti] = $"actor-shape-jag-{Guid.NewGuid():N}",
+            [WellKnownJwtClaimNames.Iat] = now.AddMinutes(-1).ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = now.AddMinutes(5).ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Scope] = WellKnownScopes.OpenId
+        };
+
+        if(actor is not null)
+        {
+            payload[WellKnownJwtClaimNames.Act] = actor;
+        }
+
+        if(authorizedActor is not null)
+        {
+            payload[WellKnownJwtClaimNames.MayAct] = authorizedActor;
+        }
+
+        UnsignedJwt unsigned = new(header, payload);
+        using JwsMessage jws = await unsigned.SignAsync(
+            signingKey,
+            ClientAssertionHeaderSerializer,
+            ClientAssertionPayloadSerializer,
+            TestSetup.Base64UrlEncoder,
+            Pool,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        return JwsSerialization.SerializeCompact(jws, TestSetup.Base64UrlEncoder);
+    }
+
+
+    /// <summary>
     /// Posts a Token Exchange that uses a SAML 2.0 Assertion as the <c>subject_token</c> requesting a
     /// Refresh Token (<c>requested_token_type</c> = the refresh_token URN), per §4.5.
     /// </summary>
@@ -3454,6 +4078,9 @@ internal sealed class IdJagGrantTests
         //resource to the access token audience (RFC 8707), thread the authorization_details through,
         //surface the grant's bound key (cnf.jkt) so the §9.8.1.2 proof-of-possession matrix runs, and
         //surface iss/jti/exp so the jwt-bearer endpoint's JtiReplayGuard applies the §3 replay defense.
+        //RFC 8693 §4.1/§4.4: the grant's delegation chain and its authorized-actor statement cross the
+        //seam too — a seam that dropped them would lose the chain and leave the redemption
+        //unconstrained, which is why this fixture copies both the way a real deployment must.
         return new JwtBearerGrant
         {
             Subject = result.Subject!,
@@ -3463,7 +4090,9 @@ internal sealed class IdJagGrantTests
             RequiredKeyThumbprint = result.ConfirmationKeyThumbprint,
             Issuer = result.Issuer,
             Jti = result.Jti,
-            Expiration = result.Expiration
+            Expiration = result.Expiration,
+            Act = result.Act,
+            MayAct = result.MayAct
         };
     }
 

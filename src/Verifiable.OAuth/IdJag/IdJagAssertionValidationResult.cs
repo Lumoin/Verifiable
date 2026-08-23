@@ -95,6 +95,49 @@ public sealed record IdJagAssertionValidationResult
     /// </summary>
     public string? ConfirmationKeyThumbprint { get; init; }
 
+    /// <summary>
+    /// The <c>act</c> (actor) claim carried by the grant — the delegation chain recorded on it per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see>, the outermost
+    /// object naming the current actor and any nested <c>act</c> members the prior actors, least recent
+    /// deepest. <see langword="null"/> when the grant records no delegation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Surfaced so a Resource Authorization Server can continue the chain on the access token it issues
+    /// (<see cref="JwtBearer.JwtBearerGrant.Act"/> → <see cref="IdJagActorDecision"/>). Carrying the
+    /// actor across the redemption is this authorization server's profile decision, exercising the
+    /// discretion RFC 8693 §1.1 grants ("When and if a composite token is issued is at the discretion of
+    /// the authorization server"): §4.3 / §9.7 of this specification define no <c>actor_token</c>
+    /// processing and no rule about an <c>act</c> claim on the grant, and
+    /// draft-ietf-oauth-identity-chaining-16 §2.4 — the redemption leg — never mentions <c>act</c>.
+    /// </para>
+    /// <para>
+    /// Per §4.1 the chain is delegation, never impersonation: <see cref="Subject"/> stays the principal
+    /// access is requested for while these actors are the parties acting for it. Only the outermost
+    /// actor is the current one — "Prior actors identified by any nested <c>act</c> claims are
+    /// informational only and are not to be considered in access control decisions."
+    /// </para>
+    /// </remarks>
+    public IReadOnlyDictionary<string, object>? Act { get; init; }
+
+    /// <summary>
+    /// The <c>may_act</c> (authorized actor) claim carried by the grant — the party its issuer asserts
+    /// is "eligible to act" for <see cref="Subject"/> per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.4">RFC 8693 §4.4</see>, identified by
+    /// a <c>sub</c> optionally combined with an <c>iss</c>. <see langword="null"/> when the grant
+    /// constrains the acting party in no way.
+    /// </summary>
+    /// <remarks>
+    /// Surfaced so the redemption can enforce it (<see cref="JwtBearer.JwtBearerGrant.MayAct"/> →
+    /// <see cref="IdJagActorDecision"/>): §4.4 states the claim "can be used by the authorization server
+    /// to determine whether the client ... is authorized to engage in the requested delegation or
+    /// impersonation", which at this leg is the client redeeming the grant. A grant carrying a
+    /// <c>may_act</c> that identifies no party is refused by
+    /// <see cref="IdJagValidationFailureReason.MalformedAuthorizedActor"/> rather than surfaced as
+    /// unconstrained.
+    /// </remarks>
+    public IReadOnlyDictionary<string, object>? MayAct { get; init; }
+
     /// <summary>The <c>scope</c> claim, when present.</summary>
     public string? Scope { get; init; }
 

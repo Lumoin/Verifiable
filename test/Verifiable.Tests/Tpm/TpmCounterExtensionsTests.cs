@@ -1,5 +1,7 @@
 using System;
 using System.Buffers;
+using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
@@ -8,6 +10,7 @@ using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Constants;
+using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Tpm;
@@ -55,7 +58,7 @@ internal sealed class TpmCounterExtensionsTests
         const int IncrementCount = 5;
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
 
         TpmResult<NvDefineSpaceResponse> defineResult = await device.DefineCounterAsync(
@@ -91,7 +94,7 @@ internal sealed class TpmCounterExtensionsTests
         const int IncrementsBeforeDelete = 3;
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
 
         TpmResult<NvDefineSpaceResponse> defineResult = await device.DefineCounterAsync(
@@ -131,13 +134,16 @@ internal sealed class TpmCounterExtensionsTests
     /// Verifies <see cref="TpmDeviceExtensions.IncrementCounterAsync"/> with a wrong Index authValue rejects with
     /// <c>TPM_RC_BAD_AUTH</c>. The Index is defined with <c>noDa: true</c> (dictionary-attack opted out) so this
     /// negative is a clean bad-authorization answer, uncomplicated by the dictionary-attack lockout ladder a
-    /// DA-protected Index would instead feed (TPM 2.0 Library Part 1, Section 17.8.1).
+    /// DA-protected Index would instead feed (TPM 2.0 Library Part 1, Section 17.8.1). The verb's default channel
+    /// is an HMAC session, so the mismatch is a genuine command-HMAC failure and the raw wire code
+    /// carries the session-index modifier (TPM 2.0 Library Part 2, clause 6.6.2) - the base error is what
+    /// decodes to the bare constant.
     /// </summary>
     [TestMethod]
     public async Task IncrementCounterAsyncWithWrongAuthOnANoDaIndexReturnsBadAuth()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
 
         TpmResult<NvDefineSpaceResponse> defineResult = await device.DefineCounterAsync(
@@ -149,7 +155,10 @@ internal sealed class TpmCounterExtensionsTests
             CounterIndexHandle, WrongCounterAuthBytes, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(wrongAuthResult.IsSuccess, "A wrong Index authValue must not be accepted.");
-        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, wrongAuthResult.ResponseCode);
+        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, wrongAuthResult.BaseError);
+        Assert.AreNotEqual(
+            TpmRcConstants.TPM_RC_BAD_AUTH, wrongAuthResult.ResponseCode,
+            "The default channel is an HMAC session, so the raw wire code carries the session-index modifier.");
     }
 
     /// <summary>
@@ -159,12 +168,14 @@ internal sealed class TpmCounterExtensionsTests
     /// plain bad-authorization a <c>TPMA_NV_NO_DA</c> Index answers (<c>TPM_RC_BAD_AUTH</c>, Section 17.8.1 — the
     /// contrast <see cref="IncrementCounterAsyncWithWrongAuthOnANoDaIndexReturnsBadAuth"/> exercises). Flipping the
     /// default to opt every counter out of lockout protection therefore fails here rather than passing silently.
+    /// The verb's default channel is an HMAC session, so the raw wire code carries the session-index
+    /// modifier (TPM 2.0 Library Part 2, clause 6.6.2) - the base error is what decodes to the bare constant.
     /// </summary>
     [TestMethod]
     public async Task DefineCounterAsyncDefaultsToDictionaryAttackProtected()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
 
         TpmResult<NvDefineSpaceResponse> defineResult = await device.DefineCounterAsync(
@@ -177,8 +188,11 @@ internal sealed class TpmCounterExtensionsTests
 
         Assert.IsFalse(wrongAuthResult.IsSuccess, "A wrong Index authValue must not be accepted.");
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_AUTH_FAIL, wrongAuthResult.ResponseCode,
+            TpmRcConstants.TPM_RC_AUTH_FAIL, wrongAuthResult.BaseError,
             "A counter defined with the default must be dictionary-attack protected, so a wrong authValue answers TPM_RC_AUTH_FAIL, not TPM_RC_BAD_AUTH.");
+        Assert.AreNotEqual(
+            TpmRcConstants.TPM_RC_AUTH_FAIL, wrongAuthResult.ResponseCode,
+            "The default channel is an HMAC session, so the raw wire code carries the session-index modifier.");
     }
 
     /// <summary>
@@ -192,7 +206,7 @@ internal sealed class TpmCounterExtensionsTests
     public async Task ReadCounterAsyncBeforeFirstIncrementFailsWhileIncrementCounterAsyncOnTheSameFreshIndexSucceeds()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
 
         TpmResult<NvDefineSpaceResponse> defineResult = await device.DefineCounterAsync(
@@ -225,7 +239,7 @@ internal sealed class TpmCounterExtensionsTests
     public async Task RawNvWriteAgainstAVerbDefinedCounterIndexReturnsAttributes()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
 
         TpmResult<NvDefineSpaceResponse> defineResult = await device.DefineCounterAsync(
@@ -237,7 +251,8 @@ internal sealed class TpmCounterExtensionsTests
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_Write, TpmResponseCodec.NvWrite);
 
         using TpmPasswordSession writeSession = TpmPasswordSession.Create(CounterAuthBytes, pool);
-        var writeInput = new NvWriteInput(CounterIndexHandle, CounterIndexHandle, new Tpm2bMaxBuffer(RejectedWriteAttempt), Offset: 0);
+        using Tpm2bMaxNvBuffer writeInputBuffer = Tpm2bMaxNvBuffer.Create(RejectedWriteAttempt, pool);
+        var writeInput = new NvWriteInput(CounterIndexHandle, CounterIndexHandle, writeInputBuffer, Offset: 0);
 
         TpmResult<NvWriteResponse> writeResult = await TpmCommandExecutor.ExecuteAsync<NvWriteResponse>(
             device, writeInput, [writeSession], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -249,13 +264,220 @@ internal sealed class TpmCounterExtensionsTests
     }
 
     /// <summary>
-    /// Creates a simulator, powers it on, and brings it through <c>TPM2_Startup(CLEAR)</c> into the operational
-    /// phase.
+    /// A full define→increment→read→undefine lifecycle driven ENTIRELY
+    /// over the four verbs' DEFAULT channel is monotonic exactly as the all-password lifecycle (see
+    /// <see cref="DefineThenIncrementRunThroughTheVerbsIsMonotonic"/>) is, and not one command the verbs
+    /// compose ever carries <c>TPM_RS_PW</c> as its authorizing session - proving the default channel
+    /// genuinely rides a session rather than a password (TPM 2.0 Library Part 1, Sections 17.6.9/17.6.10).
     /// </summary>
-    /// <returns>The operational simulator.</returns>
-    private async Task<TpmSimulator> CreateOperationalAsync()
+    [TestMethod]
+    public async Task DefineIncrementReadUndefineOverTheDefaultChannelRoundTripsMonotonicWithoutEverSendingAPasswordSession()
     {
-        var simulator = new TpmSimulator("tpm-in-house-counter-verbs");
+        const int IncrementCount = 3;
+
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+
+        var capturedCommands = new List<byte[]>();
+        async ValueTask<TpmResult<TpmResponse>> CaptureAsync(ReadOnlyMemory<byte> command, BaseMemoryPool commandPool, CancellationToken ct)
+        {
+            capturedCommands.Add(command.ToArray());
+            return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
+        }
+
+        using TpmDevice device = TpmDevice.Create(CaptureAsync);
+
+        TpmResult<NvDefineSpaceResponse> defineResult = await device.DefineCounterAsync(
+            ReadOnlyMemory<byte>.Empty, CounterIndexHandle, CounterAuthBytes, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(defineResult.IsSuccess, $"DefineCounterAsync failed: '{defineResult.ResponseCode}'.");
+
+        for(ulong expected = 1; expected <= IncrementCount; expected++)
+        {
+            TpmResult<ulong> incrementResult = await device.IncrementCounterAsync(
+                CounterIndexHandle, CounterAuthBytes, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(incrementResult.IsSuccess, $"Increment {expected} of {IncrementCount} failed: '{incrementResult.ResponseCode}'.");
+            Assert.AreEqual(expected, incrementResult.Value, $"Increment {expected} must return exactly {expected}.");
+        }
+
+        TpmResult<ulong> readResult = await device.ReadCounterAsync(
+            CounterIndexHandle, CounterAuthBytes, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(readResult.IsSuccess, $"ReadCounterAsync failed: '{readResult.ResponseCode}'.");
+        Assert.AreEqual((ulong)IncrementCount, readResult.Value, "A standalone read after the run must agree with the last increment's returned count.");
+
+        TpmResult<NvUndefineSpaceResponse> undefineResult = await device.UndefineCounterAsync(
+            ReadOnlyMemory<byte>.Empty, CounterIndexHandle, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(undefineResult.IsSuccess, $"UndefineCounterAsync failed: '{undefineResult.ResponseCode}'.");
+
+        Assert.IsNotEmpty(capturedCommands, "The capturing wrapper must have observed at least one command.");
+        foreach(byte[] command in capturedCommands)
+        {
+            TpmCcConstants code = ReadCommandCode(command);
+            int handleCount = CounterCommandHandleCount(code);
+            if(handleCount < 0)
+            {
+                continue;
+            }
+
+            uint sessionHandle = ReadFirstSessionHandleAfterHandleCount(command, handleCount);
+            Assert.AreNotEqual(
+                (uint)TpmRh.TPM_RH_PW, sessionHandle,
+                $"The default channel must never send a TPM_RS_PW password session ('{code}' command).");
+        }
+    }
+
+    /// <summary>
+    /// Every <c>…WithPasswordAsync</c> opt-out still authorizes
+    /// correctly through the same lifecycle and genuinely sends <c>TPM_RS_PW</c> for each composed command -
+    /// proving the opt-outs are not accidentally identical to the secure defaults on the wire.
+    /// </summary>
+    [TestMethod]
+    public async Task DefineIncrementReadUndefineWithPasswordOptOutsRoundTripAndGenuinelySendATpmRsPwSession()
+    {
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+
+        var capturedCommands = new List<byte[]>();
+        async ValueTask<TpmResult<TpmResponse>> CaptureAsync(ReadOnlyMemory<byte> command, BaseMemoryPool commandPool, CancellationToken ct)
+        {
+            capturedCommands.Add(command.ToArray());
+            return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
+        }
+
+        using TpmDevice device = TpmDevice.Create(CaptureAsync);
+
+        TpmResult<NvDefineSpaceResponse> defineResult = await device.DefineCounterWithPasswordAsync(
+            ReadOnlyMemory<byte>.Empty, CounterIndexHandle, CounterAuthBytes, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(defineResult.IsSuccess, $"DefineCounterWithPasswordAsync failed: '{defineResult.ResponseCode}'.");
+
+        TpmResult<ulong> incrementResult = await device.IncrementCounterWithPasswordAsync(
+            CounterIndexHandle, CounterAuthBytes, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(incrementResult.IsSuccess, $"IncrementCounterWithPasswordAsync failed: '{incrementResult.ResponseCode}'.");
+        Assert.AreEqual(1ul, incrementResult.Value, "The first increment must return exactly 1.");
+
+        TpmResult<ulong> readResult = await device.ReadCounterWithPasswordAsync(
+            CounterIndexHandle, CounterAuthBytes, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(readResult.IsSuccess, $"ReadCounterWithPasswordAsync failed: '{readResult.ResponseCode}'.");
+        Assert.AreEqual(1ul, readResult.Value, "A standalone read after the single increment must agree with it.");
+
+        TpmResult<NvUndefineSpaceResponse> undefineResult = await device.UndefineCounterWithPasswordAsync(
+            ReadOnlyMemory<byte>.Empty, CounterIndexHandle, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(undefineResult.IsSuccess, $"UndefineCounterWithPasswordAsync failed: '{undefineResult.ResponseCode}'.");
+
+        Assert.IsNotEmpty(capturedCommands, "The capturing wrapper must have observed at least one command.");
+        foreach(byte[] command in capturedCommands)
+        {
+            TpmCcConstants code = ReadCommandCode(command);
+            int handleCount = CounterCommandHandleCount(code);
+            if(handleCount < 0)
+            {
+                continue;
+            }
+
+            uint sessionHandle = ReadFirstSessionHandleAfterHandleCount(command, handleCount);
+            Assert.AreEqual(
+                (uint)TpmRh.TPM_RH_PW, sessionHandle,
+                $"Every WithPasswordAsync opt-out must genuinely send TPM_RS_PW ('{code}' command).");
+        }
+    }
+
+    /// <summary>
+    /// The salted overload round-trips against an RSA tpmKey exactly as
+    /// the unsalted default does - the salt (TPM 2.0 Library Part 1, Section 17.6.11, equation 23) changes only
+    /// where the session key's entropy comes from, never the increment's return value (mirrors the Pin group's
+    /// own salted-overload proof, <c>VerifyPinAsyncSaltedOverloadSucceedsAgainstAnRsaTpmKeyAndResetsPinCount</c>).
+    /// </summary>
+    [TestMethod]
+    public async Task IncrementCounterAsyncSaltedOverloadSucceedsAgainstAnRsaTpmKeyAndReturnsTheFreshCount()
+    {
+        const uint DefaultRsaExponent = 65537;
+        const TpmAlgIdConstants RsaKeyNameAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
+
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(withRsaBackend: true).ConfigureAwait(false);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+
+        TpmResult<NvDefineSpaceResponse> defineResult = await device.DefineCounterAsync(
+            ReadOnlyMemory<byte>.Empty, CounterIndexHandle, CounterAuthBytes, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(defineResult.IsSuccess, $"DefineCounterAsync failed: '{defineResult.ResponseCode}'.");
+
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);
+
+        using CreatePrimaryInput primaryInput = CreatePrimaryInput.ForRsaEndorsementKey(TpmRh.TPM_RH_OWNER, pool);
+        using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
+        TpmResult<CreatePrimaryResponse> keyResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            device, primaryInput, [ownerAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(keyResult.IsSuccess, $"CreatePrimary (RSA decrypt key) failed: '{keyResult.ResponseCode}'.");
+
+        using CreatePrimaryResponse tpmKey = keyResult.Value;
+        ReadOnlyMemory<byte> modulus = tpmKey.OutPublic.PublicArea.Unique.GetRsaModulus().ToArray();
+        TpmRsaSigningBackend rsaBackend = MicrosoftTpmRsaSigningBackend.Create();
+
+        TpmResult<ulong> incrementResult = await device.IncrementCounterAsync(
+            CounterIndexHandle, CounterAuthBytes, tpmKey.ObjectHandle.Value, modulus, DefaultRsaExponent, RsaKeyNameAlg,
+            rsaBackend.EncryptOaep, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(incrementResult.IsSuccess, $"IncrementCounterAsync (salted overload) failed: '{incrementResult.ResponseCode}'.");
+        Assert.AreEqual(1ul, incrementResult.Value, "The salted overload's first increment must return exactly 1, exactly as the unsalted default does.");
+    }
+
+    /// <summary>Reads a captured TPM command's header <c>code</c> field, leaving every other field unexamined.</summary>
+    /// <param name="command">The captured command bytes.</param>
+    /// <returns>The command code.</returns>
+    private static TpmCcConstants ReadCommandCode(byte[] command)
+    {
+        var reader = new TpmReader(command);
+        TpmHeader header = TpmHeader.Parse(ref reader);
+
+        return (TpmCcConstants)header.Code;
+    }
+
+    /// <summary>
+    /// Reads a captured command's first (and, throughout these additions, only) authorizing session's
+    /// <c>sessionHandle</c> field: handle area (<paramref name="handleCount"/> handles), then
+    /// <c>authorizationSize</c>, then <c>sessionHandle</c> - firewalled to the wire, no back-channel into
+    /// simulator or session internals.
+    /// </summary>
+    /// <param name="command">The captured command bytes.</param>
+    /// <param name="handleCount">The number of handles in the command's handle area.</param>
+    /// <returns>The authorizing session's handle.</returns>
+    private static uint ReadFirstSessionHandleAfterHandleCount(byte[] command, int handleCount)
+    {
+        var reader = new TpmReader(command);
+        _ = TpmHeader.Parse(ref reader);
+        for(int i = 0; i < handleCount; i++)
+        {
+            _ = reader.ReadUInt32();
+        }
+
+        _ = reader.ReadUInt32(); //authorizationSize.
+        return reader.ReadUInt32(); //sessionHandle.
+    }
+
+    /// <summary>The handle-area size of each Counter-group command the four verbs compose (TPM 2.0 Library Part 3, Sections 31.3/31.4/31.8/31.13).</summary>
+    /// <param name="code">The command code to map.</param>
+    /// <returns>The handle count, or -1 when the code is not one of this file's Counter commands.</returns>
+    private static int CounterCommandHandleCount(TpmCcConstants code) => code switch
+    {
+        TpmCcConstants.TPM_CC_NV_DefineSpace => 1,
+        TpmCcConstants.TPM_CC_NV_Increment => 2,
+        TpmCcConstants.TPM_CC_NV_Read => 2,
+        TpmCcConstants.TPM_CC_NV_UndefineSpace => 2,
+        _ => -1
+    };
+
+    /// <summary>
+    /// Creates a simulator, powers it on, and brings it through <c>TPM2_Startup(CLEAR)</c> into the operational
+    /// phase. When <paramref name="withRsaBackend"/> is set, the simulator is also wired with the ECC
+    /// (BouncyCastle) and RSA (framework) signing backends a salted HMAC session's RSA <c>tpmKey</c> needs from
+    /// <c>TPM2_CreatePrimary()</c> (TPM 2.0 Library Part 1, clause 11.4.10.3).
+    /// </summary>
+    /// <param name="withRsaBackend">When <see langword="true"/>, wires the ECC and RSA signing backends; otherwise the simulator carries neither.</param>
+    /// <returns>The operational simulator.</returns>
+    private async Task<TpmSimulator> CreateOperationalAsync(bool withRsaBackend = false)
+    {
+        var simulator = withRsaBackend
+            ? new TpmSimulator(
+                "tpm-in-house-counter-verbs", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create())
+            : new TpmSimulator("tpm-in-house-counter-verbs");
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;

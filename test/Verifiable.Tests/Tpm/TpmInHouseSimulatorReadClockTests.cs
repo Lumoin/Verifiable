@@ -34,7 +34,7 @@ internal sealed class TpmInHouseSimulatorReadClockTests
     public async Task ReadClockAdvancesByTheDeterministicQuantumAcrossCommands()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = CreatePoweredOff();
+        using TpmSimulator simulator = CreatePoweredOff();
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -70,7 +70,7 @@ internal sealed class TpmInHouseSimulatorReadClockTests
     public async Task TimeResetsButClockDoesNotAcrossAShutdownStateStartupClearRestart()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = CreatePoweredOff();
+        using TpmSimulator simulator = CreatePoweredOff();
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -105,7 +105,7 @@ internal sealed class TpmInHouseSimulatorReadClockTests
     public async Task ResetCountAndRestartCountTransitionAcrossResetRestartAndResume()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = CreatePoweredOff();
+        using TpmSimulator simulator = CreatePoweredOff();
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -154,7 +154,7 @@ internal sealed class TpmInHouseSimulatorReadClockTests
     public async Task ClockSafeIsNoAfterAnUnorderlyResetFollowingPriorOperation()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = CreatePoweredOff();
+        using TpmSimulator simulator = CreatePoweredOff();
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 

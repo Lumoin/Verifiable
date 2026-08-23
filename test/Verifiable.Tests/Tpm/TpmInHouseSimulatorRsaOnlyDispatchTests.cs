@@ -65,7 +65,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     public async Task RsaOnlySimulatorCompletesCertifyAndQuoteEndToEnd()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateRsaOnlyOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateRsaOnlyOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -102,7 +102,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     public async Task RsaOnlySimulatorStillRejectsEccCreatePrimaryWithCommandCode()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateRsaOnlyOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateRsaOnlyOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -131,7 +131,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     public async Task RsaOnlySimulatorCompletesMakeAndActivateCredentialEndToEnd()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateRsaOnlyOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateRsaOnlyOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -152,10 +152,40 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
         using StartAuthSessionResponse policyStart = policyStartResult.Value;
         uint policyHandle = policyStart.SessionHandle.Value;
 
-        TpmResult<PolicySecretResponse> secretResult = await tpm.PolicySecretAsync(
+        //PolicySecretAsync's secure default composes a bound HMAC session against authHandle internally rather
+        //than sending its authorization value as a plaintext TPM_RS_PW password (see
+        //TpmInHouseSimulatorSecureChannelTests for the dedicated coverage) — captured here too, so THIS specific
+        //EK PolicyA flow (the standard EK's userWithAuth-CLEAR case the TCG Credential Profile names) is itself
+        //proven to ride the secure channel, not merely assumed from the verb's own unit tests.
+        byte[]? capturedPolicySecretCommand = null;
+        async ValueTask<TpmResult<TpmResponse>> CapturePolicySecretAsync(ReadOnlyMemory<byte> command, BaseMemoryPool commandPool, System.Threading.CancellationToken ct)
+        {
+            var peekReader = new TpmReader(command.Span);
+            TpmHeader peekHeader = TpmHeader.Parse(ref peekReader);
+            if((TpmCcConstants)peekHeader.Code == TpmCcConstants.TPM_CC_PolicySecret)
+            {
+                capturedPolicySecretCommand = command.ToArray();
+            }
+
+            return await simulator.SubmitAsync(command, commandPool, ct).ConfigureAwait(false);
+        }
+
+        using TpmDevice policySecretCapturingTpm = TpmDevice.Create(CapturePolicySecretAsync);
+        TpmResult<PolicySecretResponse> secretResult = await policySecretCapturingTpm.PolicySecretAsync(
             (uint)TpmRh.TPM_RH_ENDORSEMENT, policyHandle, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(secretResult.IsSuccess, $"PolicySecret failed: '{secretResult.ResponseCode}'.");
         secretResult.Value.Dispose();
+
+        Assert.IsNotNull(capturedPolicySecretCommand, "The capturing wrapper must have observed the outgoing PolicySecret command.");
+        var authAreaReader = new TpmReader(capturedPolicySecretCommand!);
+        _ = TpmHeader.Parse(ref authAreaReader);
+        _ = authAreaReader.ReadUInt32(); //authHandle.
+        _ = authAreaReader.ReadUInt32(); //policySession.
+        _ = authAreaReader.ReadUInt32(); //authorizationSize.
+        uint authorizingSessionHandle = authAreaReader.ReadUInt32(); //sessionHandle.
+        Assert.AreNotEqual(
+            (uint)TpmRh.TPM_RH_PW, authorizingSessionHandle,
+            "PolicySecretAsync's secure default must never send a TPM_RS_PW password session, even inside the standard EK PolicyA flow.");
 
         using ActivateCredentialInput activateInput = ActivateCredentialInput.Create(
             ak.ObjectHandle, ek.ObjectHandle, made.CredentialBlob.Span, made.Secret.Span, pool);
@@ -185,7 +215,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
     public async Task RsaOnlySimulatorRejectsRsaSigningKeyAsCredentialKeyWithType()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateRsaOnlyOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateRsaOnlyOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 

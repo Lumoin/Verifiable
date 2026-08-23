@@ -1,5 +1,6 @@
 using System;
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cbor.Ctap;
@@ -418,6 +419,8 @@ internal sealed class CtapAuthenticatorNvSignCounterCapstoneTests
     /// <param name="chipRunId">The simulated TPM's own run id.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The TPM device and the loaded storage parent's handle.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "The simulator is the test class's durable chip: its ownership rides the returned TpmDevice's submit delegate for the rest of the test, and its pooled state is reclaimed with the suite's process-wide pool.")]
     private static async Task<(TpmDevice Tpm, uint ParentHandle)> CreateChipWithLoadedStorageParentAsync(string chipRunId, CancellationToken cancellationToken)
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;

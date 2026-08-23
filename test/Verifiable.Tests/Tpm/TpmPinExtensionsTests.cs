@@ -55,7 +55,7 @@ internal sealed class TpmPinExtensionsTests
     {
         const uint PinLimit = 3;
 
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
 
         TpmResult<NvWriteResponse> defineResult = await device.DefinePinFailIndexAsync(
@@ -81,7 +81,7 @@ internal sealed class TpmPinExtensionsTests
     {
         const uint PinLimit = 3;
 
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
 
         await DefineAsync(device, PinLimit).ConfigureAwait(false);
@@ -89,7 +89,7 @@ internal sealed class TpmPinExtensionsTests
         TpmResult<TpmPinCounterParameters> wrongResult = await device.VerifyPinAsync(
             PinIndexHandle, WrongPinHash, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(wrongResult.IsSuccess, "A wrong PIN must not be accepted.");
-        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, wrongResult.ResponseCode);
+        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, wrongResult.BaseError);
 
         TpmResult<TpmPinCounterParameters> countersResult = await device.ReadPinCountersAsync(
             ReadOnlyMemory<byte>.Empty, PinIndexHandle, TestContext.CancellationToken).ConfigureAwait(false);
@@ -108,14 +108,14 @@ internal sealed class TpmPinExtensionsTests
     {
         const uint PinLimit = 2;
 
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
 
         await DefineAsync(device, PinLimit).ConfigureAwait(false);
 
         TpmResult<TpmPinCounterParameters> seedingFailure = await device.VerifyPinAsync(
             PinIndexHandle, WrongPinHash, TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, seedingFailure.ResponseCode, "The seeding failure must not yet be at pinLimit.");
+        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, seedingFailure.BaseError, "The seeding failure must not yet be at pinLimit.");
 
         TpmResult<TpmPinCounterParameters> successResult = await device.VerifyPinAsync(
             PinIndexHandle, CorrectPinHash, TestContext.CancellationToken).ConfigureAwait(false);
@@ -124,11 +124,11 @@ internal sealed class TpmPinExtensionsTests
 
         TpmResult<TpmPinCounterParameters> firstFailureAfterReset = await device.VerifyPinAsync(
             PinIndexHandle, WrongPinHash, TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, firstFailureAfterReset.ResponseCode, "The first failure after the reset must not yet be at pinLimit.");
+        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, firstFailureAfterReset.BaseError, "The first failure after the reset must not yet be at pinLimit.");
 
         TpmResult<TpmPinCounterParameters> secondFailureAfterReset = await device.VerifyPinAsync(
             PinIndexHandle, WrongPinHash, TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, secondFailureAfterReset.ResponseCode, "The second failure after the reset must still be counted, not yet AUTH_UNAVAILABLE.");
+        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, secondFailureAfterReset.BaseError, "The second failure after the reset must still be counted, not yet AUTH_UNAVAILABLE.");
 
         TpmResult<TpmPinCounterParameters> atLimitAfterReset = await device.VerifyPinAsync(
             PinIndexHandle, CorrectPinHash, TestContext.CancellationToken).ConfigureAwait(false);
@@ -148,7 +148,7 @@ internal sealed class TpmPinExtensionsTests
     {
         const uint PinLimit = 2;
 
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
 
         await DefineAsync(device, PinLimit).ConfigureAwait(false);
@@ -158,7 +158,7 @@ internal sealed class TpmPinExtensionsTests
             TpmResult<TpmPinCounterParameters> wrongResult = await device.VerifyPinAsync(
                 PinIndexHandle, WrongPinHash, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual(
-                TpmRcConstants.TPM_RC_BAD_AUTH, wrongResult.ResponseCode,
+                TpmRcConstants.TPM_RC_BAD_AUTH, wrongResult.BaseError,
                 $"Attempt {attempt} of {PinLimit} must be a plain bad-authorization, not yet at the limit.");
         }
 
@@ -179,14 +179,14 @@ internal sealed class TpmPinExtensionsTests
     {
         const uint PinLimit = 1;
 
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
 
         await DefineAsync(device, PinLimit).ConfigureAwait(false);
 
         TpmResult<TpmPinCounterParameters> exhaustingFailure = await device.VerifyPinAsync(
             PinIndexHandle, WrongPinHash, TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, exhaustingFailure.ResponseCode, "One wrong PIN against pinLimit == 1 must reach the limit.");
+        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, exhaustingFailure.BaseError, "One wrong PIN against pinLimit == 1 must reach the limit.");
 
         TpmResult<TpmPinCounterParameters> blockedResult = await device.VerifyPinAsync(
             PinIndexHandle, CorrectPinHash, TestContext.CancellationToken).ConfigureAwait(false);
@@ -214,14 +214,14 @@ internal sealed class TpmPinExtensionsTests
     {
         const uint PinLimit = 2;
 
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
 
         await DefineAsync(device, PinLimit).ConfigureAwait(false);
 
         TpmResult<TpmPinCounterParameters> seedingFailure = await device.VerifyPinAsync(
             PinIndexHandle, WrongPinHash, TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, seedingFailure.ResponseCode);
+        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, seedingFailure.BaseError);
 
         for(int repeat = 0; repeat < 3; repeat++)
         {
@@ -233,7 +233,7 @@ internal sealed class TpmPinExtensionsTests
 
         TpmResult<TpmPinCounterParameters> exhaustingFailure = await device.VerifyPinAsync(
             PinIndexHandle, WrongPinHash, TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, exhaustingFailure.ResponseCode);
+        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, exhaustingFailure.BaseError);
 
         for(int repeat = 0; repeat < 3; repeat++)
         {
@@ -262,7 +262,7 @@ internal sealed class TpmPinExtensionsTests
     {
         const uint PinLimit = 3;
 
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
 
         await DefineAsync(device, PinLimit).ConfigureAwait(false);
@@ -278,7 +278,7 @@ internal sealed class TpmPinExtensionsTests
         TpmResult<TpmPinCounterParameters> oldPinResult = await device.VerifyPinAsync(
             PinIndexHandle, CorrectPinHash, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(oldPinResult.IsSuccess, "The OLD PIN must no longer authorize the redefined Index.");
-        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, oldPinResult.ResponseCode);
+        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, oldPinResult.BaseError);
 
         TpmResult<TpmPinCounterParameters> newPinResult = await device.VerifyPinAsync(
             PinIndexHandle, RotatedPinHash, TestContext.CancellationToken).ConfigureAwait(false);
@@ -298,13 +298,13 @@ internal sealed class TpmPinExtensionsTests
     {
         const uint PinLimit = 3;
 
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
 
         TpmResult<NvWriteResponse> wrongAuthResult = await device.DefinePinFailIndexAsync(
             WrongOwnerAuth, PinIndexHandle, CorrectPinHash, PinLimit, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(wrongAuthResult.IsSuccess, "A wrong owner authorization must not be able to define the Index.");
-        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, wrongAuthResult.ResponseCode);
+        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, wrongAuthResult.BaseError);
 
         TpmResult<NvWriteResponse> correctAuthResult = await device.DefinePinFailIndexAsync(
             ReadOnlyMemory<byte>.Empty, PinIndexHandle, CorrectPinHash, PinLimit, TestContext.CancellationToken).ConfigureAwait(false);
@@ -322,14 +322,14 @@ internal sealed class TpmPinExtensionsTests
     {
         const uint PinLimit = 3;
 
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         await DefineAsync(device, PinLimit).ConfigureAwait(false);
 
         TpmResult<TpmPinCounterParameters> wrongAuthResult = await device.ReadPinCountersAsync(
             WrongOwnerAuth, PinIndexHandle, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(wrongAuthResult.IsSuccess, "A wrong owner authorization must not be able to read the counters.");
-        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, wrongAuthResult.ResponseCode);
+        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, wrongAuthResult.BaseError);
 
         TpmResult<TpmPinCounterParameters> correctAuthResult = await device.ReadPinCountersAsync(
             ReadOnlyMemory<byte>.Empty, PinIndexHandle, TestContext.CancellationToken).ConfigureAwait(false);
@@ -348,18 +348,18 @@ internal sealed class TpmPinExtensionsTests
     {
         const uint PinLimit = 1;
 
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         await DefineAsync(device, PinLimit).ConfigureAwait(false);
 
         TpmResult<TpmPinCounterParameters> exhaustingFailure = await device.VerifyPinAsync(
             PinIndexHandle, WrongPinHash, TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, exhaustingFailure.ResponseCode, "One wrong PIN against pinLimit == 1 must reach the limit.");
+        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, exhaustingFailure.BaseError, "One wrong PIN against pinLimit == 1 must reach the limit.");
 
         TpmResult<NvWriteResponse> wrongAuthResult = await device.ResetPinCountAsync(
             WrongOwnerAuth, PinIndexHandle, PinLimit, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(wrongAuthResult.IsSuccess, "A wrong owner authorization must not be able to reset the counter.");
-        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, wrongAuthResult.ResponseCode);
+        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, wrongAuthResult.BaseError);
 
         TpmResult<TpmPinCounterParameters> stillBlockedResult = await device.VerifyPinAsync(
             PinIndexHandle, CorrectPinHash, TestContext.CancellationToken).ConfigureAwait(false);
@@ -388,14 +388,14 @@ internal sealed class TpmPinExtensionsTests
     {
         const uint PinLimit = 3;
 
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         await DefineAsync(device, PinLimit).ConfigureAwait(false);
 
         TpmResult<NvUndefineSpaceResponse> wrongAuthResult = await device.UndefinePinIndexAsync(
             WrongOwnerAuth, PinIndexHandle, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(wrongAuthResult.IsSuccess, "A wrong owner authorization must not be able to undefine the Index.");
-        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, wrongAuthResult.ResponseCode);
+        Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, wrongAuthResult.BaseError);
 
         TpmResult<TpmPinCounterParameters> stillDefinedResult = await device.VerifyPinAsync(
             PinIndexHandle, CorrectPinHash, TestContext.CancellationToken).ConfigureAwait(false);

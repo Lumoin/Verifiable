@@ -17,11 +17,11 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// <b>Union members:</b>
 /// </para>
 /// <list type="bullet">
-///   <item><description>TPM_ALG_ECDSA: TPMS_SIGNATURE_ECDSA (hash + signatureR + signatureS), Part 2, Section 11.3.4.</description></item>
-///   <item><description>TPM_ALG_RSASSA / TPM_ALG_RSAPSS: TPMS_SIGNATURE_RSA (hash + sig), Part 2, Section 11.3.2.</description></item>
+///   <item><description>TPM_ALG_ECDSA: TPMS_SIGNATURE_ECC (hash + signatureR + signatureS), Part 2, Section 11.3.2, Table 205.</description></item>
+///   <item><description>TPM_ALG_RSASSA / TPM_ALG_RSAPSS: TPMS_SIGNATURE_RSA (hash + sig), Part 2, Section 11.3.1, Table 203.</description></item>
 /// </list>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 11.3.5, Table 195 (TPMU_SIGNATURE).
+/// Specification reference: TPM 2.0 Library Part 2, Section 11.3.3, Table 207 (TPMU_SIGNATURE).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -76,6 +76,94 @@ public sealed class TpmuSignature: IDisposable
         RsaSignature = rsaSignature;
         SignatureR = null;
         SignatureS = null;
+    }
+
+    /// <summary>
+    /// Creates a signature union from a raw signature value under the supplied algorithm selector.
+    /// </summary>
+    /// <param name="sigAlg">The signing-algorithm selector of the enclosing TPMT_SIGNATURE.</param>
+    /// <param name="hashAlg">The hash algorithm the signature was made with, carried in the member's <c>hash</c> field.</param>
+    /// <param name="signature">
+    /// The raw signature value: for <c>TPM_ALG_ECDSA</c> the IEEE P1363 <c>r ‖ s</c> concatenation, whose two
+    /// equal-width halves become <c>signatureR</c> and <c>signatureS</c>; for an RSA scheme the signature octets,
+    /// which become <c>sig</c> whole.
+    /// </param>
+    /// <param name="pool">The memory pool for the member's buffers.</param>
+    /// <returns>The created signature union; the caller owns and disposes it.</returns>
+    /// <exception cref="NotSupportedException"><paramref name="sigAlg"/> is not a supported signing algorithm.</exception>
+    /// <exception cref="ArgumentException">An ECDSA <paramref name="signature"/> has odd length, so it cannot be canonical P1363 <c>r ‖ s</c>.</exception>
+    public static TpmuSignature Create(TpmAlgIdConstants sigAlg, TpmAlgIdConstants hashAlg, ReadOnlySpan<byte> signature, BaseMemoryPool pool)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+
+        return sigAlg switch
+        {
+            TpmAlgIdConstants.TPM_ALG_ECDSA => CreateEcdsa(sigAlg, hashAlg, signature, pool),
+            TpmAlgIdConstants.TPM_ALG_RSASSA or TpmAlgIdConstants.TPM_ALG_RSAPSS => new TpmuSignature(sigAlg, hashAlg, Tpm2bPublicKeyRsa.Create(signature, pool)),
+            _ => throw new NotSupportedException($"Signing algorithm '{sigAlg}' is not supported.")
+        };
+
+        static TpmuSignature CreateEcdsa(TpmAlgIdConstants sigAlg, TpmAlgIdConstants hashAlg, ReadOnlySpan<byte> signature, BaseMemoryPool pool)
+        {
+            //r and s are the equal-width halves of the IEEE P1363 signature (each the curve field width), so its
+            //length is even and the split at the midpoint is exact.
+            if((signature.Length & 1) != 0)
+            {
+                throw new ArgumentException($"An ECDSA signature must be IEEE P1363 r ‖ s of even length so r and s are equal width; got {signature.Length} octets.", nameof(signature));
+            }
+
+            int fieldWidth = signature.Length / 2;
+            Tpm2bEccParameter r = Tpm2bEccParameter.Create(signature[..fieldWidth], pool);
+            try
+            {
+                Tpm2bEccParameter s = Tpm2bEccParameter.Create(signature[fieldWidth..], pool);
+
+                return new TpmuSignature(sigAlg, hashAlg, r, s);
+            }
+            catch
+            {
+                r.Dispose();
+                throw;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the serialized size of the selected member: its <c>hash</c> field followed by the member's buffers.
+    /// </summary>
+    /// <returns>The number of octets <see cref="WriteTo"/> produces.</returns>
+    public int GetSerializedSize()
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+
+        int memberSize = Type == TpmAlgIdConstants.TPM_ALG_ECDSA
+            ? SignatureR!.SerializedSize + SignatureS!.SerializedSize
+            : RsaSignature.SerializedSize;
+
+        return sizeof(ushort) + memberSize;
+    }
+
+    /// <summary>
+    /// Writes the selected member to a TPM writer: the <c>hash</c> field, then <c>signatureR</c> and
+    /// <c>signatureS</c> for ECDSA or <c>sig</c> for an RSA scheme. The selector itself belongs to the enclosing
+    /// <see cref="TpmtSignature"/>.
+    /// </summary>
+    /// <param name="writer">The writer.</param>
+    public void WriteTo(ref TpmWriter writer)
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+
+        writer.WriteUInt16((ushort)HashAlgorithm);
+
+        if(Type == TpmAlgIdConstants.TPM_ALG_ECDSA)
+        {
+            SignatureR!.WriteTo(ref writer);
+            SignatureS!.WriteTo(ref writer);
+
+            return;
+        }
+
+        RsaSignature.WriteTo(ref writer);
     }
 
     /// <summary>

@@ -5,14 +5,15 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 
 /// <summary>
 /// A policy assessor that evaluates a proposed disclosure and may approve,
-/// narrow, or reject it.
+/// narrow, expand, or reject it.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Assessors are composed in a pipeline within <see cref="DisclosureComputation{TCredential}"/>.
 /// Each assessor receives the output of the previous assessor (or the lattice computation
-/// for the first assessor). The pipeline processes assessors in order; a rejection stops
-/// the pipeline for that credential.
+/// for the first assessor), clamped into the credential's lattice, so no assessor can hand the
+/// next one a set the credential does not admit. The pipeline processes assessors in order;
+/// a rejection stops the pipeline for that credential.
 /// </para>
 /// <para>
 /// <strong>Presentation-side assessors</strong> (holder deciding what to reveal):

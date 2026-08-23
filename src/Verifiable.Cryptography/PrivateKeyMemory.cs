@@ -34,6 +34,15 @@ public class PrivateKeyMemory: SensitiveMemory
 
 
     /// <summary>
+    /// Gets whether this carrier holds no key material — the semantic presence check, so a caller
+    /// deciding whether a key was retained never takes a byte view to ask; the bytes surface only
+    /// at a cryptographic primitive. An <see cref="EmptyMemoryOwner"/>-backed sentinel answers
+    /// <see langword="true"/> without touching memory at all.
+    /// </summary>
+    public bool IsEmpty => MemoryOwner is EmptyMemoryOwner || MemoryOwner.Memory.IsEmpty;
+
+
+    /// <summary>
     /// Passes the private key bytes to <paramref name="operation"/> and returns the result.
     /// </summary>
     /// <remarks>

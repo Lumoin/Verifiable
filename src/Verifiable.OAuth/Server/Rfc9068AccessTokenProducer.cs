@@ -230,10 +230,11 @@ internal static class Rfc9068AccessTokenProducer
             payload[OAuthRequestParameterNames.AuthorizationDetails] = grantedDetails;
         }
 
-        //RFC 8693 §4.1: a Token Exchange DELEGATION exchange supplies the composite token's
-        //"act" (actor) claim — the nested JSON object identifying the current actor (and any
-        //prior actors). It is null for every non-delegation issuance, so this is a no-op for
-        //impersonation token exchange and every other grant.
+        //RFC 8693 §4.1: a delegating grant supplies the composite token's "act" (actor) claim — the
+        //nested JSON object identifying the current actor (and any prior actors) — whether the
+        //delegation was established by a Token Exchange actor_token or at an ID-JAG redemption. It is
+        //null for every issuance where no party acts for another, so this is a no-op then. RFC 9068
+        //§2.2.2 is why the value rides under the IANA-registered name rather than a private one.
         if(context.Act is not null)
         {
             payload[WellKnownJwtClaimNames.Act] = context.Act;

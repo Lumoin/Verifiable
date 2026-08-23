@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Buffers.Binary;
 using Verifiable.Cryptography;
 using Verifiable.Tpm.Spec.Constants;
+using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Infrastructure;
 
@@ -339,6 +340,59 @@ public static class TpmPolicyDigest
         {
             branchDigests[i].Span.CopyTo(buffer[offset..]);
             offset += branchDigests[i].Length;
+        }
+
+        int written = Hash(buffer, policyHashAlgorithm, destination);
+        buffer.Clear();
+
+        return written;
+    }
+
+    /// <summary>
+    /// Computes the policyDigest for TPM2_PolicyOR over the branch list in the <c>TPML_DIGEST</c> the command
+    /// carries on the wire (TPM 2.0 Library Part 2, clause 10.9.5, Table 123):
+    /// <c>policyDigest = H(0...0 || TPM_CC_PolicyOR || branchDigest0 || branchDigest1 || ...)</c>.
+    /// </summary>
+    /// <remarks>
+    /// The formula is <see cref="ExtendForOr(System.Collections.Generic.IReadOnlyList{ReadOnlyMemory{byte}}, TpmAlgIdConstants, Span{byte})"/>'s
+    /// exactly; only the carrier of the branch set differs, so a caller holding the parsed structure folds it
+    /// without projecting it onto a list first. The concatenation scratch comes from the caller's own pool, so
+    /// the whole fold is observable on the pool the command was dispatched under.
+    /// </remarks>
+    /// <param name="branchDigests">The OR branch policy digests, each <see cref="Size"/> bytes.</param>
+    /// <param name="policyHashAlgorithm">The session's policy hash algorithm.</param>
+    /// <param name="destination">Receives the new policyDigest; must be at least <see cref="Size"/> bytes.</param>
+    /// <param name="pool">The memory pool the concatenation scratch is rented from.</param>
+    /// <returns>The number of digest bytes written.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="branchDigests"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
+    public static int ExtendForOr(
+        TpmlDigest branchDigests,
+        TpmAlgIdConstants policyHashAlgorithm,
+        Span<byte> destination,
+        BaseMemoryPool pool)
+    {
+        ArgumentNullException.ThrowIfNull(branchDigests);
+        ArgumentNullException.ThrowIfNull(pool);
+        int size = Size(policyHashAlgorithm);
+
+        int branchesLength = 0;
+        for(int i = 0; i < branchDigests.Count; i++)
+        {
+            branchesLength += branchDigests[i].Size;
+        }
+
+        //H( zeros(size) || TPM_CC_PolicyOR || branch0 || branch1 || ... ).
+        int length = size + sizeof(uint) + branchesLength;
+        using IMemoryOwner<byte> owner = pool.Rent(length);
+        Span<byte> buffer = owner.Memory.Span[..length];
+        buffer[..size].Clear();
+        BinaryPrimitives.WriteUInt32BigEndian(buffer[size..], (uint)TpmCcConstants.TPM_CC_PolicyOR);
+
+        int offset = size + sizeof(uint);
+        for(int i = 0; i < branchDigests.Count; i++)
+        {
+            branchDigests[i].AsReadOnlySpan().CopyTo(buffer[offset..]);
+            offset += branchDigests[i].Size;
         }
 
         int written = Hash(buffer, policyHashAlgorithm, destination);

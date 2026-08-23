@@ -71,7 +71,7 @@ internal sealed class TpmBackedTerminalAuthenticationTests
 
         //Generate the terminal's Terminal Authentication key inside the in-house TPM and export only its public
         //point; TPM2_Sign produces the EXTERNAL AUTHENTICATE signature, so the private scalar never leaves it.
-        TpmSimulator tpmSimulator = await CreateOperationalTpmAsync("passport-terminal-tpm", pool).ConfigureAwait(false);
+        using TpmSimulator tpmSimulator = await CreateOperationalTpmAsync("passport-terminal-tpm", pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(tpmSimulator.SubmitAsync);
         TpmResponseRegistry tpmRegistry = new TpmResponseRegistry()
             .Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary)

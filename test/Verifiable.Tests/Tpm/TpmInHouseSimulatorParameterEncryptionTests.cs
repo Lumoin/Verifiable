@@ -23,7 +23,7 @@ namespace Verifiable.Tests.Tpm;
 /// session negotiating a symmetric definition (XOR obfuscation or AES-CFB), sets <c>CONTINUE_SESSION | ENCRYPT</c>,
 /// and runs two <c>TPM2_GetRandom()</c> commands over the session, asserting each response verifies (the response
 /// HMAC) and decrypts to the requested length and that the two decrypted buffers differ (TPM 2.0 Library Part 1,
-/// clauses 17.6, 18.7, and 19).
+/// clauses 17.6, 16.7, and 19).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -31,7 +31,7 @@ namespace Verifiable.Tests.Tpm;
 /// <see cref="TpmSession.CreateBoundAsync"/> uses, keys the response HMAC and the parameter-encryption
 /// mask/keystream on the SAME session value, and frames the response in the order the production executor expects
 /// (the first response parameter is encrypted before rpHash is computed over the ciphertext, and the caller
-/// decrypts only after the response HMAC verifies; Part 1, clauses 18.7 and 19.1). So the on-device derivation and
+/// decrypts only after the response HMAC verifies; Part 1, clauses 16.7 and 19.1). So the on-device derivation and
 /// the host's verification cannot diverge by construction: these tests exercise the bound-session lifecycle, the
 /// nonce rolling, and the encrypt-attribute command path, not the byte-exact transform, whose correctness is the
 /// independent-oracle role of the transform's own known-answer tests.
@@ -74,7 +74,7 @@ internal sealed class TpmInHouseSimulatorParameterEncryptionTests
     private async Task RunEncryptedGetRandomAsync(TpmtSymDef symmetric)
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
         var registry = new TpmResponseRegistry();

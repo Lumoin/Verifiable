@@ -56,10 +56,13 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// <item><description>
 /// <strong>Layer 4 — Policy decision (this class):</strong> A two-level pipeline.
 /// Layer 4a runs per-credential <see cref="PolicyAssessorDelegate{TCredential}"/> assessors
-/// in sequence; each can narrow, expand (within lattice bounds), or reject.
+/// in sequence; each can narrow, expand, or reject.
 /// Layer 4b runs <see cref="CrossCredentialOptimizerDelegate{TCredential}"/> instances
 /// that receive all per-credential decisions and can redistribute paths across credentials
 /// for global optimization (SAT solvers, ILP, LLM-based reasoners).
+/// Neither level is trusted with the bounds: every set either one returns is clamped into
+/// the credential's own lattice before it is adopted, and an out-of-bounds return is recorded
+/// (see <strong>Bound enforcement</strong> below).
 /// Assessor implementations include:
 /// <list type="bullet">
 /// <item><description>Rule-based engines enforcing organizational or regulatory policies
@@ -101,11 +104,11 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// │         │                     │               │                      │
 /// │         ▼                     │               ▼                      │
 /// │  ┌─────────────────────────────────────────────────────┐             │
-/// │  │  Layer 3   PathLattice / SetDisclosureLattice     │             │
+/// │  │  Layer 3   SetDisclosureLattice (ancestry-aware)  │             │
 /// │  │                                                     │             │
 /// │  │  mandatory (⊥) ⊆ disclosure set ⊆ all paths (⊤)   │             │
 /// │  │                                                     │             │
-/// │  │  Operations: Join (∨), Meet (∧), ComputeClosure    │             │
+/// │  │  Operations: Join (∨), Meet (∧), Closure, Clamp    │             │
 /// │  └──────────────────────┬──────────────────────────────┘             │
 /// │                         │                                            │
 /// │                         ▼                                            │
@@ -154,10 +157,12 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// </description></item>
 /// <item><description>
 /// Run <see cref="PolicyAssessorDelegate{TCredential}"/> pipeline in sequence. Each assessor
-/// can narrow, expand (within lattice bounds), or reject entirely; rejection stops the
-/// pipeline for that credential (Layer 4a). Then run
+/// can narrow, expand, or reject entirely; rejection stops the pipeline for that credential.
+/// Each returned set is clamped into the credential's lattice before the next assessor, the
+/// decision, or the effect diff sees it (Layer 4a). Then run
 /// <see cref="CrossCredentialOptimizerDelegate{TCredential}"/> instances that optimize
-/// across all credential decisions (Layer 4b).
+/// across all credential decisions, each returned decision clamped against its own lattice
+/// (Layer 4b).
 /// </description></item>
 /// <item><description>
 /// Capture all intermediate results into <see cref="DisclosureDecisionRecord{TCredential}"/>
@@ -175,11 +180,34 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// <list type="bullet">
 /// <item><description>Lattice bounds: M ⊆ S ⊆ A (the disclosure set is bounded by mandatory below and available above).</description></item>
 /// <item><description>Mandatory inviolability: ∀p ∈ M → p ∈ S (mandatory paths cannot be excluded by any means).</description></item>
-/// <item><description>Minimality: S = M ∪ (V \ E) ∪ closure(V \ E) when no policy narrows further.</description></item>
-/// <item><description>Upward closure: ∀p ∈ S, ∀q ancestor of p → q ∈ S (structural validity is preserved).</description></item>
-/// <item><description>Policy monotonicity: each assessor can only narrow S or reject; no assessor can add paths beyond the lattice result.</description></item>
+/// <item><description>Minimality: S = M ∪ ((V \ E) ∩ A) when no policy component runs — the lattice adds nothing the verifier did not ask for.</description></item>
+/// <item><description>Upward closure: ∀p ∈ S, ∀q ancestor of p with q ∈ A → q ∈ S, for every S a policy component contributes (structural validity is preserved).</description></item>
+/// <item><description>Policy bounding: an assessor or optimizer may narrow S or expand it, and either way the result is clamped to M ⊆ S ⊆ A and closed upward; the returned set is never adopted as given.</description></item>
 /// <item><description>Exclusion safety: E ∩ M = ∅ semantically (user exclusions of mandatory paths are silently ignored).</description></item>
 /// </list>
+/// <para>
+/// <strong>Bound enforcement:</strong>
+/// </para>
+/// <para>
+/// The invariants hold because the pipeline treats every set arriving from a policy component
+/// as a proposal, not a decision. A policy assessor is a plug-in — a rule engine, a solver, an
+/// AI risk model, a consent mediator — and the architecture deliberately admits components
+/// whose internal reasoning cannot be inspected. Trusting such a component to respect M ⊆ S ⊆ A
+/// would leave the strongest structural guarantee in the hands of the least boundable
+/// participant, so the pipeline does not: it clamps each returned set with
+/// <see cref="SetDisclosureLattice{TClaim}.Clamp"/> — intersect with the top, union the
+/// mandatory bottom, close upward — and only then adopts it. The same clamp runs on every
+/// decision a cross-credential optimizer returns, against that decision's own lattice.
+/// </para>
+/// <para>
+/// Clamping is not silence. A proposal that left the lattice is an auditable event, kept in
+/// the provenance trail split by violation shape: <see cref="PolicyAssessmentRecord"/> carries
+/// it for assessors and <see cref="DisclosureDecisionRecord{TCredential}.BoundViolations"/>
+/// for optimizers. The effect diff runs against the clamped set, so
+/// <see cref="PolicyAssessmentRecord.Effect"/>, <see cref="PolicyAssessmentRecord.AddedPaths"/>
+/// and <see cref="PolicyAssessmentRecord.RemovedPaths"/> describe what happened to the
+/// disclosure set while the violation fields describe what was attempted.
+/// </para>
 /// <para>
 /// <strong>Authority monotonicity and provenance:</strong>
 /// </para>
@@ -189,8 +217,10 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// lattice (all available paths). The holder can only narrow this to a subset. The verifier
 /// receives only what the holder chose to reveal. At no step can authority grow beyond what the
 /// previous participant granted. This monotone decreasing property — ⊤ ⊇ S_issuer ⊇ S_holder ⊇
-/// S_verifier ⊇ ⊥ — is an inherent structural guarantee of the bounded lattice, not an
-/// application-level policy. The <see cref="DisclosureDecisionRecord{TCredential}"/> captures
+/// S_verifier ⊇ ⊥ — is a structural guarantee of the bounded lattice rather than an
+/// application-level policy, and it is structural precisely because the clamp described above
+/// holds it against every component the pipeline runs, including the ones an application
+/// supplies. The <see cref="DisclosureDecisionRecord{TCredential}"/> captures
 /// the provenance trail at each step, enabling auditability of the authority narrowing across
 /// the full issuance-to-verification flow.
 /// </para>
@@ -361,7 +391,8 @@ public sealed class DisclosureComputation<TCredential>
             var mandatoryPaths = match.MandatoryPaths ?? (IReadOnlySet<CredentialPath>)new HashSet<CredentialPath>();
             var lattice = new SetDisclosureLattice<CredentialPath>(
                 match.AllAvailablePaths,
-                mandatoryPaths);
+                mandatoryPaths,
+                ancestors: CredentialPath.Ancestry);
 
             //Compute user exclusions for this requirement.
             IReadOnlySet<CredentialPath>? exclusions = null;
@@ -419,6 +450,7 @@ public sealed class DisclosureComputation<TCredential>
                 //Layer 6: Compute effect by diffing input versus output paths.
                 IReadOnlySet<CredentialPath>? removedPaths = null;
                 IReadOnlySet<CredentialPath>? addedPaths = null;
+                DisclosureClampResult<CredentialPath>? clamp = null;
                 PolicyAssessmentEffect computedEffect = PolicyAssessmentEffect.Unchanged;
 
                 if(!outcome.Approved)
@@ -427,10 +459,19 @@ public sealed class DisclosureComputation<TCredential>
                 }
                 else if(outcome.ApprovedPaths is not null)
                 {
-                    var removed = new HashSet<CredentialPath>(currentPaths);
-                    removed.ExceptWith(outcome.ApprovedPaths);
+                    //An assessor returns a PROPOSAL. Clamping it back into the credential's own
+                    //lattice happens before anything else observes it, so the set that reaches
+                    //the next assessor, the decision, and the wire is one the lattice admits.
+                    //The order matters: the diff below then describes what actually happened to
+                    //the disclosure set, not what the assessor attempted. An assessor that
+                    //"expands" entirely outside the lattice therefore records Unchanged plus the
+                    //out-of-bounds paths, which is the truthful account of both facts.
+                    clamp = lattice.Clamp(outcome.ApprovedPaths);
 
-                    var added = new HashSet<CredentialPath>(outcome.ApprovedPaths);
+                    var removed = new HashSet<CredentialPath>(currentPaths);
+                    removed.ExceptWith(clamp.ClampedClaims);
+
+                    var added = new HashSet<CredentialPath>(clamp.ClampedClaims);
                     added.ExceptWith(currentPaths);
 
                     if(removed.Count > 0)
@@ -443,18 +484,13 @@ public sealed class DisclosureComputation<TCredential>
                         addedPaths = added;
                     }
 
-                    if(removed.Count > 0 && added.Count > 0)
+                    computedEffect = (removed.Count > 0, added.Count > 0) switch
                     {
-                        computedEffect = PolicyAssessmentEffect.Modified;
-                    }
-                    else if(removed.Count > 0)
-                    {
-                        computedEffect = PolicyAssessmentEffect.Narrowed;
-                    }
-                    else if(added.Count > 0)
-                    {
-                        computedEffect = PolicyAssessmentEffect.Expanded;
-                    }
+                        (true, true) => PolicyAssessmentEffect.Modified,
+                        (true, false) => PolicyAssessmentEffect.Narrowed,
+                        (false, true) => PolicyAssessmentEffect.Expanded,
+                        _ => PolicyAssessmentEffect.Unchanged
+                    };
                 }
 
                 policyRecords.Add(new PolicyAssessmentRecord
@@ -465,6 +501,9 @@ public sealed class DisclosureComputation<TCredential>
                     Effect = computedEffect,
                     RemovedPaths = removedPaths,
                     AddedPaths = addedPaths,
+                    OutOfBoundsPaths = clamp?.OutOfBoundsClaims,
+                    RestoredMandatoryPaths = clamp?.RestoredMandatoryClaims,
+                    RestoredAncestorPaths = clamp?.RestoredAncestorClaims,
                     Reason = outcome.Reason
                 });
 
@@ -474,9 +513,9 @@ public sealed class DisclosureComputation<TCredential>
                     break;
                 }
 
-                if(outcome.ApprovedPaths is not null)
+                if(clamp is not null)
                 {
-                    currentPaths = outcome.ApprovedPaths;
+                    currentPaths = clamp.ClampedClaims;
                     currentSatisfies = match.RequiredPaths.IsSubsetOf(currentPaths);
                 }
             }
@@ -502,13 +541,20 @@ public sealed class DisclosureComputation<TCredential>
             satisfiedRequirements.Add(match.QueryRequirementId);
         }
 
-        //Layer 4b: Run cross-credential optimizer pipeline.
-        IReadOnlyList<CredentialDisclosureDecision<TCredential>> optimizedDecisions = decisions;
-        foreach(var optimizer in CrossCredentialOptimizers)
+        //Layer 4b: Run cross-credential optimizer pipeline. Each pass returns a whole decision
+        //list, so each pass is clamped: an optimizer redistributes paths across credentials and
+        //must land inside every credential's lattice to do it legitimately.
+        List<CredentialDisclosureDecision<TCredential>> optimizedDecisions = decisions;
+        var boundViolations = new List<BoundViolationRecord>();
+
+        for(int optimizerIndex = 0; optimizerIndex < CrossCredentialOptimizers.Count; optimizerIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            optimizedDecisions = await optimizer(optimizedDecisions, requestingPartySignals, cancellationToken)
-                .ConfigureAwait(false);
+
+            var optimizerResult = await CrossCredentialOptimizers[optimizerIndex](
+                optimizedDecisions, requestingPartySignals, cancellationToken).ConfigureAwait(false);
+
+            optimizedDecisions = ClampToLatticeBounds(optimizerResult, optimizerIndex, boundViolations);
         }
 
         //Determine unsatisfied requirements.
@@ -557,6 +603,7 @@ public sealed class DisclosureComputation<TCredential>
             Evaluations = evaluationRecords,
             LatticeComputations = latticeRecords,
             PolicyAssessments = policyRecords.Count > 0 ? policyRecords : null,
+            BoundViolations = boundViolations.Count > 0 ? boundViolations : null,
             FinalDecisions = optimizedDecisions,
             Satisfied = unsatisfied.Count == 0
         };
@@ -604,6 +651,73 @@ public sealed class DisclosureComputation<TCredential>
         }
 
         return graph;
+    }
+
+
+    /// <summary>
+    /// Clamps every decision returned by a cross-credential optimizer back into that decision's
+    /// own lattice, appending a <see cref="BoundViolationRecord"/> for each one that had left it.
+    /// </summary>
+    /// <param name="decisions">The decisions the optimizer returned.</param>
+    /// <param name="optimizerIndex">The optimizer's position in the cross-credential pipeline.</param>
+    /// <param name="boundViolations">The accumulating provenance list for the decision record.</param>
+    /// <returns>The decisions with every bounded selection replaced by its clamped set.</returns>
+    private static List<CredentialDisclosureDecision<TCredential>> ClampToLatticeBounds(
+        IReadOnlyList<CredentialDisclosureDecision<TCredential>> decisions,
+        int optimizerIndex,
+        List<BoundViolationRecord> boundViolations)
+    {
+        var clampedDecisions = new List<CredentialDisclosureDecision<TCredential>>(decisions.Count);
+
+        foreach(var decision in decisions)
+        {
+            //A decision carries the lattice it was computed against, and that lattice is what
+            //bounds it. A decision arriving without one was not produced by this pipeline, so
+            //there is nothing to clamp it to and it passes through as the optimizer returned it.
+            //Identity beyond that — an optimizer that duplicates a decision or attaches a lattice
+            //it did not receive — is the optimizer contract's to keep, not this clamp's: the
+            //clamp bounds every set whose lattice travelled with it.
+            if(decision.Lattice is null)
+            {
+                clampedDecisions.Add(decision);
+                continue;
+            }
+
+            var clamp = decision.Lattice.Clamp(decision.SelectedPaths);
+            if(clamp.IsWithinBounds)
+            {
+                clampedDecisions.Add(decision);
+                continue;
+            }
+
+            boundViolations.Add(new BoundViolationRecord
+            {
+                QueryRequirementId = decision.QueryRequirementId,
+                OptimizerIndex = optimizerIndex,
+                OutOfBoundsPaths = clamp.OutOfBoundsClaims,
+                RestoredMandatoryPaths = clamp.RestoredMandatoryClaims,
+                RestoredAncestorPaths = clamp.RestoredAncestorClaims
+            });
+
+            //SatisfiesRequirements stays as the optimizer reported it. The clamp only ever drops
+            //claims outside the lattice top, and a requirement resolved against that lattice
+            //cannot name one — a requirement naming a path the credential does not have is
+            //already reported through UnavailablePaths — so bounding the set does not silently
+            //invalidate a satisfaction the optimizer computed over the credential's own claims.
+            clampedDecisions.Add(new CredentialDisclosureDecision<TCredential>
+            {
+                Credential = decision.Credential,
+                QueryRequirementId = decision.QueryRequirementId,
+                SelectedPaths = clamp.ClampedClaims,
+                SatisfiesRequirements = decision.SatisfiesRequirements,
+                ConflictingPaths = decision.ConflictingPaths,
+                UnavailablePaths = decision.UnavailablePaths,
+                Format = decision.Format,
+                Lattice = decision.Lattice
+            });
+        }
+
+        return clampedDecisions;
     }
 
 

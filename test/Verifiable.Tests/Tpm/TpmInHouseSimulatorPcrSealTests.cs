@@ -27,10 +27,10 @@ namespace Verifiable.Tests.Tpm;
 /// <para>
 /// A secret is sealed into a <c>TPM_ALG_KEYEDHASH</c> object whose authPolicy is a <c>TPM2_PolicyPCR()</c> digest,
 /// so the unseal is authorized only when a policy session reproduces that digest over the live PCR values (TPM 2.0
-/// Library Part 3, clause 12.7; Part 1, clause 19.7). Recovery uses two sessions: a satisfied
+/// Library Part 3, clause 12.7; Part 1, clause 17.7). Recovery uses two sessions: a satisfied
 /// <see cref="TpmPolicySession"/> (the authorizing session, supplied first, which carries an empty HMAC because the
-/// policy itself is the authorization, Part 1, clause 19.6) plus a bound HMAC session with AES-CFB parameter
-/// encryption and the <c>encrypt</c> attribute (Part 1, clauses 18.7 and 19), so the recovered secret is decrypted
+/// policy itself is the authorization, Part 1, clause 17.6) plus a bound HMAC session with AES-CFB parameter
+/// encryption and the <c>encrypt</c> attribute (Part 1, clauses 16.7 and 19), so the recovered secret is decrypted
 /// only after the response HMAC verifies.
 /// </para>
 /// <para>
@@ -43,7 +43,7 @@ namespace Verifiable.Tests.Tpm;
 /// </para>
 /// <para>
 /// The simulator advances each session's policyDigest and frames the two-session response through the SAME seams
-/// the host <see cref="TpmSession"/> verifies with (Part 1, clauses 17.6, 18.7, and 19), so the on-device
+/// the host <see cref="TpmSession"/> verifies with (Part 1, clauses 17.6, 16.7, and 19), so the on-device
 /// derivation and the host's verification cannot diverge by construction: a session key, nonce, keystream, or
 /// response-framing byte that the simulator produced off by one would make the executor reject the response and
 /// fail the positive test's byte-exact equality assertion.
@@ -74,7 +74,7 @@ internal sealed class TpmInHouseSimulatorPcrSealTests
     public async Task PcrGatedSealUnsealsWhenPolicySatisfied()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
         TpmtSymDef symmetric = TpmtSymDef.Aes(128, TpmAlgIdConstants.TPM_ALG_CFB);
@@ -188,7 +188,7 @@ internal sealed class TpmInHouseSimulatorPcrSealTests
     public async Task PcrGatedSealRejectsUnsealWhenPolicyUnsatisfied()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -297,7 +297,7 @@ internal sealed class TpmInHouseSimulatorPcrSealTests
     public async Task PcrGatedSealRejectsUnsealAuthorizedByTrialSession()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 

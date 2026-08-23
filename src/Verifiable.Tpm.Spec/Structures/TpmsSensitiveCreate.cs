@@ -115,9 +115,20 @@ public sealed class TpmsSensitiveCreate: IDisposable
     public static TpmsSensitiveCreate Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         var userAuth = Tpm2bAuth.Parse(ref reader, pool);
-        var data = Tpm2bSensitiveData.Parse(ref reader, pool);
+        try
+        {
+            var data = Tpm2bSensitiveData.Parse(ref reader, pool);
 
-        return new TpmsSensitiveCreate(userAuth, data);
+            return new TpmsSensitiveCreate(userAuth, data);
+        }
+        catch
+        {
+            //The auth carrier's only owner is this frame until the constructed structure adopts it, so a
+            //failing sensitive-data read (a truncated frame throws from the reader) must release it or the
+            //pinned rental is orphaned.
+            userAuth.Dispose();
+            throw;
+        }
     }
 
     /// <summary>

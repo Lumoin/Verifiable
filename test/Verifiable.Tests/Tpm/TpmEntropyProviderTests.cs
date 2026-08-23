@@ -141,8 +141,17 @@ internal sealed class TpmEntropyProviderTests
             Assert.AreEqual(32, nonce.Length);
         }
 
-        //Filter by emitter to ignore any concurrent entropy events from parallel tests.
-        EntropyConsumedEvent emitted = observed
+        //The subject delivers from an immutable observer snapshot taken at the start of each publication, so an
+        //event another parallel test publishes can still reach this observer after the subscription is disposed.
+        //The sink is therefore read through the same lock its observer appends under, as a copy, before the
+        //emitter filter ignores every event this test did not cause.
+        CryptoEvent[] snapshot;
+        lock(observed)
+        {
+            snapshot = [.. observed];
+        }
+
+        EntropyConsumedEvent emitted = snapshot
             .OfType<EntropyConsumedEvent>()
             .Single(e => e.EmittedBy == TpmId);
 
@@ -189,6 +198,8 @@ internal sealed class TpmEntropyProviderTests
         Assert.AreEqual($"transport-error:0x{TransportCode:X8}", observation.EvidenceReference);
     }
 
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "The simulator is the test class's durable chip: its ownership rides the returned TpmDevice's submit delegate for the rest of the test, and its pooled state is reclaimed with the suite's process-wide pool.")]
     private async Task<TpmDevice> CreateOperationalDeviceAsync(string tpmId, TpmSelfTestBehavior selfTest = TpmSelfTestBehavior.Passes)
     {
         var simulator = new TpmSimulator(tpmId, selfTest);
@@ -243,6 +254,15 @@ internal sealed class TpmEntropyProviderTests
         {
         }
 
-        public void OnNext(CryptoEvent value) => sink.Add(value);
+        /// <summary>Appends <paramref name="value"/> to the sink under a lock: the process-wide event subject
+        /// delivers synchronously from every concurrently running test, and an unsynchronized
+        /// <see cref="List{T}.Add"/> race can silently lose an element.</summary>
+        public void OnNext(CryptoEvent value)
+        {
+            lock(sink)
+            {
+                sink.Add(value);
+            }
+        }
     }
 }

@@ -58,7 +58,7 @@ public sealed class TpmtTkVerified: IDisposable, ITpmWireType
     /// </summary>
     private static TpmtTkVerified NullInstance { get; } = new(
         TpmStConstants.TPM_ST_VERIFIED,
-        TpmRh.TPM_RH_NULL,
+        TpmiRhHierarchy.Null,
         null,
         0);
 
@@ -72,17 +72,15 @@ public sealed class TpmtTkVerified: IDisposable, ITpmWireType
     public TpmStConstants Tag { get; }
 
     /// <summary>
-    /// Gets the hierarchy containing the verifying key's Name.
+    /// Gets the hierarchy containing the verifying key's Name, typed <c>TPMI_RH_HIERARCHY+</c> as Table 110
+    /// names it — the four hierarchy selectors of Part 2, clause 9.13, Table 60, the NULL hierarchy among them.
     /// </summary>
-    /// <remarks>
-    /// One of TPM_RH_OWNER, TPM_RH_ENDORSEMENT, TPM_RH_PLATFORM, TPM_RH_NULL.
-    /// </remarks>
-    public TpmRh Hierarchy { get; }
+    public TpmiRhHierarchy Hierarchy { get; }
 
     /// <summary>
     /// Initializes a new verified ticket.
     /// </summary>
-    private TpmtTkVerified(TpmStConstants tag, TpmRh hierarchy, IMemoryOwner<byte>? storage, int digestLength)
+    private TpmtTkVerified(TpmStConstants tag, TpmiRhHierarchy hierarchy, IMemoryOwner<byte>? storage, int digestLength)
     {
         Tag = tag;
         Hierarchy = hierarchy;
@@ -98,7 +96,7 @@ public sealed class TpmtTkVerified: IDisposable, ITpmWireType
     /// <summary>
     /// Gets whether this is a NULL ticket.
     /// </summary>
-    public bool IsNull => Hierarchy == TpmRh.TPM_RH_NULL && digestLength == 0;
+    public bool IsNull => Hierarchy.IsNull && digestLength == 0;
 
     /// <summary>
     /// Gets the digest as a read-only span.
@@ -132,7 +130,7 @@ public sealed class TpmtTkVerified: IDisposable, ITpmWireType
         ObjectDisposedException.ThrowIf(disposed, this);
 
         writer.WriteUInt16((ushort)Tag);
-        writer.WriteUInt32((uint)Hierarchy);
+        Hierarchy.WriteTo(ref writer);
         writer.WriteUInt16((ushort)digestLength);
 
         if(digestLength > 0)
@@ -142,11 +140,12 @@ public sealed class TpmtTkVerified: IDisposable, ITpmWireType
     }
 
     /// <summary>
-    /// Parses a verified ticket from a TPM reader.
+    /// Parses a verified ticket from a TPM reader, validating both the structure tag and the hierarchy selector.
     /// </summary>
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed verified ticket.</returns>
+    /// <exception cref="InvalidOperationException">The tag is not <c>TPM_ST_VERIFIED</c> (<c>TPM_RC_TAG</c>, Table 110), or the hierarchy is not a <c>TPMI_RH_HIERARCHY</c> selector (<c>TPM_RC_VALUE</c>, Table 60).</exception>
     public static TpmtTkVerified Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -157,12 +156,12 @@ public sealed class TpmtTkVerified: IDisposable, ITpmWireType
             throw new InvalidOperationException($"Invalid verified ticket tag: 0x{tag:X4}. Expected TPM_ST_VERIFIED.");
         }
 
-        var hierarchy = (TpmRh)reader.ReadUInt32();
+        TpmiRhHierarchy hierarchy = TpmiRhHierarchy.Parse(ref reader);
         ushort digestSize = reader.ReadUInt16();
 
         if(digestSize == 0)
         {
-            if(hierarchy == TpmRh.TPM_RH_NULL)
+            if(hierarchy.IsNull)
             {
                 return Null;
             }
@@ -171,18 +170,78 @@ public sealed class TpmtTkVerified: IDisposable, ITpmWireType
         }
 
         IMemoryOwner<byte> storage = pool.Rent(digestSize);
-        ReadOnlySpan<byte> source = reader.ReadBytes(digestSize);
-        source.CopyTo(storage.Memory.Span.Slice(0, digestSize));
+        try
+        {
+            ReadOnlySpan<byte> source = reader.ReadBytes(digestSize);
+            source.CopyTo(storage.Memory.Span.Slice(0, digestSize));
 
-        return new TpmtTkVerified((TpmStConstants)tag, hierarchy, storage, digestSize);
+            return new TpmtTkVerified((TpmStConstants)tag, hierarchy, storage, digestSize);
+        }
+        catch
+        {
+            //A truncated frame must not orphan the digest rental the declared size already asked for.
+            storage.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
-    /// Releases the memory owned by this structure.
+    /// Adopts an already-filled pooled buffer as this ticket's digest storage: ownership of
+    /// <paramref name="digest"/> transfers to the returned instance, with no second rental and no copy — the
+    /// production counterpart of <see cref="Parse"/> for the TPM side, which computes the ticket HMAC into a
+    /// buffer it rented itself and then frames the whole <c>TPMT_TK_VERIFIED</c> from it.
+    /// </summary>
+    /// <remarks>
+    /// The tag is always <c>TPM_ST_VERIFIED</c> (TPM 2.0 Library Part 2, clause 10.7.4, Table 110). A
+    /// <paramref name="digestLength"/> of zero releases <paramref name="digest"/> here, since a ticket with no
+    /// digest owns no storage: under <c>TPM_RH_NULL</c> that tuple IS the NULL Verified Ticket of clause 10.7.2,
+    /// so the shared <see cref="Null"/> sentinel stands for it; under any other hierarchy the tuple is a distinct,
+    /// storage-less ticket that keeps the hierarchy it was handed, exactly as <see cref="Parse"/> reconstructs the
+    /// same octets off the wire. An argument that does not describe a valid ticket likewise releases
+    /// <paramref name="digest"/> before the exception leaves, so a rejected adoption never orphans the rental.
+    /// </remarks>
+    /// <param name="hierarchy">The hierarchy containing the verifying key's Name, framed in the ticket's <c>hierarchy</c> field.</param>
+    /// <param name="digest">The pooled buffer whose leading octets hold the ticket HMAC; ownership transfers to the returned instance or is released here.</param>
+    /// <param name="digestLength">The number of valid octets at the head of <paramref name="digest"/>.</param>
+    /// <returns>The adopted ticket.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="digest"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="digestLength"/> is negative, exceeds <paramref name="digest"/>'s length, or exceeds the 16-bit width of a <c>TPM2B</c> size field.</exception>
+    public static TpmtTkVerified FromMarshaled(TpmiRhHierarchy hierarchy, IMemoryOwner<byte> digest, int digestLength)
+    {
+        ArgumentNullException.ThrowIfNull(digest);
+
+        try
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(digestLength);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(digestLength, digest.Memory.Length);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(digestLength, ushort.MaxValue);
+        }
+        catch
+        {
+            digest.Dispose();
+            throw;
+        }
+
+        if(digestLength == 0)
+        {
+            digest.Dispose();
+
+            return hierarchy.IsNull
+                ? Null
+                : new TpmtTkVerified(TpmStConstants.TPM_ST_VERIFIED, hierarchy, null, 0);
+        }
+
+        return new TpmtTkVerified(TpmStConstants.TPM_ST_VERIFIED, hierarchy, digest, digestLength);
+    }
+
+    /// <summary>
+    /// Releases the memory owned by this structure. The shared <see cref="Null"/> ticket is exempt: it owns no
+    /// pooled storage and every consumer holds the same instance, so disposing one of them leaves it readable
+    /// and framable for all the others.
     /// </summary>
     public void Dispose()
     {
-        if(!disposed)
+        if(!disposed && this != NullInstance)
         {
             storage?.Dispose();
             disposed = true;
@@ -198,16 +257,7 @@ public sealed class TpmtTkVerified: IDisposable, ITpmWireType
                 return "TPMT_TK_VERIFIED(NULL)";
             }
 
-            string hierarchyName = Hierarchy switch
-            {
-                TpmRh.TPM_RH_OWNER => "OWNER",
-                TpmRh.TPM_RH_ENDORSEMENT => "ENDORSEMENT",
-                TpmRh.TPM_RH_PLATFORM => "PLATFORM",
-                TpmRh.TPM_RH_NULL => "NULL",
-                _ => $"0x{(uint)Hierarchy:X8}"
-            };
-
-            return $"TPMT_TK_VERIFIED({hierarchyName}, {digestLength} bytes)";
+            return $"TPMT_TK_VERIFIED({TpmValueConversions.GetHandleDescription(Hierarchy.Value)}, {digestLength} bytes)";
         }
     }
 }

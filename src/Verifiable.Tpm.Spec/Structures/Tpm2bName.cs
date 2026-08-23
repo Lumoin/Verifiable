@@ -111,6 +111,23 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
     }
 
     /// <summary>
+    /// Gets the Name data as read-only memory that aliases this instance's pooled storage — for a borrowing
+    /// consumer such as a cpHash handle-name area concatenation, valid until <see cref="Dispose"/> and never
+    /// copied into an untracked array.
+    /// </summary>
+    /// <returns>The Name bytes.</returns>
+    public ReadOnlyMemory<byte> AsReadOnlyMemory()
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        if(Storage is null)
+        {
+            return ReadOnlyMemory<byte>.Empty;
+        }
+
+        return Storage.Memory.Slice(0, Size);
+    }
+
+    /// <summary>
     /// Gets the name algorithm if this is a digest-based Name.
     /// </summary>
     public ushort NameAlgorithm
@@ -238,6 +255,53 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
         bytes.CopyTo(storage.Memory.Span);
 
         return new Tpm2bName(storage, bytes.Length);
+    }
+
+    /// <summary>
+    /// Adopts an already-filled pooled buffer as this structure's storage: ownership of
+    /// <paramref name="storage"/> transfers to the returned instance, with no second rental and no copy — the
+    /// zero-copy counterpart of <see cref="Create(ReadOnlySpan{byte}, BaseMemoryPool)"/> for a producer that
+    /// rented the octets and wrote them itself.
+    /// </summary>
+    /// <remarks>
+    /// A <paramref name="size"/> of zero yields the shared <see cref="Empty"/> singleton and releases
+    /// <paramref name="storage"/> here, since the singleton rents nothing and its <see cref="Dispose"/> is a
+    /// no-op. An argument that does not describe a valid <c>TPM2B_NAME</c> likewise releases
+    /// <paramref name="storage"/> before the exception leaves, so a rejected adoption never orphans the
+    /// rental. The bound checked here is the <c>TPM2B</c> size field's own 16-bit width, since the octets come
+    /// from the producing side rather than from a caller: the table's content bound is enforced where octets
+    /// arrive from the wire (<see cref="Parse"/>) or are copied in from an untrusted span
+    /// (<see cref="Create(ReadOnlySpan{byte}, BaseMemoryPool)"/>).
+    /// </remarks>
+    /// <param name="storage">The pooled buffer whose leading octets hold the value; ownership transfers to the returned instance or is released here.</param>
+    /// <param name="size">The number of valid octets at the head of <paramref name="storage"/>.</param>
+    /// <returns>The adopted value.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="storage"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="size"/> is negative, exceeds <paramref name="storage"/>'s length, or exceeds the 16-bit width of a <c>TPM2B</c> size field.</exception>
+    public static Tpm2bName FromMarshaled(IMemoryOwner<byte> storage, int size)
+    {
+        ArgumentNullException.ThrowIfNull(storage);
+
+        try
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(size);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(size, storage.Memory.Length);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(size, ushort.MaxValue);
+        }
+        catch
+        {
+            storage.Dispose();
+            throw;
+        }
+
+        if(size == 0)
+        {
+            storage.Dispose();
+
+            return Empty;
+        }
+
+        return new Tpm2bName(storage, size);
     }
 
     /// <summary>

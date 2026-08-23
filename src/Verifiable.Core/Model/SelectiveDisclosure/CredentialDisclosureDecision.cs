@@ -60,9 +60,17 @@ public sealed class CredentialDisclosureDecision<TCredential>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This set always includes mandatory paths (the lattice bottom) and the
-    /// verifier-required paths that survived policy evaluation. It is the
-    /// final, approved set of paths to disclose.
+    /// This set is the final, approved set of paths to disclose: the verifier-required paths
+    /// that survived policy evaluation, plus the mandatory paths (the lattice bottom). The
+    /// mandatory paths are present by enforcement rather than by convention — the mandatory
+    /// floor and the availability ceiling hold for this set unconditionally, and every set a
+    /// policy assessor or cross-credential optimizer returns is additionally clamped against
+    /// <see cref="Lattice"/> (bounds and upward closure, the full
+    /// <see cref="SetDisclosureLattice{TClaim}.IsValid"/> shape) before adoption, so no policy
+    /// component can strip a claim the issuer made mandatory or add one the credential does not
+    /// carry. A computation that runs no policy component adopts the Layer-3 result as computed,
+    /// which is bounded but not closed upward — the same scoping the containing type's
+    /// formal-invariants list states.
     /// </para>
     /// </remarks>
     public required IReadOnlySet<CredentialPath> SelectedPaths { get; init; }

@@ -13,7 +13,7 @@ namespace Verifiable.Tpm;
 
 /// <summary>
 /// Computes a TPM object's Name and Qualified Name, generalized over the nameAlg carried in the object's
-/// public area (TPM 2.0 Library Part 1, clause 16): <c>Name = nameAlg ‖ H_nameAlg(TPMT_PUBLIC)</c> and
+/// public area (TPM 2.0 Library Part 1, clause 14, Table 6): <c>Name = nameAlg ‖ H_nameAlg(TPMT_PUBLIC)</c> and
 /// <c>QN(object) = nameAlg ‖ H_nameAlg(QN(parent) ‖ Name(object))</c>.
 /// </summary>
 /// <remarks>
@@ -61,7 +61,7 @@ public static class TpmObjectName
     /// <param name="nameAlg">The Name algorithm.</param>
     /// <returns>The digest tag.</returns>
     /// <exception cref="NotSupportedException"><paramref name="nameAlg"/> is not a Name algorithm this model computes.</exception>
-    [SuppressMessage("Security", "CA5350:Do Not Use Weak Cryptographic Algorithms", Justification = "SHA-1 is a valid TPM nameAlg this model still serves (TPM 2.0 Library Part 1, clause 16); the tag is composed inline, never from a convenience CryptoTags member, so ordinary protocol code cannot reach it by accident.")]
+    [SuppressMessage("Security", "CA5350:Do Not Use Weak Cryptographic Algorithms", Justification = "SHA-1 is a valid TPM nameAlg this model still serves (TPM 2.0 Library Part 1, clause 14, Table 6); the tag is composed inline, never from a convenience CryptoTags member, so ordinary protocol code cannot reach it by accident.")]
     private static Tag DigestTag(TpmAlgIdConstants nameAlg) => nameAlg switch
     {
         TpmAlgIdConstants.TPM_ALG_SHA1 => Tag.Create(HashAlgorithmName.SHA1).With(Purpose.Digest).With(EncodingScheme.Raw).With(MaterialSemantics.Direct),
@@ -72,7 +72,7 @@ public static class TpmObjectName
     };
 
     /// <summary>
-    /// Computes an object's Name: <c>nameAlg ‖ H_nameAlg(TPMT_PUBLIC)</c> (TPM 2.0 Library Part 1, clause 16),
+    /// Computes an object's Name: <c>nameAlg ‖ H_nameAlg(TPMT_PUBLIC)</c> (TPM 2.0 Library Part 1, clause 14, Table 6),
     /// through the registered asynchronous digest seam.
     /// </summary>
     /// <param name="marshalledPublicArea">The marshaled <c>TPMT_PUBLIC</c> (no <c>TPM2B</c> size prefix) to hash.</param>
@@ -99,12 +99,12 @@ public static class TpmObjectName
 
     /// <summary>
     /// Computes an object's Qualified Name: <c>QN = nameAlg ‖ H_nameAlg(QN(parent) ‖ Name(object))</c>
-    /// (TPM 2.0 Library Part 1, clause 16), through the registered asynchronous digest seam.
+    /// (TPM 2.0 Library Part 1, clause 14, Table 6), through the registered asynchronous digest seam.
     /// </summary>
     /// <remarks>
     /// For a primary object created directly under a permanent hierarchy — every object this simulator
     /// creates today — <c>QN(parent)</c> is the hierarchy's own Name, which for a permanent handle is defined
-    /// to be the 4-octet big-endian handle value itself (Part 1, clause 16); the caller supplies that value
+    /// to be the 4-octet big-endian handle value itself (Part 1, clause 14, Table 6); the caller supplies that value
     /// as <paramref name="parentQualifiedName"/>. A future parent that is itself a non-hierarchy loaded object
     /// would instead supply that object's own computed Qualified Name here.
     /// </remarks>

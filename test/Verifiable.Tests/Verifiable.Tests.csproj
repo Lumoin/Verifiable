@@ -23,6 +23,11 @@
     <TestingExtensionsProfile>AllMicrosoft</TestingExtensionsProfile>
     <IsTestApplication>true</IsTestApplication>
     <MSTestAnalysisMode>Recommended</MSTestAnalysisMode>
+    <!--
+      MSTest.Sdk resolves the code coverage extension through this property; the value tracks the
+      dotnet-coverage tool in .config/dotnet-tools.json so the in-process collector and the CLI agree.
+    -->
+    <MicrosoftTestingExtensionsCodeCoverageVersion>18.10.0</MicrosoftTestingExtensionsCodeCoverageVersion>
   </PropertyGroup>
  
   <ItemGroup>
@@ -51,9 +56,6 @@
     <PackageReference Include="System.Reactive" />
     <PackageReference Include="Microsoft.Reactive.Testing" />
     <PackageReference Include="Microsoft.IdentityModel.Tokens" />
-    <PackageReference Update="Microsoft.Testing.Extensions.CodeCoverage">
-      <VersionOverride>18.6.2</VersionOverride>
-    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>

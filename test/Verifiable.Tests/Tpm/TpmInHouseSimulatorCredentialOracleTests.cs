@@ -85,7 +85,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
     public async Task ChallengerBuiltCredentialActivatesThroughTheProductionExecutor()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -144,7 +144,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
     public async Task ChallengerBuiltCredentialWithATamperedOuterHmacIsRejectedWithIntegrityError()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -196,6 +196,233 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
     }
 
     /// <summary>
+    /// The credential <c>TPM2_ActivateCredential()</c> recovers is a <c>TPM2B_DIGEST</c> (TPM 2.0 Library Part 3,
+    /// clause 12.5), so its buffer is bounded by <c>sizeof(TPMU_HA)</c> (Part 2, clause 10.4.2, Table 92). A
+    /// challenger-built blob that is valid in every other respect — a correct outer HMAC over a correctly
+    /// wrapped inner structure — but whose inner credential declares more octets than that bound is refused with
+    /// <c>TPM_RC_SIZE</c>: Part 4's <c>TPM2B_DIGEST_Unmarshal()</c> (page 1138) answers <c>TPM_RC_SIZE</c> for a
+    /// declared size past <c>sizeof(TPMU_HA)</c> before it reads the body, and that is one of the three codes
+    /// <c>CredentialToSecret()</c> declares for this channel (page 734: "TPM_RC_INSUFFICIENT error during
+    /// credential unmarshaling / TPM_RC_INTEGRITY credential integrity is broken / TPM_RC_SIZE error during
+    /// credential unmarshaling"), which the command's own return list repeats as "TPM_RC_SIZE 'secret' size is
+    /// invalid or the 'credentialBlob' does not unmarshal correctly" (Part 4, <c>TPM2_ActivateCredential()</c>,
+    /// page 700). The refusal precedes the rental, so no over-bound <c>TPM2B_DIGEST</c> is ever framed for the
+    /// response parser to refuse.
+    /// </summary>
+    [TestMethod]
+    public async Task ChallengerBuiltCredentialWiderThanTheDigestBoundIsRejectedWithSizeError()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse ek = await CreateStoragePrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
+        try
+        {
+            using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
+            try
+            {
+                TpmsEccPoint ekPoint = ek.OutPublic.PublicArea.Unique.Ecc!;
+                byte[] ekX = ekPoint.X.AsReadOnlySpan().ToArray();
+                byte[] ekY = ekPoint.Y.AsReadOnlySpan().ToArray();
+                byte[] akName = ak.Name.Span.ToArray();
+
+                //Fourteen octets past the bound, so the marshaled inner data (a 2-octet size prefix plus the
+                //credential) is exactly five 16-octet AES blocks — the same block-alignment constraint framework
+                //Aes.EncryptCfb places on this oracle that CredentialSecret's own 14-octet width sidesteps.
+                byte[] overBoundCredential = new byte[Tpm2bDigest.MaxSize + 14];
+                overBoundCredential.AsSpan().Fill(0xD3);
+
+                (IMemoryOwner<byte> blob, int blobLength, IMemoryOwner<byte> secret, int secretLength) =
+                    await BuildChallengerCredentialAsync(overBoundCredential, akName, ekX, ekY, pool, TestContext.CancellationToken).ConfigureAwait(false);
+                try
+                {
+                    using ActivateCredentialInput activateInput = ActivateCredentialInput.Create(
+                        ak.ObjectHandle, ek.ObjectHandle, blob.Memory.Span[..blobLength], secret.Memory.Span[..secretLength], pool);
+                    using TpmPasswordSession activateAuth = TpmPasswordSession.CreateEmpty(pool);
+                    using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
+
+                    TpmResult<ActivateCredentialResponse> activateResult = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
+                        tpm, activateInput, [activateAuth, keyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+                    Assert.IsFalse(activateResult.IsSuccess, "A credential wider than a TPM2B_DIGEST must not activate.");
+                    Assert.AreEqual(
+                        TpmRcConstants.TPM_RC_SIZE, activateResult.ResponseCode,
+                        "A recovered credential wider than sizeof(TPMU_HA) is the unmarshal's own size refusal (Part 2, clause 10.4.2, Table 92; Part 4, TPM2B_DIGEST_Unmarshal(), page 1138).");
+                }
+                finally
+                {
+                    blob.Dispose();
+                    secret.Dispose();
+                }
+            }
+            finally
+            {
+                await FlushAsync(tpm, registry, ak.ObjectHandle.Value, pool).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await FlushAsync(tpm, registry, ek.ObjectHandle.Value, pool).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// The recovered credential's declared width is attacker-influenceable: a challenger who knows the
+    /// credential key's PUBLIC point can derive the same seed, symmetric key and HMAC key the TPM will, so it
+    /// can present a blob whose outer integrity check PASSES and whose decrypted inner <c>TPM2B_DIGEST</c>
+    /// nonetheless declares more octets than the plaintext holds. That is the reference's
+    /// <c>BYTE_Array_Unmarshal()</c> shortfall — <c>TPM_RC_INSUFFICIENT</c> (TPM 2.0 Library Part 4, page 1212:
+    /// "if(*size &lt; count) return TPM_RC_INSUFFICIENT") — the first of the three codes
+    /// <c>CredentialToSecret()</c> declares for this channel (page 734: "TPM_RC_INSUFFICIENT error during
+    /// credential unmarshaling / TPM_RC_INTEGRITY credential integrity is broken / TPM_RC_SIZE error during
+    /// credential unmarshaling"), and the command's own return list carries <c>TPM_RC_INSUFFICIENT</c> as well
+    /// (Part 4, <c>TPM2_ActivateCredential()</c>, page 700). The alternative is reading past the plaintext.
+    /// <c>TPM_RC_INTEGRITY</c> stays the outer HMAC's own answer (Part 3, clause 12.5: "The HMAC is used to
+    /// validate that the credentialBlob is associated with activateHandle and that the data in credentialBlob
+    /// has not been modified"), and separating the two leaks nothing, because only a blob that already passed
+    /// that HMAC reaches the unmarshal at all — the ordering Part 3, clause 13.3.1 states for this same
+    /// construction: "Checking the integrity before the data is used prevents attacks on the sensitive area by
+    /// fuzzing the data and looking at the differences in the response codes."
+    /// </summary>
+    [TestMethod]
+    public async Task ChallengerBuiltCredentialDeclaringMoreOctetsThanThePlaintextHoldsIsRejectedWithInsufficientError()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse ek = await CreateStoragePrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
+        try
+        {
+            using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
+            try
+            {
+                TpmsEccPoint ekPoint = ek.OutPublic.PublicArea.Unique.Ecc!;
+                byte[] ekX = ekPoint.X.AsReadOnlySpan().ToArray();
+                byte[] ekY = ekPoint.Y.AsReadOnlySpan().ToArray();
+                byte[] akName = ak.Name.Span.ToArray();
+
+                //The inner structure declares a full SHA-256 digest but carries only the 14 octets the shared
+                //credential holds, so the declared width overruns the plaintext by 18 octets while staying
+                //inside the sizeof(TPMU_HA) bound the sibling proof exercises — this isolates the overrun from
+                //the width bound. The plaintext stays one whole AES block, which the oracle's framework CFB
+                //requires.
+                (IMemoryOwner<byte> blob, int blobLength, IMemoryOwner<byte> secret, int secretLength) =
+                    await BuildChallengerCredentialAsync(
+                        CredentialSecret.Memory, akName, ekX, ekY, pool, TestContext.CancellationToken,
+                        declaredCredentialLength: Sha256DigestSize).ConfigureAwait(false);
+                try
+                {
+                    using ActivateCredentialInput activateInput = ActivateCredentialInput.Create(
+                        ak.ObjectHandle, ek.ObjectHandle, blob.Memory.Span[..blobLength], secret.Memory.Span[..secretLength], pool);
+                    using TpmPasswordSession activateAuth = TpmPasswordSession.CreateEmpty(pool);
+                    using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
+
+                    TpmResult<ActivateCredentialResponse> activateResult = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
+                        tpm, activateInput, [activateAuth, keyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+                    Assert.IsFalse(activateResult.IsSuccess, "A credential whose declared width overruns the recovered plaintext must not activate.");
+                    Assert.AreEqual(
+                        TpmRcConstants.TPM_RC_INSUFFICIENT, activateResult.ResponseCode,
+                        "The overrun is the unmarshal's shortfall code, not an exception escaping the effect.");
+                }
+                finally
+                {
+                    blob.Dispose();
+                    secret.Dispose();
+                }
+            }
+            finally
+            {
+                await FlushAsync(tpm, registry, ak.ObjectHandle.Value, pool).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await FlushAsync(tpm, registry, ek.ObjectHandle.Value, pool).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// <c>CredentialToSecret()</c> closes its unmarshal with "if(result == TPM_RC_SUCCESS &amp;&amp; size != 0)
+    /// return TPM_RC_SIZE" (TPM 2.0 Library Part 4, page 734), so the recovered plaintext must hold the
+    /// credential's <c>TPM2B_DIGEST</c> and nothing else. A challenger who knows the credential key's PUBLIC
+    /// point can build a blob whose outer HMAC PASSES and whose plaintext carries a well-formed, in-bound
+    /// <c>TPM2B_DIGEST</c> followed by extra octets: every earlier gate admits it — the size field is present,
+    /// the declared width is within <c>sizeof(TPMU_HA)</c> (Part 2, clause 10.4.2, Table 92), and the plaintext
+    /// supplies every declared octet — so this refusal is the only one that can answer it. Its code is
+    /// <c>TPM_RC_SIZE</c>, the third of the three <c>CredentialToSecret()</c> declares (page 734:
+    /// "TPM_RC_INSUFFICIENT error during credential unmarshaling / TPM_RC_INTEGRITY credential integrity is
+    /// broken / TPM_RC_SIZE error during credential unmarshaling"), which the command's own return list states
+    /// as "TPM_RC_SIZE 'secret' size is invalid or the 'credentialBlob' does not unmarshal correctly" (Part 4,
+    /// <c>TPM2_ActivateCredential()</c>, page 700).
+    /// </summary>
+    [TestMethod]
+    public async Task ChallengerBuiltCredentialLeavingOctetsAfterTheDigestIsRejectedWithSizeError()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse ek = await CreateStoragePrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
+        try
+        {
+            using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
+            try
+            {
+                TpmsEccPoint ekPoint = ek.OutPublic.PublicArea.Unique.Ecc!;
+                byte[] ekX = ekPoint.X.AsReadOnlySpan().ToArray();
+                byte[] ekY = ekPoint.Y.AsReadOnlySpan().ToArray();
+                byte[] akName = ak.Name.Span.ToArray();
+
+                //The inner structure declares a full SHA-256 digest and carries 46 octets, so 14 octets remain
+                //after the digest. The trailing count is 14 rather than 1 because the marshaled inner data (the
+                //2-octet size prefix plus the carried octets) must be a whole number of 16-octet AES blocks for
+                //the oracle's framework CFB, the same block-alignment constraint the digest-bound proof states.
+                byte[] trailingCredential = new byte[Sha256DigestSize + 14];
+                trailingCredential.AsSpan().Fill(0xC7);
+
+                (IMemoryOwner<byte> blob, int blobLength, IMemoryOwner<byte> secret, int secretLength) =
+                    await BuildChallengerCredentialAsync(
+                        trailingCredential, akName, ekX, ekY, pool, TestContext.CancellationToken,
+                        declaredCredentialLength: Sha256DigestSize).ConfigureAwait(false);
+                try
+                {
+                    using ActivateCredentialInput activateInput = ActivateCredentialInput.Create(
+                        ak.ObjectHandle, ek.ObjectHandle, blob.Memory.Span[..blobLength], secret.Memory.Span[..secretLength], pool);
+                    using TpmPasswordSession activateAuth = TpmPasswordSession.CreateEmpty(pool);
+                    using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
+
+                    TpmResult<ActivateCredentialResponse> activateResult = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
+                        tpm, activateInput, [activateAuth, keyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+                    Assert.IsFalse(activateResult.IsSuccess, "A plaintext holding octets past the credential must not activate.");
+                    Assert.AreEqual(
+                        TpmRcConstants.TPM_RC_SIZE, activateResult.ResponseCode,
+                        "Octets left after the recovered TPM2B_DIGEST are the unmarshal's closing size refusal (Part 4, CredentialToSecret(), page 734).");
+                }
+                finally
+                {
+                    blob.Dispose();
+                    secret.Dispose();
+                }
+            }
+            finally
+            {
+                await FlushAsync(tpm, registry, ak.ObjectHandle.Value, pool).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await FlushAsync(tpm, registry, ek.ObjectHandle.Value, pool).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
     /// Builds a credential blob and encrypted secret: a fresh ephemeral P-256 key agreed with the credential
     /// key's public point via framework <see cref="ECDiffieHellman"/> (independent of the simulator's own ECC
     /// backend), the project's own <see cref="Kdfe"/> derives the seed (Annex C.6.1, eq. (65)), and the outer
@@ -207,6 +434,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
     /// <param name="credentialKeyY">The credential key's (EK's) public point Y coordinate.</param>
     /// <param name="pool">The memory pool for all pooled allocations.</param>
     /// <param name="cancellationToken">A token observed across the KDF/HMAC computations.</param>
+    /// <param name="declaredCredentialLength">The width the inner <c>TPM2B_DIGEST</c> declares, or a negative value (the default) for the honest width of <paramref name="credential"/>. A larger value builds the structurally malformed blob whose declared width overruns the plaintext.</param>
     /// <returns>The credential blob and encrypted secret, each with its written length; the caller disposes both owners.</returns>
     private static async Task<(IMemoryOwner<byte> Blob, int BlobLength, IMemoryOwner<byte> Secret, int SecretLength)> BuildChallengerCredentialAsync(
         ReadOnlyMemory<byte> credential,
@@ -214,7 +442,8 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
         ReadOnlyMemory<byte> credentialKeyX,
         ReadOnlyMemory<byte> credentialKeyY,
         BaseMemoryPool pool,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int declaredCredentialLength = -1)
     {
         //Independent oracle: framework ECDiffieHellman performs the P-256 agreement, a different provider from
         //the simulator's own ECC signing backend, so the agreement itself is cross-checked rather than assumed.
@@ -239,7 +468,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
             try
             {
                 (IMemoryOwner<byte> blobOwner, int blobLength) = await BuildCredentialBlobAsync(
-                    seedOwner.Memory[..Sha256DigestSize], credential, objectName, pool, cancellationToken).ConfigureAwait(false);
+                    seedOwner.Memory[..Sha256DigestSize], credential, objectName, pool, cancellationToken, declaredCredentialLength).ConfigureAwait(false);
                 try
                 {
                     (IMemoryOwner<byte> secretOwner, int secretLength) = FrameEccPointSecret(ephemeralX, ephemeralY, pool);
@@ -277,11 +506,16 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
     /// <param name="objectName">The Name of the bound object (the AK).</param>
     /// <param name="pool">The memory pool for all pooled allocations.</param>
     /// <param name="cancellationToken">A token observed across the KDF/HMAC computations.</param>
+    /// <param name="declaredCredentialLength">The width the inner <c>TPM2B_DIGEST</c> declares, or a negative value (the default) for the honest width of <paramref name="credential"/>.</param>
     /// <returns>The credential blob owner and its written length; the caller disposes the owner.</returns>
     private static async Task<(IMemoryOwner<byte> Owner, int Length)> BuildCredentialBlobAsync(
-        ReadOnlyMemory<byte> seed, ReadOnlyMemory<byte> credential, ReadOnlyMemory<byte> objectName, BaseMemoryPool pool, CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> seed, ReadOnlyMemory<byte> credential, ReadOnlyMemory<byte> objectName, BaseMemoryPool pool, CancellationToken cancellationToken,
+        int declaredCredentialLength = -1)
     {
         int innerLength = sizeof(ushort) + credential.Length;
+        int declaredLength = declaredCredentialLength < 0
+            ? credential.Length
+            : declaredCredentialLength;
 
         //symKey = KDFa(SHA256, seed, "STORAGE", objectName, Empty, 128) — Part 1, clause 24.4, eq. (44).
         using IMemoryOwner<byte> symKeyOwner = await Kdfa.DeriveAsync(
@@ -292,7 +526,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
         {
             using IMemoryOwner<byte> plainOwner = pool.Rent(innerLength);
             Span<byte> plain = plainOwner.Memory.Span[..innerLength];
-            BinaryPrimitives.WriteUInt16BigEndian(plain, (ushort)credential.Length);
+            BinaryPrimitives.WriteUInt16BigEndian(plain, (ushort)declaredLength);
             credential.Span.CopyTo(plain[sizeof(ushort)..]);
 
             Span<byte> zeroFeedback = stackalloc byte[AesBlockSize];

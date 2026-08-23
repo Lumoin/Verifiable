@@ -9,9 +9,17 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This structure holds the modulus (n) of an RSA public key.
-/// The maximum size is determined by the largest RSA key size supported
-/// by the TPM (typically 4096 bits = 512 bytes).
+/// Carries the modulus (n) of an RSA public key in the <c>unique</c> member of an RSA
+/// <c>TPMT_PUBLIC</c>, and the signature octets of an RSA <c>TPMS_SIGNATURE_RSA</c> — Part 2 gives both the
+/// same buffer type. Table 193 bounds it by <c>MAX_RSA_KEY_BYTES</c>, the octet width of the largest RSA key
+/// the TPM supports, which this library takes as 4096 bits.
+/// </para>
+/// <para>
+/// The content is public key material, so this carrier holds no
+/// <see cref="Verifiable.Cryptography.SensitiveMemory"/> tag; it follows the hand-rolled pooled shape of
+/// <see cref="Tpm2bName"/> and <see cref="Tpm2bOperand"/>. Instance identity is ownership identity: two
+/// carriers are the same carrier only when they are the same instance, so a record holding one compares it by
+/// reference and never reads a possibly-released buffer's content.
 /// </para>
 /// <para>
 /// <b>Wire format:</b>
@@ -23,43 +31,93 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// } TPM2B_PUBLIC_KEY_RSA;
 /// </code>
 /// <para>
-/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.4.5.
+/// Specification reference: TPM 2.0 Library Part 2, Section 11.2.4.5, Table 193.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public readonly struct Tpm2bPublicKeyRsa: IDisposable, IEquatable<Tpm2bPublicKeyRsa>
+public sealed class Tpm2bPublicKeyRsa: IDisposable, ITpmWireType
 {
     /// <summary>
-    /// Maximum RSA key size in bytes (4096 bits).
+    /// Maximum RSA key size in bytes (4096 bits) — Table 193's <c>MAX_RSA_KEY_BYTES</c>.
     /// </summary>
     public const int MaxRsaKeyBytes = 512;
 
-    private readonly IMemoryOwner<byte>? memoryOwner;
-    private readonly ReadOnlyMemory<byte> buffer;
+    /// <summary>
+    /// The shared zero-length instance backing every empty buffer.
+    /// </summary>
+    private static Tpm2bPublicKeyRsa EmptyInstance { get; } = new(null, 0);
 
     /// <summary>
-    /// Initializes a new instance with owned memory.
+    /// The pooled storage, or <see langword="null"/> for <see cref="Empty"/>.
     /// </summary>
-    private Tpm2bPublicKeyRsa(IMemoryOwner<byte>? owner, ReadOnlyMemory<byte> data)
+    private IMemoryOwner<byte>? Storage { get; }
+
+    /// <summary>
+    /// Whether <see cref="Dispose"/> has already released <see cref="Storage"/>.
+    /// </summary>
+    private bool disposed;
+
+    /// <summary>
+    /// Initializes a new RSA public key buffer over pooled storage, or the empty sentinel when there is none.
+    /// </summary>
+    /// <param name="storage">The memory owner holding the key octets, or <see langword="null"/> for the empty form.</param>
+    /// <param name="size">The number of valid octets at the head of <paramref name="storage"/>.</param>
+    private Tpm2bPublicKeyRsa(IMemoryOwner<byte>? storage, int size)
     {
-        memoryOwner = owner;
-        buffer = data;
+        this.Storage = storage;
+        Size = size;
     }
+
+    /// <summary>
+    /// Gets the shared empty RSA public key buffer. It owns no pooled storage, so its disposal is a no-op.
+    /// </summary>
+    public static Tpm2bPublicKeyRsa Empty => EmptyInstance;
 
     /// <summary>
     /// Gets the size of the public key in bytes.
     /// </summary>
-    public int Size => buffer.Length;
-
-    /// <summary>
-    /// Gets the public key data (RSA modulus).
-    /// </summary>
-    public ReadOnlySpan<byte> Buffer => buffer.Span;
+    public int Size { get; }
 
     /// <summary>
     /// Gets whether this buffer is empty.
     /// </summary>
-    public bool IsEmpty => buffer.IsEmpty;
+    public bool IsEmpty => Size == 0;
+
+    /// <summary>
+    /// Gets the public key data (RSA modulus) as a read-only span.
+    /// </summary>
+    public ReadOnlySpan<byte> Buffer
+    {
+        get
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+
+            if(Storage is null)
+            {
+                return ReadOnlySpan<byte>.Empty;
+            }
+
+            return Storage.Memory.Span.Slice(0, Size);
+        }
+    }
+
+    /// <summary>
+    /// Gets the key octets as read-only memory that aliases this instance's pooled storage — for a borrowing
+    /// consumer such as the asynchronous cryptographic seams, valid until <see cref="Dispose"/> and never
+    /// copied into an untracked array.
+    /// </summary>
+    /// <returns>The key octets.</returns>
+    public ReadOnlyMemory<byte> AsReadOnlyMemory()
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+
+        if(Storage is null)
+        {
+            return ReadOnlyMemory<byte>.Empty;
+        }
+
+        return Storage.Memory.Slice(0, Size);
+    }
 
     /// <summary>
     /// Gets the serialized size in bytes.
@@ -72,8 +130,14 @@ public readonly struct Tpm2bPublicKeyRsa: IDisposable, IEquatable<Tpm2bPublicKey
     /// <param name="writer">The writer.</param>
     public void WriteTo(ref TpmWriter writer)
     {
+        ObjectDisposedException.ThrowIf(disposed, this);
+
         writer.WriteUInt16((ushort)Size);
-        writer.WriteBytes(Buffer);
+
+        if(Size > 0)
+        {
+            writer.WriteBytes(Buffer);
+        }
     }
 
     /// <summary>
@@ -82,8 +146,11 @@ public readonly struct Tpm2bPublicKeyRsa: IDisposable, IEquatable<Tpm2bPublicKey
     /// <param name="reader">The reader.</param>
     /// <param name="pool">The memory pool to allocate from.</param>
     /// <returns>The parsed RSA public key.</returns>
-    public static Tpm2bPublicKeyRsa Parse(ref TpmReader reader, BaseMemoryPool? pool = null)
+    /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The declared size exceeds <see cref="MaxRsaKeyBytes"/> (<c>TPM_RC_SIZE</c>).</exception>
+    public static Tpm2bPublicKeyRsa Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
         ushort size = reader.ReadUInt16();
 
         if(size == 0)
@@ -96,20 +163,33 @@ public readonly struct Tpm2bPublicKeyRsa: IDisposable, IEquatable<Tpm2bPublicKey
             throw new InvalidOperationException($"RSA public key size {size} exceeds maximum {MaxRsaKeyBytes}.");
         }
 
-        pool ??= BaseMemoryPool.Shared;
-        var owner = pool.Rent(size);
-        reader.ReadBytes(size).CopyTo(owner.Memory.Span);
-        return new Tpm2bPublicKeyRsa(owner, owner.Memory[..size]);
+        IMemoryOwner<byte> storage = pool.Rent(size);
+        try
+        {
+            reader.ReadBytes(size).CopyTo(storage.Memory.Span);
+
+            return new Tpm2bPublicKeyRsa(storage, size);
+        }
+        catch
+        {
+            //A truncated frame must not orphan the rental the declared size already asked for.
+            storage.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
-    /// Creates an RSA public key from the given data.
+    /// Creates an RSA public key buffer from the given octets.
     /// </summary>
-    /// <param name="modulus">The RSA modulus.</param>
+    /// <param name="modulus">The RSA modulus (or RSA signature octets), big-endian.</param>
     /// <param name="pool">The memory pool to allocate from.</param>
-    /// <returns>The RSA public key.</returns>
-    public static Tpm2bPublicKeyRsa Create(ReadOnlySpan<byte> modulus, BaseMemoryPool? pool = null)
+    /// <returns>The RSA public key buffer; the caller owns and disposes it.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="pool"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="modulus"/> is longer than <see cref="MaxRsaKeyBytes"/>.</exception>
+    public static Tpm2bPublicKeyRsa Create(ReadOnlySpan<byte> modulus, BaseMemoryPool pool)
     {
+        ArgumentNullException.ThrowIfNull(pool);
+
         if(modulus.Length > MaxRsaKeyBytes)
         {
             throw new ArgumentException($"RSA modulus size {modulus.Length} exceeds maximum {MaxRsaKeyBytes}.", nameof(modulus));
@@ -120,46 +200,36 @@ public readonly struct Tpm2bPublicKeyRsa: IDisposable, IEquatable<Tpm2bPublicKey
             return Empty;
         }
 
-        pool ??= BaseMemoryPool.Shared;
-        var owner = pool.Rent(modulus.Length);
-        modulus.CopyTo(owner.Memory.Span);
-        return new Tpm2bPublicKeyRsa(owner, owner.Memory[..modulus.Length]);
+        IMemoryOwner<byte> storage = pool.Rent(modulus.Length);
+        try
+        {
+            modulus.CopyTo(storage.Memory.Span);
+
+            return new Tpm2bPublicKeyRsa(storage, modulus.Length);
+        }
+        catch
+        {
+            storage.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
-    /// Gets an empty RSA public key buffer.
+    /// Releases the memory owned by this structure. The shared <see cref="Empty"/> buffer is exempt: it owns no
+    /// pooled storage and every consumer holds the same instance, so disposing one of them leaves it readable
+    /// and framable for all the others.
     /// </summary>
-    public static Tpm2bPublicKeyRsa Empty { get; } = new(null, ReadOnlyMemory<byte>.Empty);
-
-    /// <inheritdoc/>
     public void Dispose()
     {
-        memoryOwner?.Dispose();
-    }
-
-    /// <inheritdoc/>
-    public bool Equals(Tpm2bPublicKeyRsa other) => buffer.Span.SequenceEqual(other.buffer.Span);
-
-    /// <inheritdoc/>
-    public override bool Equals(object? obj) => obj is Tpm2bPublicKeyRsa other && Equals(other);
-
-    /// <inheritdoc/>
-    public override int GetHashCode()
-    {
-        HashCode hash = new();
-        hash.AddBytes(buffer.Span);
-        return hash.ToHashCode();
+        if(!disposed && this != EmptyInstance)
+        {
+            Storage?.Dispose();
+            disposed = true;
+        }
     }
 
     /// <summary>
-    /// Equality operator.
+    /// The debugger's one-line rendering: the octet count only, never the octets themselves.
     /// </summary>
-    public static bool operator ==(Tpm2bPublicKeyRsa left, Tpm2bPublicKeyRsa right) => left.Equals(right);
-
-    /// <summary>
-    /// Inequality operator.
-    /// </summary>
-    public static bool operator !=(Tpm2bPublicKeyRsa left, Tpm2bPublicKeyRsa right) => !left.Equals(right);
-
     private string DebuggerDisplay => $"TPM2B_PUBLIC_KEY_RSA({Size} bytes)";
 }

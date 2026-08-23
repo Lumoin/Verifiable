@@ -730,6 +730,15 @@ public delegate ValueTask<TokenExchange.ValidatedSecurityToken?> ValidateTokenEx
 /// when it builds the new token's <c>act</c> claim; this seam shapes the top-level claims only.
 /// </para>
 /// <para>
+/// For an ID-JAG issued type the same chain becomes the grant's <c>act</c> claim, so the acting party
+/// survives the mint. <see cref="TokenExchange.TokenExchangeAuthorization.Actor"/> lets this seam
+/// shape it instead — the derivation draft-ietf-oauth-identity-assertion-authz-grant-04 §9.7 leaves to
+/// a profile — and <see cref="TokenExchange.TokenExchangeAuthorization.AuthorizedActor"/> states which
+/// client may become the actor when that grant is redeemed
+/// (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.4">RFC 8693 §4.4</see>). Both are
+/// discretionary: RFC 8693 §1.1 leaves whether a composite token is issued to the authorization server.
+/// </para>
+/// <para>
 /// Return <see langword="null"/> when the exchange is denied — for example when the authorization
 /// server is "unwilling or unable to issue a token for any target service indicated by the
 /// <c>resource</c> or <c>audience</c> parameters": the endpoint then answers <c>invalid_target</c>
@@ -802,6 +811,15 @@ public delegate ValueTask<TokenExchange.TokenExchangeAuthorization?> AuthorizeTo
 /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.1">RFC 7523 §3.1</see> (which mandates
 /// that exact error code), leaking nothing about why. A non-null result is the validated grant the
 /// issued access token is shaped from.
+/// </para>
+/// <para>
+/// When the assertion is an Identity Assertion JWT Authorization Grant, copy its <c>act</c> and
+/// <c>may_act</c> claims onto <see cref="JwtBearer.JwtBearerGrant.Act"/> and
+/// <see cref="JwtBearer.JwtBearerGrant.MayAct"/> — <see cref="IdJag.IdJagAssertionValidation"/> reads
+/// both. The endpoint composes the issued token's own <c>act</c> from the chain and the redeeming
+/// client and refuses a client the <c>may_act</c> does not authorize
+/// (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.4">RFC 8693 §4.4</see>); a seam that
+/// drops them issues a token that records neither the delegation nor its constraint.
 /// </para>
 /// </remarks>
 /// <param name="assertion">The <c>assertion</c> value — a single JWT, exactly as presented on the wire. Confidential.</param>

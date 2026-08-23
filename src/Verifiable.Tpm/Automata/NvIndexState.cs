@@ -1,6 +1,11 @@
 using System;
 using System.Buffers.Binary;
+using System.Diagnostics.CodeAnalysis;
+using Verifiable.Tpm.Spec.Algorithms;
 using Verifiable.Tpm.Spec.Attributes;
+using Verifiable.Tpm.Spec.Constants;
+using Verifiable.Tpm.Spec.Handles;
+using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Automata;
 
@@ -14,10 +19,17 @@ namespace Verifiable.Tpm.Automata;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The authorization value and the data area are held as plain <see cref="ReadOnlyMemory{T}"/> rather than
-/// pooled buffers: they are durable model state owned by the live automaton for the lifetime of the simulated
-/// TPM, mirroring how <see cref="TpmExchange"/> holds recorded command/response octets. The hot
-/// command/response wire path remains pool-backed; only the device's own persistent state lives here.
+/// The authorization value lives in a pinned, zero-on-dispose <see cref="Tpm2bAuth"/> carrier the record
+/// owns: it is rented where a pool is in scope (the command parser or a decrypt effect), its ownership
+/// transfers into this record at the installing transition, and it is disposed when the specific field is
+/// replaced (<see cref="WithAuthValue"/>) or the Index is evicted. The carrier holds the exact octets the
+/// installing path stored — the wire-exact value on the plaintext <c>TPM2_NV_DefineSpace()</c> arms, the
+/// trailing-zero-stripped value on the decrypted-auth and <c>TPM2_NV_ChangeAuth()</c> paths — and every
+/// consumer takes its comparison or stripped view at the point of use. The data area is a pooled
+/// <see cref="TpmNvIndexData"/> the record likewise owns, reserved at the declared <see cref="DataSize"/> by the
+/// defining command's parser and stored into in place by every later write: an Index's space is reserved at
+/// definition and a write merges into it (TPM 2.0 Library Part 3, clause 31.7.1), which is also what lets the
+/// pure transitions that perform those stores hold no memory pool.
 /// </para>
 /// <para>
 /// Written-ness is modelled as the <c>TPMA_NV_WRITTEN</c> bit within <see cref="Attributes"/>, set by the
@@ -27,16 +39,36 @@ namespace Verifiable.Tpm.Automata;
 /// </para>
 /// </remarks>
 /// <param name="NvIndex">The NV Index handle (its most-significant octet is <c>TPM_HT_NV_INDEX</c>).</param>
-/// <param name="AuthValue">The Index authorization value supplied at definition; compared against a caller's authorization on access.</param>
+/// <param name="AuthValue">The Index authorization value supplied at definition, in an owned <see cref="Tpm2bAuth"/> carrier; compared against a caller's authorization on access.</param>
 /// <param name="Attributes">The Index attributes (<c>TPMA_NV</c>) set at definition, with <c>TPMA_NV_WRITTEN</c> folded in once the Index has been written.</param>
 /// <param name="DataSize">The size in octets of the Index data area declared at definition.</param>
-/// <param name="Data">The octets stored by <c>TPM2_NV_Write()</c>, covering the written extent of the data area; empty until the first write.</param>
+/// <param name="Data">
+/// The Index's data area in an owned pooled carrier reserved at <paramref name="DataSize"/> octets by the
+/// defining command's parser, whose ownership transfers into this record at the installing transition and which
+/// is released when the Index is evicted. Its <see cref="TpmNvIndexData.Length"/> is the written extent — the
+/// octets a store has actually reached — and is zero until the first write.
+/// </param>
+/// <param name="NameAlg">
+/// The hash algorithm used to compute this Index's Name (<c>Name ≔ nameAlg ‖ H_nameAlg(TPMS_NV_PUBLIC)</c> - the
+/// marshaled public area whose own first field is the Index handle, so the handle is hashed exactly once,
+/// TPM 2.0 Library Part 1, clause 14 and Table 6) and to process <see cref="AuthPolicy"/>, supplied at
+/// <c>TPM2_NV_DefineSpace()</c> and retained unchanged for the Index's lifetime.
+/// </param>
+/// <param name="AuthPolicy">
+/// This Index's access policy digest (<c>TPMS_NV_PUBLIC.authPolicy</c>, a <c>TPM2B_DIGEST</c> — TPM 2.0 Library
+/// Part 2, clause 10.4.2, Table 92), in an owned pooled carrier: supplied at <c>TPM2_NV_DefineSpace()</c>,
+/// adopted from the defining request at install, and folded into the marshaled public area every Name
+/// computation hashes. The dispose-immune <see cref="Tpm2bDigest.Empty"/> when the Index was defined with no
+/// policy; released when the Index leaves the dictionary.
+/// </param>
 public sealed record NvIndexState(
-    uint NvIndex,
-    ReadOnlyMemory<byte> AuthValue,
+    TpmiRhNvIndex NvIndex,
+    Tpm2bAuth AuthValue,
     TpmaNv Attributes,
     ushort DataSize,
-    ReadOnlyMemory<byte> Data)
+    TpmNvIndexData Data,
+    TpmiAlgHash NameAlg,
+    Tpm2bDigest AuthPolicy): IDisposable
 {
     /// <summary>
     /// The size in octets of <c>TPMS_NV_PIN_COUNTER_PARAMETERS</c> (pinCount + pinLimit, each a
@@ -97,6 +129,24 @@ public sealed record NvIndexState(
     public bool IsWritten => (Attributes & TpmaNv.TPMA_NV_WRITTEN) != 0;
 
     /// <summary>
+    /// Gets a value indicating whether this Index was defined under Platform Authorization
+    /// (<see cref="TpmaNv.TPMA_NV_PLATFORMCREATE"/>, <c>TPMA_NV</c> bit 30; TPM 2.0 Library Part 2, clause 13.4).
+    /// It fixes which authority owns the Index for the rest of its life: a platform-created Index may be
+    /// undefined only with Platform Authorization, and it is gated by <c>phEnableNV</c> rather than
+    /// <c>shEnable</c> (Part 3, clause 24.2.1).
+    /// </summary>
+    /// <remarks>
+    /// This is the discriminator <c>TPM2_Clear()</c> turns on: its effect list deletes exactly the Indexes with
+    /// this attribute CLEAR — "delete any NV Index with TPMA_NV_PLATFORMCREATE == CLEAR" (Part 3, clause
+    /// 24.6.1) — so a platform-created Index survives an owner change. It reads the bit out of
+    /// <see cref="Attributes"/> rather than shadowing it in a field of its own, the way every other attribute
+    /// lens on this record does: the bit is fixed at definition and no later state change touches it
+    /// (<see cref="WriteData"/> only folds in <c>TPMA_NV_WRITTEN</c>), so a derived reading cannot drift from
+    /// the attributes the Name is computed over.
+    /// </remarks>
+    public bool IsPlatformCreated => (Attributes & TpmaNv.TPMA_NV_PLATFORMCREATE) != 0;
+
+    /// <summary>
     /// Gets the Index's type (the <c>TPM_NT</c> field within <see cref="Attributes"/>, bits 7:4; TPM 2.0
     /// Library Part 2, clause 13.2).
     /// </summary>
@@ -135,6 +185,27 @@ public sealed record NvIndexState(
         : 0u;
 
     /// <summary>
+    /// Returns a copy of this Index with <paramref name="data"/> stored at <paramref name="offset"/> and
+    /// <c>TPMA_NV_WRITTEN</c> set, merging into the reserved data area (TPM 2.0 Library Part 3, clause 31.7).
+    /// The caller has already range-checked the write against <see cref="DataSize"/>.
+    /// </summary>
+    /// <remarks>
+    /// The store happens in place, in the carrier the Index already owns: an Index's space is reserved at
+    /// definition and a write merges <c>data.size</c> octets into it starting at <c>offset</c> (clause 31.7.1),
+    /// so the returned copy shares the very carrier this one holds and only the attribute word differs. That is
+    /// what lets the pure transitions that perform every store hold no memory pool.
+    /// </remarks>
+    /// <param name="offset">The octet offset into the data area at which to write.</param>
+    /// <param name="data">The octets to store.</param>
+    /// <returns>The updated Index.</returns>
+    public NvIndexState WriteData(int offset, ReadOnlySpan<byte> data)
+    {
+        Data.Write(offset, data);
+
+        return this with { Attributes = Attributes | TpmaNv.TPMA_NV_WRITTEN };
+    }
+
+    /// <summary>
     /// Gets the attempt threshold from the retained <c>TPMS_NV_PIN_COUNTER_PARAMETERS</c> data (the second
     /// four octets of <see cref="Data"/>; TPM 2.0 Library Part 2, clause 13.3). Zero for an unwritten Index.
     /// </summary>
@@ -160,24 +231,6 @@ public sealed record NvIndexState(
         : 0ul;
 
     /// <summary>
-    /// Returns a copy of this Index with <paramref name="data"/> stored at <paramref name="offset"/> and
-    /// <c>TPMA_NV_WRITTEN</c> set, growing or patching the retained data area (TPM 2.0 Library Part 3,
-    /// clause 31.7). The caller has already range-checked the write against <see cref="DataSize"/>.
-    /// </summary>
-    /// <param name="offset">The octet offset into the data area at which to write.</param>
-    /// <param name="data">The octets to store.</param>
-    /// <returns>The updated Index.</returns>
-    public NvIndexState WriteData(int offset, ReadOnlySpan<byte> data)
-    {
-        int newLength = Math.Max(Data.Length, offset + data.Length);
-        byte[] merged = new byte[newLength];
-        Data.Span.CopyTo(merged);
-        data.CopyTo(merged.AsSpan(offset));
-
-        return this with { Data = merged, Attributes = Attributes | TpmaNv.TPMA_NV_WRITTEN };
-    }
-
-    /// <summary>
     /// Returns a copy of this PIN Index with <paramref name="pinCount"/> stored as the first four octets of
     /// the retained <c>TPMS_NV_PIN_COUNTER_PARAMETERS</c> data, leaving <see cref="PinLimit"/> (and any
     /// further stored octets) untouched (TPM 2.0 Library Part 2, clause 13.3). Composes over
@@ -193,6 +246,45 @@ public sealed record NvIndexState(
         BinaryPrimitives.WriteUInt32BigEndian(pinCountBytes, pinCount);
 
         return WriteData(0, pinCountBytes);
+    }
+
+    /// <summary>
+    /// Returns a copy of this Index carrying <paramref name="strippedAuthValue"/> as its authorization value —
+    /// the sole effect of <c>TPM2_NV_ChangeAuth()</c> (TPM 2.0 Library Part 3, clause 31.15), which replaces the
+    /// authValue and nothing else.
+    /// </summary>
+    /// <remarks>
+    /// The data area is untouched, so a PIN Index's retained pinCount/pinLimit and its <c>TPMA_NV_WRITTEN</c> bit
+    /// survive a rotation, and the Index's Name is stable by construction: <see cref="AuthValue"/> is not a field
+    /// of <c>TPMS_NV_PUBLIC</c>, which is the only structure the Name recipe hashes (Part 1, clause 14 and
+    /// Table 6). A Name or attestation obtained before a rotation therefore stays valid after it. The carrier
+    /// holds the exact octets the rotating command supplied; every consumer takes its trailing-zero-stripped
+    /// view where the value is used as an authValue (Part 1, clause 17.6.4.3: "Trailing octets of zero are to be
+    /// removed from any string before it is used as an authValue"), so the stored form and the compared form
+    /// cannot drift.
+    /// </remarks>
+    /// <param name="newAuth">The new authorization value in an owned carrier; ownership transfers to the returned Index.</param>
+    /// <returns>The updated Index.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of newAuth transfers to the returned NvIndexState's AuthValue, which the record's Dispose or the next rotation releases; the outgoing carrier is disposed here before the with-copy replaces it.")]
+    public NvIndexState WithAuthValue(Tpm2bAuth newAuth)
+    {
+        AuthValue.Dispose();
+
+        return this with { AuthValue = newAuth };
+    }
+
+    /// <summary>
+    /// Releases the Index's owned authorization-value, access-policy-digest, and data-area carriers. Called when
+    /// the Index leaves the automaton's dictionary for good (<c>TPM2_NV_UndefineSpace()</c>, <c>TPM2_Clear()</c>,
+    /// simulator teardown); the shared empty carriers are dispose-immune, so the walk is safe for a no-auth,
+    /// no-policy, zero-size Index.
+    /// </summary>
+    public void Dispose()
+    {
+        AuthValue.Dispose();
+        AuthPolicy.Dispose();
+        Data.Dispose();
     }
 
     /// <summary>
@@ -212,4 +304,33 @@ public sealed record NvIndexState(
 
         return WriteData(0, counterValueBytes);
     }
+
+    /// <summary>
+    /// Value equality with OWNERSHIP identity for the owned carriers: two Indexes are equal only when they
+    /// share the same <see cref="AuthValue"/>, <see cref="AuthPolicy"/> and <see cref="Data"/> instances. A
+    /// rotated authValue is a different resource even under equal octets, and
+    /// <see cref="SensitiveMemory"/>'s own equality reads
+    /// buffer content — which a
+    /// rotation has already disposed when <c>ImmutableDictionary.SetItem</c> compares the replacement
+    /// against the superseded entry. Reference comparison preserves the object-identity semantics the
+    /// field had as plain memory and never reads bytes, so a superseded snapshot cannot throw here.
+    /// </summary>
+    /// <param name="other">The Index to compare against.</param>
+    /// <returns><see langword="true"/> when every field matches and the carriers are the same instances.</returns>
+    public bool Equals(NvIndexState? other) =>
+        other is not null
+        && NvIndex == other.NvIndex
+        && ReferenceEquals(AuthValue, other.AuthValue)
+        && Attributes == other.Attributes
+        && DataSize == other.DataSize
+        && ReferenceEquals(Data, other.Data)
+        && NameAlg == other.NameAlg
+        && ReferenceEquals(AuthPolicy, other.AuthPolicy);
+
+    /// <summary>
+    /// Hashes the Index's immutable identity fields, consistent with <see cref="Equals(NvIndexState)"/>
+    /// without ever reading carrier content.
+    /// </summary>
+    /// <returns>The hash code.</returns>
+    public override int GetHashCode() => HashCode.Combine(NvIndex, Attributes, DataSize, NameAlg);
 }

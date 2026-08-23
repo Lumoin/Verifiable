@@ -1055,6 +1055,37 @@ internal sealed class CtapAuthenticatorLargeBlobsTests
     }
 
 
+    /// <summary>
+    /// Tearing the simulator down mid multi-fragment <c>set</c> sequence returns the in-progress
+    /// write's own rented accumulation buffer to the pool: the sequence-initiating fragment below
+    /// declares a total <c>length</c> larger than itself, so
+    /// <see cref="CtapAuthenticatorState.RememberedLargeBlobWrite"/> still owns its
+    /// <see cref="CtapRememberedLargeBlobWriteState.PendingBuffer"/> when
+    /// <see cref="CtapAuthenticatorSimulator.Dispose"/> runs — the final teardown walk must release
+    /// the pending sequence exactly as <see cref="CtapAuthenticatorState.PowerCycle"/> and
+    /// <see cref="CtapAuthenticatorState.FactoryReset"/> already do, observed through the
+    /// tracking-pool public seam without any test-only hook in production code.
+    /// </summary>
+    [TestMethod]
+    public async Task DisposeMidSetSequenceReturnsPendingFragmentBufferToPool()
+    {
+        using var trackingPool = new MeteredHousePool();
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("largeblobs-dispose-pending");
+
+        var request = new CtapLargeBlobsRequest(Set: new byte[] { 0x01, 0x02 }, Offset: 0, Length: 50);
+        using(PooledMemory response = await SendLargeBlobsAsync(simulator, request, trackingPool.Pool, TestContext.CancellationToken))
+        {
+            Assert.AreEqual(WellKnownCtapStatusCodes.Ok, response.AsReadOnlySpan()[0], "the sequence-initiating fragment must succeed tokenless on a fresh device.");
+        }
+
+        Assert.IsGreaterThan(0L, trackingPool.OutstandingCount, "the in-progress sequence must still own its rented accumulation buffer, or the balance assertion below is vacuous.");
+
+        simulator.Dispose();
+
+        Assert.AreEqual(0L, trackingPool.OutstandingCount, "tearing the simulator down mid set sequence must return the pending write's accumulation buffer to the pool.");
+    }
+
+
     /// <summary>Rents a pooled one-byte CTAP2 request envelope carrying only <paramref name="command"/> — the shape a sub-command-less request like <c>authenticatorGetInfo</c> or <c>authenticatorReset</c> needs.</summary>
     /// <param name="command">The CTAP2 command byte.</param>
     /// <param name="pool">The memory pool the envelope is rented from.</param>

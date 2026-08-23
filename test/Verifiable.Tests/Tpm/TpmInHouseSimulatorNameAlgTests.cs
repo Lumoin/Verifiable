@@ -29,7 +29,7 @@ namespace Verifiable.Tests.Tpm;
 /// Each case builds an ECC signing-key template with a caller-chosen nameAlg directly
 /// (<see cref="Tpm2bPublic.CreateEccSigningTemplate"/>), bypassing <see cref="CreatePrimaryInput.ForEccSigningKey"/>
 /// (which hardcodes SHA-256), and recomputes the object Name <b>off-TPM</b> from the wire-exported public area
-/// through the registered digest seam (TPM 2.0 Library Part 1, clause 16) — firewalled: the verifier never calls
+/// through the registered digest seam (TPM 2.0 Library Part 1, clause 14, Table 6) — firewalled: the verifier never calls
 /// into the production <c>TpmObjectName</c> helper, only an independent recomputation, matching the sibling
 /// Certify/Sign/Quote tests' oracle style.
 /// </para>
@@ -47,13 +47,13 @@ internal sealed class TpmInHouseSimulatorNameAlgTests
     public async Task CreatePrimaryRecomputesNameForEachSupportedNameAlg(TpmAlgIdConstants nameAlg, int digestSize)
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
         using CreatePrimaryResponse primary = await CreatePrimaryWithNameAlgAsync(tpm, registry, pool, nameAlg).ConfigureAwait(false);
 
-        //name = nameAlg || H_nameAlg(TPMT_PUBLIC) (TPM 2.0 Library Part 1, clause 16), recomputed independently
+        //name = nameAlg || H_nameAlg(TPMT_PUBLIC) (TPM 2.0 Library Part 1, clause 14, Table 6), recomputed independently
         //from the wire-exported public area, off-TPM, through the registered digest seam — proving the digest
         //itself is agile, not always a SHA-256 digest under a relabeled prefix.
         byte[] marshaledPublic = MarshalPublicArea(primary.OutPublic, pool);
@@ -70,11 +70,11 @@ internal sealed class TpmInHouseSimulatorNameAlgTests
     public async Task CreatePrimaryWithSha1NameAlgSucceeds()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
-        //SHA-1 is still a profile-listed object nameAlg value (TPM 2.0 Library Part 1, clause 16), and this model
+        //SHA-1 is still a profile-listed object nameAlg value (TPM 2.0 Library Part 1, clause 14, Table 6), and this model
         //computes it, so creation succeeds. No deep off-TPM matrix here — the shared nameAlg-agile digest routing
         //is already exercised by the SHA-256/384/512 matrix above.
         using CreatePrimaryResponse primary = await CreatePrimaryWithNameAlgAsync(tpm, registry, pool, TpmAlgIdConstants.TPM_ALG_SHA1).ConfigureAwait(false);
@@ -88,7 +88,7 @@ internal sealed class TpmInHouseSimulatorNameAlgTests
     public async Task CreatePrimaryWithUnsupportedNameAlgReturnsHash()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 

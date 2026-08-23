@@ -67,6 +67,20 @@ public readonly struct CredentialPath: IEquatable<CredentialPath>, IComparable<C
     public static CredentialPath Root { get; } = new(JsonPointerType.Root);
 
     /// <summary>
+    /// The credential-path hierarchy expressed as the lattice seam, so that a
+    /// <see cref="SetDisclosureLattice{TClaim}"/> over paths enforces upward closure.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every lattice built over credential paths wires this one instance rather than
+    /// restating the hierarchy, so closure means the same thing wherever a path set is
+    /// computed, clamped, or validated. It delegates to <see cref="Ancestors"/>, which is
+    /// transitive as the seam requires.
+    /// </para>
+    /// </remarks>
+    public static ClaimAncestorsDelegate<CredentialPath> Ancestry { get; } = static path => path.Ancestors();
+
+    /// <summary>
     /// Whether this is a JSON-based path (can be expressed as JSON Pointer).
     /// </summary>
     public bool IsJsonPath => jsonPointer.HasValue;

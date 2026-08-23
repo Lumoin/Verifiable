@@ -621,7 +621,7 @@ public sealed class TpmtPublic: IDisposable
     /// When <see langword="true"/> (the default), sets TPMA_OBJECT.userWithAuth so a USER-role action (such as
     /// <c>TPM2_Unseal()</c>) may be authorized by an HMAC session or password as well as a policy session; when
     /// <see langword="false"/>, only a policy session may authorize it (TPM 2.0 Library Part 2, clause 8.3.3;
-    /// Part 3, clause 5.6, check 6).
+    /// Part 3, clause 5.6, check 7.1).
     /// </param>
     /// <returns>The public area template.</returns>
     public static TpmtPublic CreateSealedDataTemplate(

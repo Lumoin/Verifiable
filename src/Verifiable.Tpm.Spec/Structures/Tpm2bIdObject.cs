@@ -169,6 +169,53 @@ public sealed class Tpm2bIdObject: IDisposable
     }
 
     /// <summary>
+    /// Adopts an already-filled pooled buffer as this structure's storage: ownership of
+    /// <paramref name="storage"/> transfers to the returned instance, with no second rental and no copy — the
+    /// zero-copy counterpart of <see cref="Create(ReadOnlySpan{byte}, BaseMemoryPool)"/> for a producer that
+    /// rented the octets and wrote them itself.
+    /// </summary>
+    /// <remarks>
+    /// A <paramref name="length"/> of zero yields the shared <see cref="Empty"/> singleton and releases
+    /// <paramref name="storage"/> here, since the singleton rents nothing and its <see cref="Dispose"/> is a
+    /// no-op. An argument that does not describe a valid <c>TPM2B_ID_OBJECT</c> likewise releases
+    /// <paramref name="storage"/> before the exception leaves, so a rejected adoption never orphans the
+    /// rental. The bound checked here is the <c>TPM2B</c> size field's own 16-bit width, since the octets come
+    /// from the producing side rather than from a caller: the table's content bound is enforced where octets
+    /// arrive from the wire (<see cref="Parse"/>) or are copied in from an untrusted span
+    /// (<see cref="Create(ReadOnlySpan{byte}, BaseMemoryPool)"/>).
+    /// </remarks>
+    /// <param name="storage">The pooled buffer whose leading octets hold the value; ownership transfers to the returned instance or is released here.</param>
+    /// <param name="length">The number of valid octets at the head of <paramref name="storage"/>.</param>
+    /// <returns>The adopted value.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="storage"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is negative, exceeds <paramref name="storage"/>'s length, or exceeds the 16-bit width of a <c>TPM2B</c> size field.</exception>
+    public static Tpm2bIdObject FromMarshaled(IMemoryOwner<byte> storage, int length)
+    {
+        ArgumentNullException.ThrowIfNull(storage);
+
+        try
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(length);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(length, storage.Memory.Length);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(length, ushort.MaxValue);
+        }
+        catch
+        {
+            storage.Dispose();
+            throw;
+        }
+
+        if(length == 0)
+        {
+            storage.Dispose();
+
+            return Empty;
+        }
+
+        return new Tpm2bIdObject(storage, length);
+    }
+
+    /// <summary>
     /// Releases the memory owned by this structure.
     /// </summary>
     public void Dispose()

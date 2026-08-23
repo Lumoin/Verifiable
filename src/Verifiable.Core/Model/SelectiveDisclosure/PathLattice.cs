@@ -338,54 +338,6 @@ public sealed class PathLattice
 
 
     /// <summary>
-    /// Validates that a path set satisfies all structural constraints.
-    /// </summary>
-    /// <param name="paths">The path set to validate.</param>
-    /// <returns><c>true</c> if the path set is valid.</returns>
-    /// <remarks>
-    /// A valid path set must:
-    /// <list type="bullet">
-    /// <item><description>Contain all mandatory paths.</description></item>
-    /// <item><description>Contain only known paths.</description></item>
-    /// <item><description>Be upward-closed (include all ancestors of included paths).</description></item>
-    /// </list>
-    /// </remarks>
-    public bool IsValidPathSet(IReadOnlySet<CredentialPath> paths)
-    {
-        ArgumentNullException.ThrowIfNull(paths);
-
-        //Check mandatory inclusion.
-        foreach(CredentialPath mandatory in MandatoryPaths)
-        {
-            if(!paths.Contains(mandatory))
-            {
-                return false;
-            }
-        }
-
-        //Check known paths and upward closure.
-        foreach(CredentialPath path in paths)
-        {
-            if(!AllPaths.Contains(path))
-            {
-                return false;
-            }
-
-            //Check ancestors are included.
-            foreach(CredentialPath ancestor in path.Ancestors())
-            {
-                if(AllPaths.Contains(ancestor) && !paths.Contains(ancestor))
-                {
-                    return false;
-                }
-            }
-        }
-
-        return true;
-    }
-
-
-    /// <summary>
     /// Gets all paths at a specific depth.
     /// </summary>
     /// <param name="depth">The depth (0 = root).</param>

@@ -162,12 +162,18 @@ public sealed record IssuanceContext
     /// The RFC 8693 §4.1 <c>act</c> (actor) claim to emit on the issued token — the nested JSON
     /// object identifying the current actor (its <c>sub</c>) and, when a delegation chain is being
     /// extended, the prior actor(s) under a nested <c>act</c> member per
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see>. Populated
-    /// only by a Token Exchange DELEGATION exchange (an <c>actor_token</c> was presented); the access
-    /// token producer emits it verbatim as the top-level <c>act</c> claim. <see langword="null"/> for
-    /// every non-delegation issuance — impersonation token exchange, and every other grant and
-    /// producer — so no other path emits an <c>act</c> claim.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see>. The access
+    /// token producer emits it verbatim as the top-level <c>act</c> claim.
     /// </summary>
+    /// <remarks>
+    /// Two paths populate it, both recording a delegation that actually happened: a Token Exchange
+    /// DELEGATION exchange (an <c>actor_token</c> was presented), and the redemption of an Identity
+    /// Assertion JWT Authorization Grant whose acting party the grant records or whose redeeming client
+    /// acts for a subject that is not itself (<see cref="IdJag.IdJagActorDecision"/>). It is
+    /// <see langword="null"/> for every issuance where no party acts for another — impersonation token
+    /// exchange, a self-redemption, and every other grant and producer — so the RFC 8693 §1.1 boundary
+    /// stays sharp: a token carrying no <c>act</c> asserts no delegation.
+    /// </remarks>
     public IReadOnlyDictionary<string, object>? Act { get; init; }
 
     /// <summary>

@@ -44,6 +44,15 @@ public sealed class TpmPolicyBuilder
     /// <summary>
     /// Appends a TPM2_PolicySecret assertion against a permanent handle (empty policyRef).
     /// </summary>
+    /// <remarks>
+    /// This predicts the digest a session reaches by replaying a TPM2_PolicySecret-minted ticket through
+    /// <c>TPM2_PolicyTicket()</c> ONLY when that ticket was minted with an empty <c>policyRef</c> — this method
+    /// always folds an empty one (per its own summary), while <c>TPM2_PolicyTicket()</c> dispatches to the same
+    /// <c>PolicyUpdate(TPM_CC_PolicySecret, ...)</c> fold using the ticket's OWN <c>policyRef</c> (TPM 2.0
+    /// Library Part 3, Section 23.5), selected by the ticket's tag rather than by <c>TPM_CC_PolicyTicket</c>
+    /// itself. For a ticket minted with a non-empty <c>policyRef</c>, this method predicts a different digest;
+    /// there is no builder verb for that case — fold it directly with <see cref="TpmPolicyDigest.ExtendForSecret"/>.
+    /// </remarks>
     /// <param name="authHandle">The permanent handle whose authorization the policy requires (for example <c>(uint)TpmRh.TPM_RH_ENDORSEMENT</c>).</param>
     /// <returns>This builder.</returns>
     public TpmPolicyBuilder WithSecret(uint authHandle)
@@ -114,6 +123,13 @@ public sealed class TpmPolicyBuilder
     /// Appends a TPM2_PolicySigned assertion. Replay always uses an empty caller nonceTPM and cpHashA (a
     /// session-unbound, command-unbound authorization).
     /// </summary>
+    /// <remarks>
+    /// This is also the digest a session reaches by replaying a TPM2_PolicySigned-minted ticket through
+    /// <c>TPM2_PolicyTicket()</c>: that command dispatches to this same <c>PolicyUpdate(TPM_CC_PolicySigned,
+    /// ...)</c> fold, selected by the ticket's own tag rather than by <c>TPM_CC_PolicyTicket</c> itself (TPM 2.0
+    /// Library Part 3, Section 23.5). A ticket-authorized branch therefore predicts with this same method — there
+    /// is no separate builder verb for it.
+    /// </remarks>
     /// <param name="authObject">The handle of the key whose public part validates the signature.</param>
     /// <param name="authName">The Name of that key (<c>nameAlg || H(TPMT_PUBLIC)</c>).</param>
     /// <param name="policyRef">The opaque policy qualifier, or empty for none.</param>
