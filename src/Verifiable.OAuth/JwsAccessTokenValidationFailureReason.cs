@@ -13,7 +13,12 @@ namespace Verifiable.OAuth;
 /// </summary>
 public enum JwsAccessTokenValidationFailureReason
 {
-    /// <summary>The token string is not parseable as a three-part compact JWS.</summary>
+    /// <summary>
+    /// The token is structurally unusable: the string is not parseable as a three-part compact JWS, its
+    /// payload is not a JSON object, or a structured claim whose meaning would otherwise be silently lost is
+    /// not in its registered shape (the <c>act</c> delegation chain and <c>may_act</c> of RFC 8693,
+    /// Sections 4.1 and 4.4 — a delegated token must never validate as a plain direct-subject token).
+    /// </summary>
     Malformed,
 
     /// <summary>The header is missing required members or carries unrecognised shapes.</summary>

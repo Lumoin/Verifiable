@@ -1,5 +1,6 @@
 using System;
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cbor.Ctap;
@@ -468,7 +469,9 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
-        byte[] sealAuth = "pin-f1-discarded-snapshot-seal-auth"u8.ToArray();
+        //At most 32 octets: an authValue is bounded by the digest size of the sealed object's nameAlg (SHA-256
+        //here) — TPM 2.0 Library Part 1, clause 17.6.4.2, enforced at TPM2_Create() with TPM_RC_SIZE.
+        byte[] sealAuth = "pin-f1-discarded-seal-auth"u8.ToArray();
 
         (TpmDevice tpm, uint parentHandle) = await CreateChipWithLoadedStorageParentAsync("pin-f1-discarded-snapshot-chip", cancellationToken).ConfigureAwait(false);
         try
@@ -529,7 +532,8 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
-        byte[] sealAuth = "pin-f2-undefine-behind-back-seal-auth"u8.ToArray();
+        //At most 32 octets — the same clause 17.6.4.2 bound as the f1 case above.
+        byte[] sealAuth = "pin-f2-undefine-seal-auth"u8.ToArray();
 
         (TpmDevice tpm, uint parentHandle) = await CreateChipWithLoadedStorageParentAsync("pin-f2-undefine-behind-back-chip", cancellationToken).ConfigureAwait(false);
         try
@@ -757,6 +761,54 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
 
 
     /// <summary>
+    /// The Index <see cref="CtapPinRetriesCustody.ProvisionPinAsync"/> enrolls is rotation-capable: its
+    /// <c>authPolicy</c> is the ADMIN-role policy <c>TPM2_NV_ChangeAuth</c> demands
+    /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
+    /// Specification</see>, Part 3, Section 31.15.1: the command "requires that a policy session be used for
+    /// authorization of nvIndex so that the ADMIN role may be asserted and that commandCode in the policy
+    /// session context shall be TPM_CC_NV_ChangeAuth"), so <c>ChangePinAsync</c> can replace the adapter's own
+    /// stored PIN form in place. An Index enrolled with an Empty Policy would be refused
+    /// <c>TPM_RC_POLICY_FAIL</c> forever (Part 1, Section 11.2), which is what this pins. The adapter's own
+    /// verify path then reports the rotation exactly: the superseded hash no longer matches, the replacement
+    /// does, and the tier never stops being provisioned - no undefine window ever opened.
+    /// </summary>
+    [TestMethod]
+    public async Task AnAdapterProvisionedIndexIsRotationCapableThroughChangePinAsync()
+    {
+        const uint PinIndexHandle = 0x0100_08b0;
+        CancellationToken cancellationToken = TestContext.CancellationToken;
+        byte[] pinHash = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+        byte[] rotatedPinHash = [16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+
+        (TpmDevice tpm, uint parentHandle) = await CreateChipWithLoadedStorageParentAsync("pin-rotation-chip", cancellationToken).ConfigureAwait(false);
+        try
+        {
+            CtapPinRetriesCustody pinCustody = TpmNvPinRetriesCustody.Create(tpm, ReadOnlyMemory<byte>.Empty, PinIndexHandle);
+            await pinCustody.ProvisionPinAsync(pinHash, cancellationToken).ConfigureAwait(false);
+
+            TpmResult<NvChangeAuthResponse> rotationResult = await tpm.ChangePinAsync(
+                PinIndexHandle, pinHash, rotatedPinHash, cancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(
+                rotationResult.IsSuccess,
+                $"the adapter's own enrollment must satisfy the ADMIN-role policy TPM2_NV_ChangeAuth demands: '{rotationResult.ResponseCode}'.");
+
+            CtapPinAttemptVerdict supersededVerdict = await pinCustody.VerifyPinAttemptAsync(pinHash, cancellationToken).ConfigureAwait(false);
+            Assert.IsFalse(supersededVerdict.IsMatch, "the superseded stored PIN form must no longer authorize the rotated Index.");
+            Assert.IsTrue(supersededVerdict.IsProvisioned, "an in-place rotation never undefines the Index, so the tier stays provisioned throughout.");
+
+            CtapPinAttemptVerdict rotatedVerdict = await pinCustody.VerifyPinAttemptAsync(rotatedPinHash, cancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(rotatedVerdict.IsMatch, "the replacement stored PIN form must authorize the rotated Index.");
+            Assert.AreEqual(PinLimit, rotatedVerdict.RetriesRemaining, "a matching attempt below the ceiling restores the full budget on the surviving counter.");
+        }
+        finally
+        {
+            _ = await tpm.FlushContextAsync(parentHandle, cancellationToken).ConfigureAwait(false);
+            tpm.Dispose();
+        }
+    }
+
+
+    /// <summary>
     /// Builds a <see cref="CtapStateCustody"/> bundle backed by <paramref name="tpm"/>'s already-loaded
     /// storage parent, <paramref name="sealAuth"/>, and <paramref name="store"/>'s three delegates —
     /// mirroring <see cref="CtapAuthenticatorNvSignCounterCapstoneTests"/>'s own identically named helper.
@@ -782,6 +834,8 @@ internal sealed class CtapAuthenticatorNvPinRetriesCapstoneTests
     /// <param name="chipRunId">The simulated TPM's own run id.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The TPM device and the loaded storage parent's handle.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "The simulator is the test class's durable chip: its ownership rides the returned TpmDevice's submit delegate for the rest of the test, and its pooled state is reclaimed with the suite's process-wide pool.")]
     private static async Task<(TpmDevice Tpm, uint ParentHandle)> CreateChipWithLoadedStorageParentAsync(string chipRunId, CancellationToken cancellationToken)
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;

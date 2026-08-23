@@ -76,6 +76,14 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         TpmaNv.TPMA_NV_AUTHREAD | TpmaNv.TPMA_NV_OWNERWRITE | TpmaNv.TPMA_NV_NO_DA
         | (TpmaNv)((uint)TpmNt.TPM_NT_PIN_PASS << TpmaNvFields.TPM_NT_SHIFT);
 
+    /// <summary>The same PIN Pass type as <see cref="PinPassAttributes"/>, with <c>TPMA_NV_AUTHREAD</c>
+    /// deliberately CLEAR instead of set, and <c>TPMA_NV_OWNERREAD</c> added so the owner-authorized
+    /// <c>TPM2_NV_Read()</c> arm can independently observe pinCount without going through the Index's own
+    /// (unavailable) authValue.</summary>
+    private const TpmaNv PinPassAttributesWithoutAuthReadWithOwnerRead =
+        TpmaNv.TPMA_NV_OWNERWRITE | TpmaNv.TPMA_NV_OWNERREAD | TpmaNv.TPMA_NV_NO_DA
+        | (TpmaNv)((uint)TpmNt.TPM_NT_PIN_PASS << TpmaNvFields.TPM_NT_SHIFT);
+
     /// <summary>Attributes whose TPM_NT field (0x3) is a reserved value — none of the six defined constants.</summary>
     private const TpmaNv ReservedIndexTypeAttributes =
         TpmaNv.TPMA_NV_AUTHREAD | TpmaNv.TPMA_NV_AUTHWRITE | (TpmaNv)(0x3u << TpmaNvFields.TPM_NT_SHIFT);
@@ -113,7 +121,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         const uint PinLimit = 2;
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -153,7 +161,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         const uint PinLimit = 2;
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -199,7 +207,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         const uint PinLimit = 3;
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -230,7 +238,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     public async Task NvDefineSpaceOfPinFailIndexWithoutNoDaReturnsAttributes()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -249,7 +257,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     public async Task NvDefineSpaceWithUnsupportedIndexTypeReturnsAttributes()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -269,7 +277,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     public async Task NvReadOfUnwrittenPinIndexReturnsAuthUnavailable()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -290,7 +298,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     public async Task NvDefineSpaceOfPinIndexWithAuthWriteSetReturnsAttributes()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -303,11 +311,11 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     /// <summary>
     /// Exploit-becomes-regression test for the unthrottled PIN-write oracle: an index-authValue
     /// <c>TPM2_NV_Write()</c> against a PIN Index rejects a WRONG and the RIGHT PIN with the IDENTICAL
-    /// <c>TPM_RC_NV_AUTHORIZATION</c> — proving the AUTHWRITE-clear gate refuses before ever comparing the
-    /// supplied value, so no correct/incorrect distinction leaks (TPM 2.0 Library Part 1, clause 37.2.6.1) —
-    /// and that neither attempt moves pinCount: a PIN Pass Index only increments pinCount on a successful
-    /// AUTHORIZED use, so a single PIN-auth read afterward reporting pinCount == 1 (not 2 or more) proves the
-    /// two rejected writes above never touched it.
+    /// <c>TPM_RC_AUTH_UNAVAILABLE</c> — proving the AUTHWRITE-clear availability gate (TPM 2.0 Library Part 3,
+    /// clause 5.6 check 7.2.2) refuses before ever comparing the supplied value, so no correct/incorrect
+    /// distinction leaks (Part 1, clause 37.2.6.1) — and that neither attempt moves pinCount: a PIN Pass Index
+    /// only increments pinCount on a successful AUTHORIZED use, so a single PIN-auth read afterward reporting
+    /// pinCount == 1 (not 2 or more) proves the two rejected writes above never touched it.
     /// </summary>
     [TestMethod]
     public async Task IndexAuthValueNvWriteAgainstPinIndexRejectsWrongAndRightPinIdenticallyWithoutMovingPinCount()
@@ -315,7 +323,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         const uint PinLimit = 5;
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -325,13 +333,13 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         TpmResult<NvWriteResponse> wrongPinWriteResult = await WriteIndexAuthValueAsync(
             device, pool, registry, PinPassIndexHandle, WrongPin).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_NV_AUTHORIZATION, wrongPinWriteResult.ResponseCode,
-            "A PIN Index forbids AUTHWRITE, so even a WRONG PIN's write attempt must be TPM_RC_NV_AUTHORIZATION, never a distinct auth-mismatch code.");
+            TpmRcConstants.TPM_RC_AUTH_UNAVAILABLE, wrongPinWriteResult.ResponseCode,
+            "A PIN Index forbids AUTHWRITE, so even a WRONG PIN's write attempt must be TPM_RC_AUTH_UNAVAILABLE, never a distinct auth-mismatch code.");
 
         TpmResult<NvWriteResponse> rightPinWriteResult = await WriteIndexAuthValueAsync(
             device, pool, registry, PinPassIndexHandle, CorrectPin).ConfigureAwait(false);
         Assert.AreEqual(
-            TpmRcConstants.TPM_RC_NV_AUTHORIZATION, rightPinWriteResult.ResponseCode,
+            TpmRcConstants.TPM_RC_AUTH_UNAVAILABLE, rightPinWriteResult.ResponseCode,
             "The CORRECT PIN must be rejected with the SAME code as the wrong one - proving no oracle distinguishes them.");
 
         TpmResult<NvReadResponse> readResult = await ReadIndexAsync(device, pool, registry, PinPassIndexHandle, CorrectPin).ConfigureAwait(false);
@@ -341,6 +349,43 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         Assert.AreEqual(
             1u, ReadPinCount(readResponse.Data),
             "pinCount must be exactly 1 (from this single read), proving neither rejected write attempt above moved it.");
+    }
+
+    /// <summary>
+    /// Proves the pre-compare <c>TPMA_NV_AUTHREAD</c> availability gate on the Index-authorized
+    /// <c>TPM2_NV_Read()</c> arm stops ALL pinCount movement, not merely the read itself: TPM 2.0 Library Part
+    /// 3, clause 5.6 check 7.2.2 orders the <c>TPMA_NV_AUTHREAD</c> availability refusal
+    /// (<c>TPM_RC_AUTH_UNAVAILABLE</c>) ahead of the check 9/10 comparison, and Part 1, clause 35.2.6.6 moves
+    /// pinCount only on an actual comparison outcome — so an unavailable-auth attempt moves nothing. Against a
+    /// PIN Pass Index with <c>TPMA_NV_AUTHREAD</c> CLEAR, even the CORRECT PIN is refused before any comparison
+    /// runs, and the owner-authorized arm afterward reports pinCount still at zero, proving the refused attempt
+    /// never reached the PIN Pass increment.
+    /// </summary>
+    [TestMethod]
+    public async Task PinAuthReadAgainstAuthReadClearPinIndexIsRefusedWithoutMovingPinCount()
+    {
+        const uint PinLimit = 5;
+
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateNvRegistry();
+
+        await DefineIndexAsync(device, pool, registry, PinPassIndexHandle, PinPassAttributesWithoutAuthReadWithOwnerRead).ConfigureAwait(false);
+        await WritePinCounterParametersAsync(device, pool, registry, PinPassIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
+
+        TpmResult<NvReadResponse> indexAuthResult = await ReadIndexAsync(device, pool, registry, PinPassIndexHandle, CorrectPin).ConfigureAwait(false);
+        Assert.AreEqual(
+            TpmRcConstants.TPM_RC_AUTH_UNAVAILABLE, indexAuthResult.ResponseCode,
+            "TPMA_NV_AUTHREAD CLEAR must refuse before the compare, even with the CORRECT PIN.");
+
+        TpmResult<NvReadResponse> ownerReadResult = await ReadIndexAsOwnerAsync(device, pool, registry, PinPassIndexHandle, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
+        Assert.IsTrue(ownerReadResult.IsSuccess, $"The owner-authorized read must still succeed: '{ownerReadResult.ResponseCode}'.");
+
+        using NvReadResponse ownerReadResponse = ownerReadResult.Value;
+        Assert.AreEqual(
+            0u, ReadPinCount(ownerReadResponse.Data),
+            "pinCount must still be zero: the refused index-authValue attempt above must never have reached the PIN Pass increment.");
     }
 
     /// <summary>
@@ -355,7 +400,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         const uint PinLimit = 1;
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -397,7 +442,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     public async Task OwnerAuthNvWriteAgainstIndexWithoutOwnerWriteReturnsAuthorization()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -424,7 +469,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         const uint PinLimit = 2;
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -470,7 +515,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     public async Task OwnerReadNvReadWithWrongOwnerAuthReturnsBadAuth()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -494,7 +539,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     public async Task OwnerReadNvReadAgainstIndexWithoutOwnerReadReturnsAuthorizationBeforeComparingOwnerAuth()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -520,7 +565,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     public async Task OwnerReadNvReadAgainstIndexWithoutOwnerReadReturnsAuthorizationEvenWithCorrectOwnerAuth()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -546,7 +591,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     public async Task OwnerReadNvReadOfUnwrittenPinIndexReturnsUninitialized()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -567,7 +612,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     public async Task NvUndefineSpaceWithWrongOwnerAuthReturnsBadAuthAndLeavesTheIndexDefined()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -593,7 +638,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
     public async Task NvUndefineSpaceWithNonOwnerAuthHandleReturnsHandle()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -619,7 +664,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         const uint PinLimit = 1;
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateNvRegistry();
 
@@ -792,7 +837,8 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         BinaryPrimitives.WriteUInt32BigEndian(blob.Span, pinCount);
         BinaryPrimitives.WriteUInt32BigEndian(blob.Span[sizeof(uint)..], pinLimit);
 
-        var writeInput = new NvWriteInput((uint)TpmRh.TPM_RH_OWNER, nvIndex, new Tpm2bMaxBuffer(blob), Offset: 0);
+        using Tpm2bMaxNvBuffer writeInputBuffer = Tpm2bMaxNvBuffer.Create(blob.Span, pool);
+        var writeInput = new NvWriteInput((uint)TpmRh.TPM_RH_OWNER, nvIndex, writeInputBuffer, Offset: 0);
 
         return await TpmCommandExecutor.ExecuteAsync<NvWriteResponse>(
             device, writeInput, [ownerSession], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
@@ -814,7 +860,8 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         TpmDevice device, BaseMemoryPool pool, TpmResponseRegistry registry, uint nvIndex, ReadOnlyMemory<byte> suppliedAuth)
     {
         using TpmPasswordSession session = TpmPasswordSession.Create(suppliedAuth.Span, pool);
-        var writeInput = new NvWriteInput(nvIndex, nvIndex, new Tpm2bMaxBuffer(RejectedWriteAttempt), Offset: 0);
+        using Tpm2bMaxNvBuffer writeInputBuffer = Tpm2bMaxNvBuffer.Create(RejectedWriteAttempt, pool);
+        var writeInput = new NvWriteInput(nvIndex, nvIndex, writeInputBuffer, Offset: 0);
 
         return await TpmCommandExecutor.ExecuteAsync<NvWriteResponse>(
             device, writeInput, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);

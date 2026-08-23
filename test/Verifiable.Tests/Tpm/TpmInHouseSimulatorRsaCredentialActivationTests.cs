@@ -67,7 +67,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialActivationTests
     public async Task StandardRsaEkActivatesCredentialThroughThePolicyAPath()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -98,7 +98,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialActivationTests
                     //Device side: the AK is the activate object (ADMIN role, password), the EK recovers the seed
                     //(USER role) — but the EK's userWithAuth is CLEAR, so its session must be the satisfied policy
                     //session rather than a password. Both handles are transient objects, so the executor needs their
-                    //Names to compute cpHash for the policy session (Part 1, equation 15).
+                    //Names to compute cpHash for the policy session (Part 1, clause 16.7, equation 15).
                     using ActivateCredentialInput activateInput = ActivateCredentialInput.Create(
                         ak.ObjectHandle, ek.ObjectHandle, made.CredentialBlob.Span, made.Secret.Span, pool);
                     using TpmPasswordSession activateAuth = TpmPasswordSession.CreateEmpty(pool);
@@ -139,7 +139,7 @@ internal sealed class TpmInHouseSimulatorRsaCredentialActivationTests
     public async Task ActivateWithWrongObjectIsRejected()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 

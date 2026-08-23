@@ -107,7 +107,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
     public async Task MultiQuoteAttestationLogReplaysAndAccumulatesState()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -151,7 +151,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
     public async Task QuoteFromUnenrolledKeyIsRejected()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -209,7 +209,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
     public async Task EnrolledViaActivationThenAttestationLogReplays()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 

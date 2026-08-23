@@ -18,6 +18,18 @@ internal sealed class IdJagAssertionValidationTests
     private const string Subject = "U019488227";
     private const string GrantedScope = "chat.read chat.history";
 
+    /// <summary>
+    /// The party a grant's <c>act</c> claim names as the current actor — the outermost link of an
+    /// RFC 8693 §4.1 delegation chain.
+    /// </summary>
+    private const string CurrentActorSubject = "https://svc.example/agent";
+
+    /// <summary>
+    /// The party a nested <c>act</c> claim names — a prior actor, informational history per
+    /// RFC 8693 §4.1.
+    /// </summary>
+    private const string PriorActorSubject = "https://svc.example/first-hop";
+
     private static readonly DateTimeOffset Now = DateTimeOffset.FromUnixTimeSeconds(1_311_280_970);
     private static readonly TimeSpan Skew = TimeSpan.FromSeconds(60);
 
@@ -487,5 +499,336 @@ internal sealed class IdJagAssertionValidationTests
         IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
 
         Assert.AreEqual(IdJagValidationFailureReason.MalformedConfirmation, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// ID-JAG §3.1: "act: OPTIONAL - Actor claim as defined in Section 4.1 of [RFC8693]. When
+    /// present, this claim identifies the actor that is acting on behalf of the subject (sub)." The
+    /// grant's chain is surfaced whole — the outermost object naming the current actor with the
+    /// prior actor beneath it, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see>.
+    /// </summary>
+    [TestMethod]
+    public void ActorChainIsSurfacedWhole()
+    {
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Act] = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [WellKnownJwtClaimNames.Sub] = CurrentActorSubject,
+            [WellKnownJwtClaimNames.Act] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownJwtClaimNames.Sub] = PriorActorSubject
+            }
+        };
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.IsTrue(result.IsValid, result.FailureDescription);
+        Assert.IsNotNull(result.Act);
+        Assert.AreEqual(CurrentActorSubject, (string)result.Act![WellKnownJwtClaimNames.Sub]);
+        IReadOnlyDictionary<string, object> nested =
+            (IReadOnlyDictionary<string, object>)result.Act[WellKnownJwtClaimNames.Act];
+        Assert.AreEqual(PriorActorSubject, (string)nested[WellKnownJwtClaimNames.Sub]);
+    }
+
+
+    /// <summary>
+    /// ID-JAG §3.1 makes <c>act</c> OPTIONAL, so a grant that records no delegation surfaces no
+    /// chain — the declined half of the capability, distinguished from a malformed claim by the
+    /// claim simply not being on the wire.
+    /// </summary>
+    [TestMethod]
+    public void AbsentActorSurfacesNull()
+    {
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), ValidPayload());
+
+        Assert.IsTrue(result.IsValid, result.FailureDescription);
+        Assert.IsNull(result.Act);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see>: "The
+    /// 'act' claim value is a JSON object." A value that is not an object identifies no actor, and
+    /// admitting the grant with the claim dropped would present a delegated grant as an undelegated
+    /// one — so the grant is refused instead.
+    /// </summary>
+    [TestMethod]
+    public void NonObjectActorIsMalformedActor()
+    {
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Act] = "https://svc.example/agent";
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.AreEqual(IdJagValidationFailureReason.MalformedActor, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see>: the
+    /// members of the <c>act</c> object "are claims that identify the actor". An object naming no
+    /// <c>sub</c> identifies nobody, so no current actor can be established.
+    /// </summary>
+    [TestMethod]
+    public void ActorWithoutSubjectIsMalformedActor()
+    {
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Act] = new Dictionary<string, object>(StringComparer.Ordinal);
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.AreEqual(IdJagValidationFailureReason.MalformedActor, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// An actor whose <c>sub</c> is not a string names no party either — the identity members of an
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see> actor
+    /// object are claim values that identify it, and a number is not an identifier this grant can
+    /// compare a redeeming client against.
+    /// </summary>
+    [TestMethod]
+    public void ActorWithNonStringSubjectIsMalformedActor()
+    {
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Act] = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [WellKnownJwtClaimNames.Sub] = 1234L
+        };
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.AreEqual(IdJagValidationFailureReason.MalformedActor, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see>: "The
+    /// nested 'act' claims serve as a history trail that connects the initial request and subject
+    /// through the various delegation steps undertaken before reaching the current actor." A nested
+    /// link naming no actor breaks that trail, so the whole chain is malformed rather than silently
+    /// truncated at the last readable level.
+    /// </summary>
+    [TestMethod]
+    public void NestedActorWithoutSubjectIsMalformedActor()
+    {
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Act] = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [WellKnownJwtClaimNames.Sub] = CurrentActorSubject,
+            [WellKnownJwtClaimNames.Act] = new Dictionary<string, object>(StringComparer.Ordinal)
+        };
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.AreEqual(IdJagValidationFailureReason.MalformedActor, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// A delegation chain holds one link per hop actually taken
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see>), so a
+    /// chain nested deeper than the validator's read bound describes no reachable delegation and is
+    /// refused — bounding the work a caller-built grant can drive without ever accepting a chain the
+    /// validator has not read whole.
+    /// </summary>
+    [TestMethod]
+    public void ActorChainDeeperThanTheReadBoundIsMalformedActor()
+    {
+        //Seventeen links: one more than the deepest chain the validator reads.
+        Dictionary<string, object> chain = new(StringComparer.Ordinal)
+        {
+            [WellKnownJwtClaimNames.Sub] = PriorActorSubject
+        };
+        for(int depth = 0; depth < 16; ++depth)
+        {
+            chain = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownJwtClaimNames.Sub] = $"{CurrentActorSubject}/{depth}",
+                [WellKnownJwtClaimNames.Act] = chain
+            };
+        }
+
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Act] = chain;
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.AreEqual(IdJagValidationFailureReason.MalformedActor, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.4">RFC 8693 §4.4</see>: the
+    /// <c>may_act</c> members "identify the party that is asserted as being eligible to act for the
+    /// party identified by the JWT containing the claim", and "the combination of the two claims
+    /// 'iss' and 'sub' are sometimes necessary to uniquely identify an authorized actor" — both
+    /// members are surfaced so the redemption can enforce the combination.
+    /// </summary>
+    [TestMethod]
+    public void AuthorizedActorIsSurfaced()
+    {
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.MayAct] = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [WellKnownJwtClaimNames.Sub] = CurrentActorSubject,
+            [WellKnownJwtClaimNames.Iss] = ResourceServerIssuer
+        };
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.IsTrue(result.IsValid, result.FailureDescription);
+        Assert.IsNotNull(result.MayAct);
+        Assert.AreEqual(CurrentActorSubject, (string)result.MayAct![WellKnownJwtClaimNames.Sub]);
+        Assert.AreEqual(ResourceServerIssuer, (string)result.MayAct[WellKnownJwtClaimNames.Iss]);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.4">RFC 8693 §4.4</see> states who
+    /// may act only when the claim is present; a grant carrying no <c>may_act</c> surfaces none and
+    /// constrains the acting party in no way.
+    /// </summary>
+    [TestMethod]
+    public void AbsentAuthorizedActorSurfacesNull()
+    {
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), ValidPayload());
+
+        Assert.IsTrue(result.IsValid, result.FailureDescription);
+        Assert.IsNull(result.MayAct);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.4">RFC 8693 §4.4</see>: "The
+    /// claim value is a JSON object." A non-object <c>may_act</c> is refused rather than read as "no
+    /// constraint", because reducing an unreadable authorized-actor statement to no constraint
+    /// erases the very restriction the grant's issuer placed on who may act.
+    /// </summary>
+    [TestMethod]
+    public void NonObjectAuthorizedActorIsMalformedAuthorizedActor()
+    {
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.MayAct] = CurrentActorSubject;
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.AreEqual(IdJagValidationFailureReason.MalformedAuthorizedActor, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// An authorized-actor object naming neither a <c>sub</c> nor an <c>iss</c> identifies no party,
+    /// so it authorizes none — the members of an
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.4">RFC 8693 §4.4</see>
+    /// <c>may_act</c> object exist to "identify the party that is asserted as being eligible to
+    /// act", and an object identifying nobody is refused rather than treated as unconstrained.
+    /// </summary>
+    [TestMethod]
+    public void AuthorizedActorNamingNoPartyIsMalformedAuthorizedActor()
+    {
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.MayAct] = new Dictionary<string, object>(StringComparer.Ordinal);
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.AreEqual(IdJagValidationFailureReason.MalformedAuthorizedActor, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see>: "claims
+    /// within the 'act' claim pertain only to the identity of the actor and are not relevant to the
+    /// validity of the containing JWT in the same manner as the top-level claims. Consequently,
+    /// non-identity claims (e.g., 'exp', 'nbf', and 'aud') are not meaningful when used within an
+    /// 'act' claim and are therefore not used." An actor carrying a long-past <c>exp</c> therefore
+    /// neither invalidates the grant nor is treated as a validity input.
+    /// </summary>
+    [TestMethod]
+    public void NonIdentityMembersInsideActorAreNotValidityInputs()
+    {
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Act] = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [WellKnownJwtClaimNames.Sub] = CurrentActorSubject,
+            [WellKnownJwtClaimNames.Exp] = Now.AddDays(-30).ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Aud] = "https://elsewhere.example.com/"
+        };
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.IsTrue(result.IsValid, result.FailureDescription);
+        Assert.AreEqual(CurrentActorSubject, (string)result.Act![WellKnownJwtClaimNames.Sub]);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see>: "the
+    /// combination of the two claims 'iss' and 'sub' might be necessary to uniquely identify an actor."
+    /// An <c>iss</c> present as something other than an identifier states half of that combination
+    /// unreadably. The chain is copied verbatim onto the access token the redemption would issue, and
+    /// <see cref="Verifiable.OAuth.JwsAccessTokenValidator"/> refuses exactly this shape when a resource server reads
+    /// that token — so accepting it here would mint a token no resource can ever validate.
+    /// </summary>
+    [TestMethod]
+    public void ActorWithNonStringIssuerIsMalformedActor()
+    {
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Act] = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [WellKnownJwtClaimNames.Sub] = CurrentActorSubject,
+            [WellKnownJwtClaimNames.Iss] = 1234L
+        };
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.AreEqual(IdJagValidationFailureReason.MalformedActor, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.4">RFC 8693 §4.4</see>: "the
+    /// combination of the two claims 'iss' and 'sub' are sometimes necessary to uniquely identify an
+    /// authorized actor." A <c>may_act</c> whose <c>iss</c> is not an identifier states a pair only
+    /// half of which can be read, and ignoring the unreadable half would widen the authorization to
+    /// every namespace instead of the one the claim names — so the grant is refused.
+    /// </summary>
+    [TestMethod]
+    public void AuthorizedActorWithNonStringIssuerIsMalformedAuthorizedActor()
+    {
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.MayAct] = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [WellKnownJwtClaimNames.Sub] = CurrentActorSubject,
+            [WellKnownJwtClaimNames.Iss] = 1234L
+        };
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.AreEqual(IdJagValidationFailureReason.MalformedAuthorizedActor, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// The mirror of the same <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.4">RFC 8693
+    /// §4.4</see> pair rule: a <c>may_act</c> whose <c>sub</c> is not an identifier is refused rather
+    /// than read as an issuer-only authorization, which would let every client of the named issuer act
+    /// where the claim named exactly one.
+    /// </summary>
+    [TestMethod]
+    public void AuthorizedActorWithNonStringSubjectIsMalformedAuthorizedActor()
+    {
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.MayAct] = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [WellKnownJwtClaimNames.Sub] = 1234L,
+            [WellKnownJwtClaimNames.Iss] = ResourceServerIssuer
+        };
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.AreEqual(IdJagValidationFailureReason.MalformedAuthorizedActor, result.FailureReason);
     }
 }

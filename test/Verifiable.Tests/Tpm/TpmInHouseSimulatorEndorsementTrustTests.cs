@@ -71,7 +71,7 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
     public async Task EndorsementKeyCertificateValidatesToManufacturerCa()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
         TimeProvider time = new FakeTimeProvider(TestClock.CanonicalEpoch);
@@ -112,7 +112,7 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
     public async Task EndorsementKeyCertificateFromUntrustedCaIsRejected()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
         TimeProvider time = new FakeTimeProvider(TestClock.CanonicalEpoch);
@@ -156,7 +156,7 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
     public async Task EndorsementKeyCertificateRoundTripsThroughNvAndValidates()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
         TimeProvider time = new FakeTimeProvider(TestClock.CanonicalEpoch);
@@ -224,7 +224,8 @@ internal sealed class TpmInHouseSimulatorEndorsementTrustTests
         }
 
         using TpmPasswordSession writeAuth = TpmPasswordSession.CreateEmpty(pool);
-        var writeInput = new NvWriteInput(AuthHandle: nvIndex, NvIndex: nvIndex, Data: new Tpm2bMaxBuffer(data), Offset: 0);
+        using Tpm2bMaxNvBuffer writeInputBuffer = Tpm2bMaxNvBuffer.Create(data, pool);
+        var writeInput = new NvWriteInput(AuthHandle: nvIndex, NvIndex: nvIndex, Data: writeInputBuffer, Offset: 0);
         TpmResult<NvWriteResponse> writeResult = await TpmCommandExecutor.ExecuteAsync<NvWriteResponse>(
             tpm, writeInput, [writeAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(writeResult.IsSuccess, $"NV_Write failed: '{writeResult.ResponseCode}'.");

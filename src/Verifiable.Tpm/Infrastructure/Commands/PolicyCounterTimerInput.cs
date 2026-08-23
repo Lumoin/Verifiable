@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using Verifiable.Tpm.Spec.Constants;
+using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 
@@ -27,13 +28,42 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// </remarks>
 /// <param name="PolicySession">The policy session handle.</param>
-/// <param name="OperandB">The value to compare the live TPMS_TIME_INFO against. The caller owns the underlying memory.</param>
+/// <param name="OperandB">The value to compare the live TPMS_TIME_INFO against, at most <see cref="Tpm2bOperand.MaxSize"/> octets. The caller owns the underlying memory.</param>
 /// <param name="Offset">The octet offset into the marshaled TPMS_TIME_INFO.</param>
 /// <param name="Operation">The comparison operation (TPM_EO).</param>
+/// <exception cref="ArgumentException"><paramref name="OperandB"/> is longer than <see cref="Tpm2bOperand.MaxSize"/>.</exception>
 [DebuggerDisplay("PolicyCounterTimerInput(Session=0x{PolicySession,h}, {Operation})")]
 public readonly record struct PolicyCounterTimerInput(
     uint PolicySession, ReadOnlyMemory<byte> OperandB, ushort Offset, TpmEoConstants Operation): ITpmCommandInput
 {
+    /// <summary>
+    /// Gets the value the live <c>TPMS_TIME_INFO</c> is compared against, bounded at construction by
+    /// <see cref="Tpm2bOperand.MaxSize"/>.
+    /// </summary>
+    public ReadOnlyMemory<byte> OperandB
+    {
+        get => field;
+        init => field = EnsureWithinOperandBound(value);
+    } = EnsureWithinOperandBound(OperandB);
+
+    /// <summary>
+    /// Refuses an operand the <c>TPM2B_OPERAND</c> wire type cannot carry, so the caller learns it at
+    /// construction rather than from the TPM's <c>TPM_RC_SIZE</c> after a round trip. Part 2, clause 10.4.6,
+    /// Table 96 bounds <c>TPM2B_OPERAND</c> by the digest structure's own <c>sizeof(TPMU_HA)</c>.
+    /// </summary>
+    /// <param name="candidate">The operand offered by the caller.</param>
+    /// <returns><paramref name="candidate"/> when it is within the bound.</returns>
+    /// <exception cref="ArgumentException"><paramref name="candidate"/> is longer than <see cref="Tpm2bOperand.MaxSize"/>.</exception>
+    private static ReadOnlyMemory<byte> EnsureWithinOperandBound(ReadOnlyMemory<byte> candidate)
+    {
+        if(candidate.Length > Tpm2bOperand.MaxSize)
+        {
+            throw new ArgumentException($"Operand too large. Maximum is {Tpm2bOperand.MaxSize} bytes.", nameof(candidate));
+        }
+
+        return candidate;
+    }
+
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_PolicyCounterTimer;
 

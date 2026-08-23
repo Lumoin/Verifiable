@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
+using Verifiable.Tpm.Extensions.DictionaryAttack;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
@@ -49,7 +50,7 @@ internal sealed class TpmSimulatorNvTests
     [TestMethod]
     public async Task NvDefineSpaceWithEmptyOwnerAuthSucceeds()
     {
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -65,7 +66,7 @@ internal sealed class TpmSimulatorNvTests
     [TestMethod]
     public async Task NvDefineSpaceWithWrongOwnerAuthReturnsBadAuth()
     {
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -82,7 +83,7 @@ internal sealed class TpmSimulatorNvTests
     [TestMethod]
     public async Task NvDefineSpaceOnAlreadyDefinedIndexReturnsNvDefined()
     {
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -99,7 +100,7 @@ internal sealed class TpmSimulatorNvTests
     [TestMethod]
     public async Task NvDefineSpaceWithNonNvHandleReturnsHandle()
     {
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -116,7 +117,7 @@ internal sealed class TpmSimulatorNvTests
     [TestMethod]
     public async Task NvReadWithCorrectAuthReturnsUninitialized()
     {
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -133,7 +134,7 @@ internal sealed class TpmSimulatorNvTests
     [TestMethod]
     public async Task NvReadWithWrongAuthOnDaProtectedIndexReturnsAuthFail()
     {
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -150,7 +151,7 @@ internal sealed class TpmSimulatorNvTests
     [TestMethod]
     public async Task NvReadWithWrongAuthOnNonDaIndexReturnsBadAuth()
     {
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -169,10 +170,19 @@ internal sealed class TpmSimulatorNvTests
         Assert.AreEqual(TpmRcConstants.TPM_RC_BAD_AUTH, result.ResponseCode);
     }
 
+    /// <summary>
+    /// Verifies the Index arm's <c>TPMA_NV_AUTHREAD</c> availability gate (TPM 2.0 Library Part 3, clause 5.6,
+    /// check 7.2.2) refuses <c>TPM2_NV_Read()</c> BEFORE the authValue compare: with the attribute clear, the
+    /// Index authValue is not an available authorization mechanism for a read at all (TPM 2.0 Library Part 1,
+    /// clause 35.2.5), so a CORRECT authValue and a WRONG authValue are refused identically with
+    /// <c>TPM_RC_AUTH_UNAVAILABLE</c>, and neither attempt moves the dictionary-attack <c>failedTries</c>
+    /// counter — that counter is charged only on <c>TPM_RC_AUTH_FAIL</c> (TPM 2.0 Library Part 1, clause
+    /// 17.8.2), which this gate never reaches.
+    /// </summary>
     [TestMethod]
-    public async Task NvReadOnIndexWithoutAuthReadReturnsNvAuthorization()
+    public async Task NvReadWithAuthReadClearIsRefusedBeforeTheCompare()
     {
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -184,17 +194,38 @@ internal sealed class TpmSimulatorNvTests
             Assert.IsTrue(defineResult.IsSuccess, $"Define must succeed, got '{defineResult.ResponseCode}'.");
         }
 
-        //The supplied value matches the Index authValue, but TPMA_NV_AUTHREAD is clear, so the authValue may
-        //not authorize a read: the access check refuses it (clause 13.4), distinct from a value mismatch.
-        TpmResult<NvReadResponse> result = await ReadIndexAsync(device, pool, registry, CorrectAuth).ConfigureAwait(false);
+        TpmResult<TpmDictionaryAttackParameters> before = await device.GetDictionaryAttackParametersAsync(
+            pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(before.IsSuccess, $"Reading dictionary-attack parameters failed, got '{before.ResponseCode}'.");
 
-        Assert.AreEqual(TpmRcConstants.TPM_RC_NV_AUTHORIZATION, result.ResponseCode);
+        //The supplied value matches the Index authValue, but TPMA_NV_AUTHREAD is clear, so the authValue is
+        //not an available authorization mechanism for a read at all: the availability gate refuses it before
+        //the compare (TPM 2.0 Library Part 3, clause 5.6 check 7.2.2), distinct from a value mismatch.
+        TpmResult<NvReadResponse> correctResult = await ReadIndexAsync(device, pool, registry, CorrectAuth).ConfigureAwait(false);
+        Assert.AreEqual(
+            TpmRcConstants.TPM_RC_AUTH_UNAVAILABLE, correctResult.ResponseCode,
+            "TPMA_NV_AUTHREAD clear must refuse the read before the compare, even for a correct index authValue.");
+
+        //A WRONG authValue against the same AUTHREAD-clear Index is refused identically: the gate never
+        //reaches a value comparison, so there is no oracle distinguishing "wrong" from "correct" here.
+        TpmResult<NvReadResponse> wrongResult = await ReadIndexAsync(device, pool, registry, WrongAuth).ConfigureAwait(false);
+        Assert.AreEqual(
+            TpmRcConstants.TPM_RC_AUTH_UNAVAILABLE, wrongResult.ResponseCode,
+            "A wrong index authValue against an AUTHREAD-clear Index is refused identically, before the compare.");
+
+        TpmResult<TpmDictionaryAttackParameters> after = await device.GetDictionaryAttackParametersAsync(
+            pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(after.IsSuccess, $"Reading dictionary-attack parameters failed, got '{after.ResponseCode}'.");
+
+        Assert.AreEqual(
+            before.Value.LockoutCounter, after.Value.LockoutCounter,
+            "The pre-compare availability refusal must never charge the dictionary-attack counter (TPM 2.0 Library Part 3, clause 5.6, check 7.2.2).");
     }
 
     [TestMethod]
     public async Task NvReadOfUndefinedIndexReturnsHandle()
     {
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -208,7 +239,7 @@ internal sealed class TpmSimulatorNvTests
     [TestMethod]
     public async Task NvReadWithOwnerAuthHandleAgainstIndexWithoutOwnerReadReturnsAuthorization()
     {
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -242,7 +273,7 @@ internal sealed class TpmSimulatorNvTests
     [TestMethod]
     public async Task NvReadWithCorrectOwnerAuthHandleAgainstIndexWithoutOwnerReadReturnsAuthorization()
     {
-        TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync().ConfigureAwait(false);
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmResponseRegistry registry = CreateNvRegistry();
@@ -264,7 +295,7 @@ internal sealed class TpmSimulatorNvTests
     [TestMethod]
     public async Task NvReadBeforeStartupReturnsInitialize()
     {
-        var simulator = new TpmSimulator("tpm-nv-init");
+        using var simulator = new TpmSimulator("tpm-nv-init");
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync);

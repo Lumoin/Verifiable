@@ -136,6 +136,8 @@ internal sealed class TpmBackedPassportReadTests
     /// <summary>
     /// Brings up an in-house TPM simulator, drives it to the operational phase, and exposes it as a device.
     /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "The simulator is the test class's durable chip: its ownership rides the returned TpmDevice's submit delegate for the rest of the test, and its pooled state is reclaimed with the suite's process-wide pool.")]
     private async Task<TpmDevice> CreateOperationalTpmAsync(string tpmId)
     {
         var simulator = new TpmSimulator(tpmId, TpmSelfTestBehavior.Passes);

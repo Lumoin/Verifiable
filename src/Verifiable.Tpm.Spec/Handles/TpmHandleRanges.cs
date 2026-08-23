@@ -38,49 +38,63 @@ public static class TpmHandleRanges
     public const uint HR_RANGE_MASK = 0xFF00_0000;
 
     /// <summary>
-    /// TPM_HT_PCR range base (0x00).
+    /// First value of the PCR range (<c>PCR_FIRST</c>). PCR 0 is architecturally defined to have a handle value
+    /// of zero, so this equals zero (Part 2, clause 7.5, Table 37: <c>HR_PCR = TPM_HT_PCR « HR_SHIFT</c>).
     /// </summary>
-    public const uint HR_PCR = (uint)TpmHt.TPM_HT_PCR;
+    /// <remarks>
+    /// Part 2, clause 7.5, Table 37 defines <c>PCR_LAST</c> as <c>PCR_FIRST + IMPLEMENTATION_PCR - 1</c>, an
+    /// implementation-dependent bound (see <see cref="TpmHcConstants.GetPcrLast"/> for that formula). This pair
+    /// instead spans the type's full 24-bit index space, mirroring how <see cref="TRANSIENT_FIRST"/> and
+    /// <see cref="TRANSIENT_LAST"/> already model their range here — for classifying a handle's interface type
+    /// (<see cref="TpmiDhPcr"/>, <see cref="TpmiDhEntity"/>), not for an implementation's live
+    /// PCR count.
+    /// </remarks>
+    public const uint PCR_FIRST = 0x0000_0000;
 
     /// <summary>
-    /// TPM_HT_HMAC_SESSION range base (0x02).
+    /// Last value of the PCR range this class models (the full 24-bit index space under <see cref="TpmHcConstants.HR_PCR"/>);
+    /// see the <see cref="PCR_FIRST"/> remarks for how this differs from the spec's implementation-dependent
+    /// <c>PCR_LAST</c>.
     /// </summary>
-    public const uint HR_HMAC_SESSION = (uint)TpmHt.TPM_HT_HMAC_SESSION;
+    public const uint PCR_LAST = 0x00FF_FFFF;
 
     /// <summary>
-    /// TPM_HT_POLICY_SESSION range base (0x03).
+    /// First value of the HMAC session range (<c>HMAC_SESSION_FIRST</c>).
     /// </summary>
-    public const uint HR_POLICY_SESSION = (uint)TpmHt.TPM_HT_POLICY_SESSION;
+    /// <remarks>
+    /// Part 2, clause 7.5, Table 37 defines <c>HMAC_SESSION_LAST</c> as <c>HMAC_SESSION_FIRST +
+    /// MAX_ACTIVE_SESSIONS - 1</c>, an implementation-dependent bound (see
+    /// <see cref="TpmHcConstants.GetHmacSessionLast"/> for that formula). This pair instead spans the type's
+    /// full 24-bit index space, mirroring <see cref="TRANSIENT_FIRST"/>/<see cref="TRANSIENT_LAST"/> — for
+    /// classifying a handle's interface type (<see cref="TpmiShHmac"/>, <see cref="TpmiDhContext"/>),
+    /// not for an implementation's live session count.
+    /// </remarks>
+    public const uint HMAC_SESSION_FIRST = 0x0200_0000;
 
     /// <summary>
-    /// TPM_HT_TRANSIENT range base (0x80).
+    /// Last value of the HMAC session range this class models (the full 24-bit index space under
+    /// <see cref="TpmHcConstants.HR_HMAC_SESSION"/>); see the <see cref="HMAC_SESSION_FIRST"/> remarks.
     /// </summary>
-    public const uint HR_TRANSIENT = (uint)TpmHt.TPM_HT_TRANSIENT;
+    public const uint HMAC_SESSION_LAST = 0x02FF_FFFF;
 
     /// <summary>
-    /// TPM_HT_PERSISTENT range base (0x81).
+    /// First value of the policy session range (<c>POLICY_SESSION_FIRST</c>).
     /// </summary>
-    public const uint HR_PERSISTENT = (uint)TpmHt.TPM_HT_PERSISTENT;
+    /// <remarks>
+    /// Part 2, clause 7.5, Table 37 defines <c>POLICY_SESSION_LAST</c> as <c>POLICY_SESSION_FIRST +
+    /// MAX_ACTIVE_SESSIONS - 1</c>, an implementation-dependent bound (see
+    /// <see cref="TpmHcConstants.GetPolicySessionLast"/> for that formula). This pair instead spans the type's
+    /// full 24-bit index space, mirroring <see cref="TRANSIENT_FIRST"/>/<see cref="TRANSIENT_LAST"/> — for
+    /// classifying a handle's interface type (<see cref="TpmiShPolicy"/>, <see cref="TpmiDhContext"/>),
+    /// not for an implementation's live session count.
+    /// </remarks>
+    public const uint POLICY_SESSION_FIRST = 0x0300_0000;
 
     /// <summary>
-    /// TPM_HT_NV_INDEX range base (0x01).
+    /// Last value of the policy session range this class models (the full 24-bit index space under
+    /// <see cref="TpmHcConstants.HR_POLICY_SESSION"/>); see the <see cref="POLICY_SESSION_FIRST"/> remarks.
     /// </summary>
-    public const uint HR_NV_INDEX = (uint)TpmHt.TPM_HT_NV_INDEX;
-
-    /// <summary>
-    /// TPM_HT_EXTERNAL_NV range base (0xA0).
-    /// </summary>
-    public const uint HR_EXTERNAL_NV = (uint)TpmHt.TPM_HT_EXTERNAL_NV;
-
-    /// <summary>
-    /// TPM_HT_PERMANENT_NV range base (0xA1).
-    /// </summary>
-    public const uint HR_PERMANENT_NV = (uint)TpmHt.TPM_HT_PERMANENT_NV;
-
-    /// <summary>
-    /// TPM_HT_PERMANENT range base (0x40).
-    /// </summary>
-    public const uint HR_PERMANENT = (uint)TpmHt.TPM_HT_PERMANENT;
+    public const uint POLICY_SESSION_LAST = 0x03FF_FFFF;
 
     /// <summary>
     /// First values for key handle ranges.
@@ -113,24 +127,24 @@ public static class TpmHandleRanges
     public const uint NV_INDEX_LAST = 0x01FF_FFFF;
 
     /// <summary>
-    /// First values for external NV Index handle ranges.
+    /// First value of the external NV Index handle range (Part 2, clause 7.2, Table 35: <c>TPM_HT_EXTERNAL_NV = 0x11</c>; clause 7.5, Table 37).
     /// </summary>
-    public const uint EXTERNAL_NV_FIRST = 0xA000_0000;
+    public const uint EXTERNAL_NV_FIRST = 0x1100_0000;
 
     /// <summary>
-    /// Last values for external NV Index handle ranges.
+    /// Last value of the external NV Index handle range.
     /// </summary>
-    public const uint EXTERNAL_NV_LAST = 0xA0FF_FFFF;
+    public const uint EXTERNAL_NV_LAST = 0x11FF_FFFF;
 
     /// <summary>
-    /// First values for permanent NV Index handle ranges.
+    /// First value of the permanent NV Index handle range (Part 2, clause 7.2, Table 35: <c>TPM_HT_PERMANENT_NV = 0x12</c>; clause 7.5, Table 37).
     /// </summary>
-    public const uint PERMANENT_NV_FIRST = 0xA100_0000;
+    public const uint PERMANENT_NV_FIRST = 0x1200_0000;
 
     /// <summary>
-    /// Last values for permanent NV Index handle ranges.
+    /// Last value of the permanent NV Index handle range.
     /// </summary>
-    public const uint PERMANENT_NV_LAST = 0xA1FF_FFFF;
+    public const uint PERMANENT_NV_LAST = 0x12FF_FFFF;
 
     /// <summary>
     /// Extracts the handle type (MSO) from a 32-bit TPM handle.

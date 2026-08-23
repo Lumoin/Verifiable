@@ -45,6 +45,19 @@ public sealed class CertifyCreationInput: ITpmCommandInput, IDisposable
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_CertifyCreation;
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <c>qualifyingData</c> (<c>TPM2B_DATA</c>) is the first entry of the parameter area, ordered ahead of
+    /// <c>creationHash</c>, and carries an explicit size field (TPM 2.0 Library Part 3, clause 18.3, Table 91),
+    /// which is what TPM 2.0 Library Part 1, clause 19.1 requires of an encryptable parameter and what clause
+    /// 16.4 restates ("for a command or response parameter to be encrypted, it must be the first parameter and
+    /// it must be a TPM2B type"). Only that first parameter is ever encrypted, so the creation hash and ticket
+    /// travel in the clear. A session without the <c>decrypt</c> attribute is unaffected; the attribute is what
+    /// asks the TPM to decrypt the parameter after the command HMACs verify, so the caller nonce this command
+    /// echoes into the attestation's <c>extraData</c> never crosses the bus in the clear.
+    /// </remarks>
+    public bool FirstCommandParameterIsEncryptable => true;
+
     /// <summary>
     /// Gets the handle of the signing key.
     /// </summary>
@@ -176,7 +189,10 @@ public sealed class CertifyCreationInput: ITpmCommandInput, IDisposable
         ArgumentNullException.ThrowIfNull(creationTicket);
         ArgumentNullException.ThrowIfNull(pool);
 
-        IMemoryOwner<byte> qualifyingDataOwner = pool.Rent(qualifyingData.Length);
+        //An EMPTY qualifyingData is legal — a TPM2B parameter may declare a zero size, and Part 3, clause 5.7
+        //notes that "the size of the parameter to be encrypted can be zero" — so the rental floor keeps a
+        //zero-length value expressible; the slice below is what fixes the parameter's declared width.
+        IMemoryOwner<byte> qualifyingDataOwner = pool.Rent(Math.Max(qualifyingData.Length, 1));
         qualifyingData.CopyTo(qualifyingDataOwner.Memory.Span);
 
         IMemoryOwner<byte> creationHashOwner = pool.Rent(creationHash.Length);

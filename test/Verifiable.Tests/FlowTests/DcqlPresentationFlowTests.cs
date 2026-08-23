@@ -628,6 +628,134 @@ internal sealed class DcqlPresentationFlowTests
 
 
     /// <summary>
+    /// The DCQL engine drives the selective-disclosure pipeline, so the lattice bounds are proven
+    /// through it rather than against a synthetic match: a real DCQL credential query runs through
+    /// <see cref="DcqlDisclosure.ComputeStrategyAsync"/> with a policy assessor and a
+    /// cross-credential optimizer that both return sets outside the credential's lattice. The
+    /// presented set is the clamped one — the issuer's mandatory floor restored and the claim the
+    /// credential does not carry dropped — and both attempts are in the decision record.
+    /// </summary>
+    [TestMethod]
+    public async Task DcqlQueryWithOutOfBoundsPolicyPresentsTheClampedSet()
+    {
+        var keyMaterial = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using var publicKey = keyMaterial.PublicKey;
+        using var privateKey = keyMaterial.PrivateKey;
+
+        SdToken<string> issuedToken = await IssueSignedPidTokenAsync(privateKey, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        var issPath = CredentialPath.FromJsonPointer("/iss");
+        var vctPath = CredentialPath.FromJsonPointer("/vct");
+        var emailPath = CredentialPath.FromJsonPointer($"/{EudiPid.SdJwt.Email}");
+        var birthdatePath = CredentialPath.FromJsonPointer($"/{EudiPid.SdJwt.Birthdate}");
+
+        //A claim this credential does not carry, so it lies above the lattice top.
+        var ssnPath = CredentialPath.FromJsonPointer("/ssn");
+
+        //A policy assessor that drops the issuer's mandatory floor and reaches for a claim the
+        //credential does not carry.
+        var unboundedPolicy = new PolicyAssessorDelegate<SdToken<string>>((context, ct) =>
+            Task.FromResult(new PolicyAssessmentOutcome
+            {
+                Approved = true,
+                ApprovedPaths = new HashSet<CredentialPath> { emailPath, ssnPath },
+                AssessorName = "UnboundedPolicy"
+            }));
+
+        //A cross-credential optimizer that does the same one layer up, rewriting the decision it
+        //received rather than narrowing within the bounds it was given.
+        var unboundedOptimizer = new CrossCredentialOptimizerDelegate<SdToken<string>>(
+            (decisions, signals, ct) =>
+            {
+                var rewritten = new List<CredentialDisclosureDecision<SdToken<string>>>(decisions.Count);
+                foreach(var decision in decisions)
+                {
+                    rewritten.Add(new CredentialDisclosureDecision<SdToken<string>>
+                    {
+                        Credential = decision.Credential,
+                        QueryRequirementId = decision.QueryRequirementId,
+                        SelectedPaths = new HashSet<CredentialPath> { birthdatePath, ssnPath },
+                        SatisfiesRequirements = decision.SatisfiesRequirements,
+                        Format = decision.Format,
+                        Lattice = decision.Lattice
+                    });
+                }
+
+                return Task.FromResult<IReadOnlyList<CredentialDisclosureDecision<SdToken<string>>>>(rewritten);
+            });
+
+        var computation = new DisclosureComputation<SdToken<string>>(
+            [unboundedPolicy], crossCredentialOptimizers: [unboundedOptimizer]);
+
+        CredentialQuery credentialQuery = DcqlFixtures.PidGivenAndFamilyName().Credentials![0];
+
+        DcqlDisclosureResult<SdToken<string>> result = await DcqlDisclosure.ComputeStrategyAsync(
+            credentialQuery,
+            issuedToken,
+            SdTokenDcqlAdapter.CreateMetadataExtractor<string>(
+                DcqlCredentialFormats.SdJwt, credentialType: EudiPid.SdJwtVct),
+            SdTokenDcqlAdapter.ClaimExtractor<string>,
+            mandatoryPaths: CreateMandatoryPaths(),
+            computation: computation,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.ConstraintsSatisfied, "The credential matches the query's format and type constraints.");
+        Assert.HasCount(1, result.Graph.Decisions);
+
+        var decision = result.Graph.Decisions[0];
+
+        //(the optimizer's set ∩ available) ∪ mandatory, closed upward: /ssn is not in the
+        //credential and iss/vct are the floor the issuer set.
+        var expected = new HashSet<CredentialPath> { issPath, vctPath, birthdatePath };
+
+        Assert.IsTrue(decision.SelectedPaths.SetEquals(expected),
+            "The presented set is the clamped one, not the set either component returned.");
+        Assert.DoesNotContain(ssnPath, decision.SelectedPaths,
+            "A claim the credential does not carry never reaches the presentation.");
+        Assert.IsTrue(decision.Lattice!.IsValid(decision.SelectedPaths),
+            "The credential's own lattice admits the presented set.");
+
+        //The assessor's escape attempt is in the provenance trail, split by violation shape.
+        var assessments = result.Graph.DecisionRecord!.PolicyAssessments;
+        Assert.IsNotNull(assessments);
+        Assert.HasCount(1, assessments!);
+        Assert.IsNotNull(assessments![0].OutOfBoundsPaths);
+        Assert.Contains(ssnPath, assessments[0].OutOfBoundsPaths!);
+        Assert.IsNotNull(assessments[0].RestoredMandatoryPaths);
+        Assert.IsTrue(assessments[0].RestoredMandatoryPaths!.SetEquals(CreateMandatoryPaths()));
+
+        //So is the optimizer's, under the DCQL credential-query id.
+        var violations = result.Graph.DecisionRecord!.BoundViolations;
+        Assert.IsNotNull(violations);
+        Assert.HasCount(1, violations!);
+        Assert.AreEqual(DcqlFixtures.PidCredentialId, violations![0].QueryRequirementId);
+        Assert.AreEqual(0, violations[0].OptimizerIndex);
+        Assert.IsNotNull(violations[0].OutOfBoundsPaths);
+        Assert.Contains(ssnPath, violations[0].OutOfBoundsPaths!);
+        Assert.IsNotNull(violations[0].RestoredMandatoryPaths);
+        Assert.IsTrue(violations[0].RestoredMandatoryPaths!.SetEquals(CreateMandatoryPaths()));
+
+        //Wallet builds the presentation from the clamped set, which is what reaches the verifier.
+        var selectedClaimNames = decision.SelectedPaths
+            .Select(p => p.ToString().TrimStart('/'))
+            .ToHashSet(StringComparer.Ordinal);
+
+        SdToken<string> presentationToken = issuedToken.SelectDisclosures(
+            d => d.ClaimName is not null && selectedClaimNames.Contains(d.ClaimName), Pool);
+
+        Assert.HasCount(1, presentationToken.Disclosures,
+            "Only the clamped set's selectively disclosable claim is presented.");
+        Assert.AreEqual(EudiPid.SdJwt.Birthdate, presentationToken.Disclosures[0].ClaimName);
+
+        bool isPresentationValid = await Jws.VerifyAsync(
+            presentationToken.IssuerSigned, Decoder, Pool,
+            publicKey, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(isPresentationValid, "The presented issuer JWT signature must remain cryptographically valid.");
+    }
+
+
+    /// <summary>
     /// Issues a signed EU Digital Identity PID token with selective disclosure
     /// using <c>IssueSdJwtTokenAsync</c>.
     /// </summary>

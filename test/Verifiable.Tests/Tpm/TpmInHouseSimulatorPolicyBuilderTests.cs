@@ -16,7 +16,7 @@ namespace Verifiable.Tests.Tpm;
 /// <see cref="TpmSimulator"/> — entirely in-process, with no external assets. Each test builds a policy once, then
 /// confirms that <see cref="TpmPolicy.ComputeDigest"/> (the host prediction) and <see cref="TpmPolicy.ExecuteAsync"/>
 /// (the on-device replay, through the production command path) agree on a live session, so the two duals — predict
-/// and execute — cannot drift apart (TPM 2.0 Library Part 1, clause 19.7).
+/// and execute — cannot drift apart (TPM 2.0 Library Part 1, clause 17.7).
 /// </summary>
 /// <remarks>
 /// The simulator advances the session's policyDigest by calling the same <see cref="TpmPolicyDigest"/> methods the
@@ -46,7 +46,7 @@ internal sealed class TpmInHouseSimulatorPolicyBuilderTests
     public async Task BuiltPolicyExecutesToItsComputedDigest(TpmAlgIdConstants policyHash)
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
         //One description: require the object's authValue, then restrict the session to TPM2_Sign.
@@ -91,7 +91,7 @@ internal sealed class TpmInHouseSimulatorPolicyBuilderTests
     public async Task BuiltOrPolicyExecutesToItsComputedDigest()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         const TpmAlgIdConstants PolicyHash = TpmAlgIdConstants.TPM_ALG_SHA256;
         int size = TpmPolicyDigest.Size(PolicyHash);

@@ -196,6 +196,12 @@ public static class TpmResponseCodecExtensions
         public static TpmResponseCodec PolicySigned => TpmResponseCodec.Create(PolicySignedResponse.Parse);
 
         /// <summary>
+        /// Codec for TPM2_PolicyTicket response. This command has no response handles and no response parameters
+        /// (TPM 2.0 Library Part 3, Section 23.5).
+        /// </summary>
+        public static TpmResponseCodec PolicyTicket => TpmResponseCodec.NoParameters(PolicyTicketResponse.Instance);
+
+        /// <summary>
         /// Codec for TPM2_PolicyAuthorize response.
         /// </summary>
         /// <remarks>
@@ -228,6 +234,12 @@ public static class TpmResponseCodecExtensions
         /// parameters (TPM 2.0 Library Part 3, Section 31.4).
         /// </summary>
         public static TpmResponseCodec NvUndefineSpace => TpmResponseCodec.NoParameters(NvUndefineSpaceResponse.Instance);
+
+        /// <summary>
+        /// Codec for TPM2_NV_ChangeAuth response. This command has no response handles and no response
+        /// parameters (TPM 2.0 Library Part 3, Section 31.15).
+        /// </summary>
+        public static TpmResponseCodec NvChangeAuth => TpmResponseCodec.NoParameters(NvChangeAuthResponse.Instance);
 
         /// <summary>
         /// Codec for TPM2_NV_Increment response. This command has no response handles and no response
@@ -367,14 +379,19 @@ public static class TpmResponseCodecExtensions
         ///   <item><description>signature (TPMT_SIGNATURE) - sigAlg (2) selecting a TPMU_SIGNATURE member.</description></item>
         /// </list>
         /// <para>
-        /// The first response parameter, <c>quoted</c>, is a sized buffer and so would be encrypt-eligible, but a
-        /// quote is public by design (it proves platform state to a relying party), so it is left non-encryptable.
+        /// The first response parameter, <c>quoted</c>, is a <c>TPM2B_ATTEST</c> sized buffer (TPM 2.0 Library
+        /// Part 3, clause 18.4, Table 94), which is what TPM 2.0 Library Part 1, clause 19.1 requires of an
+        /// encryptable parameter and what clause 16.4 restates, so it is eligible for session-based parameter
+        /// encryption (the <c>encrypt</c> attribute). A quote is normally published to a relying party, but the
+        /// attestation names the platform and its PCR state, so a caller that wants that off the bus attaches an
+        /// encrypt session and the TPM encrypts the attestation before it computes any rpHash.
         /// </para>
         /// <para>
         /// See TPM 2.0 Part 3, Section 18.4 - TPM2_Quote.
         /// </para>
         /// </remarks>
-        public static TpmResponseCodec Quote => TpmResponseCodec.Create(QuoteResponse.Parse);
+        public static TpmResponseCodec Quote => TpmResponseCodec.Create(
+            QuoteResponse.Parse, responseFirstParameterIsEncryptable: true);
 
         /// <summary>
         /// Codec for TPM2_Certify response.
@@ -388,14 +405,19 @@ public static class TpmResponseCodecExtensions
         ///   <item><description>signature (TPMT_SIGNATURE) - sigAlg (2) selecting a TPMU_SIGNATURE member.</description></item>
         /// </list>
         /// <para>
-        /// The first response parameter, <c>certifyInfo</c>, is a sized buffer and so would be encrypt-eligible,
-        /// but an attestation is public by design, so it is left non-encryptable.
+        /// The first response parameter, <c>certifyInfo</c>, is a <c>TPM2B_ATTEST</c> sized buffer (TPM 2.0
+        /// Library Part 3, clause 18.2, Table 90), which is what TPM 2.0 Library Part 1, clause 19.1 requires of
+        /// an encryptable parameter and what clause 16.4 restates, so it is eligible for session-based parameter
+        /// encryption (the <c>encrypt</c> attribute). The attestation names the certified object and the
+        /// qualifying data bound to it, so a caller that wants that off the bus attaches an encrypt session and
+        /// the TPM encrypts the attestation before it computes any rpHash.
         /// </para>
         /// <para>
         /// See TPM 2.0 Part 3, Section 18.2 - TPM2_Certify.
         /// </para>
         /// </remarks>
-        public static TpmResponseCodec Certify => TpmResponseCodec.Create(CertifyResponse.Parse);
+        public static TpmResponseCodec Certify => TpmResponseCodec.Create(
+            CertifyResponse.Parse, responseFirstParameterIsEncryptable: true);
 
         /// <summary>
         /// Codec for TPM2_CertifyCreation response.
@@ -409,14 +431,18 @@ public static class TpmResponseCodecExtensions
         ///   <item><description>signature (TPMT_SIGNATURE) - sigAlg (2) selecting a TPMU_SIGNATURE member.</description></item>
         /// </list>
         /// <para>
-        /// The first response parameter, <c>certifyInfo</c>, is a sized buffer and so would be encrypt-eligible,
-        /// but an attestation is public by design, so it is left non-encryptable.
+        /// The first response parameter, <c>certifyInfo</c>, is a <c>TPM2B_ATTEST</c> sized buffer (TPM 2.0
+        /// Library Part 3, clause 18.3, Table 92), which is what TPM 2.0 Library Part 1, clause 19.1 requires of
+        /// an encryptable parameter and what clause 16.4 restates, so it is eligible for session-based parameter
+        /// encryption (the <c>encrypt</c> attribute). Only that first parameter is ever encrypted; the
+        /// <c>signature</c> that follows it travels in the clear.
         /// </para>
         /// <para>
         /// See TPM 2.0 Part 3, Section 18.3 - TPM2_CertifyCreation.
         /// </para>
         /// </remarks>
-        public static TpmResponseCodec CertifyCreation => TpmResponseCodec.Create(CertifyCreationResponse.Parse);
+        public static TpmResponseCodec CertifyCreation => TpmResponseCodec.Create(
+            CertifyCreationResponse.Parse, responseFirstParameterIsEncryptable: true);
 
         /// <summary>
         /// Codec for TPM2_GetTime response.
@@ -430,14 +456,19 @@ public static class TpmResponseCodecExtensions
         ///   <item><description>signature (TPMT_SIGNATURE) - sigAlg (2) selecting a TPMU_SIGNATURE member.</description></item>
         /// </list>
         /// <para>
-        /// The first response parameter, <c>timeInfo</c>, is a sized buffer and so would be encrypt-eligible, but
-        /// an attestation is public by design, so it is left non-encryptable.
+        /// The first response parameter, <c>timeInfo</c>, is a <c>TPM2B_ATTEST</c> sized buffer (TPM 2.0 Library
+        /// Part 3, clause 18.7, Table 100), which is what TPM 2.0 Library Part 1, clause 19.1 requires of an
+        /// encryptable parameter and what clause 16.4 restates, so it is eligible for session-based parameter
+        /// encryption (the <c>encrypt</c> attribute). The attestation carries the TPM's Clock, resetCount and
+        /// restartCount, which are privacy-relevant correlators, so a caller that wants them off the bus attaches
+        /// an encrypt session and the TPM encrypts the attestation before it computes any rpHash.
         /// </para>
         /// <para>
         /// See TPM 2.0 Part 3, Section 18.7 - TPM2_GetTime.
         /// </para>
         /// </remarks>
-        public static TpmResponseCodec GetTime => TpmResponseCodec.Create(GetTimeResponse.Parse);
+        public static TpmResponseCodec GetTime => TpmResponseCodec.Create(
+            GetTimeResponse.Parse, responseFirstParameterIsEncryptable: true);
 
         /// <summary>
         /// Codec for TPM2_ReadClock response.
@@ -473,14 +504,19 @@ public static class TpmResponseCodecExtensions
         ///   <item><description>signature (TPMT_SIGNATURE) - sigAlg (2) selecting a TPMU_SIGNATURE member.</description></item>
         /// </list>
         /// <para>
-        /// The first response parameter, <c>certifyInfo</c>, is a sized buffer and so would be encrypt-eligible,
-        /// but an attestation is public by design, so it is left non-encryptable.
+        /// The first response parameter, <c>certifyInfo</c>, is a <c>TPM2B_ATTEST</c> sized buffer (TPM 2.0
+        /// Library Part 3, clause 31.16, Table 255), which is what TPM 2.0 Library Part 1, clause 19.1 requires
+        /// of an encryptable parameter and what clause 16.4 restates, so it is eligible for session-based
+        /// parameter encryption (the <c>encrypt</c> attribute). The attestation embeds the certified NV contents
+        /// themselves, so an encrypt session is how a caller keeps those contents off the bus; the TPM encrypts
+        /// the attestation before it computes any rpHash.
         /// </para>
         /// <para>
         /// See TPM 2.0 Part 3, Section 31.16 - TPM2_NV_Certify.
         /// </para>
         /// </remarks>
-        public static TpmResponseCodec NvCertify => TpmResponseCodec.Create(NvCertifyResponse.Parse);
+        public static TpmResponseCodec NvCertify => TpmResponseCodec.Create(
+            NvCertifyResponse.Parse, responseFirstParameterIsEncryptable: true);
 
         /// <summary>
         /// Codec for TPM2_VerifySignature response.
@@ -586,6 +622,36 @@ public static class TpmResponseCodecExtensions
         public static TpmResponseCodec DictionaryAttackParameters => TpmResponseCodec.NoParameters(DictionaryAttackParametersResponse.Instance);
 
         /// <summary>
+        /// Codec for TPM2_HierarchyChangeAuth response. This command has no response handles and no response
+        /// parameters (TPM 2.0 Library Part 3, Section 24.8).
+        /// </summary>
+        public static TpmResponseCodec HierarchyChangeAuth => TpmResponseCodec.NoParameters(HierarchyChangeAuthResponse.Instance);
+
+        /// <summary>
+        /// Codec for TPM2_Clear response. This command has no response handles and no response parameters
+        /// (TPM 2.0 Library Part 3, Section 24.6).
+        /// </summary>
+        public static TpmResponseCodec Clear => TpmResponseCodec.NoParameters(ClearResponse.Instance);
+
+        /// <summary>
+        /// Codec for TPM2_ClearControl response. This command has no response handles and no response
+        /// parameters (TPM 2.0 Library Part 3, Section 24.7).
+        /// </summary>
+        public static TpmResponseCodec ClearControl => TpmResponseCodec.NoParameters(ClearControlResponse.Instance);
+
+        /// <summary>
+        /// Codec for TPM2_HierarchyControl response. This command has no response handles and no response
+        /// parameters (TPM 2.0 Library Part 3, Section 24.2).
+        /// </summary>
+        public static TpmResponseCodec HierarchyControl => TpmResponseCodec.NoParameters(HierarchyControlResponse.Instance);
+
+        /// <summary>
+        /// Codec for TPM2_SetPrimaryPolicy response. This command has no response handles and no response
+        /// parameters (TPM 2.0 Library Part 3, Section 24.3).
+        /// </summary>
+        public static TpmResponseCodec SetPrimaryPolicy => TpmResponseCodec.NoParameters(SetPrimaryPolicyResponse.Instance);
+
+        /// <summary>
         /// Codec for TPM2_ReadPublic response.
         /// </summary>
         /// <remarks>
@@ -602,5 +668,32 @@ public static class TpmResponseCodecExtensions
         /// </para>
         /// </remarks>
         public static TpmResponseCodec ReadPublic => TpmResponseCodec.Create(ReadPublicResponse.Parse);
+
+        /// <summary>
+        /// Codec for TPM2_NV_ReadPublic response.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Response parameters:
+        /// </para>
+        /// <list type="bullet">
+        ///   <item><description>nvPublic (TPM2B_NV_PUBLIC) - the public area of the NV Index.</description></item>
+        ///   <item><description>nvName (TPM2B_NAME) - the Name of the Index.</description></item>
+        /// </list>
+        /// <para>
+        /// The first response parameter, <c>nvPublic</c>, is a sized buffer and so is structurally
+        /// eligible for session-based parameter encryption per the reference command-attribute
+        /// table (an <c>ENCRYPT_2</c> target); the command's tag note ("<c>TPM_ST_SESSIONS</c> if
+        /// an audit or encrypt session is present") confirms an encrypt-only session may be
+        /// attached even though the request carries no authorization (Auth Index: None). The
+        /// host verb composes no session at all, so eligibility is recorded here rather
+        /// than opted into — a caller that attaches an encrypt session can flip
+        /// <c>responseFirstParameterIsEncryptable</c> without changing the parsed shape.
+        /// </para>
+        /// <para>
+        /// See TPM 2.0 Part 3, Section 31.6 - TPM2_NV_ReadPublic.
+        /// </para>
+        /// </remarks>
+        public static TpmResponseCodec NvReadPublic => TpmResponseCodec.Create(NvReadPublicResponse.Parse);
     }
 }

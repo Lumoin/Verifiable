@@ -16,10 +16,13 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// </para>
 /// <para>
 /// <strong>Assessor contract:</strong> Assessors may narrow <see cref="ProposedPaths"/>
-/// (remove paths) but must not widen it beyond the lattice maximum. Adding paths not
-/// in <see cref="SetDisclosureLattice{TClaim}.Top"/> would violate the structural
-/// invariant. Assessors can query the lattice to check bounds, compute alternative
-/// disclosure sets, or verify that removing a path would not violate mandatory requirements.
+/// (remove paths) or widen it within <see cref="SetDisclosureLattice{TClaim}.Top"/>, and must
+/// keep <see cref="SetDisclosureLattice{TClaim}.Bottom"/>. A returned set that leaves those
+/// bounds does not take effect: the computation clamps it back with
+/// <see cref="SetDisclosureLattice{TClaim}.Clamp"/> and records the attempt, so an assessor
+/// gains nothing by returning one. Assessors can query the lattice to check bounds, compute
+/// alternative disclosure sets, or verify that removing a path would not violate mandatory
+/// requirements.
 /// </para>
 /// <para>
 /// <strong>Contextual inputs:</strong> In addition to the credential and lattice, assessors
@@ -50,7 +53,9 @@ public sealed class PolicyAssessmentContext<TCredential>
     /// <remarks>
     /// <para>
     /// The assessor may narrow this set (remove paths) or expand it (add paths within
-    /// the lattice top). The assessor must not remove mandatory paths (lattice bottom).
+    /// the lattice top), and must not remove mandatory paths (lattice bottom). The returned
+    /// set is a proposal: the computation clamps it into <see cref="Lattice"/> before adopting
+    /// it, so paths outside the bounds are dropped and mandatory or ancestor paths are restored.
     /// </para>
     /// </remarks>
     public required IReadOnlySet<CredentialPath> ProposedPaths { get; init; }

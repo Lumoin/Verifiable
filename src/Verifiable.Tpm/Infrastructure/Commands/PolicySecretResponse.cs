@@ -15,7 +15,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// <list type="bullet">
 ///   <item><description>timeout (TPM2B_TIMEOUT): the expiration relative to the session, or empty when no ticket is produced.</description></item>
-///   <item><description>policyTicket (TPMT_TK_AUTH): an authorization ticket, or a NULL ticket when the immediate (expiration 0) form is used.</description></item>
+///   <item><description>policyTicket (TPMT_TK_AUTH): a real authorization ticket when expiration was negative on a non-trial session, otherwise a NULL ticket.</description></item>
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -24,8 +24,6 @@ public sealed class PolicySecretResponse: IDisposable, ITpmWireType
     private bool disposed;
     private IMemoryOwner<byte> TimeoutOwner { get; }
     private int TimeoutLength { get; }
-    private IMemoryOwner<byte> TicketDigestOwner { get; }
-    private int TicketDigestLength { get; }
 
     /// <summary>
     /// Gets the timeout value (empty in the immediate form).
@@ -33,17 +31,21 @@ public sealed class PolicySecretResponse: IDisposable, ITpmWireType
     public ReadOnlySpan<byte> Timeout => TimeoutOwner.Memory.Span[..TimeoutLength];
 
     /// <summary>
-    /// Gets the authorization ticket (a NULL ticket in the immediate form).
+    /// Gets the authorization ticket (a NULL ticket unless expiration was negative on a non-trial session). It
+    /// owns its own digest storage and is released by this response's <see cref="Dispose"/>.
     /// </summary>
     public TpmtTkAuth PolicyTicket { get; }
 
-    private PolicySecretResponse(
-        IMemoryOwner<byte> timeoutOwner, int timeoutLength, IMemoryOwner<byte> ticketDigestOwner, int ticketDigestLength, TpmtTkAuth policyTicket)
+    /// <summary>
+    /// Initializes a parsed TPM2_PolicySecret() response over the carriers its parse rented.
+    /// </summary>
+    /// <param name="timeoutOwner">The pooled storage holding the timeout octets; ownership transfers to this response.</param>
+    /// <param name="timeoutLength">The number of valid octets at the head of <paramref name="timeoutOwner"/>.</param>
+    /// <param name="policyTicket">The parsed authorization ticket; ownership transfers to this response.</param>
+    private PolicySecretResponse(IMemoryOwner<byte> timeoutOwner, int timeoutLength, TpmtTkAuth policyTicket)
     {
         this.TimeoutOwner = timeoutOwner;
         this.TimeoutLength = timeoutLength;
-        this.TicketDigestOwner = ticketDigestOwner;
-        this.TicketDigestLength = ticketDigestLength;
         PolicyTicket = policyTicket;
     }
 
@@ -62,24 +64,26 @@ public sealed class PolicySecretResponse: IDisposable, ITpmWireType
         //timeout (TPM2B_TIMEOUT).
         ushort timeoutSize = reader.ReadUInt16();
         IMemoryOwner<byte> timeoutOwner = pool.Rent(Math.Max((int)timeoutSize, 1));
-        if(timeoutSize > 0)
+        try
         {
-            reader.ReadBytes(timeoutSize).CopyTo(timeoutOwner.Memory.Span[..timeoutSize]);
-        }
+            if(timeoutSize > 0)
+            {
+                reader.ReadBytes(timeoutSize).CopyTo(timeoutOwner.Memory.Span[..timeoutSize]);
+            }
 
-        //policyTicket (TPMT_TK_AUTH): tag (UINT16) + hierarchy (UINT32) + digest (TPM2B_DIGEST).
-        ushort tag = reader.ReadUInt16();
-        uint hierarchy = reader.ReadUInt32();
-        ushort digestSize = reader.ReadUInt16();
-        IMemoryOwner<byte> ticketDigestOwner = pool.Rent(Math.Max((int)digestSize, 1));
-        if(digestSize > 0)
+            //policyTicket (TPMT_TK_AUTH, TPM 2.0 Library Part 2, clause 10.7.5, Table 111): the ticket carrier
+            //reads its own tag, hierarchy, and digest and owns whatever storage the digest needs.
+            TpmtTkAuth ticket = TpmtTkAuth.Parse(ref reader, pool);
+
+            return new PolicySecretResponse(timeoutOwner, timeoutSize, ticket);
+        }
+        catch
         {
-            reader.ReadBytes(digestSize).CopyTo(ticketDigestOwner.Memory.Span[..digestSize]);
+            //The timeout rental's only owner is this frame until the response adopts it, so a refused ticket
+            //parse must release it.
+            timeoutOwner.Dispose();
+            throw;
         }
-
-        var ticket = new TpmtTkAuth(tag, hierarchy, ticketDigestOwner.Memory[..digestSize]);
-
-        return new PolicySecretResponse(timeoutOwner, timeoutSize, ticketDigestOwner, digestSize, ticket);
     }
 
     /// <inheritdoc/>
@@ -88,7 +92,7 @@ public sealed class PolicySecretResponse: IDisposable, ITpmWireType
         if(!disposed)
         {
             TimeoutOwner.Dispose();
-            TicketDigestOwner.Dispose();
+            PolicyTicket.Dispose();
             disposed = true;
         }
     }

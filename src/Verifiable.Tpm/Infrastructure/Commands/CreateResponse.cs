@@ -74,13 +74,32 @@ public sealed class CreateResponse: ITpmWireType, IDisposable
     /// <returns>The parsed response.</returns>
     public static CreateResponse Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
-        Tpm2bPrivate outPrivate = Tpm2bPrivate.Parse(ref reader, pool);
-        Tpm2bPublic outPublic = Tpm2bPublic.Parse(ref reader, pool);
-        Tpm2bCreationData creationData = Tpm2bCreationData.Parse(ref reader, pool);
-        Tpm2bDigest creationHash = Tpm2bDigest.Parse(ref reader, pool);
-        TpmtTkCreation creationTicket = TpmtTkCreation.Parse(ref reader, pool);
+        //Each parameter rents before the next one is read, and every later read can refuse — the creation
+        //ticket's own parse validates both its tag and its hierarchy. A device that answers a malformed
+        //response would otherwise strand every carrier already rented for this response, one set per response,
+        //so the earlier rentals are released here before the refusal leaves the parse.
+        Tpm2bPrivate? outPrivate = null;
+        Tpm2bPublic? outPublic = null;
+        Tpm2bCreationData? creationData = null;
+        Tpm2bDigest? creationHash = null;
+        try
+        {
+            outPrivate = Tpm2bPrivate.Parse(ref reader, pool);
+            outPublic = Tpm2bPublic.Parse(ref reader, pool);
+            creationData = Tpm2bCreationData.Parse(ref reader, pool);
+            creationHash = Tpm2bDigest.Parse(ref reader, pool);
+            TpmtTkCreation creationTicket = TpmtTkCreation.Parse(ref reader, pool);
 
-        return new CreateResponse(outPrivate, outPublic, creationData, creationHash, creationTicket);
+            return new CreateResponse(outPrivate, outPublic, creationData, creationHash, creationTicket);
+        }
+        catch
+        {
+            creationHash?.Dispose();
+            creationData?.Dispose();
+            outPublic?.Dispose();
+            outPrivate?.Dispose();
+            throw;
+        }
     }
 
     /// <summary>

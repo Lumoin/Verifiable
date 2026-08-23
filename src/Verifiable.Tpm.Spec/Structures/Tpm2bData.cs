@@ -94,6 +94,23 @@ public sealed class Tpm2bData: IDisposable
     }
 
     /// <summary>
+    /// Gets the data as read-only memory that aliases this instance's pooled storage — for a borrowing
+    /// consumer such as a cpHash concatenation, valid until <see cref="Dispose"/> and never copied into an
+    /// untracked array.
+    /// </summary>
+    /// <returns>The data bytes.</returns>
+    public ReadOnlyMemory<byte> AsReadOnlyMemory()
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        if(Storage is null)
+        {
+            return ReadOnlyMemory<byte>.Empty;
+        }
+
+        return Storage.Memory.Slice(0, Length);
+    }
+
+    /// <summary>
     /// Gets the serialized size of this structure.
     /// </summary>
     public int SerializedSize => sizeof(ushort) + Length;

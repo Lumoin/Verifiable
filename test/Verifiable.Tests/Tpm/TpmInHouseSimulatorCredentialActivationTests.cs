@@ -1,14 +1,17 @@
 using System;
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
+using Verifiable.Tpm.Extensions.DictionaryAttack;
 using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
+using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
@@ -53,6 +56,18 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     /// <summary>The policy session hash algorithm used by the standard-EK (PolicyA) tests.</summary>
     private const TpmAlgIdConstants SessionAlg = TpmAlgIdConstants.TPM_ALG_SHA256;
 
+    /// <summary>The activate object's (attestation key's) real password used by the authValue verification proofs.</summary>
+    private const string ActivatePassword = "activate-object-auth-proof";
+
+    /// <summary>A wrong guess at the activate object's password, distinct from <see cref="ActivatePassword"/>.</summary>
+    private const string WrongActivatePassword = "wrong-activate-auth-guess";
+
+    /// <summary>The credential key's (endorsement key's) real password used by the authValue verification proof.</summary>
+    private const string CredentialKeyPassword = "credential-key-auth-proof";
+
+    /// <summary>A wrong guess at the credential key's password, distinct from <see cref="CredentialKeyPassword"/>.</summary>
+    private const string WrongCredentialKeyPassword = "wrong-credential-key-auth-guess";
+
     /// <summary>Gets or sets the per-test context (supplies the cancellation token).</summary>
     public TestContext TestContext { get; set; } = null!;
 
@@ -60,7 +75,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     public async Task MakeAndActivateCredentialRecoversTheSecret()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -106,7 +121,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     public async Task ActivateWithWrongObjectIsRejected()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -150,7 +165,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     public async Task ActivateCredentialRejectsUndersizedCredentialBlob()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -194,7 +209,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     public async Task StandardEkActivatesCredentialThroughThePolicyAPath()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -225,7 +240,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
                     //Device side: the AK is the activate object (ADMIN role, password), the EK recovers the seed
                     //(USER role) — but the EK's userWithAuth is CLEAR, so its session must be the satisfied policy
                     //session rather than a password. Both handles are transient objects, so the executor needs their
-                    //Names to compute cpHash for the policy session (Part 1, equation 15).
+                    //Names to compute cpHash for the policy session (Part 1, clause 16.7, equation 15).
                     using ActivateCredentialInput activateInput = ActivateCredentialInput.Create(
                         ak.ObjectHandle, ek.ObjectHandle, made.CredentialBlob.Span, made.Secret.Span, pool);
                     using TpmPasswordSession activateAuth = TpmPasswordSession.CreateEmpty(pool);
@@ -266,7 +281,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     public async Task StandardEkRejectsPasswordAuthOnTheKeyHandle()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -279,7 +294,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
                 using MakeCredentialResponse made = await MakeCredentialAsync(tpm, registry, pool, ek.ObjectHandle, ak.Name.Span.ToArray()).ConfigureAwait(false);
 
                 //Both sessions password: the standard EK clears userWithAuth, so USER-role authorization by password
-                //is not available at all (Part 3, clause 5.6, item 1) — this must fail regardless of the credential
+                //is not available at all (Part 3, clause 5.6, check 7.1) — this must fail regardless of the credential
                 //blob's validity.
                 using ActivateCredentialInput activateInput = ActivateCredentialInput.Create(
                     ak.ObjectHandle, ek.ObjectHandle, made.CredentialBlob.Span, made.Secret.Span, pool);
@@ -312,7 +327,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     public async Task StandardEkRejectsAnUnsatisfiedPolicySession()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -372,7 +387,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     public async Task StandardEkRejectsATrialPolicySession()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -431,6 +446,452 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
     }
 
     /// <summary>
+    /// Verifies that TPM2_ActivateCredential()'s activate-object slot (Auth Index 1, Auth Role ADMIN, session
+    /// 0; TPM 2.0 Library Part 3, clause 12.5) is checked against the attestation key's own retained authValue
+    /// over a plain <c>TPM_RS_PW</c> session: a WRONG password against a DA-protected activate object is
+    /// refused with the session-index-encoded <c>TPM_RC_AUTH_FAIL</c> (Part 2, clause 6.6.2) and charges
+    /// <c>failedTries</c> exactly once (Part 1, clause 17.8.7), while the CORRECT password recovers the
+    /// wrapped credential exactly as the empty-auth baseline does.
+    /// </summary>
+    [TestMethod]
+    public async Task ActivateCredentialVerifiesTheActivateObjectsAuthValue()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse ek = await CreateStoragePrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
+        try
+        {
+            using CreatePrimaryResponse ak = await CreatePasswordProtectedSigningPrimaryAsync(
+                tpm, registry, pool, TpmRh.TPM_RH_OWNER, ActivatePassword, noDa: false).ConfigureAwait(false);
+            try
+            {
+                using MakeCredentialResponse made = await MakeCredentialAsync(tpm, registry, pool, ek.ObjectHandle, ak.Name.Span.ToArray()).ConfigureAwait(false);
+
+                TpmResult<TpmDictionaryAttackParameters> before = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+                using ActivateCredentialInput wrongInput = ActivateCredentialInput.Create(
+                    ak.ObjectHandle, ek.ObjectHandle, made.CredentialBlob.Span, made.Secret.Span, pool);
+                using TpmPasswordSession wrongActivateAuth = TpmPasswordSession.Create(WrongActivatePassword, pool);
+                using TpmPasswordSession emptyKeyAuth = TpmPasswordSession.CreateEmpty(pool);
+
+                TpmResult<ActivateCredentialResponse> wrongResult = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
+                    tpm, wrongInput, [wrongActivateAuth, emptyKeyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+                Assert.IsTrue(wrongResult.IsTpmError, "A wrong activate-object password must be refused.");
+                Assert.AreEqual(
+                    SessionEncodedRc(TpmRcConstants.TPM_RC_AUTH_FAIL, sessionIndex: 0), wrongResult.ResponseCode,
+                    "A wrong password against the DA-protected activate object (session 0) must be the session-index-encoded TPM_RC_AUTH_FAIL (TPM 2.0 Library Part 2, clause 6.6.2).");
+
+                TpmResult<TpmDictionaryAttackParameters> afterWrong = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
+                Assert.AreEqual(
+                    before.Value.LockoutCounter + 1, afterWrong.Value.LockoutCounter,
+                    "A wrong activate-object password against a DA-protected object must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 17.8.7).");
+
+                using ActivateCredentialInput correctInput = ActivateCredentialInput.Create(
+                    ak.ObjectHandle, ek.ObjectHandle, made.CredentialBlob.Span, made.Secret.Span, pool);
+                using TpmPasswordSession correctActivateAuth = TpmPasswordSession.Create(ActivatePassword, pool);
+                using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
+
+                TpmResult<ActivateCredentialResponse> correctResult = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
+                    tpm, correctInput, [correctActivateAuth, keyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                Assert.IsTrue(correctResult.IsSuccess, $"TPM2_ActivateCredential with the activate object's correct password must succeed, but failed: '{correctResult.ResponseCode}'.");
+
+                using ActivateCredentialResponse activated = correctResult.Value;
+                Assert.IsTrue(
+                    activated.CertInfo.AsReadOnlySpan().SequenceEqual(CredentialSecret),
+                    "The recovered credential must equal the secret wrapped by TPM2_MakeCredential once the activate object's correct password authorizes it.");
+            }
+            finally
+            {
+                await FlushAsync(tpm, registry, ak.ObjectHandle.Value, pool).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await FlushAsync(tpm, registry, ek.ObjectHandle.Value, pool).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Verifies that TPM2_ActivateCredential()'s credential-key slot (Auth Index 2, Auth Role USER, session 1;
+    /// TPM 2.0 Library Part 3, clause 12.5) is checked against the credential key's own retained authValue over
+    /// a plain <c>TPM_RS_PW</c> session once <c>TPMA_OBJECT.userWithAuth</c> is SET (unlike the standard EK's
+    /// cleared template, which <see cref="StandardEkRejectsPasswordAuthOnTheKeyHandle"/> covers): a WRONG
+    /// password against a DA-protected credential key is refused with the session-index-encoded
+    /// <c>TPM_RC_AUTH_FAIL</c> at session 1 and charges <c>failedTries</c> exactly once, while the CORRECT
+    /// password recovers the wrapped credential.
+    /// </summary>
+    [TestMethod]
+    public async Task ActivateCredentialVerifiesTheCredentialKeysAuthValue()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse ek = await CreatePasswordProtectedStoragePrimaryAsync(
+            tpm, registry, pool, TpmRh.TPM_RH_ENDORSEMENT, CredentialKeyPassword, noDa: false).ConfigureAwait(false);
+        try
+        {
+            using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
+            try
+            {
+                using MakeCredentialResponse made = await MakeCredentialAsync(tpm, registry, pool, ek.ObjectHandle, ak.Name.Span.ToArray()).ConfigureAwait(false);
+
+                TpmResult<TpmDictionaryAttackParameters> before = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+                using ActivateCredentialInput wrongInput = ActivateCredentialInput.Create(
+                    ak.ObjectHandle, ek.ObjectHandle, made.CredentialBlob.Span, made.Secret.Span, pool);
+                using TpmPasswordSession activateAuth = TpmPasswordSession.CreateEmpty(pool);
+                using TpmPasswordSession wrongKeyAuth = TpmPasswordSession.Create(WrongCredentialKeyPassword, pool);
+
+                TpmResult<ActivateCredentialResponse> wrongResult = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
+                    tpm, wrongInput, [activateAuth, wrongKeyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+                Assert.IsTrue(wrongResult.IsTpmError, "A wrong credential-key password must be refused.");
+                Assert.AreEqual(
+                    SessionEncodedRc(TpmRcConstants.TPM_RC_AUTH_FAIL, sessionIndex: 1), wrongResult.ResponseCode,
+                    "A wrong password against the DA-protected credential key (session 1) must be the session-index-encoded TPM_RC_AUTH_FAIL (TPM 2.0 Library Part 2, clause 6.6.2).");
+
+                TpmResult<TpmDictionaryAttackParameters> afterWrong = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
+                Assert.AreEqual(
+                    before.Value.LockoutCounter + 1, afterWrong.Value.LockoutCounter,
+                    "A wrong credential-key password against a DA-protected key must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 17.8.7).");
+
+                using ActivateCredentialInput correctInput = ActivateCredentialInput.Create(
+                    ak.ObjectHandle, ek.ObjectHandle, made.CredentialBlob.Span, made.Secret.Span, pool);
+                using TpmPasswordSession correctActivateAuth = TpmPasswordSession.CreateEmpty(pool);
+                using TpmPasswordSession correctKeyAuth = TpmPasswordSession.Create(CredentialKeyPassword, pool);
+
+                TpmResult<ActivateCredentialResponse> correctResult = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
+                    tpm, correctInput, [correctActivateAuth, correctKeyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                Assert.IsTrue(correctResult.IsSuccess, $"TPM2_ActivateCredential with the credential key's correct password must succeed, but failed: '{correctResult.ResponseCode}'.");
+
+                using ActivateCredentialResponse activated = correctResult.Value;
+                Assert.IsTrue(
+                    activated.CertInfo.AsReadOnlySpan().SequenceEqual(CredentialSecret),
+                    "The recovered credential must equal the secret wrapped by TPM2_MakeCredential once the credential key's correct password authorizes it.");
+            }
+            finally
+            {
+                await FlushAsync(tpm, registry, ak.ObjectHandle.Value, pool).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await FlushAsync(tpm, registry, ek.ObjectHandle.Value, pool).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Verifies that the activate-object slot's authValue check (Auth Index 1, Auth Role ADMIN, session 0) runs
+    /// independently of the credential-key slot's authorization form: with the standard EK's <c>keyHandle</c>
+    /// authorized by a satisfied <c>TPM2_PolicySecret()</c> session over the Endorsement Hierarchy exactly as
+    /// <see cref="StandardEkActivatesCredentialThroughThePolicyAPath"/> establishes, a WRONG password on the
+    /// DA-protected activate object is still refused with the session-index-encoded <c>TPM_RC_AUTH_FAIL</c> at
+    /// session 0 and charges <c>failedTries</c> exactly once (TPM 2.0 Library Part 1, clause 17.8.7; Part 2,
+    /// clause 6.6.2), while the CORRECT password recovers the wrapped credential over the same policy-session
+    /// path.
+    /// </summary>
+    [TestMethod]
+    public async Task ActivateCredentialOverAPolicySessionVerifiesTheActivateObjectsAuthValue()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse ek = await CreateStandardEndorsementKeyAsync(tpm, registry, pool).ConfigureAwait(false);
+        try
+        {
+            using CreatePrimaryResponse ak = await CreatePasswordProtectedSigningPrimaryAsync(
+                tpm, registry, pool, TpmRh.TPM_RH_OWNER, ActivatePassword, noDa: false).ConfigureAwait(false);
+            try
+            {
+                using MakeCredentialResponse made = await MakeCredentialAsync(tpm, registry, pool, ek.ObjectHandle, ak.Name.Span.ToArray()).ConfigureAwait(false);
+                ReadOnlyMemory<byte>[] handleNames = [ak.Name.Span.ToArray(), ek.Name.Span.ToArray()];
+
+                TpmResult<TpmDictionaryAttackParameters> before = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+                uint wrongPolicyHandle = 0;
+                try
+                {
+                    wrongPolicyHandle = await OpenSatisfiedEndorsementPolicySessionAsync(tpm).ConfigureAwait(false);
+
+                    using ActivateCredentialInput wrongInput = ActivateCredentialInput.Create(
+                        ak.ObjectHandle, ek.ObjectHandle, made.CredentialBlob.Span, made.Secret.Span, pool);
+                    using TpmPasswordSession wrongActivateAuth = TpmPasswordSession.Create(WrongActivatePassword, pool);
+                    using TpmPolicySession wrongKeySession = TpmPolicySession.ForSession(wrongPolicyHandle, SessionAlg, pool);
+
+                    TpmResult<ActivateCredentialResponse> wrongResult = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
+                        tpm, wrongInput, [wrongActivateAuth, wrongKeySession], handleNames, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+                    Assert.IsTrue(wrongResult.IsTpmError, "A wrong activate-object password must be refused even over a satisfied policy session at the key slot.");
+                    Assert.AreEqual(
+                        SessionEncodedRc(TpmRcConstants.TPM_RC_AUTH_FAIL, sessionIndex: 0), wrongResult.ResponseCode,
+                        "A wrong password against the DA-protected activate object (session 0) must be the session-index-encoded TPM_RC_AUTH_FAIL, whatever the policy session's own standing (TPM 2.0 Library Part 2, clause 6.6.2).");
+                }
+                finally
+                {
+                    await FlushIfPresentAsync(tpm, wrongPolicyHandle).ConfigureAwait(false);
+                }
+
+                TpmResult<TpmDictionaryAttackParameters> afterWrong = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
+                Assert.AreEqual(
+                    before.Value.LockoutCounter + 1, afterWrong.Value.LockoutCounter,
+                    "A wrong activate-object password against a DA-protected object must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 17.8.7).");
+
+                uint correctPolicyHandle = 0;
+                try
+                {
+                    correctPolicyHandle = await OpenSatisfiedEndorsementPolicySessionAsync(tpm).ConfigureAwait(false);
+
+                    using ActivateCredentialInput correctInput = ActivateCredentialInput.Create(
+                        ak.ObjectHandle, ek.ObjectHandle, made.CredentialBlob.Span, made.Secret.Span, pool);
+                    using TpmPasswordSession correctActivateAuth = TpmPasswordSession.Create(ActivatePassword, pool);
+                    using TpmPolicySession correctKeySession = TpmPolicySession.ForSession(correctPolicyHandle, SessionAlg, pool);
+
+                    TpmResult<ActivateCredentialResponse> correctResult = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
+                        tpm, correctInput, [correctActivateAuth, correctKeySession], handleNames, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                    Assert.IsTrue(correctResult.IsSuccess, $"TPM2_ActivateCredential (PolicyA path) with the activate object's correct password must succeed, but failed: '{correctResult.ResponseCode}'.");
+
+                    using ActivateCredentialResponse activated = correctResult.Value;
+                    Assert.IsTrue(
+                        activated.CertInfo.AsReadOnlySpan().SequenceEqual(CredentialSecret),
+                        "The recovered credential must equal the secret wrapped by TPM2_MakeCredential once the activate object's correct password authorizes the policy-session path.");
+                }
+                finally
+                {
+                    await FlushIfPresentAsync(tpm, correctPolicyHandle).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                await FlushAsync(tpm, registry, ak.ObjectHandle.Value, pool).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await FlushAsync(tpm, registry, ek.ObjectHandle.Value, pool).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Verifies that <c>TPM2_ActivateCredential()</c>'s <c>keyHandle</c> DA/Lockout gate (TPM 2.0 Library Part 3,
+    /// clause 5.6, check 3) answers before its userWithAuth gate (clause 5.6, check 7.1): clause 5.6's checks run
+    /// in their numbered order, so a TPM already in general Lockout mode answers the bare <c>TPM_RC_LOCKOUT</c>
+    /// for a password session on the standard EK's DA-protected <c>keyHandle</c> without ever reaching the
+    /// userWithAuth-CLEAR check that would otherwise answer <c>TPM_RC_POLICY_FAIL</c> (the response
+    /// <see cref="StandardEkRejectsPasswordAuthOnTheKeyHandle"/> proves outside Lockout mode). The activate
+    /// object is built dictionary-attack exempt and always supplied its correct password, so the observed error
+    /// is attributable solely to the standard EK's own <c>keyHandle</c> slot, not to session 0's identical gate.
+    /// </summary>
+    [TestMethod]
+    public async Task StandardEkKeyHandleIsRefusedWithLockoutRatherThanPolicyFailWhileLockedOut()
+    {
+        const uint LoweredMaxTries = 1;
+        const string BurnerKeyPassword = "burner-credential-key-auth-proof";
+        const string WrongBurnerKeyPassword = "wrong-burner-credential-key-auth-guess";
+
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse ek = await CreateStandardEndorsementKeyAsync(tpm, registry, pool).ConfigureAwait(false);
+        try
+        {
+            //The activate object (ADMIN role, session 0) is dictionary-attack exempt and always supplied its
+            //correct password below, so Lockout mode can only ever be observed through the standard EK's
+            //keyHandle slot (session 1) in this test, never through session 0's identical gate.
+            using CreatePrimaryResponse ak = await CreatePasswordProtectedSigningPrimaryAsync(
+                tpm, registry, pool, TpmRh.TPM_RH_OWNER, ActivatePassword, noDa: true).ConfigureAwait(false);
+            try
+            {
+                //A throwaway DA-protected credential key used only to seed one counted auth-failure.
+                using CreatePrimaryResponse burnerKey = await CreatePasswordProtectedStoragePrimaryAsync(
+                    tpm, registry, pool, TpmRh.TPM_RH_OWNER, BurnerKeyPassword, noDa: false).ConfigureAwait(false);
+                try
+                {
+                    TpmResult<DictionaryAttackParametersResponse> lowerResult = await tpm.DictionaryAttackParametersAsync(
+                        ReadOnlyMemory<byte>.Empty, LoweredMaxTries, TpmSimulatorState.DefaultRecoveryTimeSeconds,
+                        TpmSimulatorState.DefaultLockoutRecoverySeconds, TestContext.CancellationToken).ConfigureAwait(false);
+                    Assert.IsTrue(lowerResult.IsSuccess, $"Lowering maxTries failed: '{lowerResult.ResponseCode}'.");
+
+                    //Seed exactly one counted failure against the DA-protected burner credential key (Auth Index
+                    //2, Auth Role USER, session 1). The auth-value compare runs before any credential-blob content
+                    //is inspected (the undersized-blob proof establishes the same ordering for TPM_RC_SIZE), so an
+                    //empty blob/secret reaches this failure undisturbed.
+                    using ActivateCredentialInput burnInput = ActivateCredentialInput.Create(
+                        ak.ObjectHandle, burnerKey.ObjectHandle, ReadOnlySpan<byte>.Empty, ReadOnlySpan<byte>.Empty, pool);
+                    using TpmPasswordSession burnActivateAuth = TpmPasswordSession.Create(ActivatePassword, pool);
+                    using TpmPasswordSession wrongBurnerKeyAuth = TpmPasswordSession.Create(WrongBurnerKeyPassword, pool);
+
+                    TpmResult<ActivateCredentialResponse> burnResult = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
+                        tpm, burnInput, [burnActivateAuth, wrongBurnerKeyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                    Assert.IsTrue(burnResult.IsTpmError, "The seeding failure against the burner credential key must be refused.");
+                    Assert.AreEqual(
+                        SessionEncodedRc(TpmRcConstants.TPM_RC_AUTH_FAIL, sessionIndex: 1), burnResult.ResponseCode,
+                        "A wrong password against the DA-protected burner credential key (session 1) must count as an auth-failure.");
+
+                    TpmResult<TpmDictionaryAttackParameters> afterBurn = await tpm.GetDictionaryAttackParametersAsync(
+                        pool, TestContext.CancellationToken).ConfigureAwait(false);
+                    Assert.IsTrue(
+                        afterBurn.Value.IsLockedOut,
+                        "One failure at the lowered maxTries must put the TPM into general Lockout mode (TPM 2.0 Library Part 1, clause 17.8.3).");
+
+                    //The proving call: the activate object's CORRECT password authorizes session 0 cleanly (it is
+                    //dictionary-attack exempt, so Lockout mode never touches it), so session 1's outcome is
+                    //attributable solely to the standard EK's own keyHandle checks.
+                    using ActivateCredentialInput lockedInput = ActivateCredentialInput.Create(
+                        ak.ObjectHandle, ek.ObjectHandle, ReadOnlySpan<byte>.Empty, ReadOnlySpan<byte>.Empty, pool);
+                    using TpmPasswordSession lockedActivateAuth = TpmPasswordSession.Create(ActivatePassword, pool);
+                    using TpmPasswordSession lockedKeyAuth = TpmPasswordSession.CreateEmpty(pool);
+
+                    TpmResult<ActivateCredentialResponse> lockedResult = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
+                        tpm, lockedInput, [lockedActivateAuth, lockedKeyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+                    Assert.IsFalse(
+                        lockedResult.IsSuccess,
+                        "A password session on the standard EK's keyHandle while the TPM is in general Lockout mode must be refused.");
+                    Assert.AreEqual(
+                        TpmRcConstants.TPM_RC_LOCKOUT, lockedResult.ResponseCode,
+                        "The keyHandle's DA/Lockout gate (clause 5.6, check 3) must answer before its userWithAuth gate (clause 5.6, check 7.1): the bare TPM_RC_LOCKOUT, not the TPM_RC_POLICY_FAIL a userWithAuth-CLEAR key would otherwise answer.");
+
+                    TpmResult<TpmDictionaryAttackParameters> afterLocked = await tpm.GetDictionaryAttackParametersAsync(
+                        pool, TestContext.CancellationToken).ConfigureAwait(false);
+                    Assert.AreEqual(
+                        afterBurn.Value.LockoutCounter, afterLocked.Value.LockoutCounter,
+                        "A TPM_RC_LOCKOUT refusal must not itself advance failedTries further (TPM 2.0 Library Part 1, clause 17.8.3).");
+                }
+                finally
+                {
+                    await FlushAsync(tpm, registry, burnerKey.ObjectHandle.Value, pool).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                await FlushAsync(tpm, registry, ak.ObjectHandle.Value, pool).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await FlushAsync(tpm, registry, ek.ObjectHandle.Value, pool).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Verifies that <c>TPM2_ActivateCredential()</c>'s credential-key slot (session index 1), when it is a
+    /// <c>TPM_RS_PW</c> authorization, is refused with <c>TPM_RC_ATTRIBUTES</c> encoded to that index once its
+    /// attributes octet claims <c>audit</c>: the attribute "has no meaning for a password authorization and is
+    /// required to be CLEAR" (TPM 2.0 Library Part 1, clause 16.6.4, Table 12), because a password authorization
+    /// keeps no session context an audit digest could live in.
+    /// </summary>
+    /// <remarks>
+    /// This command is where the rule has to hold at a slot the area check never sees: its two slots are read by
+    /// the wire reader and answered there, so the structural rules must travel with the reader rather than with
+    /// the per-command area helper. Driving it at index 1 also pins the encoding — the reference applies this
+    /// same pair of rules at every slot it unmarshals, at that slot's own error index — so a rule pinned to index
+    /// 0 would answer here with the wrong modifier and be caught. The host never composes such an octet, so it is
+    /// planted on the wire by an intervening transport, and the refusal precedes every authorization check (Part
+    /// 3, clause 5.5 precedes clause 5.6), leaving both slots' credentials unexamined.
+    /// </remarks>
+    [TestMethod]
+    public async Task ActivateCredentialKeySlotClaimingAuditIsRefusedWithAttributesAtItsOwnIndex()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse ek = await CreateStoragePrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);
+        try
+        {
+            using CreatePrimaryResponse ak = await CreateSigningPrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_OWNER).ConfigureAwait(false);
+            try
+            {
+                using MakeCredentialResponse made = await MakeCredentialAsync(tpm, registry, pool, ek.ObjectHandle, ak.Name.Span.ToArray()).ConfigureAwait(false);
+
+                using TpmDevice plantingTpm = TpmDevice.Create(async (command, commandPool, cancellationToken) =>
+                {
+                    byte[] bytes = command.ToArray();
+                    if(ReadCommandCode(bytes) == TpmCcConstants.TPM_CC_ActivateCredential)
+                    {
+                        SetSessionAttributeBit(bytes, handleCount: 2, sessionIndex: 1, TpmaSession.AUDIT);
+                    }
+
+                    return await simulator.SubmitAsync(bytes, commandPool, cancellationToken).ConfigureAwait(false);
+                });
+
+                using ActivateCredentialInput activateInput = ActivateCredentialInput.Create(
+                    ak.ObjectHandle, ek.ObjectHandle, made.CredentialBlob.Span, made.Secret.Span, pool);
+                using TpmPasswordSession activateAuth = TpmPasswordSession.CreateEmpty(pool);
+                using TpmPasswordSession keyAuth = TpmPasswordSession.CreateEmpty(pool);
+
+                TpmResult<ActivateCredentialResponse> result = await TpmCommandExecutor.ExecuteAsync<ActivateCredentialResponse>(
+                    plantingTpm, activateInput, [activateAuth, keyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+                if(result.IsSuccess)
+                {
+                    result.Value.Dispose();
+                }
+
+                Assert.AreEqual(
+                    TpmRcConstants.TPM_RC_ATTRIBUTES, result.BaseError,
+                    "A password slot may carry no attribute but continueSession, so audit there is an attribute error.");
+                Assert.AreEqual(
+                    SessionEncodedRc(TpmRcConstants.TPM_RC_ATTRIBUTES, sessionIndex: 1), result.ResponseCode,
+                    "The refusal names the credential-key slot at index 1, session-index-encoded (TPM 2.0 Library Part 2, clause 6.6.2).");
+            }
+            finally
+            {
+                await FlushAsync(tpm, registry, ak.ObjectHandle.Value, pool).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await FlushAsync(tpm, registry, ek.ObjectHandle.Value, pool).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Reads a framed command's <c>commandCode</c> field (TPM 2.0 Library Part 1, clause 18.2's command header).</summary>
+    /// <param name="command">The framed command.</param>
+    /// <returns>The command code.</returns>
+    private static TpmCcConstants ReadCommandCode(ReadOnlySpan<byte> command)
+    {
+        var reader = new TpmReader(command);
+        TpmHeader header = TpmHeader.Parse(ref reader);
+
+        return (TpmCcConstants)header.Code;
+    }
+
+    /// <summary>
+    /// Sets attribute bits in one existing authorization slot's <c>sessionAttributes</c> octet, in place, leaving
+    /// every other octet of the framed command untouched.
+    /// </summary>
+    /// <param name="command">The framed command to rewrite.</param>
+    /// <param name="handleCount">The command's handle count, which fixes where its authorization area starts.</param>
+    /// <param name="sessionIndex">The zero-based slot whose attributes octet is rewritten.</param>
+    /// <param name="sessionAttributes">The attribute bits to set.</param>
+    private static void SetSessionAttributeBit(byte[] command, int handleCount, int sessionIndex, TpmaSession sessionAttributes)
+    {
+        int offset = TpmHeader.HeaderSize + (handleCount * sizeof(uint)) + sizeof(uint);
+        for(int slot = 0; slot < sessionIndex; slot++)
+        {
+            offset += sizeof(uint);
+            offset += sizeof(ushort) + BinaryPrimitives.ReadUInt16BigEndian(command.AsSpan(offset, sizeof(ushort)));
+            offset += sizeof(byte);
+            offset += sizeof(ushort) + BinaryPrimitives.ReadUInt16BigEndian(command.AsSpan(offset, sizeof(ushort)));
+        }
+
+        offset += sizeof(uint);
+        offset += sizeof(ushort) + BinaryPrimitives.ReadUInt16BigEndian(command.AsSpan(offset, sizeof(ushort)));
+        command[offset] |= (byte)sessionAttributes;
+    }
+
+    /// <summary>
     /// Wraps <see cref="CredentialSecret"/> to the given key's public area, bound to <paramref name="objectName"/>.
     /// </summary>
     /// <param name="tpm">The TPM device.</param>
@@ -470,6 +931,34 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
         TpmResult<CreatePrimaryResponse> result = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
             tpm, input, [hierarchyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(result.IsSuccess, $"CreatePrimary storage key ({hierarchy}) failed: '{result.ResponseCode}'.");
+
+        return result.Value;
+    }
+
+    /// <summary>
+    /// Creates a restricted-decrypt ECC storage primary (a credential-key stand-in) under the given hierarchy
+    /// with a real, non-empty password — the fixture the credential key's authValue verification proof needs.
+    /// <see cref="CreatePrimaryInput.ForEccStorageParent"/>'s template sets <c>TPMA_OBJECT.userWithAuth</c>,
+    /// admitting a plain <c>TPM_RS_PW</c> session at the resulting key's USER-role slot (unlike the standard
+    /// EK's cleared template that <see cref="CreateStandardEndorsementKeyAsync"/> builds).
+    /// </summary>
+    /// <param name="tpm">The TPM device.</param>
+    /// <param name="registry">The response codec registry.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="hierarchy">The hierarchy under which to create the key.</param>
+    /// <param name="password">The key's password.</param>
+    /// <param name="noDa">Whether the key is dictionary-attack exempt (<c>TPMA_OBJECT.NO_DA</c>).</param>
+    /// <returns>The CreatePrimary response (the caller owns it and flushes the handle).</returns>
+    private async Task<CreatePrimaryResponse> CreatePasswordProtectedStoragePrimaryAsync(
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmRh hierarchy, string password, bool noDa)
+    {
+        using CreatePrimaryInput input = CreatePrimaryInput.ForEccStorageParent(
+            hierarchy, password, TpmEccCurveConstants.TPM_ECC_NIST_P256, pool, noDa);
+        using TpmPasswordSession hierarchyAuth = TpmPasswordSession.CreateEmpty(pool);
+
+        TpmResult<CreatePrimaryResponse> result = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            tpm, input, [hierarchyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(result.IsSuccess, $"CreatePrimary (password-protected storage key, {hierarchy}) failed: '{result.ResponseCode}'.");
 
         return result.Value;
     }
@@ -521,6 +1010,74 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
 
         return result.Value;
     }
+
+    /// <summary>
+    /// Creates a primary ECC P-256 signing key (an attestation-key stand-in) under the given hierarchy with a
+    /// real, non-empty password — the fixture the activate-object's authValue verification proofs need to
+    /// exercise TPM2_ActivateCredential()'s Auth Index 1, Auth Role ADMIN slot against a genuine retained
+    /// authValue rather than the empty one <see cref="CreateSigningPrimaryAsync"/>'s key carries.
+    /// </summary>
+    /// <param name="tpm">The TPM device.</param>
+    /// <param name="registry">The response codec registry.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="hierarchy">The hierarchy under which to create the key.</param>
+    /// <param name="password">The key's password.</param>
+    /// <param name="noDa">Whether the key is dictionary-attack exempt (<c>TPMA_OBJECT.NO_DA</c>).</param>
+    /// <returns>The CreatePrimary response (the caller owns it and flushes the handle).</returns>
+    private async Task<CreatePrimaryResponse> CreatePasswordProtectedSigningPrimaryAsync(
+        TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool, TpmRh hierarchy, string password, bool noDa)
+    {
+        using CreatePrimaryInput input = CreatePrimaryInput.ForEccSigningKey(
+            hierarchy,
+            password,
+            TpmEccCurveConstants.TPM_ECC_NIST_P256,
+            TpmtEccScheme.Ecdsa(TpmAlgIdConstants.TPM_ALG_SHA256),
+            pool,
+            noDa);
+        using TpmPasswordSession hierarchyAuth = TpmPasswordSession.CreateEmpty(pool);
+
+        TpmResult<CreatePrimaryResponse> result = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            tpm, input, [hierarchyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(result.IsSuccess, $"CreatePrimary (password-protected signing key, {hierarchy}) failed: '{result.ResponseCode}'.");
+
+        return result.Value;
+    }
+
+    /// <summary>
+    /// Starts a real (non-trial) policy session and satisfies it with <c>TPM2_PolicySecret()</c> against the
+    /// Endorsement Hierarchy's empty authorization (TCG EK Credential Profile, Annex B.3.2), reproducing
+    /// "PolicyA" in the session's accumulated policyDigest — the fixture the policy-session activation proof
+    /// needs at the credential key's slot, built fresh per attempt since a session's continuation after a
+    /// command that fails at a different slot is not itself under test here.
+    /// </summary>
+    /// <param name="tpm">The TPM device.</param>
+    /// <returns>The satisfied policy session's handle (the caller flushes it).</returns>
+    private async Task<uint> OpenSatisfiedEndorsementPolicySessionAsync(TpmDevice tpm)
+    {
+        TpmResult<StartAuthSessionResponse> policyStartResult = await tpm.StartPolicySessionAsync(
+            SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(policyStartResult.IsSuccess, $"StartAuthSession (policy) failed: '{policyStartResult.ResponseCode}'.");
+        using StartAuthSessionResponse policyStart = policyStartResult.Value;
+        uint policyHandle = policyStart.SessionHandle.Value;
+
+        TpmResult<PolicySecretResponse> secretResult = await tpm.PolicySecretAsync(
+            (uint)TpmRh.TPM_RH_ENDORSEMENT, policyHandle, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(secretResult.IsSuccess, $"PolicySecret failed: '{secretResult.ResponseCode}'.");
+        secretResult.Value.Dispose();
+
+        return policyHandle;
+    }
+
+    /// <summary>
+    /// The format-one session-index encoding (TPM 2.0 Library Part 2, clause 6.6.2): RC + TPM_RC_S +
+    /// TPM_RC_n(0x100·(index+1)) — a local mirror of the production session-index encoding, transcribed
+    /// independently here since the production helper is private.
+    /// </summary>
+    /// <param name="baseRc">The base format-one response code.</param>
+    /// <param name="sessionIndex">The zero-based session index.</param>
+    /// <returns>The session-index-encoded response code.</returns>
+    private static TpmRcConstants SessionEncodedRc(TpmRcConstants baseRc, int sessionIndex) =>
+        (TpmRcConstants)((uint)baseRc + (uint)TpmRcConstants.TPM_RC_S + (0x100u * (uint)(sessionIndex + 1)));
 
     /// <summary>
     /// Creates a simulator with the ECC (BouncyCastle) signing backend wired, powers it on, and brings it through

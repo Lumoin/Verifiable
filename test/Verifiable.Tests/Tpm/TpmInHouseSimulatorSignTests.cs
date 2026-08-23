@@ -10,9 +10,11 @@ using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
+using Verifiable.Tpm.Extensions.DictionaryAttack;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
+using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
 using Verifiable.Tpm.Spec.Handles;
 using Verifiable.Tpm.Spec.Structures;
@@ -46,6 +48,19 @@ internal sealed class TpmInHouseSimulatorSignTests
     /// <summary>The fixed message whose SHA-256 digest is signed.</summary>
     private static byte[] MessageBytes { get; } = "Verifiable in-house TPM signing acceptance test."u8.ToArray();
 
+    /// <summary>The real password the signing key's own-authValue verification proof creates the key with.</summary>
+    private const string SigningKeyPassword = "sign-key-auth-proof";
+
+    /// <summary>
+    /// <see cref="SigningKeyPassword"/>'s UTF-8 octets, matching the password-to-authValue convention
+    /// <see cref="Tpm2bAuth.CreateFromPassword"/> applies on the creation side (the password carries no trailing
+    /// zeros, so no trimming is in play).
+    /// </summary>
+    private static byte[] SigningKeyPasswordBytes { get; } = System.Text.Encoding.UTF8.GetBytes(SigningKeyPassword);
+
+    /// <summary>A wrong guess at the signing key's password, distinct from <see cref="SigningKeyPasswordBytes"/>.</summary>
+    private static byte[] WrongSigningKeyPasswordBytes { get; } = [0x7A, 0x7B, 0x7C, 0x7D];
+
     /// <summary>Gets or sets the per-test context (supplies the cancellation token).</summary>
     public TestContext TestContext { get; set; } = null!;
 
@@ -53,7 +68,7 @@ internal sealed class TpmInHouseSimulatorSignTests
     public async Task EcdsaP256CreateSignVerifiesAgainstInHouseSimulator()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -110,11 +125,174 @@ internal sealed class TpmInHouseSimulatorSignTests
             "An ECDSA signature produced by the in-house simulator must verify against its exported public key.");
     }
 
+    /// <summary>
+    /// <c>TPM2_Sign()</c>'s key slot (Auth Index 1, Auth Role USER; TPM 2.0 Library Part 3, clause 20.2) is
+    /// verified against the signing key's own retained authValue over a plain <c>TPM_RS_PW</c> session: a
+    /// DA-protected ECC signing key (<c>TPMA_OBJECT.NO_DA</c> clear) created with a real password signs when the
+    /// CORRECT password authorizes it and moves no dictionary-attack counter, while a WRONG password is refused
+    /// with the session-index-encoded <c>TPM_RC_AUTH_FAIL</c> (Part 2, clause 6.6.2) and charges
+    /// <c>failedTries</c> exactly once (Part 1, clause 17.8.7).
+    /// </summary>
+    [TestMethod]
+    public async Task SignVerifiesTheSigningKeysOwnAuthValue()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryInput primaryInput = CreatePrimaryInput.ForEccSigningKey(
+            TpmRh.TPM_RH_OWNER,
+            SigningKeyPassword,
+            TpmEccCurveConstants.TPM_ECC_NIST_P256,
+            TpmtEccScheme.Ecdsa(TpmAlgIdConstants.TPM_ALG_SHA256),
+            pool,
+            noDa: false);
+
+        using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
+        TpmResult<CreatePrimaryResponse> primaryResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            tpm, primaryInput, [ownerAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(primaryResult.IsSuccess, $"CreatePrimary (password-protected ECC signing key) failed: '{primaryResult.ResponseCode}'.");
+
+        using CreatePrimaryResponse primary = primaryResult.Value;
+        byte[] digest = await ComputeSha256Async(MessageBytes, pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+        TpmResult<TpmDictionaryAttackParameters> before = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+        using TpmPasswordSession correctKeyAuth = TpmPasswordSession.Create(SigningKeyPasswordBytes, pool);
+        using SignInput correctSignInput = SignInput.ForEcdsa(primary.ObjectHandle, digest, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+        TpmResult<SignResponse> correctResult = await TpmCommandExecutor.ExecuteAsync<SignResponse>(
+            tpm, correctSignInput, [correctKeyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(correctResult.IsSuccess, $"TPM2_Sign with the key's correct password must succeed, but failed: '{correctResult.ResponseCode}'.");
+        correctResult.Value.Dispose();
+
+        TpmResult<TpmDictionaryAttackParameters> afterCorrect = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(before.Value.LockoutCounter, afterCorrect.Value.LockoutCounter, "A correctly-authorized Sign must move no dictionary-attack counter.");
+
+        using TpmPasswordSession wrongKeyAuth = TpmPasswordSession.Create(WrongSigningKeyPasswordBytes, pool);
+        using SignInput wrongSignInput = SignInput.ForEcdsa(primary.ObjectHandle, digest, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+        TpmResult<SignResponse> wrongResult = await TpmCommandExecutor.ExecuteAsync<SignResponse>(
+            tpm, wrongSignInput, [wrongKeyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(wrongResult.IsTpmError, "A wrong key password must be refused.");
+        Assert.AreEqual(
+            SessionEncodedRc(TpmRcConstants.TPM_RC_AUTH_FAIL, sessionIndex: 0), wrongResult.ResponseCode,
+            "A wrong key password over a plain TPM_RS_PW session names the key slot (index 0), session-index-encoded (TPM 2.0 Library Part 2, clause 6.6.2).");
+
+        TpmResult<TpmDictionaryAttackParameters> afterWrong = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(
+            afterCorrect.Value.LockoutCounter + 1, afterWrong.Value.LockoutCounter,
+            "A wrong key password against a DA-protected signing key must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 17.8.7).");
+    }
+
+    /// <summary>
+    /// Proves TPM 2.0 Library Part 3, clause 5.6, check 7.1: <c>TPM2_Sign()</c>'s key slot (Auth Index 1, Auth
+    /// Role USER) refuses ANY authValue-based session against a key whose <c>TPMA_OBJECT.userWithAuth</c> is
+    /// CLEAR — including a plain <c>TPM_RS_PW</c> session carrying the key's own CORRECT password — with a bare
+    /// <c>TPM_RC_POLICY_FAIL</c>, because it is the session's SHAPE that is inadmissible, not its credential; a
+    /// <c>userWithAuth</c>-CLEAR object admits only a policy session for the USER role (TPM 2.0 Library Part 2,
+    /// clause 8.3.3). Check 7.1 precedes checks 9/10 in clause 5.6's mandatory order, so the correct password is
+    /// never even compared, and the refusal is uncharged: <c>TPM_RC_POLICY_FAIL</c> is not <c>TPM_RC_AUTH_FAIL</c>,
+    /// and clause 5.6's closing rule bars a non-<c>AUTH_FAIL</c> error from altering any TPM state, so
+    /// <c>failedTries</c> does not move (TPM 2.0 Library Part 1, clause 17.8.7).
+    /// </summary>
+    [TestMethod]
+    public async Task SignWithUserWithAuthClearKeyIsRefusedWithoutComparingThePassword()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryInput primaryInput = CreateUserWithAuthClearEccSigningKeyInput(SigningKeyPassword, pool);
+        using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
+        TpmResult<CreatePrimaryResponse> primaryResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            tpm, primaryInput, [ownerAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(primaryResult.IsSuccess, $"CreatePrimary (userWithAuth-CLEAR ECC signing key) failed: '{primaryResult.ResponseCode}'.");
+
+        using CreatePrimaryResponse primary = primaryResult.Value;
+        byte[] digest = await ComputeSha256Async(MessageBytes, pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+        TpmResult<TpmDictionaryAttackParameters> before = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+        //The exploit shape: a plain TPM_RS_PW session carrying the CORRECT password against a userWithAuth-CLEAR key.
+        using TpmPasswordSession correctKeyAuth = TpmPasswordSession.Create(SigningKeyPasswordBytes, pool);
+        using SignInput signInput = SignInput.ForEcdsa(primary.ObjectHandle, digest, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+        TpmResult<SignResponse> signResult = await TpmCommandExecutor.ExecuteAsync<SignResponse>(
+            tpm, signInput, [correctKeyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        if(signResult.IsSuccess)
+        {
+            signResult.Value.Dispose();
+        }
+
+        Assert.AreEqual(
+            TpmRcConstants.TPM_RC_POLICY_FAIL, signResult.ResponseCode,
+            $"A userWithAuth-CLEAR signing key must refuse a password session with a bare TPM_RC_POLICY_FAIL " +
+            $"(TPM 2.0 Library Part 3, clause 5.6, check 7.1), even when the password is correct (got '{signResult.ResponseCode}').");
+
+        TpmResult<TpmDictionaryAttackParameters> after = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(
+            before.Value.LockoutCounter, after.Value.LockoutCounter,
+            "A check 7.1 refusal must not alter any TPM state (Part 3, clause 5.6's closing rule): failedTries must not move, even though the supplied password was correct.");
+    }
+
+    /// <summary>
+    /// Proves TPM 2.0 Library Part 3, clause 5.6, check 7.1 runs strictly before checks 9/10: against the SAME
+    /// <c>userWithAuth</c>-CLEAR signing key as
+    /// <see cref="SignWithUserWithAuthClearKeyIsRefusedWithoutComparingThePassword"/>, a WRONG password over a
+    /// plain <c>TPM_RS_PW</c> session is refused with the identical bare <c>TPM_RC_POLICY_FAIL</c> — never the
+    /// session-index-encoded <c>TPM_RC_AUTH_FAIL</c> a wrong authValue would otherwise produce (TPM 2.0 Library
+    /// Part 2, clause 6.6.2) — because check 7.1 rejects the session's shape before checks 9/10 (the authValue
+    /// compare that would distinguish a wrong password from a correct one) ever run. The key is created without
+    /// <c>TPMA_OBJECT.noDA</c>, so had check 7.1 been skipped and the compare reached, a rejected wrong password
+    /// would have charged <c>failedTries</c> (TPM 2.0 Library Part 1, clause 17.8.7); it does not.
+    /// </summary>
+    [TestMethod]
+    public async Task SignWithUserWithAuthClearKeyRefusesWrongPasswordWithoutChargingFailedTries()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryInput primaryInput = CreateUserWithAuthClearEccSigningKeyInput(SigningKeyPassword, pool);
+        using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
+        TpmResult<CreatePrimaryResponse> primaryResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            tpm, primaryInput, [ownerAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(primaryResult.IsSuccess, $"CreatePrimary (userWithAuth-CLEAR ECC signing key) failed: '{primaryResult.ResponseCode}'.");
+
+        using CreatePrimaryResponse primary = primaryResult.Value;
+        byte[] digest = await ComputeSha256Async(MessageBytes, pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+        TpmResult<TpmDictionaryAttackParameters> before = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+        using TpmPasswordSession wrongKeyAuth = TpmPasswordSession.Create(WrongSigningKeyPasswordBytes, pool);
+        using SignInput signInput = SignInput.ForEcdsa(primary.ObjectHandle, digest, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+        TpmResult<SignResponse> signResult = await TpmCommandExecutor.ExecuteAsync<SignResponse>(
+            tpm, signInput, [wrongKeyAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+
+        if(signResult.IsSuccess)
+        {
+            signResult.Value.Dispose();
+        }
+
+        Assert.AreEqual(
+            TpmRcConstants.TPM_RC_POLICY_FAIL, signResult.ResponseCode,
+            $"A userWithAuth-CLEAR signing key must refuse a wrong password with the same bare TPM_RC_POLICY_FAIL " +
+            $"as a correct one (TPM 2.0 Library Part 3, clause 5.6, check 7.1), never TPM_RC_AUTH_FAIL (got '{signResult.ResponseCode}').");
+
+        TpmResult<TpmDictionaryAttackParameters> after = await tpm.GetDictionaryAttackParametersAsync(pool, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(
+            before.Value.LockoutCounter, after.Value.LockoutCounter,
+            "Check 7.1 precedes checks 9/10 (the authValue compare), so a wrong password against a DA-protected, userWithAuth-CLEAR key still must not charge failedTries.");
+    }
+
     [TestMethod]
     public async Task RsaCreateSignVerifiesAgainstInHouseSimulator()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -150,7 +328,7 @@ internal sealed class TpmInHouseSimulatorSignTests
     public async Task TpmBackedPrivateKeySignsAndVerifiesThroughTheVerifiableAbstraction()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -190,7 +368,7 @@ internal sealed class TpmInHouseSimulatorSignTests
     public async Task CreatePrimaryReturnsFaithfulNameCreationDataAndTicket()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -204,7 +382,7 @@ internal sealed class TpmInHouseSimulatorSignTests
 
         using CreatePrimaryResponse primary = primaryResult.Value;
 
-        //The object Name is nameAlg || H_nameAlg(TPMT_PUBLIC) (TPM 2.0 Part 1, clause 16). Recompute the digest
+        //The object Name is nameAlg || H_nameAlg(TPMT_PUBLIC) (TPM 2.0 Part 1, clause 14, Table 6). Recompute the digest
         //independently from the exported public area and confirm the response carries the real Name.
         byte[] marshaledPublic = MarshalPublicArea(primary.OutPublic, pool);
         byte[] expectedNameDigest = await ComputeSha256Async(marshaledPublic, pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -226,7 +404,7 @@ internal sealed class TpmInHouseSimulatorSignTests
         //The creation ticket is a real HMAC bound to the owner hierarchy (TPM 2.0 Library Part 2, clause 10.7),
         //not a NULL ticket.
         Assert.AreEqual(TpmStConstants.TPM_ST_CREATION, primary.CreationTicket.Tag, "The ticket tag must be TPM_ST_CREATION.");
-        Assert.AreEqual(TpmRh.TPM_RH_OWNER, primary.CreationTicket.Hierarchy, "The ticket hierarchy must be the owner hierarchy.");
+        Assert.AreEqual(TpmiRhHierarchy.Owner, primary.CreationTicket.Hierarchy, "The ticket hierarchy must be the owner hierarchy.");
         Assert.IsFalse(primary.CreationTicket.IsNull, "The creation ticket must be a real HMAC, not a NULL ticket.");
         Assert.HasCount(P256ComponentSize, primary.CreationTicket.Digest, "The creation ticket digest is a SHA-256 HMAC.");
     }
@@ -240,7 +418,7 @@ internal sealed class TpmInHouseSimulatorSignTests
         //creation ticket reproducible and lets this test recompute it.
         byte[] seed = Convert.FromHexString("00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF");
 
-        var simulator = new TpmSimulator("tpm-in-house-seed", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), seed: seed);
+        using var simulator = new TpmSimulator("tpm-in-house-seed", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), seed: seed);
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
@@ -272,7 +450,7 @@ internal sealed class TpmInHouseSimulatorSignTests
     public async Task SignWithUnknownKeyHandleReturnsHandle()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -294,7 +472,7 @@ internal sealed class TpmInHouseSimulatorSignTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         //A simulator with no signing backend does not implement key creation: it answers TPM_RC_COMMAND_CODE.
-        var simulator = new TpmSimulator("tpm-in-house-no-backend");
+        using var simulator = new TpmSimulator("tpm-in-house-no-backend");
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 
@@ -353,6 +531,37 @@ internal sealed class TpmInHouseSimulatorSignTests
     }
 
     /// <summary>
+    /// Composes a CreatePrimary input for a DA-protected ECC signing key whose <c>TPMA_OBJECT.userWithAuth</c>
+    /// bit is CLEAR — no production factory omits it, so the public template is built directly, mirroring
+    /// <see cref="CreatePrimaryInput.ForEccSigningKey"/> with that one attribute bit withheld and
+    /// <c>TPMA_OBJECT.noDA</c> never set. Creation itself is authorized by the owner hierarchy, which is exempt
+    /// from check 7.1 ("a hierarchy operates as if userWithAuth is SET", TPM 2.0 Library Part 3, clause 5.6).
+    /// </summary>
+    /// <param name="password">The real password bound to the key's retained authValue.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <returns>The command input.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the composed sensitive area and public template transfers to the returned CreatePrimaryInput, whose Dispose releases them.")]
+    private static CreatePrimaryInput CreateUserWithAuthClearEccSigningKeyInput(string password, BaseMemoryPool pool)
+    {
+        Tpm2bSensitiveCreate inSensitive = Tpm2bSensitiveCreate.WithPassword(password, pool);
+
+        var attributes =
+            TpmaObject.FIXED_TPM |
+            TpmaObject.FIXED_PARENT |
+            TpmaObject.SENSITIVE_DATA_ORIGIN |
+            TpmaObject.SIGN_ENCRYPT;
+
+        Tpm2bPublic inPublic = Tpm2bPublic.CreateEccSigningTemplate(
+            TpmAlgIdConstants.TPM_ALG_SHA256,
+            attributes,
+            TpmEccCurveConstants.TPM_ECC_NIST_P256,
+            TpmtEccScheme.Ecdsa(TpmAlgIdConstants.TPM_ALG_SHA256));
+
+        return new CreatePrimaryInput(TpmRh.TPM_RH_OWNER, inSensitive, inPublic, Tpm2bData.Empty, TpmlPcrSelection.Empty);
+    }
+
+    /// <summary>
     /// Creates a simulator with both the ECC (BouncyCastle) and RSA (framework) signing backends wired, powers
     /// it on, and brings it through <c>TPM2_Startup(CLEAR)</c> into the operational phase.
     /// </summary>
@@ -396,6 +605,17 @@ internal sealed class TpmInHouseSimulatorSignTests
         Assert.AreEqual(TpmRcConstants.TPM_RC_SUCCESS, (TpmRcConstants)responseHeader.Code);
         Assert.AreEqual(TpmLifecyclePhase.Operational, simulator.CurrentPhase);
     }
+
+    /// <summary>
+    /// The format-one session-index encoding (TPM 2.0 Library Part 2, clause 6.6.2): RC + TPM_RC_S +
+    /// TPM_RC_n(0x100·(index+1)) — a local mirror of the production session-index encoding, transcribed
+    /// independently here since the production helper is private.
+    /// </summary>
+    /// <param name="baseRc">The base format-one response code.</param>
+    /// <param name="sessionIndex">The zero-based session index.</param>
+    /// <returns>The session-index-encoded response code.</returns>
+    private static TpmRcConstants SessionEncodedRc(TpmRcConstants baseRc, int sessionIndex) =>
+        (TpmRcConstants)((uint)baseRc + (uint)TpmRcConstants.TPM_RC_S + (0x100u * (uint)(sessionIndex + 1)));
 
     /// <summary>Creates a response codec registry covering the commands these tests issue.</summary>
     /// <returns>The registry.</returns>

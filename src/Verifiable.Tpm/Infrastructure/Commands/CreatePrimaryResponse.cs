@@ -96,13 +96,32 @@ public sealed class CreatePrimaryResponse: ITpmWireType, IDisposable
     /// <returns>The parsed response.</returns>
     public static CreatePrimaryResponse Parse(ref TpmReader reader, TpmiDhObject objectHandle, BaseMemoryPool pool)
     {
-        Tpm2bPublic outPublic = Tpm2bPublic.Parse(ref reader, pool);
-        Tpm2bCreationData creationData = Tpm2bCreationData.Parse(ref reader, pool);
-        Tpm2bDigest creationHash = Tpm2bDigest.Parse(ref reader, pool);
-        TpmtTkCreation creationTicket = TpmtTkCreation.Parse(ref reader, pool);
-        Tpm2bName name = Tpm2bName.Parse(ref reader, pool);
+        //Each parameter rents before the next one is read, and every later read can refuse — the creation
+        //ticket's own parse validates both its tag and its hierarchy. A device that answers a malformed
+        //response would otherwise strand every carrier already rented for this response, one set per response,
+        //so the earlier rentals are released here before the refusal leaves the parse.
+        Tpm2bPublic? outPublic = null;
+        Tpm2bCreationData? creationData = null;
+        Tpm2bDigest? creationHash = null;
+        TpmtTkCreation? creationTicket = null;
+        try
+        {
+            outPublic = Tpm2bPublic.Parse(ref reader, pool);
+            creationData = Tpm2bCreationData.Parse(ref reader, pool);
+            creationHash = Tpm2bDigest.Parse(ref reader, pool);
+            creationTicket = TpmtTkCreation.Parse(ref reader, pool);
+            Tpm2bName name = Tpm2bName.Parse(ref reader, pool);
 
-        return new CreatePrimaryResponse(objectHandle, outPublic, creationData, creationHash, creationTicket, name);
+            return new CreatePrimaryResponse(objectHandle, outPublic, creationData, creationHash, creationTicket, name);
+        }
+        catch
+        {
+            creationTicket?.Dispose();
+            creationHash?.Dispose();
+            creationData?.Dispose();
+            outPublic?.Dispose();
+            throw;
+        }
     }
 
     /// <summary>

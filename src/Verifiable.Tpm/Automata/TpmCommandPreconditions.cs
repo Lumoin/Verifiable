@@ -22,8 +22,8 @@ namespace Verifiable.Tpm.Automata;
 /// (clause 10.4), both of which the table admits in that phase.
 /// </para>
 /// <para>
-/// <b>Modelled scope (current).</b> The table covers the lifecycle, entropy, capability, NV define/read/write/increment, NV undefine and object persistence, the
-/// ECC and RSA signing-object commands, the sealed-data path <c>TPM2_Create()</c>/<c>TPM2_Load()</c>/<c>TPM2_Unseal()</c> (a KEYEDHASH object sealed under an ECC storage parent and recovered over password authorization), the object-attestation command <c>TPM2_Certify()</c> (an ECC signing key attests another loaded object's Name over a caller nonce, both handles password-authorized), the PCR-attestation path <c>TPM2_PCR_Read()</c>/<c>TPM2_Quote()</c> (reading the SHA-256 bank and quoting a PCR composite digest over a caller nonce with an ECC signing key), and the policy (enhanced authorization) family <c>TPM2_StartAuthSession()</c> (policy and trial sessions) with <c>TPM2_PolicyCommandCode()</c>/<c>TPM2_PolicyAuthValue()</c>/<c>TPM2_PolicyPCR()</c>/<c>TPM2_PolicySecret()</c>/<c>TPM2_PolicySigned()</c>/<c>TPM2_PolicyAuthorize()</c>/<c>TPM2_PolicyOR()</c>/<c>TPM2_PolicyNV()</c>/<c>TPM2_PolicyGetDigest()</c> driving a session's policyDigest, the bound HMAC-session path <c>TPM2_StartAuthSession()</c> (an HMAC session that negotiates a symmetric definition) with an encrypt-attributed <c>TPM2_GetRandom()</c> whose response is parameter-encrypted and authenticated over the derived session key (the response HMAC and the XOR/AES-CFB channel), the credential-protection path <c>TPM2_MakeCredential()</c>/<c>TPM2_ActivateCredential()</c> (an ECDH-transported seed protects a credential bound to an object's Name, recovered only by a TPM holding both the credential key and the bound object; Part 1, clause 24), and <c>TPM2_FlushContext()</c> releasing a session or transient object, the simulator computes responses for — including <c>TPM2_CreatePrimary()</c> and
+/// <b>Modelled scope (current).</b> The table covers the lifecycle, entropy, capability, NV define/read/write/increment, NV undefine, NV read-public (the world-readable public-area/Name query, Auth Index: None), NV change-auth (the atomic in-place authValue rotation, the one NV command carrying Auth Role ADMIN and so authorizable only by a policy session) and object persistence, the
+/// ECC and RSA signing-object commands, the sealed-data path <c>TPM2_Create()</c>/<c>TPM2_Load()</c>/<c>TPM2_Unseal()</c> (a KEYEDHASH object sealed under an ECC storage parent and recovered over password authorization), the object-attestation command <c>TPM2_Certify()</c> (an ECC signing key attests another loaded object's Name over a caller nonce, both handles password-authorized), the PCR-attestation path <c>TPM2_PCR_Read()</c>/<c>TPM2_Quote()</c> (reading the SHA-256 bank and quoting a PCR composite digest over a caller nonce with an ECC signing key), and the policy (enhanced authorization) family <c>TPM2_StartAuthSession()</c> (policy and trial sessions) with <c>TPM2_PolicyCommandCode()</c>/<c>TPM2_PolicyAuthValue()</c>/<c>TPM2_PolicyPCR()</c>/<c>TPM2_PolicySecret()</c>/<c>TPM2_PolicySigned()</c>/<c>TPM2_PolicyAuthorize()</c>/<c>TPM2_PolicyOR()</c>/<c>TPM2_PolicyNV()</c>/<c>TPM2_PolicyTicket()</c>/<c>TPM2_PolicyGetDigest()</c> driving a session's policyDigest, the bound HMAC-session path <c>TPM2_StartAuthSession()</c> (an HMAC session that negotiates a symmetric definition) with an encrypt-attributed <c>TPM2_GetRandom()</c> whose response is parameter-encrypted and authenticated over the derived session key (the response HMAC and the XOR/AES-CFB channel), the credential-protection path <c>TPM2_MakeCredential()</c>/<c>TPM2_ActivateCredential()</c> (an ECDH-transported seed protects a credential bound to an object's Name, recovered only by a TPM holding both the credential key and the bound object; Part 1, clause 24), the hierarchy and provisioning family <c>TPM2_HierarchyControl()</c>/<c>TPM2_SetPrimaryPolicy()</c>/<c>TPM2_Clear()</c>/<c>TPM2_ClearControl()</c>/<c>TPM2_HierarchyChangeAuth()</c> (the four hierarchy enables, the per-hierarchy authorization policies, the owner change that rotates the storage primary seed and so structurally invalidates every owner and endorsement ticket, and the authValue rotations those hierarchies are administered by; Part 3, clauses 24.2, 24.3, 24.6, 24.7, and 24.8), and <c>TPM2_FlushContext()</c> releasing a session or transient object, the simulator computes responses for — including <c>TPM2_CreatePrimary()</c> and
 /// <c>TPM2_Sign()</c> (ECDSA over an exported P-256 key, and RSASSA/RSAPSS over an exported RSA key). The
 /// remaining object, session, and attestation
 /// command families — command-side HMAC verification and the parameter encryption of the request (the modelled HMAC session encrypts the response only; the policy sessions modelled here accumulate a policyDigest but do not gate an object's use),
@@ -48,7 +48,9 @@ public static class TpmCommandPreconditions
             [TpmCcConstants.TPM_CC_NV_Read] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_NV_Write] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_NV_UndefineSpace] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_NV_ChangeAuth] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_NV_Increment] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_NV_ReadPublic] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_EvictControl] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_CreatePrimary] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_Sign] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
@@ -72,6 +74,7 @@ public static class TpmCommandPreconditions
             [TpmCcConstants.TPM_CC_PolicySigned] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_PolicyAuthorize] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_PolicyOR] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_PolicyTicket] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_PolicyNV] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_PolicyCounterTimer] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_PolicyGetDigest] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
@@ -79,6 +82,11 @@ public static class TpmCommandPreconditions
             [TpmCcConstants.TPM_CC_ActivateCredential] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_DictionaryAttackLockReset] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_DictionaryAttackParameters] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_Clear] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_ClearControl] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_HierarchyControl] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_SetPrimaryPolicy] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
+            [TpmCcConstants.TPM_CC_HierarchyChangeAuth] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet(),
             [TpmCcConstants.TPM_CC_FlushContext] = new[] { TpmLifecyclePhase.Operational }.ToFrozenSet()
         }.ToFrozenDictionary();
 

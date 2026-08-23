@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
+using Verifiable.Tpm.Extensions.DictionaryAttack;
 using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Extensions.Seal;
 using Verifiable.Tpm.Infrastructure;
@@ -61,6 +62,15 @@ internal sealed class TpmSealExtensionsTests
     /// <summary>A deliberately wrong sealAuth, distinct from <see cref="SealAuthBytes"/>.</summary>
     private static byte[] WrongSealAuthBytes { get; } = "wrong-horse-battery-staple"u8.ToArray();
 
+    /// <summary>The real password the non-empty-parentAuth round-trip and wrong-parentAuth tests set the storage parent's authValue to.</summary>
+    private const string ParentAuthPassword = "seal-verb-parent-auth-proof";
+
+    /// <summary>The parent's authValue in wire form — the UTF-8 octets of <see cref="ParentAuthPassword"/>, matching the password-to-authValue convention <see cref="Tpm2bAuth.CreateFromPassword"/> applies on the creation side.</summary>
+    private static byte[] ParentAuthPasswordBytes { get; } = System.Text.Encoding.UTF8.GetBytes(ParentAuthPassword);
+
+    /// <summary>A deliberately wrong guess at the parent's password, distinct from <see cref="ParentAuthPasswordBytes"/>.</summary>
+    private static byte[] WrongParentAuthPasswordBytes { get; } = "wrong-seal-verb-parent-auth"u8.ToArray();
+
     /// <summary>Gets or sets the per-test context (supplies the cancellation token).</summary>
     public TestContext TestContext { get; set; } = null!;
 
@@ -75,7 +85,7 @@ internal sealed class TpmSealExtensionsTests
     public async Task SealUnsealRoundTripsThroughTheVerbsAcrossADiskByteRoundTrip()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, pool).ConfigureAwait(false);
@@ -128,7 +138,7 @@ internal sealed class TpmSealExtensionsTests
     public async Task UnsealAsyncWithWrongSealAuthReturnsSessionEncodedAuthFailAndStillAdmitsAFollowUpUnseal()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, pool).ConfigureAwait(false);
@@ -166,6 +176,114 @@ internal sealed class TpmSealExtensionsTests
     }
 
     /// <summary>
+    /// A storage parent with a real, non-empty authValue: <c>SealAsync</c> is called with its
+    /// <c>parentAuth</c> argument set to that value (authorizing the child <c>TPM2_Create</c>'s parent slot),
+    /// and <c>UnsealAsync</c> is called with the SAME value (authorizing <c>TPM2_Load</c>'s parent slot) — the
+    /// secret is recovered byte-exact, proving both verbs thread a non-empty <c>parentAuth</c> through to the
+    /// wire rather than only ever exercising the empty-password path every other test in this file uses (TPM
+    /// 2.0 Library Part 3, clauses 12.1 and 12.2).
+    /// </summary>
+    [TestMethod]
+    public async Task SealUnsealRoundTripsWithANonEmptyParentAuth()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+
+        using CreatePrimaryResponse parent = await CreatePasswordProtectedStorageParentAsync(
+            tpm, pool, ParentAuthPassword, noDa: false).ConfigureAwait(false);
+        uint parentHandle = parent.ObjectHandle.Value;
+
+        try
+        {
+            TpmResult<TpmSealedBlob> sealResult = await tpm.SealAsync(
+                parentHandle, ParentAuthPasswordBytes, SecretBytes, SealAuthBytes,
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(sealResult.IsSuccess, $"SealAsync over a password-protected parent failed: '{sealResult.ResponseCode}'.");
+
+            using TpmSealedBlob sealedBlob = sealResult.Value;
+
+            TpmResult<UnsealResponse> unsealResult = await tpm.UnsealAsync(
+                parentHandle, ParentAuthPasswordBytes, sealedBlob, SealAuthBytes,
+                TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(unsealResult.IsSuccess, $"UnsealAsync with the parent's correct parentAuth failed: '{unsealResult.ResponseCode}'.");
+
+            using UnsealResponse unsealed = unsealResult.Value;
+            Assert.IsTrue(
+                unsealed.OutData.AsReadOnlySpan().SequenceEqual(SecretBytes),
+                "The unsealed data must equal the sealed secret, byte for byte, when the SAME non-empty parentAuth authorizes both Seal's TPM2_Create and Unseal's TPM2_Load.");
+        }
+        finally
+        {
+            _ = await tpm.FlushContextAsync(parentHandle, TestContext.CancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// A WRONG <c>parentAuth</c> argument passed to <c>UnsealAsync</c> fails at <c>TPM2_Load</c>'s parent slot
+    /// (session index 0, the only session that command carries) with the session-index-encoded
+    /// <c>TPM_RC_AUTH_FAIL</c> the simulator returns for a DA-protected parent's authValue mismatch (Part 2,
+    /// clause 6.6.2), and charges the shared dictionary-attack <c>LockoutCounter</c> exactly once (Part 1,
+    /// clause 17.8.7). A follow-up <c>UnsealAsync</c> call with the CORRECT parentAuth against the same
+    /// <see cref="TpmSealedBlob"/> and parent handle still recovers the secret, showing the failed Load
+    /// attempt left nothing behind that blocks a subsequent legitimate cycle.
+    /// </summary>
+    [TestMethod]
+    public async Task UnsealAsyncWithWrongParentAuthReturnsSessionEncodedAuthFail()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+
+        using CreatePrimaryResponse parent = await CreatePasswordProtectedStorageParentAsync(
+            tpm, pool, ParentAuthPassword, noDa: false).ConfigureAwait(false);
+        uint parentHandle = parent.ObjectHandle.Value;
+
+        try
+        {
+            using TpmSealedBlob sealedBlob = (await tpm.SealAsync(
+                parentHandle, ParentAuthPasswordBytes, SecretBytes, SealAuthBytes,
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).Value;
+
+            TpmResult<TpmDictionaryAttackParameters> before = await tpm.GetDictionaryAttackParametersAsync(
+                pool, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(before.IsSuccess, $"GetDictionaryAttackParameters (before) failed: '{before.ResponseCode}'.");
+
+            TpmResult<UnsealResponse> wrongResult = await tpm.UnsealAsync(
+                parentHandle, WrongParentAuthPasswordBytes, sealedBlob, SealAuthBytes,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsFalse(wrongResult.IsSuccess, "A wrong parentAuth must not load the sealed object's parent.");
+            Assert.AreEqual(
+                SessionEncodedRc(TpmRcConstants.TPM_RC_AUTH_FAIL, sessionIndex: 0), wrongResult.ResponseCode,
+                $"A wrong parentAuth against a DA-protected storage parent's TPM2_Load must surface as session-encoded TPM_RC_AUTH_FAIL at slot 0 (got '{wrongResult.ResponseCode}').");
+
+            TpmResult<TpmDictionaryAttackParameters> afterWrong = await tpm.GetDictionaryAttackParametersAsync(
+                pool, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(afterWrong.IsSuccess, $"GetDictionaryAttackParameters (after wrong) failed: '{afterWrong.ResponseCode}'.");
+            Assert.AreEqual(
+                before.Value.LockoutCounter + 1, afterWrong.Value.LockoutCounter,
+                "A wrong parentAuth against a DA-protected storage parent must charge failedTries exactly once (TPM 2.0 Library Part 1, clause 17.8.7).");
+
+            TpmResult<UnsealResponse> correctResult = await tpm.UnsealAsync(
+                parentHandle, ParentAuthPasswordBytes, sealedBlob, SealAuthBytes,
+                TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(
+                correctResult.IsSuccess,
+                $"A follow-up UnsealAsync with the correct parentAuth must still recover the secret after a failed attempt: '{correctResult.ResponseCode}'.");
+
+            using UnsealResponse unsealed = correctResult.Value;
+            Assert.IsTrue(
+                unsealed.OutData.AsReadOnlySpan().SequenceEqual(SecretBytes),
+                "The follow-up Unseal must recover the same secret, byte for byte.");
+        }
+        finally
+        {
+            _ = await tpm.FlushContextAsync(parentHandle, TestContext.CancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
     /// Policy-gated arm, satisfied case: <c>SealAsync</c> seals under a live <c>TPM2_PolicyPCR</c> digest (bound
     /// to PCR 23, computed exactly as <see cref="TpmInHouseSimulatorPcrSealTests"/> does) and
     /// <c>UnsealUnderPolicyAsync</c>, authorized by that same satisfied policy session, recovers the secret
@@ -177,7 +295,7 @@ internal sealed class TpmSealExtensionsTests
     public async Task PolicyGatedSealUnsealsUnderASatisfiedPolicySessionViaTheVerbs()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, pool).ConfigureAwait(false);
@@ -220,7 +338,7 @@ internal sealed class TpmSealExtensionsTests
     public async Task UnsealUnderPolicyAsyncRejectsAMismatchedPolicyDigestWithPolicyFail()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, pool).ConfigureAwait(false);
@@ -300,7 +418,7 @@ internal sealed class TpmSealExtensionsTests
         const int cycles = 5;
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
         using CreatePrimaryResponse parent = await CreateStorageParentAsync(tpm, pool).ConfigureAwait(false);
@@ -347,7 +465,7 @@ internal sealed class TpmSealExtensionsTests
     public async Task FlushContextReleasesALoadedSealedObjectHandle()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
         var registry = new TpmResponseRegistry();
@@ -437,6 +555,20 @@ internal sealed class TpmSealExtensionsTests
     }
 
     /// <summary>
+    /// Encodes <paramref name="baseRc"/> as the format-one, session-index-tagged response code a rejection at
+    /// session slot <paramref name="sessionIndex"/> carries on the wire: <c>rc = baseRc + TPM_RC_S +
+    /// 0x100 * (sessionIndex + 1)</c> (TPM 2.0 Library Part 2, clause 6.6.2), the exact inverse of
+    /// <see cref="StripSessionModifier"/>.
+    /// </summary>
+    /// <param name="baseRc">The unencoded error code.</param>
+    /// <param name="sessionIndex">The zero-based session slot the rejection names.</param>
+    /// <returns>The session-index-encoded response code.</returns>
+    private static TpmRcConstants SessionEncodedRc(TpmRcConstants baseRc, int sessionIndex)
+    {
+        return (TpmRcConstants)((uint)baseRc + (uint)TpmRcConstants.TPM_RC_S + (0x100u * (uint)(sessionIndex + 1)));
+    }
+
+    /// <summary>
     /// Starts a real (non-trial) policy session, binds it to the live PCR 23 composite, and returns its
     /// policyDigest — the digest a sealed object's authPolicy must equal for this same session to later
     /// authorize an <c>UnsealUnderPolicyAsync</c> call.
@@ -515,6 +647,33 @@ internal sealed class TpmSealExtensionsTests
         TpmResult<CreatePrimaryResponse> parentResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
             tpm, parentInput, [ownerAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(parentResult.IsSuccess, $"CreatePrimary storage parent failed: '{parentResult.ResponseCode}'.");
+
+        return parentResult.Value;
+    }
+
+    /// <summary>
+    /// Creates the deterministic ECC storage parent under the owner hierarchy with a real, non-empty authValue
+    /// (<c>TPMA_OBJECT.NO_DA</c> controlled by <paramref name="noDa"/>) and returns the response (the caller
+    /// owns it and flushes <see cref="CreatePrimaryResponse.ObjectHandle"/>).
+    /// </summary>
+    /// <param name="tpm">The TPM device.</param>
+    /// <param name="pool">The memory pool.</param>
+    /// <param name="password">The parent's authValue, set at creation.</param>
+    /// <param name="noDa">Whether the parent is exempt from dictionary-attack protection.</param>
+    /// <returns>The CreatePrimary response for the password-protected storage parent.</returns>
+    private async Task<CreatePrimaryResponse> CreatePasswordProtectedStorageParentAsync(
+        TpmDevice tpm, BaseMemoryPool pool, string password, bool noDa)
+    {
+        var registry = new TpmResponseRegistry();
+        _ = registry.Register(TpmCcConstants.TPM_CC_CreatePrimary, TpmResponseCodec.CreatePrimary);
+
+        using CreatePrimaryInput parentInput = CreatePrimaryInput.ForEccStorageParent(
+            TpmRh.TPM_RH_OWNER, password, TpmEccCurveConstants.TPM_ECC_NIST_P256, pool, noDa);
+        using TpmPasswordSession ownerAuth = TpmPasswordSession.CreateEmpty(pool);
+
+        TpmResult<CreatePrimaryResponse> parentResult = await TpmCommandExecutor.ExecuteAsync<CreatePrimaryResponse>(
+            tpm, parentInput, [ownerAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(parentResult.IsSuccess, $"CreatePrimary (password-protected storage parent) failed: '{parentResult.ResponseCode}'.");
 
         return parentResult.Value;
     }

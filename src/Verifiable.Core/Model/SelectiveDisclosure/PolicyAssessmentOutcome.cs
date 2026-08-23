@@ -45,7 +45,9 @@ public sealed class PolicyAssessmentOutcome
     /// </para>
     /// <para>
     /// Expansion (adding paths not in the proposed set) is valid when the added paths
-    /// are within the lattice top. The computation validates this postcondition.
+    /// are within the lattice top. The computation enforces that postcondition: the set is
+    /// clamped into the lattice before it is adopted, and any part of it that fell outside is
+    /// recorded in the <see cref="PolicyAssessmentRecord"/> rather than disclosed.
     /// </para>
     /// </remarks>
     public IReadOnlySet<CredentialPath>? ApprovedPaths { get; init; }

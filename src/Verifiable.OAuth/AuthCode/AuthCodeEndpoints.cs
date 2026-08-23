@@ -3016,8 +3016,12 @@ public static class AuthCodeEndpoints
                 //contribution applies to a JAG), so this branch is self-contained.
                 if(authorization.IssuedTokenType == TokenType.IdJag)
                 {
+                    //RFC 8693 §4.1: the delegation chain this leg already built from the validated
+                    //actor_token (and the subject token's own prior act) rides into the JAG's claim set
+                    //— the mint threads that one value rather than deriving a second, so a JAG and an
+                    //access token minted from the same exchange record the identical acting party.
                     return await BuildIdJagMintResponseAsync(
-                        server, registration, context, exchangeRequest, authorization, issuerUri, now, ct)
+                        server, registration, context, exchangeRequest, authorization, act, issuerUri, now, ct)
                         .ConfigureAwait(false);
                 }
 
@@ -3150,6 +3154,8 @@ public static class AuthCodeEndpoints
         WellKnownJwtClaimNames.AudienceTenant,
         WellKnownJwtClaimNames.AudienceSubject,
         WellKnownJwtClaimNames.SubId,
+        WellKnownJwtClaimNames.Act,
+        WellKnownJwtClaimNames.MayAct,
         OAuthRequestParameterNames.Resource,
         OAuthRequestParameterNames.AuthorizationDetails
     };
@@ -3285,12 +3291,29 @@ public static class AuthCodeEndpoints
     /// <c>N_A</c> (§4.3.4). The crypto seams are the same the access-token producers use; only the claim
     /// shaping and response assembly differ.
     /// </remarks>
+    /// <param name="server">The endpoint server.</param>
+    /// <param name="registration">The authenticated client requesting the exchange.</param>
+    /// <param name="context">The per-request context bag.</param>
+    /// <param name="exchangeRequest">The shape-validated Token Exchange request.</param>
+    /// <param name="authorization">The authorization seam's verdict, which shapes the §3.1 claim set.</param>
+    /// <param name="act">
+    /// The <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see> <c>act</c>
+    /// claim this exchange computed from the validated <c>actor_token</c> and the subject token's own
+    /// prior chain, or <see langword="null"/> for an impersonation exchange.
+    /// <see cref="TokenExchange.TokenExchangeAuthorization.Actor"/> overrides it when the seam shapes
+    /// the actor itself (§9.7 leaves the derivation to the profile).
+    /// </param>
+    /// <param name="issuerUri">The resolved IdP issuer identifier.</param>
+    /// <param name="now">The current instant.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The mint response, or the early-exit failure response.</returns>
     private static async ValueTask<(FlowInput? Input, ServerHttpResponse? EarlyExit)> BuildIdJagMintResponseAsync(
         EndpointServer server,
         ClientRecord registration,
         ExchangeContext context,
         TokenExchange.TokenExchangeRequest exchangeRequest,
         TokenExchange.TokenExchangeAuthorization authorization,
+        IReadOnlyDictionary<string, object>? act,
         Uri issuerUri,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -3413,6 +3436,30 @@ public static class AuthCodeEndpoints
         {
             extraClaims ??= new Dictionary<string, object>(StringComparer.Ordinal);
             extraClaims[WellKnownJwtClaimNames.SubId] = subjectIdentifier.ToClaimObject();
+        }
+
+        //§3.1: "act: OPTIONAL - Actor claim as defined in Section 4.1 of [RFC8693]. When present, this
+        //claim identifies the actor that is acting on behalf of the subject (sub)." §4.3/§9.7 define no
+        //derivation for it, leaving that to a profile; this server's is to record the acting party the
+        //exchange established — the chain built from the validated actor_token with the subject token's
+        //prior actors already nested beneath it, carried verbatim so the least recent stays deepest per
+        //§4.1. The authorization seam's own Actor wins when it shapes one. RFC 8693 §1.1 keeps this
+        //delegation, not impersonation: sub remains the resource owner and act names who acts for it.
+        IReadOnlyDictionary<string, object>? actorClaim = authorization.Actor ?? act;
+        if(actorClaim is not null)
+        {
+            extraClaims ??= new Dictionary<string, object>(StringComparer.Ordinal);
+            extraClaims[WellKnownJwtClaimNames.Act] = actorClaim;
+        }
+
+        //RFC 8693 §4.4: a may_act claim states that a named party "is authorized to become the actor and
+        //act on behalf of another party" — here, which client may redeem this grant and become the actor
+        //of the access token it yields. The IdP states it through the authorization seam; the Resource
+        //Authorization Server enforces it on redemption.
+        if(authorization.AuthorizedActor is { } authorizedActorClaim)
+        {
+            extraClaims ??= new Dictionary<string, object>(StringComparer.Ordinal);
+            extraClaims[WellKnownJwtClaimNames.MayAct] = authorizedActorClaim;
         }
 
         //§3.1: the ID-JAG MAY also carry ID Token identity claims (auth_time, acr, amr, email, ...). The
@@ -3725,6 +3772,29 @@ public static class AuthCodeEndpoints
                     }
                 }
 
+                //RFC 8693 §4.1/§4.4: decide the delegation the redeemed access token records — the act
+                //claim composed from the grant's own chain and the redeeming client — and enforce the
+                //grant's may_act statement about which client may become that actor. Stamping act here
+                //is this server's profile decision under §1.1's "at the discretion of the authorization
+                //server" (ID-JAG §4.3/§9.7 define no actor processing; the identity-chaining redemption
+                //leg, draft-ietf-oauth-identity-chaining-16 §2.4, never mentions act) — and having
+                //exercised it, §4.4's authorized-actor statement binds. The refusal is the RFC 7523
+                //§3.1 invalid_grant this endpoint answers every grant defect with, decided before the
+                //granted authorization_details reach the context so a refused redemption grants nothing.
+                IdJagActorDecision actorDecision = IdJagActorDecision.Evaluate(
+                    grant.Act, grant.MayAct, registration.ClientId, grant.Subject, issuerUri.OriginalString);
+                if(actorDecision.IsRefused)
+                {
+                    string actorRefusal = actorDecision.Kind switch
+                    {
+                        IdJagActorDecisionKind.RefuseUnauthorizedActor => "The client is not authorized to act for the subject of this authorization grant.",
+                        _ => "The authorization grant's act claim does not identify an actor."
+                    };
+
+                    return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant, actorRefusal)
+                        .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore));
+                }
+
                 //ID-JAG §4.4.1: the granted authorization_details ride the context into the producer
                 //walk so the RFC 9068 access token carries them as a top-level claim — the same seam
                 //the authorization-code grant uses. The response echo below reflects them per §4.4.2.
@@ -3773,6 +3843,9 @@ public static class AuthCodeEndpoints
                 //A non-empty grant audience confines the issued token (its aud) verbatim, bypassing the
                 //scope→audience resolver (RFC 8693-style target binding); an empty list leaves Audience
                 //null so the resolver runs. A non-empty Confirmation sender-constrains the token (§9.8).
+                //RFC 8693 §1.1 delegation is preserved by keeping Subject the assertion's subject while
+                //Act names the party acting for it; Act is null when no party does (§1.1 "acting
+                //directly on its own behalf"), so no self-referential actor is ever emitted.
                 IssuanceContext issuance = new()
                 {
                     Registration = registration,
@@ -3783,6 +3856,7 @@ public static class AuthCodeEndpoints
                     ClientId = registration.ClientId,
                     GrantType = WellKnownGrantTypes.JwtBearer,
                     IssuedAt = now,
+                    Act = actorDecision.Act,
                     Audience = grant.Audience is { Count: > 0 } ? grant.Audience : null,
                     Confirmation = tokenConfirmation
                 };

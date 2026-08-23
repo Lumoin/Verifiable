@@ -80,7 +80,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     public async Task RsaSaltedUnboundSessionRoundTripsEncryptedGetRandom()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -117,7 +117,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     public async Task EccSaltedUnboundSessionRoundTripsEncryptedGetRandom()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -162,7 +162,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
         const TpmAlgIdConstants MixedSessionAlg = TpmAlgIdConstants.TPM_ALG_SHA384;
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -227,14 +227,14 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     /// <summary>
     /// A salted-and-bound session (RSA tpmKey) bound to a storage parent (empty auth) authorizing a DIFFERENT
     /// entity — a sealed item with a real, non-empty userAuth — over <c>TPM2_Unseal()</c>: the per-command
-    /// authValue is supplied (equation 21/25, no bind-omission), proving salting composes with a genuine
+    /// authValue is supplied (equation 21 (Part 1, clause 17.6.10)/25 (Part 1, clause 17.6.12), no bind-omission), proving salting composes with a genuine
     /// non-empty authorization.
     /// </summary>
     [TestMethod]
     public async Task SaltedAndBoundSessionIncludesAuthValueWhenAuthorizingADifferentEntity()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -297,7 +297,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
 
     /// <summary>
     /// A salted-and-bound session (ECC tpmKey) bound DIRECTLY to the sealed item it then authorizes over
-    /// <c>TPM2_Unseal()</c>, with NO per-command authValue supplied: only the eq. 26 bind-omission (the bound
+    /// <c>TPM2_Unseal()</c>, with NO per-command authValue supplied: only the eq. 26 (Part 1, clause 17.6.12) bind-omission (the bound
     /// entity's real userAuth folded into the session key, then omitted from the per-command HMAC key because
     /// the entity being authorized now IS the bound entity) lets this succeed — proving bind resolution to a
     /// sealed object (with its real userAuth) composes correctly with salting.
@@ -306,7 +306,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     public async Task SaltedAndBoundSessionOmitsAuthValueForTheBoundObjectItself()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -345,7 +345,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
                 session.SessionAttributes = TpmaSession.CONTINUE_SESSION;
 
                 //Deliberately NOT calling session.SetAuthValue: the per-command authValue stays empty, relying
-                //entirely on the bind-omission (equation 26) to authorize the Unseal.
+                //entirely on the bind-omission (Part 1, clause 17.6.12, equation 26) to authorize the Unseal.
                 try
                 {
                     UnsealInput unsealInput = UnsealInput.ForItem(loaded.ObjectHandle);
@@ -375,7 +375,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     public async Task ShortNonceCallerIsRejectedWithSize()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -390,7 +390,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     public async Task EncryptedSaltWithNullTpmKeyIsRejectedWithValue()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -408,7 +408,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     public async Task CorruptedRsaOaepCiphertextIsRejectedWithValueImmediately()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -456,7 +456,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         TpmRsaSigningBackend throwingRsaBackend = MicrosoftTpmRsaSigningBackend.Create() with { DecryptOaep = ThrowOnWrongLengthCiphertextAsync };
-        var simulator = new TpmSimulator(
+        using var simulator = new TpmSimulator(
             "tpm-in-house-salted-session-throwing-rsa", signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rsaSigningBackend: throwingRsaBackend);
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await IssueStartupClearAsync(simulator, pool).ConfigureAwait(false);
@@ -520,7 +520,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     public async Task OffCurveEccPointIsRejectedWithValue()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -577,7 +577,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     public async Task MismatchedYCoordinateLengthOnCurvePointIsRejectedWithValue()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -628,7 +628,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     public async Task SealedObjectAsTpmKeyIsRejectedWithKey()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -673,7 +673,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
         const ushort PinCounterParametersSize = 8;
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_NV_DefineSpace, TpmResponseCodec.NvDefineSpace);
@@ -705,7 +705,7 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
     public async Task NonCfbAesModeIsRejectedWithMode()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -713,6 +713,53 @@ internal sealed class TpmInHouseSimulatorSaltedSessionTests
 
         TpmRcConstants rc = await AttemptStartAuthSessionAsync(tpm, registry, pool, startInput).ConfigureAwait(false);
         Assert.AreEqual(TpmRcConstants.TPM_RC_MODE, rc, "AES with a non-CFB mode must be TPM_RC_MODE, not TPM_RC_SYMMETRIC.");
+    }
+
+    /// <summary>
+    /// An AES definition naming a key width the algorithm does not have is rejected with <c>TPM_RC_VALUE</c>,
+    /// and the refused attempt leaves no session behind.
+    /// </summary>
+    /// <remarks>
+    /// <c>TPMT_SYM_DEF</c>'s <c>keyBits</c> selects <c>TPMI_AES_KEY_BITS</c> for an AES definition, an interface
+    /// type whose admitted set is <c>$AES_KEY_SIZES_BITS</c> — 128, 192, and 256 in the reference — and whose
+    /// violation the table names <c>#TPM_RC_VALUE</c>, "error when key size is not supported" (TPM 2.0 Library
+    /// Part 2, clause 11.1.2, Table 155, replicated for AES in clause 4.12.5, Table 1). The three codes divide
+    /// the definition cleanly and each names the field it is about: <c>TPM_RC_SYMMETRIC</c> for the algorithm,
+    /// <c>TPM_RC_VALUE</c> for its key size, <c>TPM_RC_MODE</c> for its mode.
+    /// </remarks>
+    [TestMethod]
+    public async Task UnsupportedAesKeyWidthIsRejectedWithValueAndStartsNoSession()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        StartAuthSessionInput overWideInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(
+            SessionAlg, TpmtSymDef.Aes(512, TpmAlgIdConstants.TPM_ALG_CFB));
+
+        TpmRcConstants rc = await AttemptStartAuthSessionAsync(tpm, registry, pool, overWideInput).ConfigureAwait(false);
+        Assert.AreEqual(
+            TpmRcConstants.TPM_RC_VALUE, rc,
+            "AES with a key width outside $AES_KEY_SIZES_BITS must be TPM_RC_VALUE, not TPM_RC_SYMMETRIC (which names the algorithm) or TPM_RC_MODE (which names the mode).");
+
+        //The refusal must precede every allocation the command would otherwise make, so the NEXT session to start
+        //is still the first one: a handle above the range's first value would mean the refused attempt had
+        //already taken a slot.
+        StartAuthSessionInput admittedInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(
+            SessionAlg, TpmtSymDef.Aes(128, TpmAlgIdConstants.TPM_ALG_CFB));
+
+        TpmResult<StartAuthSessionResponse> startedResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
+            tpm, admittedInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(startedResult.IsSuccess, $"An AES-128-CFB definition is inside the admitted key sizes and must start a session: '{startedResult.ResponseCode}'.");
+
+        using StartAuthSessionResponse started = startedResult.Value;
+        Assert.AreEqual(
+            TpmHandleRanges.HMAC_SESSION_FIRST, started.SessionHandle.Value,
+            "The first session the TPM starts takes the first handle of the HMAC-session range, which it cannot do if the refused attempt had consumed one.");
+
+        _ = await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
+            tpm, FlushContextInput.ForHandle(started.SessionHandle.Value), [], null, pool, registry, CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>Left-pads (or trims) a big-endian value to 32 bytes, as SEC1 P-256 coordinates require.</summary>

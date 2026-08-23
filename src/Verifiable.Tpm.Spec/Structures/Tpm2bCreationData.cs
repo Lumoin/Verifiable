@@ -70,6 +70,74 @@ public sealed class Tpm2bCreationData: IDisposable, ITpmWireType
     }
 
     /// <summary>
+    /// Gets the serialized size of this structure: the <c>UINT16</c> size field plus the marshaled
+    /// <c>TPMS_CREATION_DATA</c> octets.
+    /// </summary>
+    public int SerializedSize
+    {
+        get
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+
+            return sizeof(ushort) + RawLength;
+        }
+    }
+
+    /// <summary>
+    /// Writes this structure to a TPM writer: the <c>UINT16</c> size field followed by the marshaled
+    /// <c>TPMS_CREATION_DATA</c> octets exactly as they were adopted or read.
+    /// </summary>
+    /// <param name="writer">The writer.</param>
+    public void WriteTo(ref TpmWriter writer)
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+
+        writer.WriteUInt16((ushort)RawLength);
+        writer.WriteBytes(GetRawBytes());
+    }
+
+    /// <summary>
+    /// Adopts an already-marshaled <c>TPMS_CREATION_DATA</c> buffer as this structure's storage: ownership of
+    /// <paramref name="marshaled"/> transfers to the returned instance with no second rental and no copy — the
+    /// production counterpart of <see cref="Parse"/> for the TPM side, which marshals the creation data into a
+    /// buffer it rented itself and then frames the whole <c>TPM2B_CREATION_DATA</c> from it.
+    /// </summary>
+    /// <remarks>
+    /// The inner structure is parsed out of the adopted octets, so an adopted instance carries the same
+    /// <see cref="CreationData"/> view a wire-parsed one does and its <see cref="Dispose"/> releases both. An
+    /// argument that does not describe a valid <c>TPM2B_CREATION_DATA</c> releases <paramref name="marshaled"/>
+    /// before the exception leaves, so a rejected adoption never orphans the rental.
+    /// </remarks>
+    /// <param name="marshaled">The pooled buffer whose leading octets hold the marshaled <c>TPMS_CREATION_DATA</c>; ownership transfers to the returned instance or is released here.</param>
+    /// <param name="length">The number of valid octets at the head of <paramref name="marshaled"/>.</param>
+    /// <param name="pool">The memory pool the parsed inner structure's own buffers are rented from.</param>
+    /// <returns>The adopted creation data.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="marshaled"/> or <paramref name="pool"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is not positive, exceeds <paramref name="marshaled"/>'s length, or exceeds the 16-bit width of a <c>TPM2B</c> size field.</exception>
+    public static Tpm2bCreationData FromMarshaled(IMemoryOwner<byte> marshaled, int length, BaseMemoryPool pool)
+    {
+        ArgumentNullException.ThrowIfNull(marshaled);
+
+        try
+        {
+            ArgumentNullException.ThrowIfNull(pool);
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(length);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(length, marshaled.Memory.Length);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(length, ushort.MaxValue);
+
+            var innerReader = new TpmReader(marshaled.Memory.Span.Slice(0, length));
+            TpmsCreationData creationData = TpmsCreationData.Parse(ref innerReader, pool);
+
+            return new Tpm2bCreationData(creationData, marshaled, length);
+        }
+        catch
+        {
+            marshaled.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Parses creation data from a TPM reader.
     /// </summary>
     /// <param name="reader">The reader.</param>

@@ -73,7 +73,7 @@ internal sealed class TpmSigningContextPrecedenceTests
         TpmResponseRegistry registry = CreateRegistry();
 
         //The key lives only on this device.
-        TpmSimulator simulatorWithKey = await CreateOperationalSimulatorAsync(pool, "tpm-context-precedence-with-key").ConfigureAwait(false);
+        using TpmSimulator simulatorWithKey = await CreateOperationalSimulatorAsync(pool, "tpm-context-precedence-with-key").ConfigureAwait(false);
         using TpmDevice deviceWithKey = TpmDevice.Create(simulatorWithKey.SubmitAsync);
 
         using CreatePrimaryInput primaryInput = CreatePrimaryInput.ForEccSigningKey(
@@ -87,7 +87,7 @@ internal sealed class TpmSigningContextPrecedenceTests
 
         //A distinct, independently operational simulator with no key created: the same handle value
         //does not resolve there.
-        TpmSimulator simulatorWithoutKey = await CreateOperationalSimulatorAsync(pool, "tpm-context-precedence-without-key").ConfigureAwait(false);
+        using TpmSimulator simulatorWithoutKey = await CreateOperationalSimulatorAsync(pool, "tpm-context-precedence-without-key").ConfigureAwait(false);
         using TpmDevice deviceWithoutKey = TpmDevice.Create(simulatorWithoutKey.SubmitAsync);
 
         FrozenDictionary<string, object> poisonedDefaultContext = TpmCryptographicFunctions.CreateP256SigningContext(deviceWithoutKey);

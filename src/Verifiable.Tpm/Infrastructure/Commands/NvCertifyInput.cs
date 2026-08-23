@@ -44,6 +44,19 @@ public sealed class NvCertifyInput: ITpmCommandInput, IDisposable
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_NV_Certify;
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <c>qualifyingData</c> (<c>TPM2B_DATA</c>) is the first entry of the parameter area, ordered ahead of
+    /// <c>inScheme</c>, <c>size</c> and <c>offset</c>, and carries an explicit size field (TPM 2.0 Library Part
+    /// 3, clause 31.16, Table 254), which is what TPM 2.0 Library Part 1, clause 19.1 requires of an encryptable
+    /// parameter and what clause 16.4 restates ("for a command or response parameter to be encrypted, it must be
+    /// the first parameter and it must be a TPM2B type"). A session without the <c>decrypt</c> attribute is
+    /// unaffected; the attribute is what asks the TPM to decrypt the parameter after the command HMACs verify, so
+    /// the caller nonce this command echoes into the attestation's <c>extraData</c> never crosses the bus in the
+    /// clear.
+    /// </remarks>
+    public bool FirstCommandParameterIsEncryptable => true;
+
     /// <summary>
     /// Gets the handle of the signing key.
     /// </summary>
@@ -184,7 +197,10 @@ public sealed class NvCertifyInput: ITpmCommandInput, IDisposable
         BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
-        IMemoryOwner<byte> owner = pool.Rent(qualifyingData.Length);
+        //An EMPTY qualifyingData is legal — a TPM2B parameter may declare a zero size, and Part 3, clause 5.7
+        //notes that "the size of the parameter to be encrypted can be zero" — so the rental floor keeps a
+        //zero-length value expressible; the slice below is what fixes the parameter's declared width.
+        IMemoryOwner<byte> owner = pool.Rent(Math.Max(qualifyingData.Length, 1));
         qualifyingData.CopyTo(owner.Memory.Span);
 
         return new NvCertifyInput(

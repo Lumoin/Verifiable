@@ -148,6 +148,55 @@ public sealed record TokenExchangeAuthorization
     public IReadOnlyList<object>? AuthorizationDetailsClaim { get; init; }
 
     /// <summary>
+    /// The <c>act</c> (actor) claim an issued ID-JAG carries — the JSON object naming the current actor
+    /// (its <c>sub</c>) with any prior actors under its own nested <c>act</c> member, least recent
+    /// deepest, per <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see>.
+    /// <see langword="null"/> lets the library carry the chain it already built from the validated
+    /// <c>actor_token</c> (delegation) and the subject token's own prior <c>act</c>, and emits no claim
+    /// when the exchange was an impersonation. Applies only when <see cref="IssuedTokenType"/> is
+    /// <see cref="TokenType.IdJag"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the IdP's §9.7 derivation point — "Such profiles or extensions should define how
+    /// <c>actor_token</c> is validated, how the relationship between the authenticated client, subject,
+    /// and actor is authorized, how any resulting <c>act</c> claim is derived, and how unnecessary
+    /// disclosure of actor identity or attributes is minimized across trust domains" — since
+    /// draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §4.3 / §9.7 define no
+    /// <c>actor_token</c> processing themselves. Emitting the claim at all is discretionary: RFC 8693
+    /// §1.1 leaves "When and if a composite token is issued ... at the discretion of the authorization
+    /// server and applicable policy and configuration."
+    /// </para>
+    /// <para>
+    /// The claim is delegation, never impersonation (§1.1): <see cref="Subject"/> stays the resource
+    /// owner while this names the party acting for it — the distinction §9.7 asks profiles to preserve,
+    /// noting also that "The authenticated client identity is also not a substitute for actor identity."
+    /// A value supplied here replaces the library's chain wholesale, so a deployment that shapes it
+    /// owns the §9.7 risk that a chain could "overstate the actor's authority"; the library's own chain
+    /// has already passed the §4.4 <c>may_act</c> check against the presented <c>actor_token</c>.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyDictionary<string, object>? Actor { get; init; }
+
+    /// <summary>
+    /// The <c>may_act</c> (authorized actor) claim an issued ID-JAG carries — the JSON object
+    /// identifying the party authorized "to become the actor and act on behalf of another party" per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.4">RFC 8693 §4.4</see>, by a
+    /// <c>sub</c> optionally combined with an <c>iss</c>. <see langword="null"/> omits the claim, which
+    /// leaves the grant's redemption unconstrained by an authorized-actor statement. Applies only when
+    /// <see cref="IssuedTokenType"/> is <see cref="TokenType.IdJag"/>.
+    /// </summary>
+    /// <remarks>
+    /// A grant minted with this claim is refused at redemption unless the redeeming client is the party
+    /// it names — §4.4's own purpose, "determine whether the client ... is authorized to engage in the
+    /// requested delegation or impersonation", applied at the boundary where that client becomes the
+    /// actor. The party is identified in the Resource Authorization Server's namespace: its <c>sub</c>
+    /// is a <c>client_id</c> there, and an <c>iss</c>, when included, is that server's issuer. Read back
+    /// on the redeem leg via <see cref="IdJag.IdJagAssertionValidationResult.MayAct"/>.
+    /// </remarks>
+    public IReadOnlyDictionary<string, object>? AuthorizedActor { get; init; }
+
+    /// <summary>
     /// The granted authorization details as a JSON array string for the §4.3.4 token-exchange
     /// response, or <see langword="null"/> to omit the response field. Populated only when the IdP
     /// granted authorization details that differ from the request or modified them (§4.3.4 makes the

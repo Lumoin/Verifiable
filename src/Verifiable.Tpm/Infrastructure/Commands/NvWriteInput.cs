@@ -30,9 +30,9 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </remarks>
 /// <param name="AuthHandle">The authorization handle (the Index itself for Index authorization).</param>
 /// <param name="NvIndex">The NV Index to write.</param>
-/// <param name="Data">The data to write (TPM2B_MAX_NV_BUFFER). The caller owns the underlying memory.</param>
+/// <param name="Data">The data to write (<c>TPM2B_MAX_NV_BUFFER</c>, TPM 2.0 Library Part 2, clause 10.4.9, Table 99) in a pooled carrier this input BORROWS: the caller owns it and releases it once the command has been framed.</param>
 /// <param name="Offset">The octet offset into the NV area at which to write.</param>
-public readonly record struct NvWriteInput(uint AuthHandle, uint NvIndex, Tpm2bMaxBuffer Data, ushort Offset): ITpmCommandInput
+public readonly record struct NvWriteInput(uint AuthHandle, uint NvIndex, Tpm2bMaxNvBuffer Data, ushort Offset): ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_NV_Write;
@@ -53,7 +53,7 @@ public readonly record struct NvWriteInput(uint AuthHandle, uint NvIndex, Tpm2bM
     /// <inheritdoc/>
     public void WriteParameters(ref TpmWriter writer)
     {
-        writer.WriteTpm2b(Data.Buffer.Span);
+        writer.WriteTpm2b(Data.Span);
         writer.WriteUInt16(Offset);
     }
 }

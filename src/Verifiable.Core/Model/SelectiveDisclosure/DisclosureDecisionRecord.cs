@@ -125,6 +125,22 @@ public sealed class DisclosureDecisionRecord<TCredential>
     /// </remarks>
     public IReadOnlyList<PolicyAssessmentRecord>? PolicyAssessments { get; init; }
 
+    /// <summary>
+    /// Decisions a cross-credential optimizer returned outside their lattice bounds, in order
+    /// of execution, or <see langword="null"/> when every optimizer stayed within bounds.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="CrossCredentialOptimizerDelegate{TCredential}"/> is contracted to keep each
+    /// credential's selection inside its lattice. The computation clamps the returned decisions
+    /// rather than trusting them, and records here what each violating pass attempted — the
+    /// paths above the top, the mandatory paths dropped, the ancestors omitted. Bound violations
+    /// are the accountability signal for optimizers whose reasoning is not itself auditable,
+    /// such as solver- or model-driven passes.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<BoundViolationRecord>? BoundViolations { get; init; }
+
     //Final outcome.
 
     /// <summary>

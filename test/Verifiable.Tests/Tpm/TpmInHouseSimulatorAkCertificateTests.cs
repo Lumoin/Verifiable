@@ -84,7 +84,7 @@ internal sealed class TpmInHouseSimulatorAkCertificateTests
     public async Task AkCertificateChainsAndVerifiesAttestation()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
         TimeProvider time = TimeProvider.System;
@@ -150,7 +150,7 @@ internal sealed class TpmInHouseSimulatorAkCertificateTests
     public async Task AkCertificateFromUntrustedCaFailsChainValidation()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
         TimeProvider time = TimeProvider.System;

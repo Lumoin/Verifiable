@@ -78,7 +78,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     public async Task PolicyAuthorizeEccFlowRevisesThePolicyAndUnsealsUnderThePredictedAuthPolicy()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -211,7 +211,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     public async Task PolicyAuthorizeWithTamperedApprovedPolicyReturnsValue()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -261,7 +261,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     public async Task PolicyAuthorizeWithForgedCheckTicketReturnsValue()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -314,7 +314,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     public async Task PolicyAuthorizeWithWrongHierarchyCheckTicketReturnsValue()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -346,7 +346,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
 
         using VerifySignatureResponse verified = verifyResult.Value;
         Assert.IsFalse(verified.Validation.IsNull, "A real-hierarchy authority key must produce a usable (non-NULL) ticket.");
-        Assert.AreEqual(TpmRh.TPM_RH_OWNER, verified.Validation.Hierarchy, "Test setup: the authority key must be created under Owner.");
+        Assert.AreEqual(TpmiRhHierarchy.Owner, verified.Validation.Hierarchy, "Test setup: the authority key must be created under Owner.");
 
         //The genuine digest re-claimed under TPM_RH_ENDORSEMENT rather than the authority key's own
         //TPM_RH_OWNER — the re-derived proof differs, so the recomputed HMAC no longer matches.
@@ -387,7 +387,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     public async Task PolicyAuthorizeWithUnrecognizedKeySignHashAlgReturnsHash()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
         byte[] keySignWithUnrecognizedHashAlg = new byte[sizeof(ushort) + 32];
@@ -426,7 +426,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     public async Task PolicyAuthorizeWithKeySignLengthMismatchReturnsSize()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
 
         //SHA-256's nameAlg tag, but only 16 digest octets (SHA-256 needs 32).
@@ -467,7 +467,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     public async Task PolicyAuthorizeTrialSessionWithNullTicketFoldsCorrectlyAndMatchesHostPrediction()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -520,7 +520,7 @@ internal sealed class TpmInHouseSimulatorPolicyAuthorizeTests
     public async Task BuilderRoundTripPredictedDigestMatchesExecutedDigestForWithSignedThenWithAuthorize()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 

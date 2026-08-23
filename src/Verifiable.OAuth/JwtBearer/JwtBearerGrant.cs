@@ -84,6 +84,47 @@ public sealed record JwtBearerGrant
     public bool RequiresSenderConstrainedToken { get; init; }
 
     /// <summary>
+    /// The <c>act</c> (actor) claim the validated assertion carries — the delegation chain recorded on
+    /// it per <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see>, the
+    /// outermost object naming the current actor and any nested <c>act</c> members the prior actors,
+    /// least recent deepest. <see langword="null"/> when the assertion records no delegation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The jwt-bearer endpoint composes the issued access token's own <c>act</c> from this chain and the
+    /// redeeming client through <see cref="IdJag.IdJagActorDecision"/>: the chain crosses unchanged when
+    /// the redeeming client already is its current actor, and nests beneath the redeeming client when it
+    /// is not. Recording the actor at this boundary is a profile decision this authorization server
+    /// makes under the discretion RFC 8693 §1.1 grants — the specifications this grant implements leave
+    /// it open (draft-ietf-oauth-identity-assertion-authz-grant-04 §4.3 / §9.7 define no actor
+    /// processing; draft-ietf-oauth-identity-chaining-16 §2.4 never mentions <c>act</c>).
+    /// </para>
+    /// <para>
+    /// The chain is delegation, never impersonation (§1.1): <see cref="Subject"/> remains the principal
+    /// access is requested for and these actors are the parties acting for it. Sourced from
+    /// <see cref="IdJag.IdJagAssertionValidationResult.Act"/>, which reads it from the redeemed grant.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyDictionary<string, object>? Act { get; init; }
+
+    /// <summary>
+    /// The <c>may_act</c> (authorized actor) claim the validated assertion carries — the party its
+    /// issuer asserts is "eligible to act" for <see cref="Subject"/> per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.4">RFC 8693 §4.4</see>, identified by
+    /// a <c>sub</c> optionally combined with an <c>iss</c>. <see langword="null"/> when the assertion
+    /// constrains the acting party in no way and any client the grant is issued to may act.
+    /// </summary>
+    /// <remarks>
+    /// When non-null the jwt-bearer endpoint enforces it: a redeeming client that is not the authorized
+    /// actor is refused with <c>invalid_grant</c> rather than issued a token whose <c>act</c> names a
+    /// party the grant's issuer never authorized (§4.4 — the claim lets the authorization server
+    /// "determine whether the client ... is authorized to engage in the requested delegation or
+    /// impersonation"). Sourced from <see cref="IdJag.IdJagAssertionValidationResult.MayAct"/>; a seam
+    /// that does not copy it forward leaves the redemption unconstrained.
+    /// </remarks>
+    public IReadOnlyDictionary<string, object>? MayAct { get; init; }
+
+    /// <summary>
     /// The validated assertion's <c>iss</c> (the IdP that issued an ID-JAG), or <see langword="null"/>
     /// when the seam does not supply it. With <see cref="Jti"/> and <see cref="Expiration"/> it lets the
     /// jwt-bearer endpoint apply the shared RFC 7523 §3 (rule 7) replay defense

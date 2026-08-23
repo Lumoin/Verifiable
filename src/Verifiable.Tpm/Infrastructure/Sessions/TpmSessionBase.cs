@@ -89,12 +89,37 @@ public abstract class TpmSessionBase
     public TpmtSymDef Symmetric { get; protected init; } = TpmtSymDef.Null;
 
     /// <summary>
+    /// Gets whether this session cryptographically verifies the response, so a successful response to a command
+    /// this session authorizes MUST carry a response authorization area holding this session's own entry
+    /// (TPM 2.0 Library Part 1, clauses 16.6.1 and 17.6.5: a successful response carries the same number of
+    /// sessions in the same order as the request, each entry's HMAC keyed on sessionKey concatenated to
+    /// authValue exactly as the command's was).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="TpmCommandExecutor"/> reads this to decide whether a successful response that dropped its
+    /// authorization area (a <c>TPM_ST_NO_SESSIONS</c> tag) is admissible. For a session that verifies, it is
+    /// not: accepting it would let anything on the transport answer a session-authorized command with an
+    /// unauthenticated success, which is exactly the integrity the session exists to provide. The executor
+    /// therefore fails such a response closed rather than parsing it.
+    /// </para>
+    /// <para>
+    /// The default is <see langword="true"/> — fail closed — so a session kind that adds real response
+    /// verification inherits the requirement, and a kind that genuinely has nothing to verify states that by
+    /// overriding: <see cref="TpmPasswordSession"/> (the TPM answers a password-only command with no
+    /// authorization area at all) and <see cref="TpmPolicySession"/> (an unbound, unsalted, satisfied policy
+    /// session has no key, so its response entry carries an empty HMAC there is nothing to check against).
+    /// </para>
+    /// </remarks>
+    public virtual bool VerifiesResponseAuthorization => true;
+
+    /// <summary>
     /// Gets this session's current nonceTPM — the value stored since the last response, before any roll this
-    /// command's own response may cause (TPM 2.0 Library Part 1, clause 17.6.7).
+    /// command's own response may cause (TPM 2.0 Library Part 1, clause 17.6.5).
     /// </summary>
     /// <remarks>
     /// Used only by the executor to fold an OTHER session's nonceTPM into the FIRST authorizing session's command
-    /// HMAC when that other session carries the <c>decrypt</c> or <c>encrypt</c> attribute (clause 19.6.3.4); the
+    /// HMAC when that other session carries the <c>decrypt</c> or <c>encrypt</c> attribute (clause 17.6.3.4); the
     /// base implementation returns an empty buffer for sessions that track no TPM nonce (password sessions) or
     /// none meaningful to this fold (policy sessions, which have no command-HMAC key to fold into in the first
     /// place).
@@ -190,7 +215,7 @@ public abstract class TpmSessionBase
     /// <param name="pool">The memory pool.</param>
     /// <param name="cancellationToken">Token to observe while awaiting HMAC computation.</param>
     /// <param name="foldedSessionNonces">
-    /// The nonceTPMdecrypt/nonceTPMencrypt fold (TPM 2.0 Library Part 1, clause 19.6.3.4): when this session is the
+    /// The nonceTPMdecrypt/nonceTPMencrypt fold (TPM 2.0 Library Part 1, clause 17.6.3.4): when this session is the
     /// FIRST session in the command's authorization area and it authorizes an entity, the concatenated nonceTPM of
     /// any OTHER session in the command carrying the <c>decrypt</c> or <c>encrypt</c> attribute (a decrypt/encrypt
     /// session that IS this session is never folded into its own HMAC — its nonceTPM already counts once as

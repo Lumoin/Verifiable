@@ -65,7 +65,7 @@ public sealed record TpmPolicy(IReadOnlyList<TpmPolicyAssertion> Assertions)
 
         /// <summary>
         /// Folds a PolicySecret assertion: a permanent handle's Name is its 4-octet big-endian handle value
-        /// (TPM 2.0 Library Part 1, Section 16), folded with an empty policyRef.
+        /// (TPM 2.0 Library Part 1, Section 14, Table 6), folded with an empty policyRef.
         /// </summary>
         static int ExtendSecret(Span<byte> running, uint authHandle, TpmAlgIdConstants policyHash)
         {

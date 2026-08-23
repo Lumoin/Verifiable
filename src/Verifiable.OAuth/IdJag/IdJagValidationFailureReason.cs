@@ -46,6 +46,26 @@ public enum IdJagValidationFailureReason
     /// </summary>
     MalformedConfirmation,
 
+    /// <summary>
+    /// The <c>act</c> claim is present but is not an
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see> actor object —
+    /// not a JSON object, naming no <c>sub</c>, nesting a prior actor that is itself not an actor
+    /// object, or nesting deeper than a delegation chain can reach. A grant asserting a delegation the
+    /// Resource Authorization Server cannot read is rejected rather than redeemed as if no delegation
+    /// had occurred, which would silently drop the acting party from the issued access token.
+    /// </summary>
+    MalformedActor,
+
+    /// <summary>
+    /// The <c>may_act</c> claim is present but is not an
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.4">RFC 8693 §4.4</see>
+    /// authorized-actor object — not a JSON object, or naming neither a <c>sub</c> nor an <c>iss</c> to
+    /// identify the party eligible to act. A grant whose actor constraint cannot be read is rejected
+    /// rather than redeemed unconstrained, which would let a malformed claim bypass the constraint
+    /// entirely.
+    /// </summary>
+    MalformedAuthorizedActor,
+
     /// <summary>The <c>exp</c> claim is absent (RFC 7521 §5.2).</summary>
     MissingExpiration,
 

@@ -79,4 +79,39 @@ public static class TpmTags
     /// See TPM 2.0 Part 2, Section 10.9.3.
     /// </remarks>
     public static Tag SensitiveData { get; } = Tag.Create(Purpose.Encryption).With(MaterialSemantics.Direct);
+
+    /// <summary>
+    /// Tag for a session key: the KDFa-derived HMAC and parameter-encryption key a bound and/or
+    /// salted session carries for its whole life.
+    /// </summary>
+    /// <remarks>
+    /// See TPM 2.0 Part 1, Section 17.6.10 equation 20 - Bound Session Key Generation. Distinct from
+    /// <see cref="Auth"/> (a caller-supplied authorization value) even though both are HMAC-purposed:
+    /// a session key is KDFa output the TPM itself derives and retains.
+    /// </remarks>
+    public static Tag SessionKey { get; } = Tag.Create(Purpose.Hmac).With(MaterialSemantics.Direct);
+
+    /// <summary>
+    /// Tag for a session's bound-entity value: the bind entity's Name with its authValue XORed into
+    /// the tail, recorded once at <c>TPM2_StartAuthSession()</c> and compared at every bind-omission
+    /// decision.
+    /// </summary>
+    /// <remarks>
+    /// See TPM 2.0 Part 1, Section 17.6.10 ("the authorization value is combined with the Name and
+    /// stored in the SESSION boundEntity member") and Part 4, <c>SessionComputeBoundEntity()</c>.
+    /// </remarks>
+    public static Tag BoundEntity { get; } = Tag.Create(Purpose.Verification).With(MaterialSemantics.Direct);
+
+    /// <summary>
+    /// Tag for a hierarchy proof seed: the rotatable secret the storage and endorsement hierarchy
+    /// proofs (<c>shProof</c>, <c>ehProof</c>) derive from, standing in for the Storage Primary Seed
+    /// a real TPM keeps in NV.
+    /// </summary>
+    /// <remarks>
+    /// See TPM 2.0 Part 1, Sections 12.4.4 and 12.5. HMAC-purposed because every consumer keys a
+    /// proof HMAC from it (tickets, context integrity); distinct from <see cref="SessionKey"/> (a
+    /// per-session KDFa output) and from <see cref="Auth"/> (a caller-supplied authorization value) —
+    /// this seed is TPM-internal root material that never crosses the wire.
+    /// </remarks>
+    public static Tag StorageProofSeed { get; } = Tag.Create(Purpose.Hmac).With(MaterialSemantics.Direct);
 }

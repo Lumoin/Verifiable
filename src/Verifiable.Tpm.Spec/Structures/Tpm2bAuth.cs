@@ -37,12 +37,29 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// <para>
 /// See TPM 2.0 Part 1, Section 17.6.4 - Authorization Values.
-/// See TPM 2.0 Part 2, Section 10.4.4.
+/// See TPM 2.0 Part 2, Section 10.4.5.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
 {
+    /// <summary>
+    /// The largest authorization value a <c>TPM2B_AUTH</c> buffer may carry: <c>sizeof(TPMU_HA)</c>, 64 octets.
+    /// The type is defined as a <c>TPM2B_DIGEST</c> whose "size limited to the same as the digest structure"
+    /// (TPM 2.0 Library Part 2, clause 10.4.5, Table 95, page 135), and that structure's own table bounds its
+    /// buffer field at <c>buffer[size]{:sizeof(TPMU_HA)}</c> (clause 10.4.2, Table 92, page 134). The same
+    /// clause states what a wider value answers with: "As with all sized buffers, the size is checked to see if
+    /// it is within the prescribed range. If not, the response code is TPM_RC_SIZE".
+    /// </summary>
+    /// <remarks>
+    /// This is the STRUCTURAL bound, not the per-entity one. Clause 10.4.5's own prose adds a second, narrower
+    /// rule — "the authValue may be no larger than the size of the digest produced by the object's nameAlg" —
+    /// which depends on the entity being authorized and so belongs to the command that installs the value,
+    /// not to the carrier. Both layers apply: a value wider than 64 octets is not a well-formed
+    /// <c>TPM2B_AUTH</c> at all, and a value within 64 octets may still be too wide for a particular object.
+    /// </remarks>
+    public const int MaxSize = 64;
+
     /// <summary>
     /// Shared empty instance (EmptyAuth) backed by <see cref="EmptyMemoryOwner"/>.
     /// </summary>
@@ -72,6 +89,7 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
     /// <param name="reader">The reader positioned at the auth value.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed auth value.</returns>
+    /// <exception cref="InvalidOperationException">The declared size exceeds <see cref="MaxSize"/>, which a TPM answers with <c>TPM_RC_SIZE</c>.</exception>
     public static Tpm2bAuth Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -80,6 +98,11 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
         if(length == 0)
         {
             return EmptyInstance;
+        }
+
+        if(length > MaxSize)
+        {
+            throw new InvalidOperationException($"Auth size {length} exceeds maximum {MaxSize}.");
         }
 
         IMemoryOwner<byte> storage = pool.Rent(length, AllocationKind.Pinned);
@@ -104,6 +127,13 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
     /// Gets the serialized size (2-byte length prefix + data).
     /// </summary>
     public int SerializedSize => sizeof(ushort) + Length;
+
+    /// <summary>
+    /// Gets the shared empty auth value (EmptyAuth), for contexts with no pool in scope — the
+    /// same dispose-immune instance <see cref="CreateEmpty"/> returns, mirroring
+    /// <see cref="Tpm2bSensitiveData.Empty"/>.
+    /// </summary>
+    public static Tpm2bAuth Empty => EmptyInstance;
 
     /// <summary>
     /// Creates an empty auth value (EmptyAuth).
@@ -131,12 +161,18 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
     /// <see cref="string"/> source cannot be cleared once created.
     /// </para>
     /// </remarks>
+    /// <exception cref="ArgumentException"><paramref name="bytes"/> is longer than <see cref="MaxSize"/>.</exception>
     public static Tpm2bAuth Create(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         if(bytes.IsEmpty)
         {
             return EmptyInstance;
+        }
+
+        if(bytes.Length > MaxSize)
+        {
+            throw new ArgumentException($"Auth value too large. Maximum is {MaxSize} bytes.", nameof(bytes));
         }
 
         IMemoryOwner<byte> storage = pool.Rent(bytes.Length, AllocationKind.Pinned);
@@ -163,7 +199,15 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
     /// material, marshal the entry into a pooled buffer and use
     /// <see cref="Create(ReadOnlySpan{byte}, BaseMemoryPool)"/> instead.
     /// </para>
+    /// <para>
+    /// The structural bound applies here too, measured after the trailing-zero trim: a password whose UTF-8
+    /// encoding is longer than <see cref="MaxSize"/> octets cannot be a <c>TPM2B_AUTH</c> and is refused rather
+    /// than truncated. A TPM refuses the same value on the wire, so shortening it here would produce an
+    /// authValue no TPM would ever hold. A caller with a longer secret applies the hash-if-too-long convention
+    /// itself (TPM 2.0 Library Part 1, clause 17.6.4.3: "The TPM does not enforce this transformation").
+    /// </para>
     /// </remarks>
+    /// <exception cref="ArgumentException">The trimmed UTF-8 encoding of <paramref name="password"/> is longer than <see cref="MaxSize"/>.</exception>
     public static Tpm2bAuth CreateFromPassword(string password, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -185,6 +229,13 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
         {
             System.Security.Cryptography.CryptographicOperations.ZeroMemory(passwordBytes);
             return EmptyInstance;
+        }
+
+        if(length > MaxSize)
+        {
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(passwordBytes);
+
+            throw new ArgumentException($"Auth value too large. Maximum is {MaxSize} bytes.", nameof(password));
         }
 
         IMemoryOwner<byte> storage = pool.Rent(length, AllocationKind.Pinned);

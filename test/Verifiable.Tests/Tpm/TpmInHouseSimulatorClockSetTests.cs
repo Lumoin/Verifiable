@@ -34,7 +34,7 @@ internal sealed class TpmInHouseSimulatorClockSetTests
     public async Task ClockSetForwardAdvancesClockAndReadClockConfirms()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = CreatePoweredOff();
+        using TpmSimulator simulator = CreatePoweredOff();
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -61,7 +61,7 @@ internal sealed class TpmInHouseSimulatorClockSetTests
     public async Task ClockSetBackwardReturnsValueAndLeavesClockUnchanged()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = CreatePoweredOff();
+        using TpmSimulator simulator = CreatePoweredOff();
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -89,7 +89,7 @@ internal sealed class TpmInHouseSimulatorClockSetTests
     public async Task ClockSetAboveTheCeilingReturnsValue()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = CreatePoweredOff();
+        using TpmSimulator simulator = CreatePoweredOff();
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -112,7 +112,7 @@ internal sealed class TpmInHouseSimulatorClockSetTests
     public async Task ClockSetWithNonOwnerHandleReturnsHandle()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = CreatePoweredOff();
+        using TpmSimulator simulator = CreatePoweredOff();
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 

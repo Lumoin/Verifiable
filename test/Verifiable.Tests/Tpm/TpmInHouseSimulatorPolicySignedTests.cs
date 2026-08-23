@@ -1,5 +1,6 @@
 using System;
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cryptography;
@@ -63,7 +64,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     public async Task PolicySignedEccFlowSealsAndUnsealsUnderThePredictedPolicy()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -143,7 +144,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
 
             using(PolicySignedResponse policySigned = policySignedResult.Value)
             {
-                Assert.IsTrue(policySigned.PolicyTicket.IsNull(), "PolicySigned always frames a NULL ticket; the real mint is deferred.");
+                Assert.IsTrue(policySigned.PolicyTicket.IsNull, "PolicySigned always frames a NULL ticket; the real mint is deferred.");
             }
 
             TpmResult<PolicyGetDigestResponse> digestResult = await tpm.PolicyGetDigestAsync(
@@ -185,7 +186,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     public async Task PolicySignedTrialSessionPredictsTheSameDigestAsAHostPrediction()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -241,7 +242,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     public async Task PolicySignedWithCorruptedSignatureReturnsSignature()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -294,14 +295,16 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
 
     /// <summary>
     /// Verifies a non-empty caller nonceTPM that does not match the session's retained nonce is rejected with
-    /// <c>TPM_RC_NONCE</c>, before the (placeholder, never-reached) signature is ever verified (TPM 2.0 Library
-    /// Part 3, Section 23.2.2).
+    /// <c>TPM_RC_VALUE</c>, before the (placeholder, never-reached) signature is ever verified. TPM 2.0 Library
+    /// Part 3, clause 23.2.2, printed page 189, rule 1 names the code: "nonceTPM - If this parameter is not the
+    /// Empty Buffer, and it does not match policySession&#8594;nonceTPM, then the TPM shall return
+    /// TPM_RC_VALUE."
     /// </summary>
     [TestMethod]
-    public async Task PolicySignedWithMismatchedCallerNonceReturnsNonce()
+    public async Task PolicySignedWithMismatchedCallerNonceReturnsValue()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -328,7 +331,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
                 TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(policySignedResult.IsSuccess, "A mismatched non-empty caller nonce must be rejected.");
-            Assert.AreEqual(TpmRcConstants.TPM_RC_NONCE, policySignedResult.ResponseCode);
+            Assert.AreEqual(TpmRcConstants.TPM_RC_VALUE, policySignedResult.ResponseCode);
         }
         finally
         {
@@ -346,7 +349,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     public async Task PolicySignedWithExpiredDeadlineReturnsExpired()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool, clockAdvanceQuantumMs: 5000).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool, clockAdvanceQuantumMs: 5000).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -388,7 +391,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     public async Task PolicySignedWithWrongSizedCpHashAReturnsSize()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -430,7 +433,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     public async Task PolicySignedCpHashLatchConflictReturnsCpHash()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -489,6 +492,95 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     }
 
     /// <summary>
+    /// A signature that fails to verify must NOT latch <c>cpHashA</c> onto the session (TPM 2.0 Library Part 3,
+    /// Section 23.2.4's latch is part of a SUCCESSFUL <c>PolicyUpdate()</c>, not a pre-verification side effect
+    /// of merely proposing a cpHashA): a first call carrying a non-empty <c>cpHashA</c> but a signature that does
+    /// not verify is rejected with <c>TPM_RC_SIGNATURE</c>, and a SECOND, genuinely verified call on the SAME
+    /// session with a DIFFERENT <c>cpHashA</c> must then succeed — proving the failed first call left the
+    /// session's cpHash latch empty rather than poisoning it.
+    /// </summary>
+    [TestMethod]
+    public async Task PolicySignedFailedVerificationLeavesTheSessionCpHashLatchEmpty()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
+        uint authorityHandle = authorityKey.ObjectHandle.Value;
+
+        byte[] firstCpHash = new byte[32];
+        Array.Fill(firstCpHash, (byte)0x11);
+        byte[] secondCpHash = new byte[32];
+        Array.Fill(secondCpHash, (byte)0x22);
+
+        uint sessionHandle = 0;
+        try
+        {
+            TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
+                SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (policy) failed: '{startResult.ResponseCode}'.");
+
+            using StartAuthSessionResponse session = startResult.Value;
+            sessionHandle = session.SessionHandle.Value;
+            byte[] nonceTpm = session.NonceTPM.AsReadOnlySpan().ToArray();
+
+            //First call: a non-empty cpHashA, but a genuine signature over that same aHash with one octet of its
+            //S component flipped, so it fails to verify (mirrors PolicySignedWithCorruptedSignatureReturnsSignature's
+            //safe corruption technique rather than an all-zero placeholder, which risks the ECC backend rejecting
+            //a structurally degenerate r=0/s=0 signature before this test can observe the intended RC). Must fail
+            //WITHOUT latching firstCpHash onto the session.
+            byte[] firstAHash = await ComputeAHashAsync(
+                nonceTpm, 0, firstCpHash, ReadOnlyMemory<byte>.Empty, 32, CryptoTags.Sha256Digest, pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+            using TpmPasswordSession firstSignAuth = TpmPasswordSession.CreateEmpty(pool);
+            using SignInput firstSignInput = SignInput.ForEcdsa(authorityKey.ObjectHandle, firstAHash, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+            TpmResult<SignResponse> firstSignResult = await TpmCommandExecutor.ExecuteAsync<SignResponse>(
+                tpm, firstSignInput, [firstSignAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(firstSignResult.IsSuccess, $"TPM2_Sign (first aHash) failed: '{firstSignResult.ResponseCode}'.");
+
+            using SignResponse firstSignature = firstSignResult.Value;
+            int firstSLength = firstSignature.Signature.SignatureS!.AsReadOnlySpan().Length;
+            using IMemoryOwner<byte> corruptedS = pool.Rent(firstSLength);
+            firstSignature.Signature.SignatureS!.AsReadOnlySpan().CopyTo(corruptedS.Memory.Span);
+            corruptedS.Memory.Span[firstSLength - 1] ^= 0xFF;
+            using Signature corruptedFirstSignature = ConcatenateP1363(firstSignature.Signature.SignatureR!.AsReadOnlySpan(), corruptedS.Memory.Span[..firstSLength], pool);
+
+            TpmResult<PolicySignedResponse> firstResult = await tpm.PolicySignedAsync(
+                authorityHandle, sessionHandle, nonceTpm, firstCpHash, ReadOnlyMemory<byte>.Empty, 0, corruptedFirstSignature.AsReadOnlyMemory(),
+                TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsFalse(firstResult.IsSuccess, "A signature that does not verify must be rejected.");
+            Assert.AreEqual(TpmRcConstants.TPM_RC_SIGNATURE, firstResult.ResponseCode);
+
+            //Second call, same session: a genuine signature over a DIFFERENT cpHashA. If the failed first call
+            //had latched firstCpHash, this would be rejected with TPM_RC_CPHASH instead of succeeding.
+            byte[] secondAHash = await ComputeAHashAsync(
+                nonceTpm, 0, secondCpHash, ReadOnlyMemory<byte>.Empty, 32, CryptoTags.Sha256Digest, pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+            using TpmPasswordSession signAuth = TpmPasswordSession.CreateEmpty(pool);
+            using SignInput signInput = SignInput.ForEcdsa(authorityKey.ObjectHandle, secondAHash, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+            TpmResult<SignResponse> signResult = await TpmCommandExecutor.ExecuteAsync<SignResponse>(
+                tpm, signInput, [signAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(signResult.IsSuccess, $"TPM2_Sign (second aHash) failed: '{signResult.ResponseCode}'.");
+
+            using SignResponse secondSignature = signResult.Value;
+            using Signature secondP1363Signature = ConcatenateP1363(secondSignature.Signature.SignatureR!.AsReadOnlySpan(), secondSignature.Signature.SignatureS!.AsReadOnlySpan(), pool);
+
+            TpmResult<PolicySignedResponse> secondResult = await tpm.PolicySignedAsync(
+                authorityHandle, sessionHandle, nonceTpm, secondCpHash, ReadOnlyMemory<byte>.Empty, 0, secondP1363Signature.AsReadOnlyMemory(),
+                TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsTrue(secondResult.IsSuccess, $"PolicySigned with a different cpHashA after a failed verification must succeed: '{secondResult.ResponseCode}'.");
+            secondResult.Value.Dispose();
+        }
+        finally
+        {
+            await FlushIfPresentAsync(tpm, sessionHandle).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
     /// Verifies an RSA authority key signing under RSASSA with a SHA-384 scheme hash succeeds against a policy
     /// session started with a SHA-256 policy hash — the three-hash-algorithm separation this session enforces (aHash's
     /// H_authAlg, the session's own policy hash, and the ticket-HMAC hash — the last not reached here since
@@ -499,7 +591,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     public async Task PolicySignedAcceptsAnRsaSignatureUnderAMixedSchemeHashAgainstTheSessionsPolicyHash()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
         TpmResponseRegistry registry = CreateRegistry();
 
@@ -556,6 +648,187 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
             Assert.IsTrue(
                 digest.PolicyDigest.AsReadOnlySpan().SequenceEqual(predicted),
                 "The policyDigest fold must use the session's own (SHA-256) policy hash, independent of the SHA-384 scheme hash aHash was built with.");
+        }
+        finally
+        {
+            await FlushIfPresentAsync(tpm, sessionHandle).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Verifies a negative <c>expiration</c> on a real (non-trial) session mints a genuine
+    /// <c>TPMT_TK_AUTH</c> — tag <c>TPM_ST_AUTH_SIGNED</c>, the authority key's own hierarchy, a non-empty
+    /// SHA-256-width digest, and an 8-byte <c>TPM2B_TIMEOUT</c> — instead of the NULL ticket a non-negative
+    /// expiration produces (TPM 2.0 Library Part 3, Section 23.2.5). An empty caller nonceTPM makes the
+    /// deadline absolute (Time-base, not session-relative), so the ticket's bit 63 (expires-on-reset,
+    /// Section 10.4.10) must be set.
+    /// </summary>
+    [TestMethod]
+    public async Task PolicySignedWithNegativeExpirationAndEmptyNonceMintsARealTicketThatExpiresOnReset()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
+        uint authorityHandle = authorityKey.ObjectHandle.Value;
+        byte[] policyRef = "ticket-mint-empty-nonce-ref"u8.ToArray();
+
+        uint sessionHandle = 0;
+        try
+        {
+            TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
+                SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (policy) failed: '{startResult.ResponseCode}'.");
+
+            using StartAuthSessionResponse session = startResult.Value;
+            sessionHandle = session.SessionHandle.Value;
+
+            byte[] aHash = await ComputeAHashAsync(
+                ReadOnlyMemory<byte>.Empty, -3600, ReadOnlyMemory<byte>.Empty, policyRef, 32, CryptoTags.Sha256Digest, pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+            using TpmPasswordSession signAuth = TpmPasswordSession.CreateEmpty(pool);
+            using SignInput signInput = SignInput.ForEcdsa(authorityKey.ObjectHandle, aHash, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+            TpmResult<SignResponse> signResult = await TpmCommandExecutor.ExecuteAsync<SignResponse>(
+                tpm, signInput, [signAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(signResult.IsSuccess, $"TPM2_Sign (authority over aHash) failed: '{signResult.ResponseCode}'.");
+
+            using SignResponse signature = signResult.Value;
+            using Signature p1363Signature = ConcatenateP1363(signature.Signature.SignatureR!.AsReadOnlySpan(), signature.Signature.SignatureS!.AsReadOnlySpan(), pool);
+
+            TpmResult<PolicySignedResponse> policySignedResult = await tpm.PolicySignedAsync(
+                authorityHandle, sessionHandle, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, policyRef, -3600, p1363Signature.AsReadOnlyMemory(),
+                TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(policySignedResult.IsSuccess, $"PolicySigned (negative expiration) failed: '{policySignedResult.ResponseCode}'.");
+
+            using PolicySignedResponse policySigned = policySignedResult.Value;
+            Assert.IsFalse(policySigned.PolicyTicket.IsNull, "A negative expiration on a real session must mint a real ticket, not a NULL ticket.");
+            Assert.AreEqual(TpmStConstants.TPM_ST_AUTH_SIGNED, policySigned.PolicyTicket.Tag, "The ticket tag must be TPM_ST_AUTH_SIGNED.");
+            Assert.AreEqual(TpmiRhHierarchy.Owner, policySigned.PolicyTicket.Hierarchy, "The ticket hierarchy must be the authority key's own hierarchy.");
+            int ticketDigestLength = policySigned.PolicyTicket.Digest.Length;
+            int timeoutLength = policySigned.Timeout.Length;
+            Assert.AreEqual(32, ticketDigestLength, "The ticket digest is a SHA-256 HMAC.");
+            Assert.AreEqual(8, timeoutLength, "A real ticket's TPM2B_TIMEOUT is exactly 8 bytes.");
+
+            ulong rawTimeout = BinaryPrimitives.ReadUInt64BigEndian(policySigned.Timeout);
+            Assert.AreNotEqual(0UL, rawTimeout & (1UL << 63), "An empty caller nonceTPM (absolute deadline) must set the expires-on-reset bit (bit 63).");
+        }
+        finally
+        {
+            await FlushIfPresentAsync(tpm, sessionHandle).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Verifies the same real-ticket mint as
+    /// <see cref="PolicySignedWithNegativeExpirationAndEmptyNonceMintsARealTicketThatExpiresOnReset"/>, but with
+    /// the session's real (non-empty) nonceTPM supplied — a session-relative deadline — so bit 63
+    /// (expires-on-reset) must be CLEAR: the nonceTPM presence, not the sign of expiration alone, decides that
+    /// bit (TPM 2.0 Library Part 2, Section 10.4.10).
+    /// </summary>
+    [TestMethod]
+    public async Task PolicySignedWithNegativeExpirationAndNonEmptyNonceMintsARealTicketThatDoesNotExpireOnReset()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
+        uint authorityHandle = authorityKey.ObjectHandle.Value;
+        byte[] policyRef = "ticket-mint-real-nonce-ref"u8.ToArray();
+
+        uint sessionHandle = 0;
+        try
+        {
+            TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
+                SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (policy) failed: '{startResult.ResponseCode}'.");
+
+            using StartAuthSessionResponse session = startResult.Value;
+            sessionHandle = session.SessionHandle.Value;
+            byte[] nonceTpm = session.NonceTPM.AsReadOnlySpan().ToArray();
+
+            byte[] aHash = await ComputeAHashAsync(
+                nonceTpm, -3600, ReadOnlyMemory<byte>.Empty, policyRef, 32, CryptoTags.Sha256Digest, pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+            using TpmPasswordSession signAuth = TpmPasswordSession.CreateEmpty(pool);
+            using SignInput signInput = SignInput.ForEcdsa(authorityKey.ObjectHandle, aHash, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+            TpmResult<SignResponse> signResult = await TpmCommandExecutor.ExecuteAsync<SignResponse>(
+                tpm, signInput, [signAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(signResult.IsSuccess, $"TPM2_Sign (authority over aHash) failed: '{signResult.ResponseCode}'.");
+
+            using SignResponse signature = signResult.Value;
+            using Signature p1363Signature = ConcatenateP1363(signature.Signature.SignatureR!.AsReadOnlySpan(), signature.Signature.SignatureS!.AsReadOnlySpan(), pool);
+
+            TpmResult<PolicySignedResponse> policySignedResult = await tpm.PolicySignedAsync(
+                authorityHandle, sessionHandle, nonceTpm, ReadOnlyMemory<byte>.Empty, policyRef, -3600, p1363Signature.AsReadOnlyMemory(),
+                TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(policySignedResult.IsSuccess, $"PolicySigned (negative expiration) failed: '{policySignedResult.ResponseCode}'.");
+
+            using PolicySignedResponse policySigned = policySignedResult.Value;
+            Assert.IsFalse(policySigned.PolicyTicket.IsNull, "A negative expiration on a real session must mint a real ticket, not a NULL ticket.");
+            int timeoutLength = policySigned.Timeout.Length;
+            Assert.AreEqual(8, timeoutLength, "A real ticket's TPM2B_TIMEOUT is exactly 8 bytes.");
+
+            ulong rawTimeout = BinaryPrimitives.ReadUInt64BigEndian(policySigned.Timeout);
+            Assert.AreEqual(0UL, rawTimeout & (1UL << 63), "A non-empty caller nonceTPM (session-relative deadline) must leave the expires-on-reset bit (bit 63) clear.");
+        }
+        finally
+        {
+            await FlushIfPresentAsync(tpm, sessionHandle).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Verifies a positive (not yet expired) <c>expiration</c> on a real session still returns a NULL ticket:
+    /// only a NEGATIVE expiration requests a ticket (TPM 2.0 Library Part 3, Section 23.2.5) — the deadline
+    /// magnitude is identical either way, so this isolates the sign as the sole "mint a ticket" signal.
+    /// </summary>
+    [TestMethod]
+    public async Task PolicySignedWithPositiveExpirationOnARealSessionStillReturnsANullTicket()
+    {
+        BaseMemoryPool pool = BaseMemoryPool.Shared;
+        using TpmSimulator simulator = await CreateOperationalAsync(pool).ConfigureAwait(false);
+        using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync);
+        TpmResponseRegistry registry = CreateRegistry();
+
+        using CreatePrimaryResponse authorityKey = await CreateEccAuthorityKeyAsync(tpm, registry, pool).ConfigureAwait(false);
+        uint authorityHandle = authorityKey.ObjectHandle.Value;
+        byte[] policyRef = "ticket-mint-positive-expiration-ref"u8.ToArray();
+
+        uint sessionHandle = 0;
+        try
+        {
+            TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
+                SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (policy) failed: '{startResult.ResponseCode}'.");
+
+            using StartAuthSessionResponse session = startResult.Value;
+            sessionHandle = session.SessionHandle.Value;
+
+            //A large positive expiration (absolute Time-base deadline, far in the future) never trips
+            //TPM_RC_EXPIRED, isolating the "no ticket" outcome from the separate expired-deadline ladder rung.
+            byte[] aHash = await ComputeAHashAsync(
+                ReadOnlyMemory<byte>.Empty, 3600, ReadOnlyMemory<byte>.Empty, policyRef, 32, CryptoTags.Sha256Digest, pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+            using TpmPasswordSession signAuth = TpmPasswordSession.CreateEmpty(pool);
+            using SignInput signInput = SignInput.ForEcdsa(authorityKey.ObjectHandle, aHash, TpmAlgIdConstants.TPM_ALG_SHA256, pool);
+            TpmResult<SignResponse> signResult = await TpmCommandExecutor.ExecuteAsync<SignResponse>(
+                tpm, signInput, [signAuth], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(signResult.IsSuccess, $"TPM2_Sign (authority over aHash) failed: '{signResult.ResponseCode}'.");
+
+            using SignResponse signature = signResult.Value;
+            using Signature p1363Signature = ConcatenateP1363(signature.Signature.SignatureR!.AsReadOnlySpan(), signature.Signature.SignatureS!.AsReadOnlySpan(), pool);
+
+            TpmResult<PolicySignedResponse> policySignedResult = await tpm.PolicySignedAsync(
+                authorityHandle, sessionHandle, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, policyRef, 3600, p1363Signature.AsReadOnlyMemory(),
+                TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(policySignedResult.IsSuccess, $"PolicySigned (positive expiration) failed: '{policySignedResult.ResponseCode}'.");
+
+            using PolicySignedResponse policySigned = policySignedResult.Value;
+            Assert.IsTrue(policySigned.PolicyTicket.IsNull, "A non-negative expiration must return a NULL ticket, even when the deadline itself is valid and far in the future.");
         }
         finally
         {

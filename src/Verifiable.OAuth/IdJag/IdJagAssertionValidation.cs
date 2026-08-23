@@ -32,6 +32,13 @@ namespace Verifiable.OAuth.IdJag;
 ///   <item><description><c>aud</c> is the Resource Authorization Server's issuer as a string, or a single-element array of it; any other shape (multi-element array, mismatch) is rejected.</description></item>
 ///   <item><description><c>client_id</c> equals the authenticated client.</description></item>
 ///   <item><description><c>sub</c> and <c>exp</c> are present, the temporal claims are consistent, and the grant is neither expired nor not-yet-valid (RFC 7521 §5.2).</description></item>
+///   <item><description>
+///     an <c>act</c> or <c>may_act</c> claim, when present, is a well-formed
+///     <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see> /
+///     <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.4">§4.4</see> object — not a §4.4.1
+///     rule (ID-JAG §4.3/§9.7 defines no actor processing), but a fail-closed read: a delegation this
+///     server cannot parse is refused rather than dropped from the token it would issue.
+///   </description></item>
 /// </list>
 /// <para>
 /// The <c>iss</c>/<c>sub</c>/<c>aud</c>/<c>exp</c>/<c>nbf</c>/<c>iat</c> checks above are the generic
@@ -168,6 +175,29 @@ public static class IdJagAssertionValidation
                 "The assertion cnf claim carries no usable jkt thumbprint.");
         }
 
+        //RFC 8693 §4.1: an act claim on the grant is the delegation chain the redeemed access token
+        //continues — "The outermost act claim represents the current actor while nested act claims
+        //represent prior actors." A present act that is not a §4.1 actor object is rejected rather than
+        //dropped, so a malformed chain can never downgrade a delegated grant to an undelegated token.
+        IReadOnlyDictionary<string, object>? act = ReadActorChain(payload);
+        if(act is null && payload.ContainsKey(WellKnownJwtClaimNames.Act))
+        {
+            return IdJagAssertionValidationResult.Failure(
+                IdJagValidationFailureReason.MalformedActor,
+                "The assertion act claim is not a well-formed actor object.");
+        }
+
+        //RFC 8693 §4.4: a may_act claim names the party the grant's issuer authorized to become the
+        //actor. A present may_act that identifies no party is rejected rather than treated as "no
+        //constraint", which would turn a malformed claim into a bypass of the constraint it states.
+        IReadOnlyDictionary<string, object>? mayAct = ReadAuthorizedActor(payload);
+        if(mayAct is null && payload.ContainsKey(WellKnownJwtClaimNames.MayAct))
+        {
+            return IdJagAssertionValidationResult.Failure(
+                IdJagValidationFailureReason.MalformedAuthorizedActor,
+                "The assertion may_act claim is not a well-formed authorized-actor object.");
+        }
+
         string? scope = Rfc7523AssertionValidation.TryReadStringClaim(payload, WellKnownJwtClaimNames.Scope, out string? scopeValue)
             ? scopeValue
             : null;
@@ -205,6 +235,8 @@ public static class IdJagAssertionValidation
             AuthorizationDetails = ReadObjectArray(payload, OAuthRequestParameterNames.AuthorizationDetails),
             ClientId = clientId,
             ConfirmationKeyThumbprint = confirmationThumbprint,
+            Act = act,
+            MayAct = mayAct,
             Scope = scope,
             Jti = jti,
             IssuedAt = iat,
@@ -245,6 +277,161 @@ public static class IdJagAssertionValidation
             _ => null
         };
     }
+
+
+    /// <summary>
+    /// The deepest <c>act</c> nesting this validator reads. A delegation chain holds one link per hop
+    /// actually taken (RFC 8693 §4.1), so a deeper chain describes no reachable delegation and is
+    /// treated as malformed — bounding the recursion a caller-built payload could otherwise drive.
+    /// </summary>
+    private const int MaxActorChainDepth = 16;
+
+
+    /// <summary>
+    /// Reads the grant's <c>act</c> claim as an RFC 8693 §4.1 delegation chain.
+    /// </summary>
+    /// <param name="payload">The decoded assertion payload.</param>
+    /// <returns>
+    /// The chain when the claim is present and well-formed, or <see langword="null"/> when it is absent
+    /// or malformed — the caller distinguishes the two by claim presence.
+    /// </returns>
+    private static IReadOnlyDictionary<string, object>? ReadActorChain(JwtPayload payload) =>
+        payload.TryGetValue(WellKnownJwtClaimNames.Act, out object? raw)
+            ? ReadActorLink(raw, MaxActorChainDepth)
+            : null;
+
+
+    /// <summary>
+    /// Reads one link of an RFC 8693 §4.1 delegation chain — an object whose members "identify the
+    /// actor" and whose optional nested <c>act</c> member is the prior actor. A link that names no
+    /// <c>sub</c>, that states an <c>iss</c> in any shape other than an identifier, or whose nested
+    /// prior actor is itself not a link, makes the whole chain malformed: the chain is read wholly or
+    /// not at all, so no part of a delegation history is silently discarded.
+    /// </summary>
+    /// <param name="value">The decoded claim value of this link.</param>
+    /// <param name="remainingDepth">The nesting budget left for this link and the ones beneath it.</param>
+    /// <returns>The link, or <see langword="null"/> when it is not a well-formed actor object.</returns>
+    private static IReadOnlyDictionary<string, object>? ReadActorLink(object? value, int remainingDepth)
+    {
+        if(remainingDepth <= 0)
+        {
+            return null;
+        }
+
+        IReadOnlyDictionary<string, object>? actor = AsClaimObject(value);
+        if(actor is null)
+        {
+            return null;
+        }
+
+        if(!actor.TryGetValue(WellKnownJwtClaimNames.Sub, out object? subRaw)
+            || subRaw is not string actorSubject
+            || string.IsNullOrEmpty(actorSubject))
+        {
+            return null;
+        }
+
+        //§4.1: "the combination of the two claims iss and sub might be necessary to uniquely identify
+        //an actor." An iss present as anything but a non-empty string identifies no namespace, and the
+        //link is copied verbatim onto the access token this redemption issues — where the resource
+        //server's own reading of §4.1, JwsAccessTokenValidator, rejects exactly that shape. Reading the
+        //member the same way at both ends is what keeps redemption from minting a token whose actor
+        //claim the resource it was minted for can never validate.
+        if(!IsIdentityMemberReadable(actor, WellKnownJwtClaimNames.Iss))
+        {
+            return null;
+        }
+
+        if(actor.TryGetValue(WellKnownJwtClaimNames.Act, out object? nestedRaw)
+            && ReadActorLink(nestedRaw, remainingDepth - 1) is null)
+        {
+            return null;
+        }
+
+        return actor;
+    }
+
+
+    /// <summary>
+    /// Reads the grant's <c>may_act</c> claim as an RFC 8693 §4.4 authorized-actor object — one whose
+    /// members "identify the party that is asserted as being eligible to act", which the §4.4 text
+    /// identifies by <c>sub</c>, optionally combined with <c>iss</c>.
+    /// </summary>
+    /// <param name="payload">The decoded assertion payload.</param>
+    /// <returns>
+    /// The authorized-actor object, or <see langword="null"/> when the claim is absent, states an
+    /// identity member in a shape that is not an identifier, or identifies no party at all — the caller
+    /// distinguishes absence from the malformed cases by claim presence.
+    /// </returns>
+    private static IReadOnlyDictionary<string, object>? ReadAuthorizedActor(JwtPayload payload)
+    {
+        if(!payload.TryGetValue(WellKnownJwtClaimNames.MayAct, out object? raw))
+        {
+            return null;
+        }
+
+        IReadOnlyDictionary<string, object>? authorizedActor = AsClaimObject(raw);
+        if(authorizedActor is null)
+        {
+            return null;
+        }
+
+        //§4.4: "the combination of the two claims iss and sub are sometimes necessary to uniquely
+        //identify an authorized actor." A member present in any other shape states half of that pair
+        //unreadably, and ignoring it would relax the claim to whichever half happened to parse — a
+        //narrower authorization silently widened by a malformed member. The same reading as the act
+        //links above and as the resource side applies to the claim it receives.
+        if(!IsIdentityMemberReadable(authorizedActor, WellKnownJwtClaimNames.Sub)
+            || !IsIdentityMemberReadable(authorizedActor, WellKnownJwtClaimNames.Iss))
+        {
+            return null;
+        }
+
+        bool namesSubject = HasIdentityMember(authorizedActor, WellKnownJwtClaimNames.Sub);
+        bool namesIssuer = HasIdentityMember(authorizedActor, WellKnownJwtClaimNames.Iss);
+
+        return namesSubject || namesIssuer ? authorizedActor : null;
+    }
+
+
+    /// <summary>
+    /// Whether an actor or authorized-actor object identifies its party by the given member — present,
+    /// a string, and non-empty.
+    /// </summary>
+    /// <param name="claimObject">The actor or authorized-actor object.</param>
+    /// <param name="member">The member name.</param>
+    /// <returns><see langword="true"/> when the member identifies the party.</returns>
+    private static bool HasIdentityMember(IReadOnlyDictionary<string, object> claimObject, string member) =>
+        claimObject.TryGetValue(member, out object? raw) && raw is string value && !string.IsNullOrEmpty(value);
+
+
+    /// <summary>
+    /// Whether a member of an actor or authorized-actor object is readable as the identity it states:
+    /// either absent, or present as a non-empty string. RFC 8693 §4.1/§4.4 describe these members as
+    /// "claims that identify" the party, so a member present in any other shape states an identity
+    /// nothing downstream can compare — a defect of the claim, and a different condition from the party
+    /// simply not being identified by that member.
+    /// </summary>
+    /// <param name="claimObject">The actor or authorized-actor object.</param>
+    /// <param name="member">The member name.</param>
+    /// <returns><see langword="true"/> when the member is absent or is an identifier.</returns>
+    private static bool IsIdentityMemberReadable(IReadOnlyDictionary<string, object> claimObject, string member) =>
+        !claimObject.TryGetValue(member, out object? raw) || (raw is string value && !string.IsNullOrEmpty(value));
+
+
+    /// <summary>
+    /// Views a decoded nested JSON object claim value as a read-only dictionary, accepting either the
+    /// read-only or the mutable dictionary shape a JWT payload parser may produce; any other value is
+    /// not an object.
+    /// </summary>
+    /// <param name="value">The decoded claim value.</param>
+    /// <returns>The object view, or <see langword="null"/> when the value is not a JSON object.</returns>
+    private static IReadOnlyDictionary<string, object>? AsClaimObject(object? value) => value switch
+    {
+        IReadOnlyDictionary<string, object> readOnly => readOnly,
+        IDictionary<string, object> mutable => new Dictionary<string, object>(mutable, StringComparer.Ordinal),
+        _ => null
+    };
 
 
     private static List<string> ReadStringOrArray(JwtPayload payload, string claimName)

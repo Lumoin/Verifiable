@@ -35,12 +35,25 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// <para>
 /// See TPM 2.0 Part 1, Section 17.6.3 - Session Nonces.
-/// See TPM 2.0 Part 2, Section 10.4.3.
+/// See TPM 2.0 Part 2, Section 10.4.4.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 public sealed class Tpm2bNonce: SensitiveMemory, ITpmWireType
 {
+    /// <summary>
+    /// The largest nonce a <c>TPM2B_NONCE</c> buffer may carry: <c>sizeof(TPMU_HA)</c>, 64 octets. Table 94
+    /// defines the type as a <c>TPM2B_DIGEST</c> whose "size limited to the same as the digest structure" (TPM
+    /// 2.0 Library Part 2, clause 10.4.4, page 134), and that structure's own table bounds its buffer field at
+    /// <c>buffer[size]{:sizeof(TPMU_HA)}</c> (clause 10.4.2, Table 92, page 134). The same clause states what a
+    /// wider value answers with: "As with all sized buffers, the size is checked to see if it is within the
+    /// prescribed range. If not, the response code is TPM_RC_SIZE", and its note adds that "For any structure,
+    /// like the one below, that contains an implied size check, it is implied that TPM_RC_SIZE is a possible
+    /// response code and the response code will not be listed in the table". The bound is the hash union's
+    /// width, never the width of whatever session hash algorithm a nonce happens to serve.
+    /// </summary>
+    public const int MaxSize = 64;
+
     /// <summary>
     /// Shared empty instance backed by <see cref="EmptyMemoryOwner"/>.
     /// </summary>
@@ -70,6 +83,7 @@ public sealed class Tpm2bNonce: SensitiveMemory, ITpmWireType
     /// <param name="reader">The reader positioned at the nonce.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The parsed nonce.</returns>
+    /// <exception cref="InvalidOperationException">The declared size exceeds <see cref="MaxSize"/>, which a TPM answers with <c>TPM_RC_SIZE</c>.</exception>
     public static Tpm2bNonce Parse(ref TpmReader reader, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -77,6 +91,11 @@ public sealed class Tpm2bNonce: SensitiveMemory, ITpmWireType
         if(size == 0)
         {
             return EmptyInstance;
+        }
+
+        if(size > MaxSize)
+        {
+            throw new InvalidOperationException($"Nonce size {size} exceeds maximum {MaxSize}.");
         }
 
         IMemoryOwner<byte> storage = pool.Rent(size);
@@ -103,6 +122,12 @@ public sealed class Tpm2bNonce: SensitiveMemory, ITpmWireType
     public int SerializedSize => sizeof(ushort) + Size;
 
     /// <summary>
+    /// Gets the shared empty nonce, for contexts with no pool in scope — the same dispose-immune instance
+    /// <see cref="CreateEmpty"/> returns, mirroring <see cref="Tpm2bAuth.Empty"/>.
+    /// </summary>
+    public static Tpm2bNonce Empty => EmptyInstance;
+
+    /// <summary>
     /// Creates an empty nonce.
     /// </summary>
     /// <param name="pool">The memory pool (unused for empty nonces).</param>
@@ -119,12 +144,18 @@ public sealed class Tpm2bNonce: SensitiveMemory, ITpmWireType
     /// <param name="bytes">The nonce bytes.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>The created nonce.</returns>
+    /// <exception cref="ArgumentException"><paramref name="bytes"/> is longer than <see cref="MaxSize"/>.</exception>
     public static Tpm2bNonce Create(ReadOnlySpan<byte> bytes, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         if(bytes.IsEmpty)
         {
             return EmptyInstance;
+        }
+
+        if(bytes.Length > MaxSize)
+        {
+            throw new ArgumentException($"Nonce too large. Maximum is {MaxSize} bytes.", nameof(bytes));
         }
 
         IMemoryOwner<byte> storage = pool.Rent(bytes.Length);
@@ -138,13 +169,18 @@ public sealed class Tpm2bNonce: SensitiveMemory, ITpmWireType
     /// <param name="length">The length of the nonce in bytes.</param>
     /// <param name="pool">The memory pool for allocating storage.</param>
     /// <returns>A nonce filled with random data.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">Length is zero or negative.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Length is zero or negative, or greater than <see cref="MaxSize"/>.</exception>
     public static Tpm2bNonce CreateRandom(int length, BaseMemoryPool pool)
     {
         ArgumentNullException.ThrowIfNull(pool);
         if(length <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(length), "Nonce size must be greater than zero.");
+        }
+
+        if(length > MaxSize)
+        {
+            throw new ArgumentOutOfRangeException(nameof(length), $"Nonce size must be no greater than {MaxSize} bytes.");
         }
 
         IMemoryOwner<byte> storage = pool.Rent(length);

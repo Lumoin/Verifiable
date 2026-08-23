@@ -19,33 +19,40 @@ public static class TpmsTaggedPolicyExtensions
     {
         string handleName = TpmValueConversions.GetHandleDescription(policy.Handle);
 
-        if(policy.PolicyHash.IsEmpty)
+        if(policy.HasEmptyPolicy())
         {
             return $"{handleName}: no policy (empty authorization)";
         }
 
-        string hashHex = Convert.ToHexString(policy.PolicyHash.Span);
-        return $"{handleName}: ALG_0x{policy.PolicyHashAlgorithm:X4} policy {hashHex}";
+        TpmtHa policyHash = policy.PolicyHash ?? TpmtHa.Null;
+        string hashHex = Convert.ToHexString(policyHash.Digest);
+
+        return $"{handleName}: {policyHash.HashAlg.Value} policy {hashHex}";
     }
 
     /// <summary>
-    /// Determines if the handle has an empty policy (no restrictions).
+    /// Determines if the handle has an empty policy (no restrictions), which a default-valued
+    /// <see cref="TpmsTaggedPolicy"/> — whose <c>PolicyHash</c> field was never set — also is.
     /// </summary>
     /// <param name="policy">The tagged policy.</param>
     /// <returns><c>true</c> if the policy is empty; otherwise, <c>false</c>.</returns>
     public static bool HasEmptyPolicy(this TpmsTaggedPolicy policy)
     {
-        return policy.PolicyHash.IsEmpty;
+        TpmtHa policyHash = policy.PolicyHash ?? TpmtHa.Null;
+
+        return policyHash.IsNull || policyHash.Size == 0;
     }
 
     /// <summary>
-    /// Gets the policy hash as a hex string.
+    /// Gets the policy hash as a hex string, the empty string for a handle with no policy restriction.
     /// </summary>
     /// <param name="policy">The tagged policy.</param>
     /// <returns>The policy hash as a hex string.</returns>
     public static string GetPolicyHashHex(this TpmsTaggedPolicy policy)
     {
-        return Convert.ToHexString(policy.PolicyHash.Span);
+        TpmtHa policyHash = policy.PolicyHash ?? TpmtHa.Null;
+
+        return Convert.ToHexString(policyHash.Digest);
     }
 
     /// <summary>

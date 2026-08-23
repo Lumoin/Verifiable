@@ -1,5 +1,6 @@
 using System;
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
 using Verifiable.Cbor.Ctap;
@@ -367,7 +368,9 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
-        byte[] sealAuth = "tpm-custody-capstone-d1-seal-auth"u8.ToArray();
+        //At most 32 octets: an authValue is bounded by the digest size of the sealed object's nameAlg (SHA-256
+        //here) — TPM 2.0 Library Part 1, clause 17.6.4.2, enforced at TPM2_Create() with TPM_RC_SIZE.
+        byte[] sealAuth = "capstone-d1-seal-auth"u8.ToArray();
 
         (TpmDevice tpm, uint parentHandle) = await CreateChipWithLoadedStorageParentAsync("tpm-custody-capstone-d1-chip", cancellationToken).ConfigureAwait(false);
         try
@@ -438,8 +441,10 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
         CancellationToken cancellationToken = TestContext.CancellationToken;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
         Guid aaguid = Guid.NewGuid();
-        byte[] correctSealAuth = "tpm-custody-capstone-d2-correct-seal-auth"u8.ToArray();
-        byte[] wrongSealAuth = "tpm-custody-capstone-d2-wrong-seal-auth"u8.ToArray();
+        //At most 32 octets each: an authValue is bounded by the digest size of the sealed object's nameAlg
+        //(SHA-256 here) — TPM 2.0 Library Part 1, clause 17.6.4.2, enforced at TPM2_Create() with TPM_RC_SIZE.
+        byte[] correctSealAuth = "capstone-d2-correct-seal-auth"u8.ToArray();
+        byte[] wrongSealAuth = "capstone-d2-wrong-seal-auth"u8.ToArray();
 
         (TpmDevice tpm, uint parentHandle) = await CreateChipWithLoadedStorageParentAsync("tpm-custody-capstone-d2-chip", cancellationToken).ConfigureAwait(false);
         try
@@ -515,6 +520,8 @@ internal sealed class CtapAuthenticatorTpmCustodyCapstoneTests
     /// <param name="chipRunId">The simulated TPM's own run id.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The TPM device and the loaded storage parent's handle.</returns>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+        Justification = "The simulator is the test class's durable chip: its ownership rides the returned TpmDevice's submit delegate for the rest of the test, and its pooled state is reclaimed with the suite's process-wide pool.")]
     private static async Task<(TpmDevice Tpm, uint ParentHandle)> CreateChipWithLoadedStorageParentAsync(string chipRunId, CancellationToken cancellationToken)
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;

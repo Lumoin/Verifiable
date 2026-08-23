@@ -156,7 +156,7 @@ public static class StartAuthSessionInputExtensions
         /// </returns>
         /// <remarks>
         /// The salt is drawn via the entropy provider at <c>digestSize(tpmKeyNameAlg)</c> octets (Annex B.10.1's
-        /// cap); the wire <c>encryptedSalt</c> is the flat OAEP ciphertext (Part 2, Table 190/191).
+        /// cap); the wire <c>encryptedSalt</c> is the flat OAEP ciphertext (Part 2, Table 209/210).
         /// </remarks>
         public static ValueTask<(StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength)> CreateSaltedHmacSession(
             uint tpmKey,
@@ -168,7 +168,7 @@ public static class StartAuthSessionInputExtensions
             BaseMemoryPool pool,
             CancellationToken cancellationToken,
             TpmtSymDef? symmetric = null) =>
-            CreateRsaSaltedHmacSessionCore(tpmKey, (uint)TpmRh.TPM_RH_NULL, modulus, exponent, tpmKeyNameAlg, authHash, encryptSalt, pool, symmetric, cancellationToken);
+            CreateRsaSaltedSessionCore(tpmKey, (uint)TpmRh.TPM_RH_NULL, modulus, exponent, tpmKeyNameAlg, authHash, TpmSeConstants.TPM_SE_HMAC, encryptSalt, pool, symmetric, cancellationToken);
 
         /// <summary>
         /// Creates a salted, bound HMAC session against an RSA <paramref name="tpmKey"/> and the supplied bind entity.
@@ -199,7 +199,7 @@ public static class StartAuthSessionInputExtensions
             BaseMemoryPool pool,
             CancellationToken cancellationToken,
             TpmtSymDef? symmetric = null) =>
-            CreateRsaSaltedHmacSessionCore(tpmKey, bind, modulus, exponent, tpmKeyNameAlg, authHash, encryptSalt, pool, symmetric, cancellationToken);
+            CreateRsaSaltedSessionCore(tpmKey, bind, modulus, exponent, tpmKeyNameAlg, authHash, TpmSeConstants.TPM_SE_HMAC, encryptSalt, pool, symmetric, cancellationToken);
 
         /// <summary>
         /// Creates a salted, unbound HMAC session against an ECC <paramref name="tpmKey"/>.
@@ -233,7 +233,7 @@ public static class StartAuthSessionInputExtensions
         /// </returns>
         /// <remarks>
         /// The wire <c>encryptedSalt</c> is a marshaled <c>TPMS_ECC_POINT</c> (two size-prefixed coordinates)
-        /// carrying the ephemeral public point — not a flat buffer (TPM 2.0 Library Part 2, Table 190/191).
+        /// carrying the ephemeral public point — not a flat buffer (TPM 2.0 Library Part 2, Table 209/210).
         /// </remarks>
         public static ValueTask<(StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength)> CreateSaltedHmacSession(
             uint tpmKey,
@@ -246,7 +246,7 @@ public static class StartAuthSessionInputExtensions
             BaseMemoryPool pool,
             CancellationToken cancellationToken,
             TpmtSymDef? symmetric = null) =>
-            CreateEccSaltedHmacSessionCore(tpmKey, (uint)TpmRh.TPM_RH_NULL, tpmKeyPublicPoint, curve, tpmKeyNameAlg, authHash, generateEphemeralKey, computeSharedSecret, pool, symmetric, cancellationToken);
+            CreateEccSaltedSessionCore(tpmKey, (uint)TpmRh.TPM_RH_NULL, tpmKeyPublicPoint, curve, tpmKeyNameAlg, authHash, TpmSeConstants.TPM_SE_HMAC, generateEphemeralKey, computeSharedSecret, pool, symmetric, cancellationToken);
 
         /// <summary>
         /// Creates a salted, bound HMAC session against an ECC <paramref name="tpmKey"/> and the supplied bind entity.
@@ -279,12 +279,12 @@ public static class StartAuthSessionInputExtensions
             BaseMemoryPool pool,
             CancellationToken cancellationToken,
             TpmtSymDef? symmetric = null) =>
-            CreateEccSaltedHmacSessionCore(tpmKey, bind, tpmKeyPublicPoint, curve, tpmKeyNameAlg, authHash, generateEphemeralKey, computeSharedSecret, pool, symmetric, cancellationToken);
+            CreateEccSaltedSessionCore(tpmKey, bind, tpmKeyPublicPoint, curve, tpmKeyNameAlg, authHash, TpmSeConstants.TPM_SE_HMAC, generateEphemeralKey, computeSharedSecret, pool, symmetric, cancellationToken);
 
         /// <summary>
         /// Shared RSA salted-session core: draws the salt, OAEP-encrypts it, and frames the flat-ciphertext
-        /// <c>encryptedSalt</c> — used by both the unbound and bound RSA factories (<paramref name="bind"/> =
-        /// <c>TPM_RH_NULL</c> selects unbound).
+        /// <c>encryptedSalt</c> — used by all four RSA salted factories (<paramref name="bind"/> = <c>TPM_RH_NULL</c>
+        /// selects unbound; <paramref name="sessionType"/> selects HMAC or POLICY).
         /// </summary>
         /// <param name="tpmKey">The handle of the loaded RSA key the salt is encrypted to.</param>
         /// <param name="bind">The bind entity's handle, or <c>TPM_RH_NULL</c> for unbound.</param>
@@ -292,18 +292,25 @@ public static class StartAuthSessionInputExtensions
         /// <param name="exponent">tpmKey's public exponent.</param>
         /// <param name="tpmKeyNameAlg">tpmKey's own Name algorithm — sizes the drawn salt and drives OAEP's <c>lhash</c>/MGF1.</param>
         /// <param name="authHash">The hash algorithm for the session.</param>
+        /// <param name="sessionType">
+        /// <see cref="TpmSeConstants.TPM_SE_HMAC"/> or <see cref="TpmSeConstants.TPM_SE_POLICY"/>. Per TPM 2.0
+        /// Library Part 3, Section 11.1.1, sessionKey derivation (the salt handling this core performs) is
+        /// identical for both — sessionType changes only the policy-session-context defaults StartAuthSession
+        /// additionally sets, none of which this core is responsible for.
+        /// </param>
         /// <param name="encryptSalt">Encrypts the drawn salt to <paramref name="modulus"/> via RSA-OAEP.</param>
         /// <param name="pool">The memory pool for the drawn salt and the OAEP scratch buffer.</param>
         /// <param name="symmetric">The symmetric algorithm to negotiate for session-based parameter encryption, or <see langword="null"/> for none.</param>
         /// <param name="cancellationToken">A token observed across the OAEP encryption.</param>
         /// <returns>The configured <see cref="StartAuthSessionInput"/> and the drawn salt (with its valid length).</returns>
-        private static async ValueTask<(StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength)> CreateRsaSaltedHmacSessionCore(
+        private static async ValueTask<(StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength)> CreateRsaSaltedSessionCore(
             uint tpmKey,
             uint bind,
             ReadOnlyMemory<byte> modulus,
             uint exponent,
             TpmAlgIdConstants tpmKeyNameAlg,
             TpmAlgIdConstants authHash,
+            TpmSeConstants sessionType,
             TpmRsaOaepEncryptDelegate encryptSalt,
             BaseMemoryPool pool,
             TpmtSymDef? symmetric,
@@ -340,7 +347,7 @@ public static class StartAuthSessionInputExtensions
                 Bind = bind,
                 NonceCaller = nonce,
                 EncryptedSalt = encryptedSalt,
-                SessionType = TpmSeConstants.TPM_SE_HMAC,
+                SessionType = sessionType,
                 AuthHash = authHash,
                 Symmetric = symmetric ?? TpmtSymDef.Null
             };
@@ -351,8 +358,8 @@ public static class StartAuthSessionInputExtensions
         /// <summary>
         /// Shared ECC salted-session core: generates the ephemeral key pair, ECDH-exchanges against tpmKey's
         /// static public point, derives the salt via <c>KDFe</c>, and frames <c>encryptedSalt</c> as a marshaled
-        /// <c>TPMS_ECC_POINT</c> — used by both the unbound and bound ECC factories (<paramref name="bind"/> =
-        /// <c>TPM_RH_NULL</c> selects unbound).
+        /// <c>TPMS_ECC_POINT</c> — used by all four ECC salted factories (<paramref name="bind"/> = <c>TPM_RH_NULL</c>
+        /// selects unbound; <paramref name="sessionType"/> selects HMAC or POLICY).
         /// </summary>
         /// <param name="tpmKey">The handle of the loaded ECC key the salt is derived against.</param>
         /// <param name="bind">The bind entity's handle, or <c>TPM_RH_NULL</c> for unbound.</param>
@@ -360,19 +367,26 @@ public static class StartAuthSessionInputExtensions
         /// <param name="curve">The ECC curve tpmKey lives on.</param>
         /// <param name="tpmKeyNameAlg">tpmKey's own Name algorithm — sizes the drawn salt and keys <c>KDFe</c>.</param>
         /// <param name="authHash">The hash algorithm for the session.</param>
+        /// <param name="sessionType">
+        /// <see cref="TpmSeConstants.TPM_SE_HMAC"/> or <see cref="TpmSeConstants.TPM_SE_POLICY"/>. Per TPM 2.0
+        /// Library Part 3, Section 11.1.1, sessionKey derivation (the ECDH+<c>KDFe</c> salt this core derives) is
+        /// identical for both — sessionType changes only the policy-session-context defaults StartAuthSession
+        /// additionally sets, none of which this core is responsible for.
+        /// </param>
         /// <param name="generateEphemeralKey">Generates the one-time ephemeral key pair.</param>
         /// <param name="computeSharedSecret">Computes the ECDH shared value <c>Z</c>.</param>
         /// <param name="pool">The memory pool for the ephemeral key, the shared value, and the derived salt.</param>
         /// <param name="symmetric">The symmetric algorithm to negotiate for session-based parameter encryption, or <see langword="null"/> for none.</param>
         /// <param name="cancellationToken">A token observed across the ECDH exchange and <c>KDFe</c>.</param>
         /// <returns>The configured <see cref="StartAuthSessionInput"/> and the derived salt (with its valid length).</returns>
-        private static async ValueTask<(StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength)> CreateEccSaltedHmacSessionCore(
+        private static async ValueTask<(StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength)> CreateEccSaltedSessionCore(
             uint tpmKey,
             uint bind,
             ReadOnlyMemory<byte> tpmKeyPublicPoint,
             TpmEccCurveConstants curve,
             TpmAlgIdConstants tpmKeyNameAlg,
             TpmAlgIdConstants authHash,
+            TpmSeConstants sessionType,
             TpmEccKeyGenerationDelegate generateEphemeralKey,
             TpmEccSharedSecretDelegate computeSharedSecret,
             BaseMemoryPool pool,
@@ -422,7 +436,7 @@ public static class StartAuthSessionInputExtensions
                 Bind = bind,
                 NonceCaller = nonce,
                 EncryptedSalt = encryptedSalt,
-                SessionType = TpmSeConstants.TPM_SE_HMAC,
+                SessionType = sessionType,
                 AuthHash = authHash,
                 Symmetric = symmetric ?? TpmtSymDef.Null
             };
@@ -470,6 +484,202 @@ public static class StartAuthSessionInputExtensions
                 AuthHash = authHash
             };
         }
+
+        /// <summary>
+        /// Creates a salted, unbound policy session against an RSA <paramref name="tpmKey"/>.
+        /// </summary>
+        /// <param name="tpmKey">The handle of a loaded RSA key with the decrypt attribute set — the salt is encrypted to its public modulus.</param>
+        /// <param name="modulus">tpmKey's public modulus, unsigned big-endian.</param>
+        /// <param name="exponent">tpmKey's public exponent.</param>
+        /// <param name="tpmKeyNameAlg">
+        /// tpmKey's own Name algorithm — sizes the drawn salt and drives OAEP's <c>lhash</c>/MGF1 (TPM 2.0
+        /// Library Part 1, Annex B.10.1); independent of <paramref name="authHash"/>.
+        /// </param>
+        /// <param name="authHash">The hash algorithm for the session.</param>
+        /// <param name="encryptSalt">
+        /// Encrypts the drawn salt to <paramref name="modulus"/> via RSA-OAEP (label <c>"SECRET"</c>, TPM 2.0
+        /// Library Part 1, Annex B.10.2) — an explicit per-call delegate, no closure capture. A
+        /// <c>TpmRsaSigningBackend.EncryptOaep</c> delegate instance composes directly.
+        /// </param>
+        /// <param name="pool">The memory pool for the drawn salt and the OAEP scratch buffer.</param>
+        /// <param name="cancellationToken">A token observed across the OAEP encryption.</param>
+        /// <param name="symmetric">
+        /// The symmetric algorithm to negotiate for session-based parameter encryption, or <see langword="null"/> for none.
+        /// </param>
+        /// <returns>
+        /// The configured <see cref="StartAuthSessionInput"/> and the drawn salt (with its valid length) — the
+        /// caller must pass <c>Salt.Memory[..SaltLength]</c> verbatim to
+        /// <see cref="Sessions.TpmSession.CreateBoundAsync"/> and then dispose <c>Salt</c>.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// Per TPM 2.0 Library Part 3, Section 11.1.1, <c>TPM2_StartAuthSession</c> derives sessionKey identically
+        /// for every sessionType — a salted POLICY session's key comes from the same OAEP-salt KDFa recipe (Part 1
+        /// §17.6.11) as a salted HMAC session. What differs is the policy session's own context defaults: a fresh
+        /// POLICY session is never "bound" in the auth-omission sense an HMAC session is (Part 1 §17.6.10's
+        /// bind-entity-authValue-omission optimization) — whether the per-command authHMAC additionally layers the
+        /// authorized entity's authValue on top of sessionKey (equations 26/27) is governed solely by the policy
+        /// session's isAuthValueNeeded/isPasswordNeeded state (set by TPM2_PolicyAuthValue/TPM2_PolicyPassword),
+        /// never by boundness. This unbound-salted factory has no bind entity, so sessionKey reduces to the salt
+        /// term alone.
+        /// </para>
+        /// <para>
+        /// The salt is drawn via the entropy provider at <c>digestSize(tpmKeyNameAlg)</c> octets (Annex B.10.1's
+        /// cap); the wire <c>encryptedSalt</c> is the flat OAEP ciphertext (Part 2, Table 209/210).
+        /// </para>
+        /// </remarks>
+        public static ValueTask<(StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength)> CreateSaltedPolicySession(
+            uint tpmKey,
+            ReadOnlyMemory<byte> modulus,
+            uint exponent,
+            TpmAlgIdConstants tpmKeyNameAlg,
+            TpmAlgIdConstants authHash,
+            TpmRsaOaepEncryptDelegate encryptSalt,
+            BaseMemoryPool pool,
+            CancellationToken cancellationToken,
+            TpmtSymDef? symmetric = null) =>
+            CreateRsaSaltedSessionCore(tpmKey, (uint)TpmRh.TPM_RH_NULL, modulus, exponent, tpmKeyNameAlg, authHash, TpmSeConstants.TPM_SE_POLICY, encryptSalt, pool, symmetric, cancellationToken);
+
+        /// <summary>
+        /// Creates a salted, bound policy session against an RSA <paramref name="tpmKey"/> and the supplied bind entity.
+        /// </summary>
+        /// <param name="tpmKey">The handle of a loaded RSA key with the decrypt attribute set — the salt is encrypted to its public modulus.</param>
+        /// <param name="bind">The handle of the entity to bind to, whose authorization value additionally seeds the session key.</param>
+        /// <param name="modulus">tpmKey's public modulus, unsigned big-endian.</param>
+        /// <param name="exponent">tpmKey's public exponent.</param>
+        /// <param name="tpmKeyNameAlg">tpmKey's own Name algorithm — sizes the drawn salt and drives OAEP's <c>lhash</c>/MGF1; independent of <paramref name="authHash"/>.</param>
+        /// <param name="authHash">The hash algorithm for the session.</param>
+        /// <param name="encryptSalt">Encrypts the drawn salt to <paramref name="modulus"/> via RSA-OAEP (label <c>"SECRET"</c>) — an explicit per-call delegate, no closure capture.</param>
+        /// <param name="pool">The memory pool for the drawn salt and the OAEP scratch buffer.</param>
+        /// <param name="cancellationToken">A token observed across the OAEP encryption.</param>
+        /// <param name="symmetric">The symmetric algorithm to negotiate for session-based parameter encryption, or <see langword="null"/> for none.</param>
+        /// <returns>
+        /// The configured <see cref="StartAuthSessionInput"/> and the drawn salt (with its valid length) — the
+        /// caller must pass both <paramref name="bind"/>'s authorization value and <c>Salt.Memory[..SaltLength]</c>
+        /// to <see cref="Sessions.TpmSession.CreateBoundAsync"/> and then dispose <c>Salt</c>.
+        /// </returns>
+        /// <remarks>
+        /// Per TPM 2.0 Library Part 3, Section 11.1.1, sessionKey derivation is identical to the RSA
+        /// <c>CreateBoundAndSaltedHmacSession</c> overload — the KDFa key folds <paramref name="bind"/>'s authValue
+        /// then the salt (Part 1 §17.6.12, equation 25) regardless of sessionType. The distinction is downstream
+        /// of key derivation: a POLICY session is never "bound" in the auth-omission sense (Part 1 §17.6.10) —
+        /// <paramref name="bind"/>'s authValue strengthens the derived sessionKey only, once, here. It is never
+        /// folded a second time into the per-command authHMAC merely because the session is bound; that fold
+        /// happens only when the policy session's isAuthValueNeeded/isPasswordNeeded flag is SET (equation 26, Part
+        /// 1 §17.6.12), and is omitted entirely (equation 27) otherwise — an HMAC-session concept (binding omits
+        /// the authValue term) does not carry over.
+        /// </remarks>
+        public static ValueTask<(StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength)> CreateBoundAndSaltedPolicySession(
+            uint tpmKey,
+            uint bind,
+            ReadOnlyMemory<byte> modulus,
+            uint exponent,
+            TpmAlgIdConstants tpmKeyNameAlg,
+            TpmAlgIdConstants authHash,
+            TpmRsaOaepEncryptDelegate encryptSalt,
+            BaseMemoryPool pool,
+            CancellationToken cancellationToken,
+            TpmtSymDef? symmetric = null) =>
+            CreateRsaSaltedSessionCore(tpmKey, bind, modulus, exponent, tpmKeyNameAlg, authHash, TpmSeConstants.TPM_SE_POLICY, encryptSalt, pool, symmetric, cancellationToken);
+
+        /// <summary>
+        /// Creates a salted, unbound policy session against an ECC <paramref name="tpmKey"/>.
+        /// </summary>
+        /// <param name="tpmKey">The handle of a loaded ECC key with the decrypt attribute set — the salt is derived via ECDH against its public point.</param>
+        /// <param name="tpmKeyPublicPoint">tpmKey's own exported public point, SEC1 uncompressed (<c>0x04 ‖ X ‖ Y</c>).</param>
+        /// <param name="curve">The ECC curve tpmKey lives on.</param>
+        /// <param name="tpmKeyNameAlg">
+        /// tpmKey's own Name algorithm — sizes the drawn salt and keys <c>KDFe</c> (TPM 2.0 Library Part 1, Annex
+        /// C.6.1/C.6.2); independent of <paramref name="authHash"/> (a mixed-hash session is legal and must NOT
+        /// leak <paramref name="authHash"/> into this derivation).
+        /// </param>
+        /// <param name="authHash">The hash algorithm for the session.</param>
+        /// <param name="generateEphemeralKey">
+        /// Generates the one-time ephemeral key pair this session's initiator role requires (Annex C.6.1) — an
+        /// explicit per-call delegate, no closure capture. A <c>TpmEccSigningBackend.GenerateKey</c> delegate
+        /// instance composes directly.
+        /// </param>
+        /// <param name="computeSharedSecret">
+        /// Computes the ECDH shared value <c>Z</c> between the ephemeral private scalar and
+        /// <paramref name="tpmKeyPublicPoint"/> (Annex C.6.1) — an explicit per-call delegate, no closure capture.
+        /// A <c>TpmEccSigningBackend.ComputeSharedSecret</c> delegate instance composes directly.
+        /// </param>
+        /// <param name="pool">The memory pool for the ephemeral key, the shared value, and the derived salt.</param>
+        /// <param name="cancellationToken">A token observed across the ECDH exchange and <c>KDFe</c>.</param>
+        /// <param name="symmetric">The symmetric algorithm to negotiate for session-based parameter encryption, or <see langword="null"/> for none.</param>
+        /// <returns>
+        /// The configured <see cref="StartAuthSessionInput"/> and the derived salt (with its valid length) — the
+        /// caller must pass <c>Salt.Memory[..SaltLength]</c> verbatim to
+        /// <see cref="Sessions.TpmSession.CreateBoundAsync"/> and then dispose <c>Salt</c>.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// Per TPM 2.0 Library Part 3, Section 11.1.1, sessionKey derivation is identical for every sessionType —
+        /// a salted POLICY session's key comes from the same ECDH+<c>KDFe</c> recipe as a salted HMAC session. A
+        /// fresh POLICY session is never "bound" in the auth-omission sense an HMAC session is (Part 1 §17.6.10);
+        /// this unbound-salted factory has no bind entity in the first place, so the point is moot here — see the
+        /// ECC <c>CreateBoundAndSaltedPolicySession</c> overload for the case where it applies.
+        /// </para>
+        /// <para>
+        /// The wire <c>encryptedSalt</c> is a marshaled <c>TPMS_ECC_POINT</c> (two size-prefixed coordinates)
+        /// carrying the ephemeral public point — not a flat buffer (TPM 2.0 Library Part 2, Table 209/210).
+        /// </para>
+        /// </remarks>
+        public static ValueTask<(StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength)> CreateSaltedPolicySession(
+            uint tpmKey,
+            ReadOnlyMemory<byte> tpmKeyPublicPoint,
+            TpmEccCurveConstants curve,
+            TpmAlgIdConstants tpmKeyNameAlg,
+            TpmAlgIdConstants authHash,
+            TpmEccKeyGenerationDelegate generateEphemeralKey,
+            TpmEccSharedSecretDelegate computeSharedSecret,
+            BaseMemoryPool pool,
+            CancellationToken cancellationToken,
+            TpmtSymDef? symmetric = null) =>
+            CreateEccSaltedSessionCore(tpmKey, (uint)TpmRh.TPM_RH_NULL, tpmKeyPublicPoint, curve, tpmKeyNameAlg, authHash, TpmSeConstants.TPM_SE_POLICY, generateEphemeralKey, computeSharedSecret, pool, symmetric, cancellationToken);
+
+        /// <summary>
+        /// Creates a salted, bound policy session against an ECC <paramref name="tpmKey"/> and the supplied bind entity.
+        /// </summary>
+        /// <param name="tpmKey">The handle of a loaded ECC key with the decrypt attribute set — the salt is derived via ECDH against its public point.</param>
+        /// <param name="bind">The handle of the entity to bind to, whose authorization value additionally seeds the session key.</param>
+        /// <param name="tpmKeyPublicPoint">tpmKey's own exported public point, SEC1 uncompressed (<c>0x04 ‖ X ‖ Y</c>).</param>
+        /// <param name="curve">The ECC curve tpmKey lives on.</param>
+        /// <param name="tpmKeyNameAlg">tpmKey's own Name algorithm — sizes the drawn salt and keys <c>KDFe</c>; independent of <paramref name="authHash"/>.</param>
+        /// <param name="authHash">The hash algorithm for the session.</param>
+        /// <param name="generateEphemeralKey">Generates the one-time ephemeral key pair this session's initiator role requires — an explicit per-call delegate, no closure capture.</param>
+        /// <param name="computeSharedSecret">Computes the ECDH shared value <c>Z</c> — an explicit per-call delegate, no closure capture.</param>
+        /// <param name="pool">The memory pool for the ephemeral key, the shared value, and the derived salt.</param>
+        /// <param name="cancellationToken">A token observed across the ECDH exchange and <c>KDFe</c>.</param>
+        /// <param name="symmetric">The symmetric algorithm to negotiate for session-based parameter encryption, or <see langword="null"/> for none.</param>
+        /// <returns>
+        /// The configured <see cref="StartAuthSessionInput"/> and the derived salt (with its valid length) — the
+        /// caller must pass both <paramref name="bind"/>'s authorization value and <c>Salt.Memory[..SaltLength]</c>
+        /// to <see cref="Sessions.TpmSession.CreateBoundAsync"/> and then dispose <c>Salt</c>.
+        /// </returns>
+        /// <remarks>
+        /// Per TPM 2.0 Library Part 3, Section 11.1.1, sessionKey derivation is identical to the ECC
+        /// <c>CreateBoundAndSaltedHmacSession</c> overload — <paramref name="bind"/>'s authValue folds into the
+        /// KDFa key alongside the ECDH-derived salt regardless of sessionType. The distinction is downstream of key
+        /// derivation: a POLICY session is never "bound" in the auth-omission sense (Part 1 §17.6.10) —
+        /// <paramref name="bind"/>'s authValue strengthens the derived sessionKey only, once, here, and is never
+        /// folded a second time into the per-command authHMAC merely because the session is bound. That fold
+        /// happens only when the policy session's isAuthValueNeeded/isPasswordNeeded flag is SET (equation 26, Part
+        /// 1 §17.6.12), and is omitted entirely (equation 27) otherwise.
+        /// </remarks>
+        public static ValueTask<(StartAuthSessionInput Input, IMemoryOwner<byte> Salt, int SaltLength)> CreateBoundAndSaltedPolicySession(
+            uint tpmKey,
+            uint bind,
+            ReadOnlyMemory<byte> tpmKeyPublicPoint,
+            TpmEccCurveConstants curve,
+            TpmAlgIdConstants tpmKeyNameAlg,
+            TpmAlgIdConstants authHash,
+            TpmEccKeyGenerationDelegate generateEphemeralKey,
+            TpmEccSharedSecretDelegate computeSharedSecret,
+            BaseMemoryPool pool,
+            CancellationToken cancellationToken,
+            TpmtSymDef? symmetric = null) =>
+            CreateEccSaltedSessionCore(tpmKey, bind, tpmKeyPublicPoint, curve, tpmKeyNameAlg, authHash, TpmSeConstants.TPM_SE_POLICY, generateEphemeralKey, computeSharedSecret, pool, symmetric, cancellationToken);
 
         /// <summary>
         /// Creates a trial policy session.

@@ -18,9 +18,12 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// <para>
 /// <strong>Bounded convergence:</strong> Every optimizer must produce decisions where
 /// each credential's selected paths remain within its lattice bounds. The
-/// <see cref="DisclosureComputation{TCredential}"/> validates this postcondition and
-/// records any bound violations in the decision record. Convergence is guaranteed
-/// because the combined space of valid disclosure strategies is finite (bounded by
+/// <see cref="DisclosureComputation{TCredential}"/> enforces this postcondition after every
+/// pass — each returned decision is clamped against its own
+/// <see cref="CredentialDisclosureDecision{TCredential}.Lattice"/>, so an optimizer cannot
+/// widen a disclosure by returning a set outside it — and records the attempt in
+/// <see cref="DisclosureDecisionRecord{TCredential}.BoundViolations"/>. Convergence is
+/// guaranteed because the combined space of valid disclosure strategies is finite (bounded by
 /// the product of each credential's lattice cardinality).
 /// </para>
 /// <para>
@@ -62,8 +65,9 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// </param>
 /// <param name="cancellationToken">Cancellation token.</param>
 /// <returns>
-/// The optimized decisions. May reorder, expand, or narrow individual decisions,
-/// but each decision's selected paths must remain within its lattice bounds.
+/// The optimized decisions. May reorder, expand, or narrow individual decisions, but each
+/// decision's selected paths must remain within its lattice bounds; paths outside them are
+/// clamped away rather than presented.
 /// </returns>
 public delegate Task<IReadOnlyList<CredentialDisclosureDecision<TCredential>>>
     CrossCredentialOptimizerDelegate<TCredential>(
